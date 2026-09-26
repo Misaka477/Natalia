@@ -40,15 +40,54 @@ const hostTarget = `${process.platform === "win32" ? "windows" : process.platfor
 const requested = process.argv.slice(2);
 const wantAll = requested.includes("--all");
 const explicit = requested.find((arg) => arg.startsWith("--target="));
+// macOS is DEFERRED by the distribution plan (no mac terminal build): a
+// release whose interactive terminal cannot run is a lie with a
+// checksum, so --all builds the two platforms that can actually ship.
 const targets = explicit
   ? [explicit.slice("--target=".length)]
   : wantAll
-    ? [
-        `bun-${hostTarget}` as const,
-        "bun-darwin-arm64" as const,
-        "bun-windows-x64" as const,
-      ]
+    ? [`bun-${hostTarget}` as const, "bun-windows-x64" as const]
     : [`bun-${hostTarget}` as const];
+
+/**
+ * Keeps only the platform's own terminal executables in the release: the
+ * plugin distribution stages a whole `wezterm/` directory, and the two
+ * native builds populate the same fork's target/release — both platforms'
+ * files sit side by side until this trims each release to its own.
+ */
+/**
+ * The terminal executables are per-platform: both native builds stage into
+ * the same fork's target/release, and the shared dist/ts copy carries
+ * whichever was staged when ts-build ran — a Windows release shipping the
+ * Linux binaries was the bug, and trimming-only produced an empty dir as
+ * the second attempt (the cross-build stages AFTER ts-build). Each release
+ * therefore takes its own executables straight from the fork, whatever the
+ * distribution happened to carry, and fails loudly when the platform's
+ * build is missing (a release whose terminal cannot run is a lie).
+ */
+async function stageTerminalNatives(
+  outDir: string,
+  platformDir: string,
+): Promise<void> {
+  const pluginDir = join(outDir, "plugins", "natalia-tool-terminal");
+  if (!(await Bun.file(join(pluginDir, "index.js")).exists())) return;
+  const weztermDir = join(pluginDir, "wezterm");
+  const forkRelease = join(
+    root,
+    "packages/plugins/native-terminal/wezterm/target/release",
+  );
+  const suffix = platformDir.startsWith("windows") ? ".exe" : "";
+  await rm(weztermDir, { recursive: true, force: true });
+  await mkdir(weztermDir, { recursive: true });
+  for (const name of ["wezterm", "wezterm-gui", "wezterm-mux-server"]) {
+    const executable = `${name}${suffix}`;
+    if (!(await Bun.file(join(forkRelease, executable)).exists()))
+      throw new Error(
+        `${platformDir}: the terminal's ${executable} is not built — run the platform's wezterm build before packaging`,
+      );
+    await cp(join(forkRelease, executable), join(weztermDir, executable));
+  }
+}
 
 async function run(command: string, args: string[], cwd: string) {
   const proc = Bun.spawn([command, ...args], {
@@ -127,6 +166,12 @@ for (const target of targets) {
         recursive: true,
       });
     }
+    // The interactive terminal's natives are per-platform: the Linux build
+    // (podman) and the Windows cross-build stage into the SAME
+    // target/release, so the shared dist/ts copy carries whichever was
+    // staged last — each release keeps only the executables its platform
+    // can run (a Windows release shipping Linux wezterm was the bug).
+    await stageTerminalNatives(outDir, platformDir);
     // The shipped composition base (P3 "base profile 随包机制"): copied
     // into the app root BEFORE the hash walk, so SHA256SUMS lists it and
     // install.sh's files loop lands it next to the binary — where the

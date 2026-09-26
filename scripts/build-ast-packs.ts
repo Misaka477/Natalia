@@ -309,11 +309,13 @@ memchr = "=2.8.1"
 
 mkdirSync(outDir, { recursive: true });
 
+let built = 0;
 for (const lang of LANGUAGES) {
   const id = lang.id;
   const out = join(outDir, `${id}.wasm`);
   if (process.env.SKIP_EXISTING !== "1" && existsSync(out)) {
     console.log(`skip ${id}`);
+    built += 1;
     continue;
   }
   const dir = join("/tmp", `ast-pack-${id}`);
@@ -354,10 +356,23 @@ pub fn grammar(language_id: &str) -> Option<Language> {
       "wasm32-wasip1/release/natalia_ast_wasm.wasm",
     );
     copyFileSync(wasm, out);
+    built += 1;
     console.log(
       `built ${id} ${(statSync(out).size / 1024 / 1024).toFixed(1)}MB`,
     );
   } catch (error) {
+    // Fail LOUD, not best-effort: a silently missing pack means the AST
+    // face parses nothing and the tests fail with a phantom "no move
+    // detected" — the CI lesson. A release whose parser is absent is a
+    // lie; a green step that produced zero packs is the same lie.
     console.error(`failed ${id}: ${String(error)}`);
+    process.exitCode = 1;
   }
 }
+// The gate: every language present, or the run is red. A partial pack set
+// parses some languages and silently fails others — the AST face would
+// answer "no move detected" for a language whose pack is missing.
+console.log(
+  `ast packs: ${built}/${LANGUAGES.length} present (${LANGUAGES.length - built} missing)`,
+);
+if (built !== LANGUAGES.length) process.exitCode = 1;

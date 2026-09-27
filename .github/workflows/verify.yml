@@ -121,7 +121,10 @@ jobs:
                     ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
                     ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
                     ./packages/hosts/object-store/test
-      - name: Test (client runtime and framework mechanisms)
+      - name: Test (the client runtime — the heaviest file)
+        run: |
+          bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test
+      - name: Test (framework mechanisms)
         run: |
           bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
                     ./packages/framework/operation-log/test ./packages/framework/runtime-diagnostics/test \
@@ -131,8 +134,7 @@ jobs:
                     ./packages/framework/agent-prompts/test ./packages/framework/collaboration/test \
                     ./packages/framework/workspace/test ./packages/framework/checkpoint/test \
                     ./packages/framework/attachments/test ./packages/framework/compaction/test \
-                    ./packages/framework/client/test ./packages/framework/sandbox/test \
-                    ./packages/framework/diff-wasm/test
+                    ./packages/framework/sandbox/test ./packages/framework/diff-wasm/test
       - name: Test (domains and product policy)
         run: |
           bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \

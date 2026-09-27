@@ -71,6 +71,25 @@ export class ObjectStore {
     }
   >();
   private packsLoaded = false;
+  /**
+   * Phase D's counters: the store's own hit rates (where a read was
+   * answered from, whether the daemon helped), the writes, and what the
+   * collections freed. Exposed through `stats()` — the plan's
+   * "性能/磁盘/命中率指标" is a property of the store, so it lives here
+   * rather than in whoever happens to be watching.
+   */
+  private readonly counters = {
+    looseReads: 0,
+    packReads: 0,
+    lruReads: 0,
+    daemonHits: 0,
+    daemonMisses: 0,
+    daemonFailures: 0,
+    writes: 0,
+    gcRuns: 0,
+    gcFreedObjects: 0,
+    gcFreedBytes: 0,
+  };
   private nativeIndexes = new Map<string, NativePackIndex>();
   /** The daemon-number → pack-file cache (the daemon's sorted names). */
   private daemonPackNames: string[] = [];
@@ -154,6 +173,10 @@ export class ObjectStore {
       // the TS path does (the second if is mutually excluded).
       const outcome = rustCas.putChunked(this.root, data);
       if (outcome.chunkCount > 1) {
+        // The core wrote the manifest and every chunk: each is an object
+        // write, counted here or the metrics go blind to the chunked
+        // lane in rust mode.
+        this.counters.writes += outcome.chunkCount + 1;
         const manifest = JSON.parse(
           (await this.chunkRead(outcome.manifestId!)).toString("utf8"),
         ) as { version: number; chunks: string[] };
@@ -226,6 +249,7 @@ export class ObjectStore {
   async get(id: string): Promise<Buffer> {
     const cached = this.lru.get(id);
     if (cached) {
+      this.counters.lruReads += 1;
       this.lru.delete(id);
       this.lru.set(id, cached);
       return cached;
@@ -235,6 +259,9 @@ export class ObjectStore {
       // as the belt — one hash over bytes already in memory, and the
       // contract byte-for-byte identical across backends.
       try {
+        // The Rust core reads the LOOSE path (the same file readObject
+        // would); the metrics count the read, not the reader.
+        this.counters.looseReads += 1;
         return this.verify(id, rustCas.get(this.root, id));
       } catch (error) {
         if (String(error).includes("not found")) {
@@ -282,11 +309,70 @@ export class ObjectStore {
     }
     try {
       const buffer = await readFile(this.objectPath(id));
+      this.counters.looseReads += 1;
       this.cacheSet(id, buffer);
       return buffer;
     } catch {
+      this.counters.packReads += 1;
       return await this.packGet(id);
     }
+  }
+
+  /**
+   * Phase D's metrics: the counters this store has accumulated, plus the
+   * disk shape (the loose and packed object counts, their bytes, the
+   * pack count) and the derived hit rates. This is the plan's
+   * "性能/磁盘/命中率指标" as a property of the store — whatever watches
+   * it reads the same numbers the store itself lives by.
+   */
+  async stats(): Promise<{
+    looseObjects: number;
+    packedObjects: number;
+    packs: number;
+    looseBytes: number;
+    lruBytes: number;
+    hits: { lru: number; loose: number; pack: number };
+    daemon: { hits: number; misses: number };
+    writes: number;
+    gc: {
+      runs: number;
+      freedObjects: number;
+      freedBytes: number;
+    };
+  }> {
+    const loose = await this.listLoose();
+    let looseBytes = 0;
+    for (const id of loose)
+      looseBytes += (await stat(this.objectPath(id)).catch(() => ({ size: 0 })))
+        .size;
+    await this.loadPackIndexes();
+    let packedObjects = 0;
+    for (const entry of this.packs.values()) packedObjects += 1;
+    const packNames = new Set(
+      [...this.packs.values()].map((entry) => entry.packFile),
+    );
+    return {
+      looseObjects: loose.length,
+      packedObjects,
+      packs: packNames.size,
+      looseBytes,
+      lruBytes: this.lruBytes,
+      hits: {
+        lru: this.counters.lruReads,
+        loose: this.counters.looseReads,
+        pack: this.counters.packReads,
+      },
+      daemon: {
+        hits: this.counters.daemonHits,
+        misses: this.counters.daemonMisses,
+      },
+      writes: this.counters.writes,
+      gc: {
+        runs: this.counters.gcRuns,
+        freedObjects: this.counters.gcFreedObjects,
+        freedBytes: this.counters.gcFreedBytes,
+      },
+    };
   }
 
   /**
@@ -399,19 +485,25 @@ export class ObjectStore {
 
   private async putRaw(content: Buffer | string): Promise<string> {
     const data = Buffer.from(content);
-    if (this.useRust)
+    const id = createHash("sha256").update(data).digest("hex");
+    if (this.useRust) {
       // Same contract end to end: id = sha256, dedup by existence, the
       // Rust side writes atomically (temp+rename) where the TS write is
       // direct — a torn file becomes impossible rather than merely
       // detected by the next verify-on-read. A pack-only id (packs are
       // slice 4) gets a redundant loose copy instead of TS's early
       // return; readers see identical truth.
+      // The core dedups silently — a write that wrote nothing is not a
+      // write the metrics count, so the guard rides the same existence
+      // check the TS path below performs.
+      if (!(await this.has(id))) this.counters.writes += 1;
       return rustCas.put(this.root, data);
-    const id = createHash("sha256").update(data).digest("hex");
+    }
     if (await this.has(id)) return id;
     const path = this.objectPath(id);
     await mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
     await writeFile(path, data, { mode: 0o600 });
+    this.counters.writes += 1;
     return id;
   }
 
@@ -424,15 +516,23 @@ export class ObjectStore {
    * rotted bytes.
    */
   private async chunkRead(id: string): Promise<Buffer> {
-    if (this.useRust && rustCas.has(this.root, id))
+    if (this.useRust && rustCas.has(this.root, id)) {
+      this.counters.looseReads += 1;
       return rustCas.get(this.root, id);
+    }
     return await this.getRaw(id);
   }
 
   private async getRaw(id: string): Promise<Buffer> {
     try {
-      return await readFile(this.objectPath(id));
+      const bytes = await readFile(this.objectPath(id));
+      // The chunked path reads chunks here, not through readObject — the
+      // counters sit at the ACTUAL read sites (this one and readObject's
+      // loose try), or the chunked lane would be invisible to them.
+      this.counters.looseReads += 1;
+      return bytes;
     } catch {
+      this.counters.packReads += 1;
       return await this.packGet(id);
     }
   }
@@ -647,6 +747,13 @@ export class ObjectStore {
       reachable: [...reachable],
     });
     if (workerResult) {
+      // The worker is ANOTHER store instance (its own counters), so its
+      // answer carries the numbers this store's metrics must absorb —
+      // without this, a collection through the maintenance worker frees
+      // objects the caller's counters never see.
+      this.counters.gcRuns += 1;
+      this.counters.gcFreedObjects += workerResult.unreachableObjects;
+      this.counters.gcFreedBytes += workerResult.bytes;
       this.packsLoaded = false;
       this.packs.clear();
       this.lru.clear();
@@ -729,6 +836,10 @@ export class ObjectStore {
       this.nativeIndexes.clear();
       await this.reloadDaemon();
       await this.loadPackIndexes();
+      this.counters.gcRuns += 1;
+      this.counters.gcFreedObjects +=
+        outcome.unreachableObjects + manifestGarbage;
+      this.counters.gcFreedBytes += Number(outcome.bytes);
       return {
         unreachableObjects: outcome.unreachableObjects + manifestGarbage,
         bytes: Number(outcome.bytes),
@@ -767,6 +878,9 @@ export class ObjectStore {
       if (await this.getMeta(`chunked:${id}`)) continue;
       keepRawIds.add(id);
     }
+    this.counters.gcRuns += 1;
+    this.counters.gcFreedObjects += unreachableObjects;
+    this.counters.gcFreedBytes += bytes;
     await this.rebuildPacks(keepRawIds);
     return { unreachableObjects, bytes };
   }
@@ -1430,8 +1544,10 @@ export class ObjectStore {
     const daemon = await this.packDaemon();
     if (daemon) {
       const hit = await daemon.find(id);
+      this.counters.daemonMisses += 1; // a miss AND a failure both land here
       const packFile = hit ? this.packFileAt(hit.pack) : undefined;
-      if (hit && packFile)
+      if (hit && packFile) {
+        this.counters.daemonHits += 1;
         return await this.readPackEntry(id, {
           packFile: join(this.root, "packs", packFile),
           offset: hit.offset,
@@ -1442,6 +1558,7 @@ export class ObjectStore {
           ...(hit.deltaLen === undefined ? {} : { deltaLen: hit.deltaLen }),
           ...(hit.baseId === undefined ? {} : { baseId: hit.baseId }),
         });
+      }
     }
     await this.loadPackIndexes();
     const nativeEntry = this.findNativeEntry(id);

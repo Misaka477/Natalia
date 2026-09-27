@@ -472,8 +472,19 @@ export const rustCas = {
           throw new Error("cas_gc result too large");
         continue;
       }
-      if (written < 0)
-        throw new Error(`cas_gc refused (${written}): ${out.toString("utf8")}`);
+      // A negative answer writes its REASON into the buffer (a zeroed
+      // Buffer ends it, so the read stops at the first NUL) and the
+      // caller re-throws those words verbatim: a refused collection
+      // must answer with the store's own message, not a wrapped FFI
+      // code — the dual-run compares the error shapes.
+      if (written < 0) {
+        const end = out.indexOf(0);
+        const reason =
+          end > 0
+            ? out.toString("utf8", 0, end)
+            : `cas_gc refused (${written})`;
+        throw new Error(reason);
+      }
       return JSON.parse(out.toString("utf8", 0, written)) as {
         unreachableObjects: number;
         bytes: number;

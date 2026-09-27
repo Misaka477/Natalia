@@ -573,7 +573,16 @@ pub extern "C" fn cas_gc(
                 );
                 write_out(json.as_bytes(), out, out_cap)
             }
-            Err(_) => -2,
+            // The failure's REASON rides in the buffer (the code stays
+            // the code — the caller's growth loop only reads -1 as
+            // capacity). The caller re-throws it verbatim, so a refused
+            // collection answers with the store's own words ("object
+            // not found: <id>") rather than a wrapped FFI code — the
+            // dual-run compares these error shapes.
+            Err(reason) => {
+                write_out(reason.as_bytes(), out, out_cap);
+                -2
+            }
         }
     });
     result.unwrap_or(-3)

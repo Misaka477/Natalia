@@ -77,9 +77,9 @@ jobs:
           if [ ! -x /opt/wasi-sdk/bin/clang ]; then
             sudo mkdir -p /opt
             curl -fsSL --retry 3 \
-              https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/x86_64-linux/wasi-sdk-25.0-x86_64-linux.tar.gz \
+              https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz \
               | sudo tar -xz -C /opt
-            sudo mv /opt/wasi-sdk-25.0-x86_64-linux /opt/wasi-sdk
+            sudo mv /opt/wasi-sdk-34.0-x86_64-linux /opt/wasi-sdk
           fi
           /opt/wasi-sdk/bin/clang --version
       - name: Build the confinement backend

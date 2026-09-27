@@ -99,6 +99,38 @@ done
   }
 }, 30_000);
 
+test("a delta entry reads THROUGH the daemon — its answer carries the base", async () => {
+  if (!nativePackIndexAvailable()) return; // the .so and the daemon are build artifacts
+  const root = await mkdtemp(join(tmpdir(), "daemon-delta-"));
+  dirs.push(root);
+  const packDir = join(root, "packs");
+  await mkdir(packDir, { recursive: true });
+  // Two similar objects: the frame writer's delta chain stores the second
+  // as a delta OF THE FIRST — the read path must resolve the base.
+  const base = Buffer.from("shared prefix ".repeat(64));
+  const derived = Buffer.concat([base, Buffer.from(" and a different tail")]);
+  const baseId = sha256(base);
+  const derivedId = sha256(derived);
+  const frame = rustCas.compactFrame([
+    { id: baseId, data: base },
+    { id: derivedId, data: derived },
+  ]);
+  await writeFile(join(packDir, "pack-a.idx"), frame.idx);
+  await writeFile(join(packDir, "pack-a.pack"), frame.pack);
+
+  const daemon = await openPackDaemon({ packsDir: packDir });
+  expect(daemon).toBeDefined();
+  // The base id rides with the delta hit (the store's daemon read path
+  // needs it: applyDelta has no other source for the base).
+  const hit = await daemon!.find(derivedId);
+  expect(hit).toMatchObject({ kind: 1, baseId });
+  // And the store READS the delta object through the daemon's location.
+  const store = new ObjectStore(root);
+  expect((await store.get(derivedId)).equals(derived)).toBe(true);
+  expect((await store.get(baseId)).equals(base)).toBe(true);
+  daemon!.close();
+}, 30_000);
+
 test("the store asks the daemon first when one is injected, and its own index otherwise", async () => {
   if (!nativePackIndexAvailable()) return;
   const root = await mkdtemp(join(tmpdir(), "daemon-store-"));
@@ -130,6 +162,7 @@ test("the store asks the daemon first when one is injected, and its own index ot
     },
     count: async () => 1,
     close: () => {},
+    reload: async () => 0,
   } as unknown as PackDaemon;
   const store = new ObjectStore(root, {
     daemonFactory: async () => recordingDaemon,
@@ -153,6 +186,7 @@ test("the store asks the daemon first when one is injected, and its own index ot
     daemonFactory: async () => ({
       find: async () => undefined,
       count: async () => 1,
+      reload: async () => 0,
       close: () => {},
     }),
   });

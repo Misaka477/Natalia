@@ -14,7 +14,11 @@
  * one owner's GC can never prune another owner's live objects.
  */
 import { Database } from "bun:sqlite";
-import { openPackDaemon, type PackDaemon } from "./daemon-client";
+import {
+  nativeDaemonAvailable,
+  openPackDaemon,
+  type PackDaemon,
+} from "./daemon-client";
 import { createHash } from "node:crypto";
 import { objectStoreBackendStatus, rustCas } from "./rust-store";
 import { mkdirSync } from "node:fs";
@@ -110,9 +114,16 @@ export class ObjectStore {
     },
   ) {
     this.useRust = objectStoreBackendStatus() === "rust";
+    // Phase B's default: the daemon when one is available — the cold
+    // start measured 2ms against the store's own 3.7ms even at ten
+    // packs, and 68ms against 615ms at a thousand, so the preference
+    // costs nothing at any size. An injected factory wins (tests), and
+    // the env can force either side: NATALIA_PACK_DAEMON=0 off, =1 on.
     this.daemonPreference = options?.daemonFactory
       ? true
-      : process.env.NATALIA_PACK_DAEMON === "1";
+      : process.env.NATALIA_PACK_DAEMON === "0"
+        ? false
+        : process.env.NATALIA_PACK_DAEMON === "1" || nativeDaemonAvailable();
     this.daemonFactory = options?.daemonFactory;
     const metaDir = join(root, ".meta");
     mkdirSync(metaDir, { recursive: true, mode: 0o700 });
@@ -716,6 +727,7 @@ export class ObjectStore {
       this.packsLoaded = false;
       this.packs.clear();
       this.nativeIndexes.clear();
+      await this.reloadDaemon();
       await this.loadPackIndexes();
       return {
         unreachableObjects: outcome.unreachableObjects + manifestGarbage,
@@ -902,6 +914,7 @@ export class ObjectStore {
     }
     this.packs.clear();
     this.packsLoaded = false;
+    await this.reloadDaemon();
     await this.loadPackIndexes();
   }
 
@@ -1388,6 +1401,21 @@ export class ObjectStore {
     return this.daemonPackNames[pack];
   }
 
+  /**
+   * The writer's declaration: the pack set changed (a compaction, a
+   * collection's rebuild). TWO caches go stale — the daemon's table
+   * (it re-reads on reload) and the store's own mirror of the pack
+   * numbering (the daemon answers an index; this maps it to a file
+   * name, and a stale map sent a read to the wrong pack — the
+   * 'missing delta base' that bug produced). Reloading the daemon
+   * keeps the fast path fast; a failed reload is any other failure —
+   * the local index load stands, the read never misses.
+   */
+  private async reloadDaemon(): Promise<void> {
+    this.daemonPackNames = [];
+    await this.daemon?.handle?.reload();
+  }
+
   private async refreshDaemonPackNames(): Promise<void> {
     const dir = join(this.root, "packs");
     const files = await readdir(dir).catch(() => [] as string[]);
@@ -1412,6 +1440,7 @@ export class ObjectStore {
           compLen: hit.compLen,
           kind: hit.kind,
           ...(hit.deltaLen === undefined ? {} : { deltaLen: hit.deltaLen }),
+          ...(hit.baseId === undefined ? {} : { baseId: hit.baseId }),
         });
     }
     await this.loadPackIndexes();

@@ -9,6 +9,8 @@ export type NativeIndexEntry = {
   compLen: number;
   kind: number;
   deltaLen: number;
+  /** A delta entry's base id — a kind-1 entry cannot be read without it. */
+  baseId?: string;
 };
 
 type NativeLib = {
@@ -160,11 +162,16 @@ export class NativePackIndexSet {
   find(id: string): NativeTableHit | undefined {
     const loaded = loadLib();
     if (!loaded) return undefined;
-    // repr(C): u32 pack, then the entry (24 bytes as above).
-    const out = Buffer.alloc(28);
+    // repr(C): u32 pack, then the entry (u32x6 + kind + delta_len), then
+    // the delta base as a fixed 64-byte array plus its length (an id is
+    // 64 hex characters). A kind-1 hit without its base is unreadable.
+    const out = Buffer.alloc(28 + 64 + 4);
     const outPtr = ffiPtr(out);
     const found = loaded.symbols.native_index_find_dir(this.handle, id, outPtr);
     if (!found) return undefined;
+    const baseLen = out.readUInt32LE(92);
+    const baseId =
+      baseLen > 0 ? out.toString("utf8", 28, 28 + baseLen) : undefined;
     return {
       pack: out.readUInt32LE(0),
       offset: out.readUInt32LE(4),
@@ -173,6 +180,7 @@ export class NativePackIndexSet {
       compLen: out.readUInt32LE(16),
       kind: out[20],
       deltaLen: out.readUInt32LE(24),
+      ...(baseId ? { baseId } : {}),
     };
   }
 

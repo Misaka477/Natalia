@@ -35,6 +35,13 @@ export type PackDaemon = {
    * both identically). */
   find(id: string): Promise<NativeTableHit | undefined>;
   count(): Promise<number>;
+  /**
+   * The writer's freshness declaration: after the store writes or
+   * retires a pack, it says so here and the daemon re-reads its table.
+   * A failed reload answers 0 (the store treats it as any other
+   * failure: the local index load stands).
+   */
+  reload(): Promise<number>;
   close(): void;
 };
 
@@ -95,6 +102,17 @@ function nativeDaemonPath(): string | undefined {
       : "natalia-object-store-daemon",
   );
   return existsSync(built) ? built : undefined;
+}
+
+/**
+ * Whether a NATIVE daemon is spawnable right now (the env's explicit
+ * binary, or the crate's release target). The store's default preference
+ * asks this so a checkout without the built daemon stays on the local
+ * path — and a built one takes the fast path without a knob.
+ */
+export function nativeDaemonAvailable(): boolean {
+  const native = nativeDaemonPath();
+  return native !== undefined && existsSync(native);
 }
 
 export async function openPackDaemon(
@@ -183,6 +201,11 @@ export async function openPackDaemon(
       if (!answer || answer.ok !== true) return undefined;
       const pack = answer.pack;
       if (typeof pack !== "number") return undefined;
+      // The base id rides with a delta hit (a kind-1 entry without it is
+      // unreadable — applyDelta needs the base); a kind-0 hit has none.
+      // The base id rides with a delta hit (a kind-1 entry without it is
+      // unreadable — applyDelta needs the base); a kind-0 hit has none.
+      const baseId = answer.baseId;
       return {
         pack,
         offset: Number(answer.offset),
@@ -191,10 +214,15 @@ export async function openPackDaemon(
         compLen: Number(answer.compLen),
         kind: Number(answer.kind),
         deltaLen: Number(answer.deltaLen),
+        ...(typeof baseId === "string" && baseId ? { baseId } : {}),
       };
     },
     count: async () => {
       const answer = await call({ op: "count" });
+      return answer && answer.ok === true ? Number(answer.count) : 0;
+    },
+    reload: async () => {
+      const answer = await call({ op: "reload" });
       return answer && answer.ok === true ? Number(answer.count) : 0;
     },
     close() {

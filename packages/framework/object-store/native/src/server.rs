@@ -81,8 +81,15 @@ fn main() {
                 };
                 match table.find(id.as_bytes()) {
                     Some(hit) => {
+                        // The base id rides with a delta hit: without it
+                        // the entry cannot be read (applyDelta needs the
+                        // base). A kind-0 hit carries none.
+                        let base = match natalia_index_native::IndexTableApi::base_id_text(&hit) {
+                            Some(id) => format!(",\"baseId\":\"{id}\""),
+                            None => String::new(),
+                        };
                         let answer = format!(
-                            "{{\"ok\":true,\"pack\":{},\"offset\":{},\"dataOffset\":{},\"origLen\":{},\"compLen\":{},\"kind\":{},\"deltaLen\":{}}}",
+                            "{{\"ok\":true,\"pack\":{},\"offset\":{},\"dataOffset\":{},\"origLen\":{},\"compLen\":{},\"kind\":{},\"deltaLen\":{}{base}}}",
                             hit.pack,
                             hit.offset,
                             hit.data_offset,

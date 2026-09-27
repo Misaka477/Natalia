@@ -87,6 +87,8 @@ struct IndexRecord {
     comp_len: u32,
     kind: u8,
     delta_len: u32,
+    /// A delta entry's base id — without it a kind-1 hit cannot be read.
+    base_id: Option<[u8; 64]>,
 }
 
 struct NativeIndex {
@@ -149,18 +151,25 @@ unsafe fn parse_index(bytes: &[u8]) -> Vec<IndexRecord> {
         let comp_len = u32::from_le_bytes(bytes[offset + 12..offset + 16].try_into().unwrap());
         let kind = bytes[offset + 16];
         offset += 17;
-        let delta_len = if kind == 1 {
+        // A delta entry's base id, CAPTURED (the old parse skipped the
+        // bytes): without it a kind-1 hit cannot be read at all —
+        // applyDelta needs the base. An id is 64 hex characters, so the
+        // fixed array is the shape, never a truncation.
+        let (delta_len, base_id) = if kind == 1 {
             if offset + 4 > bytes.len() { break; }
             let base_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
             offset += 4;
             if offset + base_len + 4 > bytes.len() { break; }
+            let mut raw = [0u8; 64];
+            let take = base_len.min(64);
+            raw[..take].copy_from_slice(&bytes[offset..offset + take]);
             offset += base_len;
             if offset + 4 > bytes.len() { break; }
             let dlen = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
             offset += 4;
-            dlen
+            (dlen, Some(raw))
         } else {
-            0
+            (0, None)
         };
         out.push(IndexRecord {
             id_offset,
@@ -171,6 +180,7 @@ unsafe fn parse_index(bytes: &[u8]) -> Vec<IndexRecord> {
             comp_len,
             kind,
             delta_len,
+            base_id,
         });
     }
     out
@@ -258,6 +268,9 @@ struct IndexTable {
 }
 
 /// The table's answer for one find: which pack answered, and its record.
+/// The base id rides as a fixed 64-byte array plus a length (an id is 64
+/// hex characters) — a repr(C) struct cannot hold a String, and a
+/// delta hit without its base is unreadable.
 #[repr(C)]
 pub struct NativeIndexTableHit {
     pub pack: u32,
@@ -267,6 +280,8 @@ pub struct NativeIndexTableHit {
     pub comp_len: u32,
     pub kind: u8,
     pub delta_len: u32,
+    pub base_id: [u8; 64],
+    pub base_len: u32,
 }
 
 /// The daemon-facing API: a table over a packs directory, with the same
@@ -306,6 +321,10 @@ impl IndexTableApi {
             if let Some(slot) = index.order.get(at) {
                 let record = &index.entries[*slot as usize];
                 if index.id_bytes(record) == id {
+                    let (base_id, base_len) = match record.base_id {
+                        Some(raw) => (raw, 64u32),
+                        None => ([0u8; 64], 0),
+                    };
                     return Some(NativeIndexTableHit {
                         pack: pack as u32,
                         offset: record.offset,
@@ -314,11 +333,21 @@ impl IndexTableApi {
                         comp_len: record.comp_len,
                         kind: record.kind,
                         delta_len: record.delta_len,
+                        base_id,
+                        base_len,
                     });
                 }
             }
         }
         None
+    }
+
+    /// The base id of a hit, as text (the daemon's protocol carries it).
+    pub fn base_id_text(hit: &NativeIndexTableHit) -> Option<String> {
+        if hit.base_len == 0 {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&hit.base_id[..hit.base_len as usize]).into_owned())
     }
 }
 
@@ -380,6 +409,10 @@ pub unsafe extern "C" fn native_index_find_dir(
         if let Some(slot) = index.order.get(at) {
             let record = &index.entries[*slot as usize];
             if index.id_bytes(record) == id {
+                let (base_id, base_len) = match record.base_id {
+                    Some(raw) => (raw, 64u32),
+                    None => ([0u8; 64], 0),
+                };
                 std::ptr::write(out, NativeIndexTableHit {
                     pack: pack as u32,
                     offset: record.offset,
@@ -388,6 +421,8 @@ pub unsafe extern "C" fn native_index_find_dir(
                     comp_len: record.comp_len,
                     kind: record.kind,
                     delta_len: record.delta_len,
+                    base_id,
+                    base_len,
                 });
                 return 1;
             }
@@ -554,6 +589,8 @@ mod tests {
             comp_len: 0,
             kind: 0,
             delta_len: 0,
+            base_id: [0; 64],
+            base_len: 0,
         };
         // The pack numbering follows the sorted names (the walk's order
         // is not the FS's mood): a, b, c.

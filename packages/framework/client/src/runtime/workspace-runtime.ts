@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
 import {
+  isSnapshotIgnored,
+  loadNataliaIgnore,
   resolveWorkspaceObjectsRoot,
   createWorkspaceFile,
   deleteWorkspaceFile,
@@ -103,6 +105,48 @@ async function astDiffWithWorkerFallback(
     const { diffWasmAst } = await import("@anthelia/diff-wasm/ast");
     return diffWasmAst(oldText, newText, language);
   }
+}
+
+/**
+ * The workspace's SOURCE files: a recursive walk under the workspace's own
+ * ignore rules (`.nataliaignore` — the same machinery the snapshots use),
+ * pruned to the files that have an AST language. The plan's Phase C needs
+ * the workspace as a SET (the move face's before/after); the access
+ * catalog in platform is intentionally ignore-free (a picker must see
+ * everything), so this walk is its own.
+ */
+async function walkSourceFiles(
+  root: string,
+): Promise<{ paths: string[]; ignored: number }> {
+  const ignore = await loadNataliaIgnore(root);
+  const paths: string[] = [];
+  let ignored = 0;
+  const stack: string[] = [""];
+  while (stack.length > 0) {
+    const relative = stack.pop()!;
+    const directory = relative ? join(root, relative) : root;
+    const children = await readdir(directory, {
+      withFileTypes: true,
+    }).catch(() => []);
+    for (const child of children) {
+      const childRelative = relative ? `${relative}/${child.name}` : child.name;
+      if (child.isDirectory()) {
+        if (isSnapshotIgnored(childRelative, true, ignore.rules)) {
+          ignored += 1;
+          continue;
+        }
+        stack.push(childRelative);
+        continue;
+      }
+      if (isSnapshotIgnored(childRelative, false, ignore.rules)) {
+        ignored += 1;
+        continue;
+      }
+      paths.push(childRelative);
+    }
+  }
+  paths.sort();
+  return { paths, ignored };
 }
 
 async function astIndexWithWorkerFallback(source: string, language: string) {
@@ -478,7 +522,16 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
       await ctx.ports.getReady();
       const root = ctx.ports.getWorkspaceRoot();
       const from = input?.from ?? "HEAD";
-      const paths = (input?.paths ?? []).slice(0, 50);
+      // No paths named: the WHOLE workspace is the move surface (the
+      // plan's "按 workspace 建立索引" — the caller should not have to
+      // enumerate). The walk runs under the ignore rules, so node_modules
+      // and the store's own directories never enter the set.
+      const named = input?.paths ?? [];
+      const walked =
+        named.length > 0
+          ? { paths: named, ignored: 0 }
+          : await walkSourceFiles(root);
+      const paths = walked.paths;
       const { astLanguageForPath } = await import("@anthelia/diff-wasm/ast");
       const before: Array<{
         path?: string;
@@ -497,7 +550,11 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
       // the detection has nothing to pair. (The first cut named only the
       // paths and its own e2e caught the hole: a move detected nothing.)
       const deleted = await gitDeletedFiles(root, from);
-      const beforePaths = [...new Set([...paths, ...deleted])].slice(0, 50);
+      // No cap: the index is content-addressed in the object store's
+      // metadata, so a workspace's move detection costs per CHANGED file,
+      // not per file — the same reason the 50-file caps in the sibling
+      // faces are gone.
+      const beforePaths = [...new Set([...paths, ...deleted])];
       await Promise.all(
         beforePaths.map(async (path) => {
           const language = astLanguageForPath(path);

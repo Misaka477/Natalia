@@ -39,6 +39,50 @@ function runtimeFor(root: string) {
   return createWorkspaceRuntime(ctx);
 }
 
+test("the workspace face walks the whole tree when no paths are named", async () => {
+  // The plan's workspace face: the caller names NOTHING and the whole
+  // workspace is the move surface, the move in the ninetieth file — past
+  // every cap the older faces had.
+  const root = await mkdtemp(join(tmpdir(), "ws-ast-walk-"));
+  roots.push(root);
+  await git(root, ["init", "-q"]);
+  await git(root, ["config", "user.email", "test@invalid"]);
+  await git(root, ["config", "user.name", "test"]);
+  await mkdir(join(root, "src"), { recursive: true });
+  const name = (index: number) => `handler_${(index * 7919) % 100000}`;
+  const source = (index: number, renamed: boolean) =>
+    `export function ${name(index)}${renamed ? "V2" : ""}(value: string) { return value; }\n`;
+  // 90 source files, plus the noise the ignore rules must keep out.
+  for (let index = 0; index < 90; index += 1)
+    await writeFile(join(root, "src", `mod-${index}.ts`), source(index, false));
+  await mkdir(join(root, "node_modules", "left-pad"), { recursive: true });
+  await writeFile(
+    join(root, "node_modules", "left-pad", "index.ts"),
+    "export function pad(value: string) { return value; }\n",
+  );
+  await git(root, ["add", "."]);
+  await git(root, ["commit", "-qm", "initial"]);
+  // The ninetieth file's symbol is renamed in the worktree.
+  await writeFile(join(root, "src", "mod-89.ts"), source(89, true));
+
+  const answer = await runtimeFor(root).workspaceAstMove!({});
+  const moves = answer.moves as Array<{
+    from: string;
+    to: string;
+    states: { renamed: boolean };
+  }>;
+  expect(
+    moves.some(
+      (move) =>
+        move.from.includes(name(89)) &&
+        move.to.includes("V2") &&
+        move.states.renamed,
+    ),
+  ).toBe(true);
+  // The noise stayed out: no node_modules symbol ever entered the sets.
+  expect(moves.some((move) => move.from.includes("pad"))).toBe(false);
+}, 60_000);
+
 test("the workspace face detects a rename+move+modify the tree actually made", async () => {
   const root = await mkdtemp(join(tmpdir(), "ws-ast-move-"));
   roots.push(root);

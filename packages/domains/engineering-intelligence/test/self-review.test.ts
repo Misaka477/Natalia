@@ -6,7 +6,9 @@ import {
   buildSelfReviewDigest,
   buildSelfReviewPrompt,
   createSelfReview,
+  parseSelfReviewAnswer,
   parseSelfReviewCandidates,
+  selfReviewGrowthFact,
 } from "../src/self-review";
 
 /**
@@ -193,4 +195,152 @@ test("a late fire after dispose vanishes silently (no publish, no provider call)
   await createSelfReview(deps).review("ses_d4", new AbortController());
   expect(called).toBe(0);
   expect(published).toEqual([]);
+});
+
+test("the review's three lanes parse tolerantly, and the growth lanes validate", () => {
+  // The full answer: all three lanes, and a malformed element in each of
+  // the growth lanes is dropped rather than trusted.
+  const answer = parseSelfReviewAnswer(
+    JSON.stringify({
+      candidates: [
+        { kind: "create", name: "a-skill", description: "d", content: "# b" },
+      ],
+      deficiencies: [
+        {
+          kind: "rule",
+          capability: "no-force-push",
+          reason: "pushed over a protected branch",
+        },
+        { kind: "nonsense", capability: "dropped", reason: "unknown kind" },
+        { kind: "policy" },
+      ],
+      aspirations: [
+        {
+          kind: "tool",
+          capability: "batch-retry",
+          reason: "reached for it twice",
+        },
+        { kind: "tool", capability: "  ", reason: "no capability name" },
+      ],
+    }),
+  );
+  expect(answer.candidates).toHaveLength(1);
+  expect(answer.deficiencies).toEqual([
+    {
+      kind: "rule",
+      capability: "no-force-push",
+      reason: "pushed over a protected branch",
+    },
+  ]);
+  expect(answer.aspirations).toEqual([
+    { kind: "tool", capability: "batch-retry", reason: "reached for it twice" },
+  ]);
+  // The old entry point still reads the skill lane alone.
+  expect(
+    parseSelfReviewCandidates(
+      JSON.stringify({
+        candidates: [{ kind: "create", name: "x" }],
+        aspirations: [{ kind: "tool" }],
+      }),
+    ),
+  ).toHaveLength(1);
+  // Garbage resolves honestly: three empty lanes, never a throw.
+  const empty = parseSelfReviewAnswer("no json at all");
+  expect(empty).toEqual({ candidates: [], deficiencies: [], aspirations: [] });
+});
+
+test("the growth fact carries both lanes with the retrospection's provenance", () => {
+  const fact = selfReviewGrowthFact({
+    deficiencies: [
+      { kind: "rule", capability: "no-force-push", reason: "seen" },
+    ],
+    aspirations: [
+      { kind: "tool", capability: "batch-retry", reason: "wanted" },
+    ],
+    sessionID: "ses_1",
+  });
+  // Deficiencies first: evidence outranks a wish.
+  expect(fact.suggestions.map((entry) => entry.kind)).toEqual(["rule", "tool"]);
+  expect(fact.considered).toEqual({ tasks: 1, gaps: 2 });
+  // An empty pair is an honest empty.
+  const quiet = selfReviewGrowthFact({
+    deficiencies: [],
+    aspirations: [],
+    sessionID: "ses_1",
+  });
+  expect(quiet.suggestions).toEqual([]);
+  expect(quiet.considered.gaps).toBe(0);
+});
+
+test("the prompt shows the session's violations to the review", () => {
+  const { messages } = buildSelfReviewPrompt(
+    "digest text",
+    [{ name: "s", description: "d" } as never],
+    [
+      {
+        owner: "domains/goal",
+        invariant: "goal.no-orphan",
+        code: "orphan_found",
+        detail: "task 12 lost its parent",
+      },
+    ],
+  );
+  const content = messages[1]!.content as string;
+  expect(content).toContain("[domains/goal] goal.no-orphan (orphan_found)");
+  expect(content).toContain("task 12 lost its parent");
+  expect(content).toContain("transcript digest:");
+  // Without violations the section is honest, not absent.
+  const quiet = buildSelfReviewPrompt("digest", []);
+  expect(quiet.messages[1]!.content).toContain(
+    "invariant violations this session:\n(none)",
+  );
+});
+
+test("the loop publishes ONE growth fact when a lane has content — and nothing when both are empty", async () => {
+  // The growth lanes end to end: a review whose answer names a deficiency
+  // and an aspiration publishes exactly one fact per lane (the whitelist's
+  // second target), and the completed event reports both counts.
+  const growth: unknown[] = [];
+  const base = collectDeps({
+    provider: () =>
+      fakeProvider(
+        `{"candidates":[],"deficiencies":[{"kind":"rule","capability":"no-force-push","reason":"pushed over a protected branch"}],"aspirations":[{"kind":"tool","capability":"batch-retry","reason":"reached for it twice"}]}`,
+      ),
+  });
+  const { deps, published } = {
+    deps: {
+      ...base.deps,
+      publishGrowth: (input: unknown) => growth.push(input),
+    },
+    published: base.published,
+  };
+  const handle = createSelfReview(deps);
+  await handle.review("ses_growth", new AbortController());
+  expect(growth).toHaveLength(1);
+  const fact = growth[0] as {
+    sessionID: string;
+    fact: { suggestions: unknown[] };
+  };
+  expect(fact.sessionID).toBe("ses_growth");
+  // Deficiencies first, then the aspiration — the ordering is the priority.
+  expect(fact.fact.suggestions).toHaveLength(2);
+  const completed = published[0] as Record<string, unknown>;
+  expect(completed.proposals).toBe(2);
+  expect(completed.deficiencies).toBe(1);
+  expect(completed.aspirations).toBe(1);
+
+  // The honest empty: no lanes' content, no fact published (a journal of
+  // "I thought of nothing" is noise, not an audit trail).
+  const quietGrowth: unknown[] = [];
+  const quiet = collectDeps({
+    provider: () => fakeProvider(`{"candidates":[]}`),
+  });
+  const quietHandle = createSelfReview({
+    ...quiet.deps,
+    publishGrowth: (input: unknown) => quietGrowth.push(input),
+  });
+  await quietHandle.review("ses_quiet", new AbortController());
+  expect(quietGrowth).toHaveLength(0);
+  const quietCompleted = quiet.published[0] as Record<string, unknown>;
+  expect(quietCompleted.proposals).toBe(0);
 });

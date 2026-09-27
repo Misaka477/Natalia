@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { ensureSessionFullEvents } from "@anthelia/substrate";
 import { createEventSink } from "../event-sink";
 import type { SessionID } from "@anthelia/contracts";
 import type { ProductRuntimeContext } from "@natalia/collab";
@@ -109,6 +111,50 @@ export function wireExecution(
         .get((event.sessionID ?? "") as SessionID);
       if (exec) ctx.ports.publishForSession(exec, event);
       else ctx.ports.publish(event);
+    },
+    // The violations' seam: D1/D2's live facts for this session. The
+    // review's hardest evidence; a wiring that cannot name them leaves
+    // the seam unset and the review reports from the transcript alone.
+    violations: (sessionID) => {
+      const exec = ctx.ports
+        .getExecutionBySession()
+        .get(sessionID as SessionID);
+      if (!exec) return [];
+      // The full-events discipline: ensure the session's events are
+      // materialized before reading their content (the same sanctioned
+      // face the subagent history uses — the guard names every
+      // full-event read).
+      void ensureSessionFullEvents(ctx, exec);
+      return exec.session.events.filter(
+        (event) => event.type === "invariant.violation",
+      );
+    },
+    // The growth lane's write surface: the proposals as ONE growth.proposed
+    // fact, published to the session's journal. A FACT — it applies
+    // nothing; the proposal interface, the verification gate and the
+    // human read it from there.
+    publishGrowth: ({ sessionID, fact }) => {
+      const exec = ctx.ports
+        .getExecutionBySession()
+        .get(sessionID as SessionID);
+      ctx.ports.publish(
+        exec
+          ? ({
+              type: "growth.proposed",
+              id: `growth-${randomUUID()}`,
+              at: new Date().toISOString(),
+              sessionID: sessionID as never,
+              suggestions: fact.suggestions,
+              considered: fact.considered,
+            } as never)
+          : ({
+              type: "growth.proposed",
+              id: `growth-${randomUUID()}`,
+              at: new Date().toISOString(),
+              suggestions: fact.suggestions,
+              considered: fact.considered,
+            } as never),
+      );
     },
   });
   ports.cancelTitleGeneration = title.cancelTitleGeneration;

@@ -2293,6 +2293,16 @@ type RuntimeEventData =
       skillsUpdated: string[];
       /** Proposals the write boundary rejected (whitelist/validation). */
       rejected: number;
+      /**
+       * The growth lanes' proposals recorded this review (a
+       * `growth.proposed` fact's suggestions, when any): how many, and
+       * the split by lane — a deficiency is evidence of something wrong,
+       * an aspiration a capability the task wished for. Zero when the
+       * review found nothing to propose (the honest empty).
+       */
+      proposals: number;
+      deficiencies: number;
+      aspirations: number;
     }
   | {
       type: "self_review.skipped";

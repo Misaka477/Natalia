@@ -107,6 +107,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "the project-grant restore fold's source: the collab fact slice when complete, the resident tail as the belt (the collaborationEventsFor accessor, one layer over)",
   },
+  "packages/framework/client/src/runtime/composition/execution.ts": {
+    count: 1,
+    cls: "explicit-history",
+    note: "the self-review's violations input: D1/D2's invariant.violation facts behind ensureSessionFullEvents — the study's sanctioned class",
+  },
   "packages/framework/client/src/runtime/terminal-runtime/native-terminal.ts": {
     count: 1,
     cls: "state-first",

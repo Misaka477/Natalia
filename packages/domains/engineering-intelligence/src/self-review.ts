@@ -33,12 +33,25 @@ export const SELF_REVIEW_TIMEOUT_MS = 30_000;
 /** How long after the turn the review fires (late enough to be after persistence). */
 export const SELF_REVIEW_DELAY_MS = 400;
 
-const TASK_PROMPT = `You are a background curator for this workspace. You receive a skills catalog and a transcript digest. Decide whether a skill should be created or updated to capture something worth reusing.
+/**
+ * The three-question review. The lane that was here first asks ① (what to
+ * sediment for next time); the two the self-iteration loop was missing are
+ * ② (what was DEFICIENT — the repair lane) and ③ (what capability was
+ * MISSING that would have made this task better — the growth lane, the
+ * plan's `growth.proposed` kind "tool"). A proposal is a FACT: recording
+ * one applies nothing (the plan's approval policy — growth never
+ * self-authorizes).
+ */
+const TASK_PROMPT = `You are a background curator for this workspace. You receive a skills catalog, a transcript digest, and (when the session produced them) the invariant violations it tripped. Answer three questions about the work just done.
 
 Reply with ONLY a JSON object, no markdown fences, no commentary:
-{"candidates":[{"kind":"create","name":"kebab-lowercase-name","description":"one line","content":"# markdown skill body"},{"kind":"update","name":"existing-skill","description":"one line","content":"# full replacement body"}]}
+{"candidates":[{"kind":"create","name":"kebab-lowercase-name","description":"one line","content":"# markdown skill body"},{"kind":"update","name":"existing-skill","description":"one line","content":"# full replacement body"}],"deficiencies":[{"kind":"rule","capability":"short name","reason":"what went wrong, seen from the transcript"}],"aspirations":[{"kind":"tool","capability":"short name","reason":"what you reached for and it did not exist, or what would have made this task better"}]}
 
-Rules: name = lowercase letters/digits/hyphens starting alphanumeric; content = complete markdown skill body; if nothing is worth sedimenting reply {"candidates":[]}. Never propose deleting, executing, or writing anything other than a skill.`;
+Rules:
+- ① candidates: name = lowercase letters/digits/hyphens starting alphanumeric; content = complete markdown skill body. If nothing is worth sedimenting, [].
+- ② deficiencies: kind is "rule" for something that should be a constitution rule, "policy" for a policy the runs keep losing to, "skill" for missing knowledge. Point at what the transcript SHOWS (a violation fact is the strongest evidence; a failure or a redo is next). [] when nothing was deficient.
+- ③ aspirations: kind is "tool" for a new tool/capability the runtime does not have, "skill" for knowledge worth sedimenting as a skill. This is the growth lane — a capability you WISH existed after doing this work. [] when nothing was missing.
+- Never propose deleting, executing, or writing anything outside these three lists. A proposal records an observation; it changes nothing by itself.`;
 
 /** The honest digest: human turns, assistant replies, tool names — bounded. */
 export function buildSelfReviewDigest(events: readonly RuntimeEvent[]): string {
@@ -78,16 +91,29 @@ export function buildSelfReviewDigest(events: readonly RuntimeEvent[]): string {
 export function buildSelfReviewPrompt(
   digest: string,
   skills: readonly SkillMetadata[],
+  violations: readonly unknown[] = [],
 ): { messages: ProviderStreamRequest["messages"] } {
   const catalog = skills
     .map((skill) => `- ${skill.name}: ${skill.description ?? ""}`.trim())
+    .join("\n");
+  const violationLines = violations
+    .map((entry) => {
+      const { owner, invariant, code, detail } = entry as Record<
+        string,
+        unknown
+      >;
+      return `- [${String(owner ?? "?")}] ${String(invariant ?? "?")} (${String(code ?? "?")}): ${String(detail ?? "").slice(0, 400)}`;
+    })
     .join("\n");
   return {
     messages: [
       { role: "system", content: TASK_PROMPT },
       {
         role: "user",
-        content: `skills catalog:\n${catalog || "(none)"}\n\ntranscript digest:\n${digest}`,
+        content:
+          `skills catalog:\n${catalog || "(none)"}\n\n` +
+          `invariant violations this session:\n${violationLines || "(none)"}\n\n` +
+          `transcript digest:\n${digest}`,
       },
     ],
   };
@@ -95,19 +121,102 @@ export function buildSelfReviewPrompt(
 
 /** Tolerant extraction: fences, chatter, garbage all resolve honestly. */
 export function parseSelfReviewCandidates(text: string): unknown[] {
+  return parseSelfReviewAnswer(text).candidates;
+}
+
+/**
+ * The review's full answer: the three lanes, each tolerant on its own (a
+ * lane the model omitted is an empty lane, never an error). The growth
+ * lanes' elements are validated to the `growth.proposed` suggestion shape
+ * — a malformed element is dropped rather than trusted.
+ */
+export function parseSelfReviewAnswer(text: string): {
+  candidates: unknown[];
+  deficiencies: SelfReviewProposal[];
+  aspirations: SelfReviewProposal[];
+} {
   try {
     const stripped = text.replace(/```(?:json)?/giu, "");
     const start = stripped.indexOf("{");
     const end = stripped.lastIndexOf("}");
-    if (start < 0 || end <= start) return [];
-    const parsed = JSON.parse(stripped.slice(start, end + 1)) as unknown;
-    if (Array.isArray((parsed as { candidates?: unknown }).candidates))
-      return (parsed as { candidates: unknown[] }).candidates;
-    if (Array.isArray(parsed)) return parsed;
-    return [];
+    if (start < 0 || end <= start)
+      return { candidates: [], deficiencies: [], aspirations: [] };
+    const parsed = JSON.parse(stripped.slice(start, end + 1)) as {
+      candidates?: unknown;
+      deficiencies?: unknown;
+      aspirations?: unknown;
+    };
+    const candidates = Array.isArray(parsed.candidates)
+      ? parsed.candidates
+      : Array.isArray(parsed)
+        ? parsed
+        : [];
+    return {
+      candidates,
+      deficiencies: parseProposals(parsed.deficiencies),
+      aspirations: parseProposals(parsed.aspirations),
+    };
   } catch {
-    return [];
+    return { candidates: [], deficiencies: [], aspirations: [] };
   }
+}
+
+const PROPOSAL_KINDS = new Set(["tool", "skill", "rule", "policy"]);
+
+/** One lane of proposals: the shape the growth fact carries, or nothing. */
+function parseProposals(value: unknown): SelfReviewProposal[] {
+  if (!Array.isArray(value)) return [];
+  const out: SelfReviewProposal[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const { kind, capability, reason } = entry as Record<string, unknown>;
+    if (typeof kind !== "string" || !PROPOSAL_KINDS.has(kind)) continue;
+    if (typeof capability !== "string" || !capability.trim()) continue;
+    out.push({
+      kind: kind as SelfReviewProposal["kind"],
+      capability: capability.trim().slice(0, 200),
+      reason: typeof reason === "string" ? reason.trim().slice(0, 500) : "",
+    });
+  }
+  return out;
+}
+
+/**
+ * One proposal: the SHAPE the `growth.proposed` fact's suggestions carry
+ * (contracts/events.ts), declared here so the review's answer and the
+ * journal fact cannot drift. `observations` is always 1 (one task's
+ * retrospection); `sources` is the session that saw it.
+ */
+export type SelfReviewProposal = {
+  kind: "tool" | "skill" | "rule" | "policy";
+  capability: string;
+  reason: string;
+};
+
+/** What one review would publish as one growth fact. */
+export type SelfReviewGrowthFact = {
+  suggestions: SelfReviewProposal[];
+  considered: { tasks: number; gaps: number };
+};
+
+/**
+ * The review's proposals as the growth fact's suggestions: both lanes,
+ * deficiencies first (a deficiency is evidence; an aspiration is a wish —
+ * the ordering is the priority), each with the retrospection's provenance.
+ */
+export function selfReviewGrowthFact(input: {
+  deficiencies: readonly SelfReviewProposal[];
+  aspirations: readonly SelfReviewProposal[];
+  sessionID: string;
+}): SelfReviewGrowthFact {
+  const suggestions: SelfReviewProposal[] = [
+    ...input.deficiencies,
+    ...input.aspirations,
+  ];
+  return {
+    suggestions,
+    considered: { tasks: 1, gaps: suggestions.length },
+  };
 }
 
 export type SelfReviewEvent =
@@ -138,6 +247,24 @@ export type SelfReviewDeps = {
    */
   skills(): Promise<SkillService | undefined> | SkillService | undefined;
   publish(event: SelfReviewEvent): void;
+  /**
+   * The session's invariant violations (D1/D2's live facts), if the wiring
+   * can name them. Optional: a wiring without it falls back to filtering
+   * the event stream for `invariant.violation` — the review's evidence is
+   * best-effort, never a requirement to run.
+   */
+  violations?(sessionID: string): readonly unknown[];
+  /**
+   * The growth lane's write surface: publishing ONE growth.proposed fact
+   * (the proposals as suggestions). The whitelist's second target — a
+   * proposal applies nothing by contract, so this is the review's only
+   * power over the self-iteration loop: putting an observation on the
+   * record where the proposal interface and the human read it.
+   */
+  publishGrowth?(input: {
+    sessionID: string;
+    fact: SelfReviewGrowthFact;
+  }): void;
   /** True once the runtime is disposing — a late timer must vanish silently. */
   disposed?(): boolean;
 };
@@ -170,9 +297,24 @@ export function createSelfReview(deps: SelfReviewDeps) {
     if (!provider) return skip("no_provider");
     const skillService = await deps.skills();
     if (!skillService) return skip("no_skills");
-    const digest = buildSelfReviewDigest(deps.events(sessionID));
+    const events = deps.events(sessionID);
+    const digest = buildSelfReviewDigest(events);
     if (!digest) return skip("no_input");
-    const { messages } = buildSelfReviewPrompt(digest, skillService.list());
+    // The violations this session tripped (D1/D2's live facts): the
+    // retrospection's hardest evidence. Without them the review can only
+    // guess from the transcript; with them a structural violation is the
+    // first thing it sees.
+    const violations = deps.violations
+      ? deps.violations(sessionID)
+      : events.filter(
+          (event) =>
+            (event as { type?: string }).type === "invariant.violation",
+        );
+    const { messages } = buildSelfReviewPrompt(
+      digest,
+      skillService.list(),
+      violations,
+    );
 
     let output = "";
     try {
@@ -212,11 +354,11 @@ export function createSelfReview(deps: SelfReviewDeps) {
     }
     if (controller.signal.aborted) return skip("superseded");
 
-    const candidates = parseSelfReviewCandidates(output);
+    const answer = parseSelfReviewAnswer(output);
     const skillsCreated: string[] = [];
     const skillsUpdated: string[] = [];
     let rejected = 0;
-    for (const candidate of candidates) {
+    for (const candidate of answer.candidates) {
       try {
         const result = await skillService.upsertSkill(candidate);
         (result.created ? skillsCreated : skillsUpdated).push(result.name);
@@ -225,6 +367,15 @@ export function createSelfReview(deps: SelfReviewDeps) {
         rejected += 1;
       }
     }
+    // The growth lanes: ONE fact per review, deficiencies first. An empty
+    // pair is an honest empty — nothing is published for it (a journal
+    // full of "I thought of nothing" is noise, not an audit trail).
+    const fact = selfReviewGrowthFact({
+      deficiencies: answer.deficiencies,
+      aspirations: answer.aspirations,
+      sessionID,
+    });
+    if (fact.suggestions.length > 0) deps.publishGrowth?.({ sessionID, fact });
     deps.publish({
       type: "self_review.completed",
       at: new Date().toISOString(),
@@ -232,6 +383,9 @@ export function createSelfReview(deps: SelfReviewDeps) {
       skillsCreated,
       skillsUpdated,
       rejected,
+      proposals: fact.suggestions.length,
+      deficiencies: answer.deficiencies.length,
+      aspirations: answer.aspirations.length,
     });
   }
 

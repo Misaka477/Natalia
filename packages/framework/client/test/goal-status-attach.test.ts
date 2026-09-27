@@ -217,10 +217,15 @@ test("pause hard-stops the running goal round and edit steers it", async () => {
   };
 
   const events: RuntimeEvent[] = [];
+  // 20s, the runtime-condition budget the real-runtime harness documents:
+  // a goal round admission crosses the runtime boundary (a settle on disk, a
+  // wake that has to run), and a 5s default is a lottery under the concurrent
+  // suite — a different victim every run. The 60s per-test cap still bounds a
+  // genuine hang.
   const waitUntil = async (
     predicate: () => boolean,
     label: string,
-    timeoutMs = 5000,
+    timeoutMs = 20_000,
   ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {

@@ -7,7 +7,13 @@ import { settleShutdown, shutdownStepTimeoutMs } from "../src/command-helpers";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 
-async function waitForFile(path: string, timeoutMs = 5000) {
+/**
+ * 20s, the runtime-condition budget the client harness documents: this
+ * waits on a SPAWNED subprocess writing a file, which crosses a process
+ * boundary — a 5s default is a lottery under the concurrent suite (a
+ * different victim every run). The per-test cap still bounds a hang.
+ */
+async function waitForFile(path: string, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(path)) return;

@@ -53,7 +53,8 @@
     "diff:build-wasm": "CARGO_HOME=${CARGO_HOME:-${TMPDIR:-/tmp}/natalia-cargo} cargo build --release --target wasm32-unknown-unknown --manifest-path packages/framework/diff-wasm/text-build/Cargo.toml && cp packages/framework/diff-wasm/text-build/target/wasm32-unknown-unknown/release/natalia_diff_wasm.wasm packages/framework/diff-wasm/src/natalia_diff_wasm.wasm && bun scripts/build-ast-packs.ts",
     "codegen:composition-dts": "bun scripts/composition-dts.ts",
     "build:distribution": "NATALIA_BUILD_SKIP_NATIVE=1 bun scripts/ts-build.ts && npm run refresh:plugin-store",
-    "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun scripts/object-store-rust-mode.ts"
+    "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun scripts/object-store-rust-mode.ts",
+    "build:everything": "bun scripts/build-everything.ts"
   },
   "dependencies": {
     "@jsquash/jpeg": "^1.6.0",

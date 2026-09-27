@@ -73,8 +73,12 @@ test("the CLI detects a live daemon, drains its active turn, flips, and restarts
   writeFileSync(join(rel, "SHA256SUMS"), `${sums}\n`);
 
   // the daemon: store + token + a REAL host, and a gated turn in flight
+  // The daemon's state directory follows the live state-directory name. A
+  // test that computes this path independently agrees with the CLI's own
+  // resolution — or the version flip reads the wrong binary, which is
+  // exactly what this test caught when the two disagreed.
   const store = createRuntimeDaemonStore({
-    dir: join(stateHome, "natalia-cli", "daemon"),
+    dir: join(stateHome, "natalia", "daemon"),
   });
   const token = await daemonToken(store);
   let release!: () => void;

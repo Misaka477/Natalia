@@ -48,7 +48,7 @@ const previousNpmCache = process.env.npm_config_cache;
 
 beforeAll(async () => {
   testNataliaInstance = await createTemporaryDirectory(
-    join(tmpdir(), "natalia-cli-instance-"),
+    join(tmpdir(), "natalia-instance-"),
   );
   // Plugin installation shells out to npm. Point its cache at the test temp
   // directory so a read-only or unavailable user cache cannot fail the suite.
@@ -105,7 +105,7 @@ afterAll(async () => {
 });
 
 test("CLI Work Graph reader projects only safe nodes and edges", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-workgraph-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-workgraph-"));
   const store = new JsonSessionStore(join(root, ".natalia", "sessions"));
   const session = createSessionRecord("ses_cli_graph", "Graph");
   session.events.push(
@@ -145,7 +145,7 @@ test("CLI Work Graph reader projects only safe nodes and edges", async () => {
 });
 
 test("CLI session helpers list and delete local durable sessions", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-sessions-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-sessions-"));
   const store = new JsonSessionStore(join(root, ".natalia", "sessions"));
   const record = createSessionRecord(
     "ses_cli" as import("@anthelia/contracts").SessionID,
@@ -176,7 +176,7 @@ test("CLI session helpers list and delete local durable sessions", async () => {
 });
 
 test("CLI session helpers list and show SQLite-backed unattended episodes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-sqlite-sessions-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-sessions-"));
   await mkdir(join(root, ".natalia"), { recursive: true });
   const store = new SqliteSessionStore(join(root, ".natalia", "sessions.db"));
   const id =
@@ -212,7 +212,7 @@ test("CLI session helpers list and show SQLite-backed unattended episodes", asyn
 });
 
 test("CLI session metadata export/import omits event and attachment contents", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-session-bundle-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-session-bundle-"));
   const store = new JsonSessionStore(join(root, ".natalia", "sessions"));
   const record = createSessionRecord(
     "ses_bundle" as import("@anthelia/contracts").SessionID,
@@ -249,7 +249,7 @@ test("CLI session metadata export/import omits event and attachment contents", a
 });
 
 test("CLI session delete reclaims an attachment orphaned by the removed session", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-delete-attachment-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-delete-attachment-"));
   const store = new JsonSessionStore(join(root, ".natalia", "sessions"));
   const record = createSessionRecord(
     "ses_attachment" as import("@anthelia/contracts").SessionID,
@@ -312,7 +312,7 @@ test("CLI run attachment flags preserve prompt text and validate values", () => 
 });
 
 test("CLI filesystem commands share protected workspace APIs", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-filesystem-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-filesystem-"));
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(join(root, "src", "main.ts"), "const answer = 42\n");
   expect(
@@ -354,7 +354,7 @@ test("CLI filesystem commands share protected workspace APIs", async () => {
 });
 
 test("CLI session helpers expose safe metadata and local mutations", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-session-actions-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-session-actions-"));
   const store = new JsonSessionStore(join(root, ".natalia", "sessions"));
   const record = createSessionRecord(
     "ses_actions" as import("@anthelia/contracts").SessionID,
@@ -392,7 +392,7 @@ test("CLI session helpers expose safe metadata and local mutations", async () =>
 });
 
 test("CLI doctor reports safe config/model/session availability", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-doctor-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-doctor-"));
   const config = defaultConfigV3();
   config.providers.local = {
     name: "local",
@@ -443,7 +443,7 @@ test("CLI doctor reports safe config/model/session availability", async () => {
 });
 
 test("CLI doctor states that shell and terminal egress is not bounded here", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-doctor-egress-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-doctor-egress-"));
   const path = join(root, "config.json");
   await saveConfigFile(defaultConfigV3(), path);
   const child = Bun.spawnSync(
@@ -468,10 +468,15 @@ test("CLI doctor states that shell and terminal egress is not bounded here", asy
   );
   expect(output).toContain("run_shell and native terminal input");
   expect(output).toContain("firewall or container network");
-});
+  // 30s, and it is not padding: this spawns a REAL CLI subprocess — the
+  // plugin bootstrap, the runtime boot, then the doctor — so the budget
+  // crosses a process boundary and the 5s default is a lottery under load
+  // (the harness's own documented lesson for runtime conditions). It runs
+  // in well under a second when the host is idle.
+}, 30_000);
 
 test("legacy tool list is absent after plugin lifecycle migration", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-tools-list-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-list-"));
   const child = Bun.spawnSync(
     [
       process.execPath,
@@ -488,7 +493,7 @@ test("legacy tool list is absent after plugin lifecycle migration", async () => 
 });
 
 test("old top-level install and uninstall no longer write tool activation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-cli-old-install-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-old-install-"));
   for (const command of ["install", "uninstall"]) {
     const child = Bun.spawnSync(
       [

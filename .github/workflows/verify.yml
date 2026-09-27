@@ -117,21 +117,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - layer: "core"
+          - layer: "core-1"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 .
-                            ./packages/core/runtime-services/test ./packages/core/composition/test \
-                            ./packages/core/capability/test ./packages/core/tools/test \
-                            ./packages/tooling/testing/test ./packages/tooling/installer/test \
-                            ./packages/tooling/sdk/test ./packages/core/plugin/test
-          - layer: "substrate"
+              bun test --max-concurrency=4 --timeout 60000 ./packages/core/contracts/test \
+                              ./packages/core/runtime-services/test ./packages/core/composition/test \
+                              ./packages/core/capability/test ./packages/core/tools/test
+          - layer: "core-2"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 .
-                            ./packages/hosts/config/test ./packages/hosts/confinement/test \
-                            ./packages/framework/session/test ./packages/framework/substrate/test \
-                            ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
-                            ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
-                            ./packages/hosts/object-store/test
+              bun test --max-concurrency=4 --timeout 60000 ./packages/tooling/testing/test \
+                              ./packages/tooling/installer/test ./packages/tooling/sdk/test \
+                              ./packages/core/plugin/test
+          - layer: "substrate-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \
+                              ./packages/hosts/config/test ./packages/hosts/confinement/test \
+                              ./packages/framework/session/test ./packages/framework/substrate/test
+          - layer: "substrate-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/session-store/test \
+                              ./packages/hosts/ui-model/test ./packages/hosts/view-store/test \
+                              ./packages/hosts/ui-host/test ./packages/hosts/object-store/test
           - layer: "client-a"
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-a.test.ts
@@ -248,41 +253,48 @@ jobs:
                               packages/framework/client/test/workspace-ast-move.test.ts \
                               packages/framework/client/test/workspace-git-diff.test.ts \
                               packages/framework/client/test/workspace-runtime-client.test.ts
-          - layer: "mechanisms"
+          - layer: "mechanisms-1"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 .
-                            ./packages/framework/operation-log/test \
-                            ./packages/framework/runtime-diagnostics/test \
-                            ./packages/framework/runtime/test ./packages/framework/retry/test \
-                            ./packages/framework/runtime-config/test \
-                            ./packages/framework/runtime-status/test \
-                            ./packages/framework/turn-orchestration/test \
-                            ./packages/framework/provider-model/test \
-                            ./packages/framework/agent-prompts/test \
-                            ./packages/framework/collaboration/test ./packages/framework/workspace/test \
-                            ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
-                            ./packages/framework/compaction/test ./packages/framework/sandbox/test \
-                            ./packages/framework/diff-wasm/test
-          - layer: "domains"
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
+                              ./packages/framework/operation-log/test \
+                              ./packages/framework/runtime-diagnostics/test ./packages/framework/runtime/test \
+                              ./packages/framework/retry/test ./packages/framework/runtime-config/test \
+                              ./packages/framework/runtime-status/test \
+                              ./packages/framework/turn-orchestration/test \
+                              ./packages/framework/provider-model/test
+          - layer: "mechanisms-2"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 .
-                            ./packages/domains/goal-runtime/test \
-                            ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test \
-                            ./packages/domains/work-ledger/test ./packages/domains/governance-ledger/test \
-                            ./packages/domains/context-ledger/test
-          - layer: "plugins"
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/agent-prompts/test \
+                              ./packages/framework/collaboration/test ./packages/framework/workspace/test \
+                              ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
+                              ./packages/framework/compaction/test ./packages/framework/sandbox/test \
+                              ./packages/framework/diff-wasm/test
+          - layer: "domains-1"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 .
-                            ./packages/plugins/team/test ./packages/framework/tool-policy/test \
-                            ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
-                            ./packages/plugins/skills/test ./packages/hosts/transport/test \
-                            ./packages/plugins/mcp/test ./packages/framework/subagents/test \
-                            ./packages/framework/agent/test ./packages/plugins/tools/ask/test \
-                            ./packages/plugins/tools/fs-read/test ./packages/plugins/tools/fs-write/test \
-                            ./packages/plugins/tools/search/test ./packages/plugins/tools/shell/test \
-                            ./packages/plugins/tools/todo/test ./packages/plugins/tools/web/test \
-                            ./packages/plugins/tools/process/test ./packages/plugins/ui/web/test \
-                          packages/plugins/ui/pending/test ./packages/plugins/ui/kit/test
+              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
+                              ./packages/domains/goal-runtime/test \
+                              ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test
+          - layer: "domains-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/work-ledger/test \
+                              ./packages/domains/governance-ledger/test \
+                              ./packages/domains/context-ledger/test
+          - layer: "plugins-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
+                              ./packages/plugins/team/test ./packages/framework/tool-policy/test \
+                              ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
+                              ./packages/plugins/skills/test ./packages/hosts/transport/test \
+                              ./packages/plugins/mcp/test ./packages/framework/subagents/test \
+                              ./packages/framework/agent/test ./packages/plugins/tools/ask/test
+          - layer: "plugins-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/tools/fs-read/test \
+                              ./packages/plugins/tools/fs-write/test ./packages/plugins/tools/search/test \
+                              ./packages/plugins/tools/shell/test ./packages/plugins/tools/todo/test \
+                              ./packages/plugins/tools/web/test ./packages/plugins/tools/process/test \
+                              ./packages/plugins/ui/web/test packages/plugins/ui/pending/test \
+                              ./packages/plugins/ui/kit/test
           - layer: "cli"
             dirs: >-
               npm run docs:check && npm --workspace @natalia/cli run test

@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 /**
@@ -197,7 +198,10 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
       "-File",
       join(repoRoot, "scripts", "install.ps1"),
       "-From",
-      release,
+      // The ps1 fetches each listed file through Invoke-WebRequest, which
+      // needs a URI — the same file:// form the sh installer's fixture
+      // uses (a bare directory path is not a URI on any platform).
+      pathToFileURL(release).href,
       "-Home",
       home,
     ],

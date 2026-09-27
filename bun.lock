@@ -391,6 +391,8 @@
       "version": "0.0.0-m13",
       "dependencies": {
         "@anthelia/contracts": "workspace:*",
+        "@anthelia/diff-wasm": "workspace:*",
+        "@anthelia/platform": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
       },
     },

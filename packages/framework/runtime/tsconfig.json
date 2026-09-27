@@ -19,7 +19,7 @@
       "path": "../../hosts/config"
     },
     {
-      "path": "../../hosts/object-store"
+      "path": "../../framework/object-store"
     },
     {
       "path": "../../hosts/platform"

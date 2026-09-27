@@ -13,7 +13,7 @@
       "path": "../../hosts/platform"
     },
     {
-      "path": "../../hosts/object-store"
+      "path": "../../framework/object-store"
     },
     {
       "path": "../../core/tools"

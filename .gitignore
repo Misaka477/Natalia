@@ -85,8 +85,8 @@ Thumbs.db
 /packages/framework/diff-wasm/target/
 /packages/framework/diff-wasm/text-build/target/
 /packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
-/packages/hosts/object-store/native-index/target/
-/packages/hosts/object-store/native/target/
+/packages/framework/object-store/native-index/target/
+/packages/framework/object-store/native/target/
 /packages/hosts/confinement/native/target/
 
 # Local CEF SDK/test artifacts

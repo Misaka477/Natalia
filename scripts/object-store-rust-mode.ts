@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import {
   objectStoreBackendStatus,
   rustCas,
-} from "../packages/hosts/object-store/src/rust-store";
+} from "../packages/framework/object-store/src/rust-store";
 
 process.env.NATALIA_OBJECT_STORE_BACKEND = "rust";
 await rustCas.ensureBuilt();
@@ -25,7 +25,7 @@ if (engaged !== "rust") {
 
 const child = spawnSync(
   process.execPath,
-  ["test", "packages/hosts/object-store/test", "--timeout", "120000"],
+  ["test", "packages/framework/object-store/test", "--timeout", "120000"],
   { stdio: "inherit", env: process.env },
 );
 process.exit(child.status ?? 1);

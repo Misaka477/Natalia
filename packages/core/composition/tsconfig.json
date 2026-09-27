@@ -10,7 +10,7 @@
       "path": "../../core/contracts"
     },
     {
-      "path": "../../hosts/object-store"
+      "path": "../../framework/object-store"
     },
     {
       "path": "../../core/runtime-services"

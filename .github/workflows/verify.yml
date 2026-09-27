@@ -132,7 +132,7 @@ jobs:
                     ./packages/framework/session/test ./packages/framework/substrate/test \
                     ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
                     ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
-                    ./packages/hosts/object-store/test
+                    ./packages/framework/object-store/test
       - name: Test (the client runtime — the heaviest file)
         run: |
           bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test

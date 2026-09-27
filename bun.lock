@@ -344,6 +344,13 @@
       "name": "@anthelia/diff-wasm",
       "version": "1.0.0",
     },
+    "packages/framework/object-store": {
+      "name": "@anthelia/object-store",
+      "version": "0.0.0-m13",
+      "dependencies": {
+        "@anthelia/contracts": "workspace:*",
+      },
+    },
     "packages/framework/operation-log": {
       "name": "@anthelia/operation-log",
       "version": "0.0.0-m13",
@@ -530,13 +537,6 @@
         "@anthelia/contracts": "workspace:*",
       },
     },
-    "packages/hosts/object-store": {
-      "name": "@anthelia/object-store",
-      "version": "0.0.0-m13",
-      "dependencies": {
-        "@anthelia/contracts": "workspace:*",
-      },
-    },
     "packages/hosts/platform": {
       "name": "@anthelia/platform",
       "version": "0.0.0-m13",
@@ -657,6 +657,7 @@
         "@anthelia/plugin": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
         "@anthelia/tools": "workspace:*",
+        "@natalia/collaboration": "workspace:*",
       },
       "devDependencies": {
         "@anthelia/subagents": "workspace:*",
@@ -882,7 +883,7 @@
 
     "@anthelia/diff-wasm": ["@anthelia/diff-wasm@workspace:packages/framework/diff-wasm"],
 
-    "@anthelia/object-store": ["@anthelia/object-store@workspace:packages/hosts/object-store"],
+    "@anthelia/object-store": ["@anthelia/object-store@workspace:packages/framework/object-store"],
 
     "@anthelia/operation-log": ["@anthelia/operation-log@workspace:packages/framework/operation-log"],
 

@@ -202,7 +202,7 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
       // needs a URI — the same file:// form the sh installer's fixture
       // uses (a bare directory path is not a URI on any platform).
       pathToFileURL(release).href,
-      "-Home",
+      "-NataliaHome",
       home,
     ],
     { encoding: "utf8" },
@@ -210,10 +210,6 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
   // The fixture ships a sh-script "natalia", not natalia.exe — the ps1's
   // layout assertions run against natalia.exe, so this gate only checks the
   // script parses and starts (a parse failure exits non-zero immediately).
-  // TEMP: surface what the script actually answered.
-  console.log(
-    `PS1_RESULT status=${result.status} stderr=${JSON.stringify(result.stderr?.slice(0, 600))} stdout=${JSON.stringify(result.stdout?.slice(0, 200))}`,
-  );
   expect(result.status === 0 || result.stderr.includes("natalia.exe")).toBe(
     true,
   );

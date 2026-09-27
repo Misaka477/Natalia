@@ -1,6 +1,6 @@
 # D2 (install study): the Windows face of the one-command install.
 #
-#   install.ps1 [-From <dir | https://…>] [-Home <dir>]
+#   install.ps1 [-From <dir | https://…>] [-NataliaHome <dir>]
 #
 # The same guarantees as install.sh, in PowerShell's own idioms: every file
 # verified against SHA256SUMS before the destination is touched, only
@@ -14,7 +14,11 @@
 
 param(
   [string]$From = $(if ($env:NATALIA_INSTALL_BASE) { $env:NATALIA_INSTALL_BASE } else { "https://natalia.dev/releases" }),
-  [string]$Home = $(if ($env:NATALIA_HOME) { $env:NATALIA_HOME } else { Join-Path $env:USERPROFILE ".natalia" })
+  # NOT `-Home`: PowerShell's automatic $Home (the user's profile home) is
+  # read-only, and a parameter of that name is a WriteError on every Windows
+  # run — the CI's pwsh gate caught it; an installer that could never have run
+  # had shipped with it.
+  [string]$NataliaHome = $(if ($env:NATALIA_HOME) { $env:NATALIA_HOME } else { Join-Path $env:USERPROFILE ".natalia" })
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,13 +71,13 @@ try {
   }
 
   # 4. Land it: only versions/<version> and bin/ are ours to write.
-  $target = Join-Path (Join-Path $Home "versions") $version
+  $target = Join-Path (Join-Path $NataliaHome "versions") $version
   if (Test-Path -LiteralPath $target) {
     Remove-Item -LiteralPath $target -Recurse -Force
   }
   New-Item -ItemType Directory -Path $target -Force | Out-Null
   Copy-Item -Path (Join-Path $filesRoot "*") -Destination $target -Recurse -Force
-  $binDir = Join-Path $Home "bin"
+  $binDir = Join-Path $NataliaHome "bin"
   New-Item -ItemType Directory -Path $binDir -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $target "natalia.exe") -Destination (Join-Path $binDir "natalia.exe") -Force
 
@@ -87,8 +91,8 @@ try {
   }
 
   Write-Output "natalia $version installed at $(Join-Path $binDir 'natalia.exe')"
-  if (Test-Path -LiteralPath (Join-Path $Home "stores")) {
-    Write-Output "existing stores preserved untouched at $(Join-Path $Home 'stores')"
+  if (Test-Path -LiteralPath (Join-Path $NataliaHome "stores")) {
+    Write-Output "existing stores preserved untouched at $(Join-Path $NataliaHome 'stores')"
   }
   Write-Output "next: natalia doctor   # first run: platform report + provider guidance"
 }

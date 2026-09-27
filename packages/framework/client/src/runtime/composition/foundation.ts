@@ -1,9 +1,11 @@
+import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import {
   foregroundProcessForTTY,
   globalConfigHome,
   userRuntimeHome,
 } from "@anthelia/platform";
+import { resolveStatePath } from "@anthelia/platform";
 import { TerminalCommandBuffer } from "@anthelia/tools";
 import {
   skillService,
@@ -19,8 +21,10 @@ import type { StatusSnapshotController } from "@anthelia/runtime-status";
 import type { WorkLedgerController } from "@natalia/work-ledger";
 
 function userSkillRoot() {
-  const root = join(globalConfigHome(), "natalia-cli", "skills");
-  return isAbsolute(root) ? root : undefined;
+  // The live state directory's skills, falling back to the legacy
+  // `natalia-cli` one an existing install already filled.
+  const root = resolveStatePath(globalConfigHome(), existsSync, "skills");
+  return isAbsolute(root.path) ? root.path : undefined;
 }
 
 function redactToolOutput(output: string, redact: boolean | undefined) {

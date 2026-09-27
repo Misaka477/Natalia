@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configV3Schema, modelRefKey } from "@anthelia/contracts";
@@ -375,10 +375,13 @@ test("writes settings mutations to the requested config scope", async () => {
     const project = JSON.parse(
       await readFile(join(workspaceRoot, ".natalia", "config.json"), "utf8"),
     );
+    // The live state directory's name: a config write lands on `natalia`,
+    // not on the repository's old name. (The legacy `natalia-cli` location
+    // is the READ fallback, covered by resolveGlobalConfigPath's tests.)
     const globalConfigPath =
       process.platform === "win32"
-        ? join(home, "natalia-cli", "config.json")
-        : join(home, ".config", "natalia-cli", "config.json");
+        ? join(home, "natalia", "config.json")
+        : join(home, ".config", "natalia", "config.json");
     const global = JSON.parse(await readFile(globalConfigPath, "utf8"));
     expect(project).toEqual({ runtime: { maxStepsPerTurn: 7 } });
     expect(global).toEqual({ context: { compactionThresholdPercent: 91 } });
@@ -813,4 +816,31 @@ test("catalog filters disabled and policy-denied models while preserving capabil
       videoInput: false,
     },
   });
+});
+
+test("an existing install's global config in the legacy natalia-cli location is still honored", async () => {
+  // The rename's whole risk in one test: a user who already has
+  // ~/.config/natalia-cli/config.json must not lose it to a directory
+  // rename. The live name is written; the legacy one is still READ, and
+  // the resolution says where the config came from.
+  const previousHome = process.env.HOME;
+  const home = await mkdtemp(join(tmpdir(), "natalia-legacy-home-"));
+  try {
+    process.env.HOME = home;
+    const legacyDir = join(home, ".config", "natalia-cli");
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      join(legacyDir, "config.json"),
+      JSON.stringify({ context: { compactionThresholdPercent: 91 } }),
+    );
+    const resolved = await resolveConfig({ workspaceRoot: home });
+    expect(resolved.config.context.compactionThresholdPercent).toBe(91);
+    const global = resolved.sources.find((source) => source.scope === "global");
+    expect(global?.applied).toBe(true);
+    expect(global?.path).toContain("natalia-cli");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    await rm(home, { recursive: true, force: true });
+  }
 });

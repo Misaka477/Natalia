@@ -806,7 +806,7 @@ natalia daemon --port 4700
   `{ url }` — printing a secret to stdout leaks it into logs). To call the
   API, a consumer on the same machine and user reads the token file:
   `<daemon-dir>/token` (the `--daemon-dir` directory, default
-  `$XDG_STATE_HOME/natalia-cli/daemon`, i.e. `~/.local/state/natalia-cli/daemon`
+  `$XDG_STATE_HOME/natalia/daemon`, i.e. `~/.local/state/natalia/daemon`
   on Linux; `natalia daemon-status` reports the exact path). For
   cross-machine or cross-user consumers, the deployment forwards the token
   value through its own configuration (env var, secret store) —
@@ -2224,7 +2224,7 @@ natalia daemon --port 4700
 - **daemon 从不打印 token**（`natalia daemon` 只打印 `{ url }`——把 secret 打到
   stdout 会泄漏给日志系统）。调用 API 前怎么拿？与 daemon 同机同用户的消费方
   **直接读 token 文件**：`<daemon-dir>/token`（`--daemon-dir` 指定的目录，默认
-  `$XDG_STATE_HOME/natalia-cli/daemon`，Linux 即 `~/.local/state/natalia-cli/daemon`；
+  `$XDG_STATE_HOME/natalia/daemon`，Linux 即 `~/.local/state/natalia/daemon`；
   `natalia daemon-status` 报告确切路径）。跨机或跨用户时，由部署方把 token 值
   转发到你自己的配置（环境变量、secret store）——`NATALIA_TRANSPORT_TOKEN`
   正是 CLI 自己用的同一条路径。

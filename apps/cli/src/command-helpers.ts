@@ -12,7 +12,11 @@ export function withoutOption(argv: string[], flag: string) {
 }
 
 export function daemonDir() {
-  return resolve(userStateHome(), "natalia-cli", "daemon");
+  // Derived state (sockets and pid files), not user data: renaming it
+  // strands at most a stale directory from a previous install, which the
+  // daemon's own stale-socket handling already copes with. No migration
+  // is owed here.
+  return resolve(userStateHome(), "natalia", "daemon");
 }
 
 function positiveEnvNumber(name: string, fallback: number): number {

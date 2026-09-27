@@ -168,6 +168,38 @@ type CategoryId =
   | "storage"
   | "plugin";
 
+/**
+ * The product's academic name, shown under the wordmark in the settings
+ * footer. Seven words for seven letters, and each one names a fact this
+ * codebase can be held to:
+ *
+ *   Native — a compiled artifact running on the host (native terminal,
+ *     Rust native crates)
+ *   Agent — a multi-agent runtime (Natalia/Navi/Nia), not a single chatbot
+ *   Toolkit — the product's real shape: a tool registry plus a plugin host
+ *   Accountable — every action has an owner, an event, and an approval
+ *     record; growth proposals never self-authorize
+ *   Ledger — the event-sourced session journal is the single source of
+ *     truth (append-only, content-addressed, rollback-able)
+ *   Instrumented — runtime invariants are published as events, the doctor
+ *     and the guard suite read them; self-observation is first-class
+ *   Architecture — the layered engine (contracts / plugins / hosts /
+ *     @anthelia/*)
+ *
+ * It replaced a backronym that filled letters with words we do not stand
+ * behind. Do not re-introduce them:
+ *   "Autonomous"       — the approval posture is ask/auto/read_only and the
+ *                        growth lane never self-authorizes; this is the
+ *                        opposite of what we ship
+ *   "Local Intelligence" — the models are remote providers; local-first is
+ *                        about data, not about where the model runs
+ *   "Terminal"          — the web shell is a first-class app, not a
+ *                        fallback
+ * "Neural" said nothing at all.
+ */
+const ACADEMIC_NAME =
+  "Native Agent Toolkit: Accountable Ledger, Instrumented Architecture";
+
 type SettingItem = {
   label: string;
   description: string;
@@ -1065,10 +1097,7 @@ export function SettingsPanel(props: {
           </div>
           <div class="neu-settings-footer">
             <span class="neu-settings-footer-title">Natalia</span>
-            <span class="neu-settings-footer-sub">
-              Neural Autonomous Terminal Agent with Local Intelligence
-              Architecture
-            </span>
+            <span class="neu-settings-footer-sub">{ACADEMIC_NAME}</span>
             <span class="neu-settings-footer-quote">
               “Computation can carry what time cannot. Not metaphor.
               Mathematics.”

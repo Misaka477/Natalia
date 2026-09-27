@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { win32 } from "node:path";
 import {
+  LEGACY_STATE_DIR_NAMES,
+  STATE_DIR_NAME,
   configureBashExecutable,
   detachedShellPrefix,
   executableName,
@@ -11,6 +13,8 @@ import {
   platformJoin,
   processTreeKillCommand,
   resolveBashExecutable,
+  resolveStatePath,
+  statePath,
   userRuntimeHome,
   userStateHome,
 } from "../src/index";
@@ -325,5 +329,52 @@ describe("the configured bash path (the settings UI's Git Bash row)", () => {
     } finally {
       configureBashExecutable(undefined);
     }
+  });
+});
+
+describe("the state directory's live name and its legacy fallback", () => {
+  test("writes go to the live name", () => {
+    expect(statePath("/home/demo/.config", "config.json")).toBe(
+      "/home/demo/.config/natalia/config.json",
+    );
+  });
+
+  test("a reader prefers the live path", () => {
+    const resolved = resolveStatePath(
+      "/root",
+      (path) => path === "/root/natalia/config.json",
+      "config.json",
+    );
+    expect(resolved).toEqual({
+      path: "/root/natalia/config.json",
+      legacy: false,
+    });
+  });
+
+  test("a reader falls back to the legacy location an existing install wrote", () => {
+    const resolved = resolveStatePath(
+      "/root",
+      (path) => path === "/root/natalia-cli/config.json",
+      "config.json",
+    );
+    expect(resolved).toEqual({
+      path: "/root/natalia-cli/config.json",
+      legacy: true,
+    });
+  });
+
+  test("neither existing still answers with the live path, so writes land there", () => {
+    const resolved = resolveStatePath("/root", () => false, "config.json");
+    expect(resolved).toEqual({
+      path: "/root/natalia/config.json",
+      legacy: false,
+    });
+  });
+
+  test("the legacy names are enumerable, and the live name is never among them", () => {
+    const legacy: readonly string[] = LEGACY_STATE_DIR_NAMES;
+    expect(legacy.includes(STATE_DIR_NAME)).toBe(false);
+    const names: readonly string[] = LEGACY_STATE_DIR_NAMES;
+    expect(names.includes("natalia-cli")).toBe(true);
   });
 });

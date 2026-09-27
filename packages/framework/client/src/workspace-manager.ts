@@ -1,5 +1,6 @@
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+import { access } from "node:fs/promises";
 import {
   mkdir,
   readFile,
@@ -9,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { LEGACY_STATE_DIR_NAMES } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import { createLocalSessionService } from "@anthelia/session-store";
 import {
@@ -137,10 +139,42 @@ async function saveSettings(
 }
 
 function workspaceRegistryPath() {
-  return (
-    process.env.NATALIA_WORKSPACES_FILE ??
-    join(homedir(), ".config", "natalia-cli", "workspaces.json")
+  return process.env.NATALIA_WORKSPACES_FILE ?? liveWorkspaceRegistryPath();
+}
+
+/** The live state directory — where writes go. */
+function liveWorkspaceRegistryPath() {
+  return join(homedir(), ".config", "natalia", "workspaces.json");
+}
+
+/** The legacy `natalia-cli` location an existing install already wrote. */
+function legacyWorkspaceRegistryPaths() {
+  return LEGACY_STATE_DIR_NAMES.map((name) =>
+    join(homedir(), ".config", name, "workspaces.json"),
   );
+}
+
+/**
+ * The registry to READ: the live path if it exists, else the first legacy
+ * path that does. An existing install's registry is honored; nothing is
+ * copied or deleted, and the next write lands on the live name.
+ */
+async function readWorkspaceRegistryPath() {
+  const live = liveWorkspaceRegistryPath();
+  try {
+    await access(live);
+    return live;
+  } catch {
+    // fall through to the legacy candidates
+  }
+  for (const candidate of legacyWorkspaceRegistryPaths())
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // keep looking
+    }
+  return live;
 }
 
 type WorkspaceRegistryEntry = {
@@ -153,7 +187,7 @@ type WorkspaceRegistryEntry = {
 async function readWorkspaceRegistry(): Promise<WorkspaceRegistryEntry[]> {
   try {
     const raw = JSON.parse(
-      await readFile(workspaceRegistryPath(), "utf8"),
+      await readFile(await readWorkspaceRegistryPath(), "utf8"),
     ) as unknown;
     if (!Array.isArray(raw)) return [];
     return raw.filter(
@@ -167,7 +201,7 @@ async function readWorkspaceRegistry(): Promise<WorkspaceRegistryEntry[]> {
 
 async function writeWorkspaceRegistry(entries: WorkspaceRegistryEntry[]) {
   const path = workspaceRegistryPath();
-  await mkdir(join(homedir(), ".config", "natalia-cli"), {
+  await mkdir(join(homedir(), ".config", "natalia"), {
     recursive: true,
     mode: 0o700,
   });

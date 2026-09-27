@@ -136,11 +136,11 @@ npm run ts:cli -- session delete <id>
 
 ## 8. Where data lives
 
-| Data                                    | Location                                |
-| --------------------------------------- | --------------------------------------- |
-| Workspace config, sessions, checkpoints | `<workspace>/.natalia/`                 |
-| Global config                           | `~/.config/natalia-cli/config.json`     |
-| Workspace registry                      | `~/.config/natalia-cli/workspaces.json` |
+| Data                                    | Location                            |
+| --------------------------------------- | ----------------------------------- |
+| Workspace config, sessions, checkpoints | `<workspace>/.natalia/`             |
+| Global config                           | `~/.config/natalia/config.json`     |
+| Workspace registry                      | `~/.config/natalia/workspaces.json` |
 
 Override global paths with `NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE`.
 
@@ -284,11 +284,11 @@ npm run ts:cli -- session delete <id>
 
 ## 8. 数据存放位置
 
-| 数据                                | 位置                                    |
-| ----------------------------------- | --------------------------------------- |
-| workspace 配置、session、checkpoint | `<workspace>/.natalia/`                 |
-| global 配置                         | `~/.config/natalia-cli/config.json`     |
-| workspace registry                  | `~/.config/natalia-cli/workspaces.json` |
+| 数据                                | 位置                                |
+| ----------------------------------- | ----------------------------------- |
+| workspace 配置、session、checkpoint | `<workspace>/.natalia/`             |
+| global 配置                         | `~/.config/natalia/config.json`     |
+| workspace registry                  | `~/.config/natalia/workspaces.json` |
 
 可用 `NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖全局路径。
 

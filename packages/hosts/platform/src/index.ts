@@ -3,7 +3,7 @@ export * from "./store-paths";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
+import { posix, win32, join } from "node:path";
 
 export {
   DEFAULT_NATALIA_IGNORE_CONTENT,
@@ -363,6 +363,62 @@ export function globalConfigHome(input: PlatformInput = {}): string {
       win32.join(userHome(input), "AppData", "Roaming"),
     );
   return posix.join(env.HOME ?? "", ".config");
+}
+
+/**
+ * The per-user state directory's name — the product name, not the repository
+ * name. It used to be `natalia-cli` (named after the repo), and the rename
+ * is NOT a string change: the directory is a published interface that holds
+ * a user's config, workspace registry, skills and UI state. Renaming it
+ * silently would strand every existing install, so:
+ *
+ *   - WRITES go to the new name;
+ *   - READS prefer the new name and fall back to the legacy one, so an
+ *     existing install keeps working with nothing to migrate;
+ *   - the fallback is visible (the config resolution reports the legacy
+ *     location as its source) rather than silent.
+ *
+ * The legacy name stays recognized indefinitely: a stale directory nobody
+ * reads is not a bug, and a config file the user can no longer find is.
+ */
+export const STATE_DIR_NAME = "natalia";
+export const LEGACY_STATE_DIR_NAMES = ["natalia-cli"] as const;
+
+/**
+ * The LIVE state path (writes go here). Under a root, so the caller joins
+ * its own home/state root: `statePath(globalConfigHome(), "config.json")`.
+ */
+export function statePath(root: string, ...segments: string[]): string {
+  return join(root, STATE_DIR_NAME, ...segments);
+}
+
+/** The legacy paths, oldest first — the read fallback's candidates. */
+export function legacyStatePaths(
+  root: string,
+  ...segments: string[]
+): Array<{ path: string; legacy: string }> {
+  return LEGACY_STATE_DIR_NAMES.map((name) => ({
+    path: join(root, name, ...segments),
+    legacy: name,
+  }));
+}
+
+/**
+ * A reader's answer: the live path if it exists, else the first legacy path
+ * that does, else the live path (so a write still lands on the live name).
+ * The existence check is injected — the resolver style this package already
+ * uses, so the fallback is testable without touching a real home.
+ */
+export function resolveStatePath(
+  root: string,
+  exists: (path: string) => boolean,
+  ...segments: string[]
+): { path: string; legacy: boolean } {
+  const live = statePath(root, ...segments);
+  if (exists(live)) return { path: live, legacy: false };
+  for (const candidate of legacyStatePaths(root, ...segments))
+    if (exists(candidate.path)) return { path: candidate.path, legacy: true };
+  return { path: live, legacy: false };
 }
 
 /**

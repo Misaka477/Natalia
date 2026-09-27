@@ -125,7 +125,7 @@ npm run ts:cli -- session delete <id>
 
 ### Configuration
 
-Configuration lives in `.natalia/config.json` per workspace, with global config at `~/.config/natalia-cli/config.json`. Use `NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE` to override paths.
+Configuration lives in `.natalia/config.json` per workspace, with global config at `~/.config/natalia/config.json`. Use `NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE` to override paths.
 
 ### Safety Notes
 
@@ -270,7 +270,7 @@ npm run ts:cli -- session delete <id>
 
 ### 配置
 
-workspace 配置在 `.natalia/config.json`，global 配置在 `~/.config/natalia-cli/config.json`。可用 `NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖路径。
+workspace 配置在 `.natalia/config.json`，global 配置在 `~/.config/natalia/config.json`。可用 `NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖路径。
 
 ### 安全说明
 

@@ -42,32 +42,19 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  # The artifacts: everything the test jobs need, built once. The gates
+  # that need nothing but the tree (format, typecheck) run here too.
+  artifacts:
     runs-on: ubuntu-latest
-    # The suite runs ~2900 tests and the artifact builds precede it. The cap
-    # is here so a hang fails the job rather than occupying a runner until
-    # the platform's own limit.
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      # Both runtimes, because the scripts use each: the workspace installs
-      # with bun (the only lockfile is `bun.lock`), and the `verify` script
-      # and the scripts it chains invoke `npm run …` and `npx …`.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-
-      # Rust for both native artifacts: the confinement backend (the shell
-      # tools fail CLOSED without it — never run unconstrained) and the AST
-      # tree-sitter wasm packs. The packs build with TWO targets — the core
-      # with wasm32-unknown-unknown, the 46 per-language packs with
-      # wasm32-wasip1 — and they need the WASI SDK's clang (the grammars'
-      # C compiles to wasm): without either, every pack build fails and the
-      # AST face silently parses nothing (the CI red this closes).
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown,wasm32-wasip1
@@ -86,26 +73,14 @@ jobs:
         run: >
           cargo build --release
           --manifest-path packages/hosts/confinement/native/Cargo.toml
-
-      # `--frozen-lockfile` so a dependency that would drift from the
-      # committed lockfile fails here instead of silently changing what is
-      # being verified.
       - name: Install
         run: bun install --frozen-lockfile
-
-      # The gates, one step each (see the header). The artifacts the tests
-      # read are built before the tests, never after.
       - name: Format
         run: npm run format
       - name: Typecheck
         run: npm run typecheck
       - name: Build the plugin distribution
         run: npm run build:distribution
-      # The AST packs are 44 per-language wasm builds (~5-9 minutes cold);
-      # the build script skips any pack already on disk, so the OUTPUT is
-      # cached and only a real source change pays for the rebuild. Without
-      # this the packs build alone outlived the window the test chunks run
-      # in, and the external cancel ate them.
       - name: Cache the AST wasm packs
         uses: actions/cache@v4
         with:
@@ -115,59 +90,133 @@ jobs:
           key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
       - name: Build the AST wasm packs
         run: npm run diff:build-wasm
-      # The suite, chunked by layer. One long step meant the external
-      # shutdown signal (whatever sends it) erased the evidence of
-      # everything before the cancel; each chunk reports for itself, so a
-      # cancel costs at most the chunk in flight.
-      - name: Test (contracts, core, and tooling)
+
+  # The suite, by layer, IN PARALLEL. Each job is a few minutes, so the
+  # external shutdown signal (whatever sends it — see the header) can
+  # only touch a job in flight, never a whole serial run; and the layers
+  # run concurrently, so the wall clock is the heaviest layer, not the
+  # sum of them.
+  test:
+    needs: artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - layer: "core"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/core/contracts/test \
+                          ./packages/core/runtime-services/test ./packages/core/composition/test \
+                          ./packages/core/capability/test ./packages/core/tools/test \
+                          ./packages/tooling/testing/test ./packages/tooling/installer/test \
+                          ./packages/tooling/sdk/test ./packages/core/plugin/test
+          - layer: "substrate"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \
+                          ./packages/hosts/config/test ./packages/hosts/confinement/test \
+                          ./packages/framework/session/test ./packages/framework/substrate/test \
+                          ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
+                          ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
+                          ./packages/hosts/object-store/test
+          - layer: "client"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test
+          - layer: "mechanisms"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
+                          ./packages/framework/operation-log/test \
+                          ./packages/framework/runtime-diagnostics/test \
+                          ./packages/framework/runtime/test ./packages/framework/retry/test \
+                          ./packages/framework/runtime-config/test \
+                          ./packages/framework/runtime-status/test \
+                          ./packages/framework/turn-orchestration/test \
+                          ./packages/framework/provider-model/test \
+                          ./packages/framework/agent-prompts/test \
+                          ./packages/framework/collaboration/test ./packages/framework/workspace/test \
+                          ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
+                          ./packages/framework/compaction/test ./packages/framework/sandbox/test \
+                          ./packages/framework/diff-wasm/test
+          - layer: "domains"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
+                          ./packages/domains/goal-runtime/test \
+                          ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test \
+                          ./packages/domains/work-ledger/test ./packages/domains/governance-ledger/test \
+                          ./packages/domains/context-ledger/test
+          - layer: "plugins"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
+                          ./packages/plugins/team/test ./packages/framework/tool-policy/test \
+                          ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
+                          ./packages/plugins/skills/test ./packages/hosts/transport/test \
+                          ./packages/plugins/mcp/test ./packages/framework/subagents/test \
+                          ./packages/framework/agent/test ./packages/plugins/tools/ask/test \
+                          ./packages/plugins/tools/fs-read/test ./packages/plugins/tools/fs-write/test \
+                          ./packages/plugins/tools/search/test ./packages/plugins/tools/shell/test \
+                          ./packages/plugins/tools/todo/test ./packages/plugins/tools/web/test \
+                          ./packages/plugins/tools/process/test ./packages/plugins/ui/web/test \
+                        packages/plugins/ui/pending/test ./packages/plugins/ui/kit/test
+          - layer: "cli"
+            dirs: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,wasm32-wasip1
+      - name: Install the WASI SDK (the AST grammars' C toolchain)
         run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/core/contracts/test \
-                    ./packages/core/runtime-services/test ./packages/core/composition/test \
-                    ./packages/core/capability/test ./packages/core/tools/test ./packages/tooling/testing/test \
-                    ./packages/tooling/installer/test ./packages/tooling/sdk/test ./packages/core/plugin/test
-      - name: Test (session and store substrate)
+          set -euo pipefail
+          if [ ! -x /opt/wasi-sdk/bin/clang ]; then
+            sudo mkdir -p /opt
+            curl -fsSL --retry 3 \
+              https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz \
+              | sudo tar -xz -C /opt
+            sudo mv /opt/wasi-sdk-34.0-x86_64-linux /opt/wasi-sdk
+          fi
+          /opt/wasi-sdk/bin/clang --version
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Build the plugin distribution
+        run: npm run build:distribution
+      - name: Cache the AST wasm packs
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/framework/diff-wasm/ast
+            packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
+          key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
+      - name: Build the AST wasm packs
+        run: npm run diff:build-wasm
+      - name: Test (${{ matrix.layer }})
         run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \
-                    ./packages/hosts/config/test ./packages/hosts/confinement/test \
-                    ./packages/framework/session/test ./packages/framework/substrate/test \
-                    ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
-                    ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
-                    ./packages/framework/object-store/test
-      - name: Test (the client runtime — the heaviest file)
-        run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test
-      - name: Test (framework mechanisms)
-        run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
-                    ./packages/framework/operation-log/test ./packages/framework/runtime-diagnostics/test \
-                    ./packages/framework/runtime/test ./packages/framework/retry/test \
-                    ./packages/framework/runtime-config/test ./packages/framework/runtime-status/test \
-                    ./packages/framework/turn-orchestration/test ./packages/framework/provider-model/test \
-                    ./packages/framework/agent-prompts/test ./packages/framework/collaboration/test \
-                    ./packages/framework/workspace/test ./packages/framework/checkpoint/test \
-                    ./packages/framework/attachments/test ./packages/framework/compaction/test \
-                    ./packages/framework/sandbox/test ./packages/framework/diff-wasm/test
-      - name: Test (domains and product policy)
-        run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
-                    ./packages/domains/goal-runtime/test ./packages/domains/engineering-intelligence/test \
-                    ./packages/domains/goal/test ./packages/domains/work-ledger/test \
-                    ./packages/domains/governance-ledger/test ./packages/domains/context-ledger/test
-      - name: Test (plugins, tools, and facets)
-        run: |
-          bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
-                    ./packages/plugins/team/test ./packages/framework/tool-policy/test \
-                    ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
-                    ./packages/plugins/skills/test ./packages/hosts/transport/test ./packages/plugins/mcp/test \
-                    ./packages/framework/subagents/test ./packages/framework/agent/test \
-                    ./packages/plugins/tools/ask/test ./packages/plugins/tools/fs-read/test \
-                    ./packages/plugins/tools/fs-write/test ./packages/plugins/tools/search/test \
-                    ./packages/plugins/tools/shell/test ./packages/plugins/tools/todo/test \
-                    ./packages/plugins/tools/web/test ./packages/plugins/tools/process/test \
-                    ./packages/plugins/ui/web/test packages/plugins/ui/pending/test \
-                    ./packages/plugins/ui/kit/test
-      - name: Test (the CLI suite and the docs gate)
-        run: npm run docs:check && npm --workspace @natalia/cli run test
+          set -euo pipefail
+          if [ "${{ matrix.layer }}" = "cli" ]; then
+            npm run docs:check && npm --workspace @natalia/cli run test
+          else
+            ${{ matrix.dirs }}
+          fi
+
+  guards:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install
+        run: bun install --frozen-lockfile
       - name: Guards
         run: >
           npm run guard:imports && npm run guard:contract && npm run guard:deps

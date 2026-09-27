@@ -113,7 +113,7 @@ async function provision() {
       "apt-get install -y -qq curl ca-certificates build-essential pkg-config unzip zip git",
       // The cargo bin must be ON the path of the shell that later runs
       // the fork's get-deps: rustup installs to /root/.cargo/bin, which a
-      // non-login `bash -lc` in the container does not carry — without
+      // non-interactive `bash -lc` in the container does not carry — without
       // this the fork's scripts answer "Rust is not installed!" and the
       // provision fails at the deps step, one host later.
       "export PATH=/root/.cargo/bin:$PATH",

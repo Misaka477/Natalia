@@ -84,6 +84,14 @@ export type CompositionRowRegistration = {
   implIDs: readonly string[];
   /** Names every legal value an error must list (§6.4). */
   legalSummary: string;
+  /**
+   * The capability keys this row's impls may DECLARE (G6). Empty or
+   * absent = the row declares no capabilities. A key outside this list,
+   * in a generation's adapter snapshot, is rejected at compose and
+   * re-checked at the gate — a capability nobody registered cannot be
+   * sworn to.
+   */
+  capKeys?: readonly string[];
   configSchema: CompositionConfigSchema;
   /**
    * The schema's import site — the ORIGIN the spec's §6.5 codegen

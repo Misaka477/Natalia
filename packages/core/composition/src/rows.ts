@@ -42,6 +42,12 @@ export const compositionRowRegistrations: readonly CompositionRowRegistration[] 
       rowID: OBJECTSTORE_COMPOSITION_ROW_ID,
       implIDs: ["typescript", "rust"],
       legalSummary: `impl ∈ typescript | rust`,
+      // The capabilities each impl may swear to. The Rust core earned
+      // all three this session: the pack READER (Phase A left reads in
+      // TS), the INCREMENTAL GC (a fully-kept pack is not re-read — 33x
+      // the TS collection), and the resident index daemon (the cold
+      // start's 9x). The TypeScript impl declares none.
+      capKeys: ["packRead", "incrementalGc", "daemon"],
       configSchema: objectStoreConfigSchema,
       configSchemaRef: {
         from: "@anthelia/contracts",

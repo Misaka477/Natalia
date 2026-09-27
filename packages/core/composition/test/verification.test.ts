@@ -7,6 +7,7 @@ import type {
 import {
   GUARD_SCRIPTS,
   buildGeneration,
+  capsCheck,
   constitutionCheck,
   guardsFace,
   runVerificationGate,
@@ -207,4 +208,30 @@ test("buildGeneration sorts policy rows, so order never changes the id", () => {
     prompts: { perRoleStatic: {}, docs: [] },
   });
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+});
+
+test("G6's caps face: a candidate's declared capability must be registered", () => {
+  // The gate's second pair of eyes: a candidate reaches it from the
+  // JOURNAL (a stored generation), not from a fresh compose, so its caps
+  // are re-checked against the row's registered vocabulary.
+  const clean = capsCheck({
+    adapters: {
+      "anthelia.objectstore": { impl: "rust", caps: { packRead: true } },
+    },
+  } as never);
+  expect(clean).toEqual({ check: "caps", ok: true });
+
+  const lying = capsCheck({
+    adapters: {
+      "anthelia.objectstore": { impl: "rust", caps: { mindReading: true } },
+    },
+  } as never);
+  expect(lying.ok).toBe(false);
+  expect(lying.detail).toContain("mindReading");
+
+  // A row that declares no capabilities is fine, and so is no caps at all.
+  expect(capsCheck({ adapters: { "anthelia.sandbox": {} } } as never).ok).toBe(
+    true,
+  );
+  expect(capsCheck({ adapters: {} } as never).ok).toBe(true);
 });

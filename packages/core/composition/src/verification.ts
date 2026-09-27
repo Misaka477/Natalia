@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { createCompositionRowRegistry } from "./profile";
+import { compositionRowRegistrations } from "./rows";
 import type {
   ConstitutionRule,
   Generation,
@@ -130,6 +132,35 @@ export function constitutionCheck(
     check: "constitution",
     ok: violations.length === 0,
     ...(violations.length ? { detail: violations.join("; ") } : {}),
+  };
+}
+
+/** The live row registry — the caps vocabulary's home (G6). */
+const rowRegistry = createCompositionRowRegistry(compositionRowRegistrations);
+
+/**
+ * G6's declarative-caps face: every capability a candidate declares must
+ * live inside its row's registered vocabulary. The compose already
+ * refuses an out-of-vocabulary key, but a candidate reaches the gate
+ * from the JOURNAL (a stored generation, not a fresh compose) — the gate
+ * is the second pair of eyes, and a capability nobody registered cannot
+ * be sworn to by a candidate either.
+ */
+export function capsCheck(candidate: Generation): VerificationCheck {
+  const problems: string[] = [];
+  for (const [rowID, ref] of Object.entries(candidate.adapters)) {
+    if (!ref.caps) continue;
+    const vocabulary = rowRegistry.get(rowID)?.capKeys ?? [];
+    for (const key of Object.keys(ref.caps))
+      if (!vocabulary.includes(key))
+        problems.push(
+          `${rowID}: capability "${key}" is not registered (the vocabulary is [${vocabulary.join(", ")}])`,
+        );
+  }
+  return {
+    check: "caps",
+    ok: problems.length === 0,
+    ...(problems.length ? { detail: problems.join("; ") } : {}),
   };
 }
 

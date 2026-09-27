@@ -9,6 +9,11 @@ import type {
   ConstitutionRule,
   RuntimeEvent,
 } from "@anthelia/contracts";
+import { createCompositionRowRegistry } from "./profile";
+import { compositionRowRegistrations } from "./rows";
+
+/** The live row registry — the caps vocabulary's home (G6). */
+const rowRegistry = createCompositionRowRegistry(compositionRowRegistrations);
 import {
   GENERATION_SCHEMA,
   type CompositionPointer,
@@ -102,6 +107,15 @@ export function buildGeneration(input: {
    * hash — a backend switch changes the generation.
    */
   rows?: ReadonlyArray<{ id: string; impl?: string }>;
+  /**
+   * The caps each row's selected impl DECLARES, by row id (G6). The
+   * caller owns the knowledge (the wiring reads the live backend's);
+   * the compose owns the discipline — a key outside the row's registered
+   * vocabulary is a lie and the compose refuses.
+   */
+  rowCaps?: Readonly<
+    Record<string, Readonly<Record<string, boolean | string | number>>>
+  >;
 }): Generation {
   const plugins: GenerationPluginRef[] = input.catalog
     .map(({ id, enabled, fingerprint }) => ({ id, enabled, fingerprint }))
@@ -110,10 +124,27 @@ export function buildGeneration(input: {
     a.id.localeCompare(b.id),
   );
   const adapters: Record<string, GenerationAdapterRef> = {};
-  for (const row of input.rows ?? [])
+  // The vocabulary check runs over the CALLER'S WHOLE map, not only the
+  // rows this composition selected: a capability entry for a row that is
+  // not selected (or not registered at all) is the same lie — an
+  // unregistered capability is a capability nobody can be held to. (The
+  // first cut validated per selected row and a test caught the hole: an
+  // unknown row's caps were silently dropped.)
+  for (const [rowID, declared] of Object.entries(input.rowCaps ?? {})) {
+    const vocabulary = rowRegistry.get(rowID)?.capKeys ?? [];
+    for (const key of Object.keys(declared))
+      if (!vocabulary.includes(key))
+        throw new Error(
+          `composition row ${rowID} declares unknown capability "${key}" — the registered vocabulary is [${vocabulary.join(", ")}]`,
+        );
+  }
+  for (const row of input.rows ?? []) {
+    const declared = input.rowCaps?.[row.id];
     adapters[row.id] = {
       ...(row.impl !== undefined ? { impl: row.impl } : {}),
+      ...(declared !== undefined ? { caps: { ...declared } } : {}),
     };
+  }
   return {
     schema: GENERATION_SCHEMA,
     config: input.config,

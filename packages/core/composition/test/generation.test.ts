@@ -304,3 +304,49 @@ test("a legacy generation without prompts or adapters still reads", () => {
   expect(parsed.adapters).toEqual({});
   expect(parsed.policyRows).toEqual([]);
 });
+
+test("G6's declarative caps: a row's declared capabilities ride inside the generation", () => {
+  const generation = buildGeneration({
+    config: CONFIG,
+    catalog: CATALOG,
+    policyRows: [],
+    prompts: PROMPTS,
+    rows: ROWS,
+    rowCaps: {
+      "anthelia.objectstore": { packRead: true, incrementalGc: true },
+    },
+  });
+  // The snapshot rides with the binding: the generation records what the
+  // selected impl can swear to, and the TypeScript binding declares none.
+  expect(generation.adapters["anthelia.objectstore"]).toEqual({
+    impl: "rust",
+    caps: { packRead: true, incrementalGc: true },
+  });
+  expect(generation.adapters["anthelia.sandbox"]).toEqual({});
+});
+
+test("a capability nobody registered is a compose-time refusal", () => {
+  expect(() =>
+    buildGeneration({
+      config: CONFIG,
+      catalog: CATALOG,
+      policyRows: [],
+      prompts: PROMPTS,
+      rows: ROWS,
+      rowCaps: {
+        "anthelia.objectstore": { mindReading: true },
+      },
+    }),
+  ).toThrow(/declares unknown capability "mindReading"/);
+  // And an unregistered ROW cannot declare anything at all.
+  expect(() =>
+    buildGeneration({
+      config: CONFIG,
+      catalog: CATALOG,
+      policyRows: [],
+      prompts: PROMPTS,
+      rows: ROWS,
+      rowCaps: { "anthelia.not-a-row": { anything: true } },
+    }),
+  ).toThrow(/declares unknown capability "anything"/);
+});

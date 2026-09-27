@@ -51,7 +51,22 @@ export type GenerationPrompts = {
  * that selection. An absent impl means the backend is discovered at
  * runtime, not selected (the confinement row's shape).
  */
-export type GenerationAdapterRef = { impl?: string };
+/**
+ * A seam binding's DECLARED capabilities (G6's declarative caps, the
+ * provider-caps discipline: "声明才开、绝不猜"). The vocabulary a row's
+ * impls may declare is registered with the row (`capKeys`), and a
+ * generation's snapshot may only live inside it — a cap outside the
+ * vocabulary is a lie the compose refuses and the gate re-checks.
+ *
+ * What the objectstore row declares today is real and earned: the native
+ * crate can read packs (the reader Phase A left in TS), its GC is
+ * incremental (a pack whose every object is kept is not re-read), and it
+ * serves the resident index daemon. The TypeScript impl declares none.
+ */
+export type GenerationAdapterRef = {
+  impl?: string;
+  caps?: Readonly<Record<string, boolean | string | number>>;
+};
 
 export type Generation = {
   schema: typeof GENERATION_SCHEMA;

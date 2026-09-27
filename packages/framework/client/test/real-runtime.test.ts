@@ -12804,9 +12804,11 @@ test("the collaboration channel round-robins between Navi and the main agent", a
   await client.naviChat!.submit({ text: "suggest echo" });
   // The suggestion wakes the idle main agent, whose wake turn already carries
   // the suggestion (the 轮巡) — no extra user submission needed.
-  // The round-robin's two internal waits ride a file that runs for minutes
-  // under CI load; the 10s budgets were a load lottery, not a measurement.
-  await waitForAsync(async () => mainPrompt.length > 0, 30_000);
+  // The round-robin's chain is two-plus provider turns with durable writes
+  // and a wake between them. Under the full-suite load the chain measured
+  // past 20s (the failure this budget covers); 45s still bounds a genuine
+  // hang under the 60s per-test cap, which is what a budget is for.
+  await waitForAsync(async () => mainPrompt.length > 0, 45_000);
   // The main agent knows who Navi is and sees her suggestion without the user
   // prompting it (the 轮巡).
   expect(mainPrompt).toContain("<live_work_chat>");
@@ -12822,10 +12824,10 @@ test("the collaboration channel round-robins between Navi and the main agent", a
         (event) =>
           isCollabMessageEvent(event) && event.message.kind === "response",
       ),
-    30_000,
+    45_000,
   );
   await client.naviChat!.submit({ text: "what did she decide" });
-  await waitForAsync(async () => chatPrompt2.includes("adopted"), 20_000);
+  await waitForAsync(async () => chatPrompt2.includes("adopted"), 45_000);
   // Navi sees the outcome without the user prompting her.
   expect(chatPrompt2).toContain("Outcomes of your suggestions to Natalia");
   expect(chatPrompt2).toContain("adopted");

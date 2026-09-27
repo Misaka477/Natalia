@@ -138,6 +138,14 @@ type RustCasLib = {
       out: unknown,
       outCap: number,
     ) => number;
+    cas_gc: (
+      root: unknown,
+      rootLen: number,
+      keepJson: unknown,
+      keepJsonLen: number,
+      out: unknown,
+      outLen: number,
+    ) => number;
   };
 };
 
@@ -233,6 +241,18 @@ function load(): RustCasLib {
       returns: FFIType.i64,
     },
     cas_get: {
+      args: [
+        FFIType.pointer,
+        FFIType.u64,
+        FFIType.pointer,
+        FFIType.u64,
+        FFIType.pointer,
+        FFIType.u64,
+      ],
+      returns: FFIType.i64,
+    },
+    // Phase A's gc.rs: the whole collection tail in one call.
+    cas_gc: {
       args: [
         FFIType.pointer,
         FFIType.u64,
@@ -404,6 +424,65 @@ export const rustCas = {
     const idxLen = view.readUInt32LE(4 + packLen);
     const idx = view.subarray(8 + packLen, 8 + packLen + idxLen);
     return { pack: Buffer.from(pack), idx: Buffer.from(idx) };
+  },
+
+  /**
+   * The whole GC tail in one call: the reachable set (the caller has
+   * already extended it through the chunk metadata — that stays TS,
+   * which owns the SQLite connection), and the Rust side enumerates the
+   * loose objects, deletes the unreachable, reads every kept original
+   * (loose first, the pack set with full delta chains second), rebuilds
+   * the replacement pack, and retires the old ones. The JSON result
+   * carries the accounting plus the pack-hit count Phase D compares.
+   */
+  gc(
+    root: string,
+    keep: readonly string[],
+  ): {
+    unreachableObjects: number;
+    bytes: number;
+    kept: number;
+    packFile: string | null;
+    fromPacks: number;
+    deleted: string[];
+  } {
+    const rootBuf = enc(root);
+    const keepBuf = enc(JSON.stringify(keep));
+    // The result carries the deleted ids (the caller cleans their chunked
+    // metadata), so its size follows the store: a GC over a hundred
+    // thousand objects answers with their ids. The FFI's -1 is the
+    // capacity answer — grow and retry, the closed-form sizing the
+    // pack_frame lesson taught.
+    let capacity = 64 * 1024;
+    for (;;) {
+      const out = Buffer.alloc(capacity);
+      const written = Number(
+        load().symbols.cas_gc(
+          bptr(rootBuf),
+          rootBuf.byteLength,
+          bptr(keepBuf),
+          keepBuf.byteLength,
+          bptr(out),
+          out.byteLength,
+        ),
+      );
+      if (written === -1) {
+        capacity *= 4;
+        if (capacity > 256 * 1024 * 1024)
+          throw new Error("cas_gc result too large");
+        continue;
+      }
+      if (written < 0)
+        throw new Error(`cas_gc refused (${written}): ${out.toString("utf8")}`);
+      return JSON.parse(out.toString("utf8", 0, written)) as {
+        unreachableObjects: number;
+        bytes: number;
+        kept: number;
+        packFile: string | null;
+        fromPacks: number;
+        deleted: string[];
+      };
+    }
   },
 
   has(root: string, id: string): boolean {

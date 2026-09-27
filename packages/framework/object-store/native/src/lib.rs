@@ -8,7 +8,9 @@
 //! CAS, working end-to-end against the TS implementation.
 
 mod compress;
+mod gc;
 mod pack;
+mod packread;
 
 use std::fs;
 use std::io::Write;
@@ -518,6 +520,133 @@ pub extern "C" fn cas_put(
     }
 }
 
+/// The GC as one call: `{root, keep:[ids]}` -> `{unreachableObjects,
+/// bytes, kept, packFile}`. The keep list arrives as a JSON array (the
+/// only shape a variable-length string list can take without a
+/// dependency — this crate is std-only by design), and the result is the
+/// same small JSON. The metadata-driven reachable extension stays in TS
+/// (it owns the SQLite connection); everything after it — enumerate,
+/// delete, read every kept original, rebuild, retire the old packs — is
+/// one call. -1 = output capacity, -2 = bad input, -3 = panic belt.
+#[no_mangle]
+pub extern "C" fn cas_gc(
+    root: *const u8,
+    root_len: usize,
+    keep_json: *const u8,
+    keep_json_len: usize,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let result = std::panic::catch_unwind(|| {
+        let root = match root_from(root, root_len) {
+            Ok(root) => root,
+            Err(()) => return -2i64,
+        };
+        let keep = match parse_id_array(slice(keep_json, keep_json_len)) {
+            Ok(keep) => keep,
+            Err(()) => return -2i64,
+        };
+        match gc::gc(&root, &keep) {
+            Ok(outcome) => {
+                let pack = outcome
+                    .pack_file
+                    .as_deref()
+                    .map(|name| format!("\"{name}\""))
+                    .unwrap_or_else(|| "null".to_string());
+                // The deleted ids ride along: the caller cleans the
+                // CHUNKED manifests among them (SQLite is the TS's), and
+                // the pack rebuild dropped their chunks already.
+                let deleted = outcome
+                    .deleted
+                    .iter()
+                    .map(|id| format!("\"{id}\""))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let json = format!(
+                    "{{\"unreachableObjects\":{},\"bytes\":{},\"kept\":{},\"packFile\":{},\"fromPacks\":{},\"deleted\":[{}]}}",
+                    outcome.unreachable_objects,
+                    outcome.bytes,
+                    outcome.kept,
+                    pack,
+                    outcome.from_packs,
+                    deleted
+                );
+                write_out(json.as_bytes(), out, out_cap)
+            }
+            Err(_) => -2,
+        }
+    });
+    result.unwrap_or(-3)
+}
+
+/// Writes `bytes` into the caller's buffer: its length, or -1 when the
+/// buffer cannot hold it.
+fn write_out(bytes: &[u8], out: *mut u8, out_cap: usize) -> i64 {
+    if out.is_null() || out_cap < bytes.len() {
+        return -1;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len());
+    }
+    bytes.len() as i64
+}
+
+/// The minimal JSON string-array parser the GC's keep list needs: a flat
+/// array of quoted strings, no nesting, no escapes (an id is 64 hex
+/// characters). Anything else is a parse failure — the caller's TS side
+/// only ever sends `JSON.stringify([...ids])`.
+fn parse_id_array(bytes: &[u8]) -> Result<Vec<String>, ()> {
+    let text = std::str::from_utf8(bytes).map_err(|_| ())?;
+    let trimmed = text.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return Err(());
+    }
+    let mut out = Vec::new();
+    // The positions below index the INNER text; slicing `trimmed` with
+    // them would shift every id by the bracket (the bug this comment
+    // guards: the first version sliced the outer string and produced
+    // ids with a stray leading quote).
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let mut chars = inner.char_indices().peekable();
+    loop {
+        // Skip to the next opening quote (commas and whitespace between).
+        let mut start = None;
+        while let Some(&(index, ch)) = chars.peek() {
+            chars.next();
+            if ch == '"' {
+                start = Some(index + 1);
+                break;
+            }
+            if ch != ',' && !ch.is_whitespace() {
+                return Err(());
+            }
+        }
+        let Some(start) = start else {
+            break;
+        };
+        let mut end = None;
+        while let Some(&(index, ch)) = chars.peek() {
+            chars.next();
+            if ch == '"' {
+                end = Some(index);
+                break;
+            }
+            if ch == '\\' {
+                chars.next(); // an escaped pair — ids never contain one
+                continue;
+            }
+            if ch.is_control() {
+                return Err(());
+            }
+        }
+        let Some(end) = end else {
+            return Err(());
+        };
+        out.push(inner[start..end].to_string());
+    }
+    Ok(out)
+}
+
 #[no_mangle]
 pub extern "C" fn cas_has(root: *const u8, root_len: usize, id: *const u8, id_len: usize) -> i32 {
     let root = match root_from(root, root_len) {
@@ -587,5 +716,32 @@ pub extern "C" fn cas_get(
                 2
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_id_array_parser_takes_what_json_stringify_emits() {
+        assert_eq!(
+            parse_id_array(b"[]").unwrap(),
+            Vec::<String>::new(),
+            "an empty array"
+        );
+        assert_eq!(
+            parse_id_array(b"[\"abc\",\"def\"]").unwrap(),
+            vec!["abc".to_string(), "def".to_string()],
+            "the plain form"
+        );
+        assert_eq!(
+            parse_id_array(b" [ \"abc\" , \"def\" ] ").unwrap(),
+            vec!["abc".to_string(), "def".to_string()],
+            "whitespace survives"
+        );
+        assert!(parse_id_array(b"not json").is_err());
+        assert!(parse_id_array(b"[\"unclosed]").is_err());
+        assert!(parse_id_array(b"{\"a\":1}").is_err());
     }
 }

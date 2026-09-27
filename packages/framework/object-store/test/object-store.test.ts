@@ -152,6 +152,29 @@ test("garbage collection preserves reachable objects including chunk manifests",
   expect(await objects.has(deadLarge)).toBe(false);
 });
 
+test("a GC after a compaction drops the packed unreachable objects", async () => {
+  // The GC's pack path: the objects are packed first (so the unreachable
+  // ones live INSIDE a pack), and the collection must retire that pack —
+  // a store that only deleted loose files would leave every packed
+  // corpse readable.
+  const { objects } = await openStore("natalia-object-gc-packed-");
+  const live = await objects.put("packed-live-content");
+  const dead = await objects.put("packed-dead-content");
+  await objects.compact();
+  expect(await objects.has(live)).toBe(true);
+  expect(await objects.has(dead)).toBe(true);
+  // The count's meaning is the loose deletions plus the retired chunked
+  // manifests: a packed corpse is dropped by the REBUILD (it is not
+  // carried into the replacement pack) rather than counted — the TS
+  // path counted exactly the same way. What the collection must prove
+  // is the observable: the packed unreachable is gone, the survivor is
+  // intact.
+  await objects.collectGarbage(new Set([live]));
+  expect(await objects.has(live)).toBe(true);
+  expect((await objects.get(live)).toString()).toBe("packed-live-content");
+  expect(await objects.has(dead)).toBe(false);
+});
+
 test("native FFI index can parse generated binary .idx entries", async () => {
   const { root, objects } = await openStore("natalia-object-native-");
   const id = await objects.put("native-indexed-content");

@@ -656,6 +656,54 @@ export class ObjectStore {
       for (const chunkId of chunked.chunks ?? [])
         extendedReachable.add(chunkId);
     }
+    // Phase A's gc.rs: the object side of the collection — enumerate,
+    // delete, read every kept original (the pack reader with the delta
+    // chains), rebuild, retire — as ONE call. The metadata extension
+    // above and the chunked-manifest cleanup below stay here: SQLite is
+    // this layer's, and the plan's split keeps it so until meta.rs.
+    if (this.useRust) {
+      // The keep set for the pack rebuild, in the extended set's order
+      // (the frame's delta chain follows the order it is given): the
+      // ids that carry chunked metadata are VIRTUAL — their manifest and
+      // chunks are the real objects, exactly as the TS rebuild below
+      // excluded them.
+      const keepRawIds: string[] = [];
+      for (const id of extendedReachable) {
+        if (await this.getMeta(`chunked:${id}`)) continue;
+        keepRawIds.push(id);
+      }
+      const outcome = rustCas.gc(this.root, keepRawIds);
+      // The chunked manifests among the unreachable: their ids are
+      // VIRTUAL (no loose file, no pack entry — the manifest and the
+      // chunks are the objects), so the Rust's enumeration never saw
+      // them and their SQLite metadata would outlive the collection.
+      // `list()` carries them, exactly as the TS path below iterated.
+      let manifestGarbage = 0;
+      for (const id of allIds) {
+        if (extendedReachable.has(id)) continue;
+        const chunked = await this.getMeta(`chunked:${id}`);
+        if (chunked) {
+          await this.deleteMeta(`chunked:${id}`);
+          manifestGarbage += 1;
+        }
+      }
+      const lruDropped = new Set(outcome.deleted);
+      for (const id of lruDropped) {
+        const cached = this.lru.get(id);
+        if (cached) {
+          this.lru.delete(id);
+          this.lruBytes -= cached.byteLength;
+        }
+      }
+      this.packsLoaded = false;
+      this.packs.clear();
+      this.nativeIndexes.clear();
+      await this.loadPackIndexes();
+      return {
+        unreachableObjects: outcome.unreachableObjects + manifestGarbage,
+        bytes: Number(outcome.bytes),
+      };
+    }
     const unreachableIds = [...allIds].filter(
       (id) => !extendedReachable.has(id),
     );

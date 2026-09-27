@@ -588,7 +588,19 @@ test("a queued input survives cancellation and drains on the next prompt", async
     20_000,
     "the queued input to drain after the next prompt",
   );
-  expect(requests).toEqual(["first", "resume please", "queued"]);
+  // The CONTRACT: the queued input survived the cancel and drains only
+  // after the next admission — not the exact interleaving of the wake
+  // turn ("resume please") and the drained input ("queued"). Those two
+  // are concurrent deliveries, and under full-suite load the drain may
+  // reach the provider before the wake turn's own request lands; the
+  // earlier version asserted a fixed order and failed as a rotating flake
+  // with both orders' requests present. What the promise actually says:
+  // the queue did not auto-promote (the equality just below the sleep),
+  // and the drain is witnessed after the next prompt.
+  expect(requests[0]).toBe("first");
+  expect(requests).toContain("resume please");
+  expect(requests).toContain("queued");
+  expect(requests.indexOf("queued")).toBeGreaterThan(0);
   await client.dispose?.();
 });
 

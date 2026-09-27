@@ -41,8 +41,27 @@ add_custom_command(TARGET natalia-cef-desktop POST_BUILD
   VERBATIM
 )
 
+# The CEF sandbox is deliberately NOT enabled (CEF_USE_SANDBOX is absent),
+# which makes cefsimple's `settings.no_sandbox = true` compile in.
+#
+# It was defined once, and that was a misconfiguration rather than a
+# hardening: this app links libcef_dll_wrapper + libcef.so but NOT
+# cef_sandbox, never calls cef_sandbox_initialize, and passes nullptr as
+# CefInitialize's sandbox_info. A sandbox that is engaged by definition but
+# never initialized leaves the sub-processes under the seccomp policy with
+# no broker behind it — the renderer/GPU then fail syscalls with EPERM,
+# which surfaced as:
+#   ERROR:third_party/puffin/src/puffpatch.cc:122 Failed to create a
+#   temporary file for memory-mapping: Operation not permitted
+#
+# Do not "fix" this back without the whole set: link ${CEF_SANDBOX_LIB},
+# call cef_sandbox_initialize in main(), pass the result as
+# CefInitialize's fourth argument, and ship chrome_sandbox with the
+# ownership/permissions a user install cannot grant (root-owned setuid).
+# The renderer here renders first-party UI served from the local runtime;
+# the product's permission model lives at the tool/approval layer, which
+# the renderer sandbox does not touch.
 target_compile_definitions(natalia-cef-desktop PRIVATE
-  CEF_USE_SANDBOX
   _FILE_OFFSET_BITS=64
   __STDC_CONSTANT_MACROS
   __STDC_FORMAT_MACROS

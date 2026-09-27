@@ -53,3 +53,24 @@ test("Navi and Nia are wired to the read-only context tools (Phase2b-2)", () => 
     expect(prompt).toContain("another session is refused");
   }
 });
+
+test("all three agents carry a Chinese name — the family is not two-thirds named", () => {
+  // Nia was the only sister without one, so a Chinese-speaking user could
+  // be greeted by a name Natalia and Navi both had and Nia did not. Each
+  // persona names itself in Chinese, and Navi knows her other sister's.
+  expect(agentSystemPrompt("natalia")).toContain("娜塔莉娅");
+  expect(agentSystemPrompt("navi")).toContain("娜薇");
+  expect(agentSystemPrompt("nia")).toContain("妮娅");
+  // The family knowledge runs both ways: Navi addresses Nia by name.
+  expect(agentSystemPrompt("navi")).toContain("妮娅");
+  // And each name appears exactly once (a duplicated self-introduction is
+  // the drift this catches).
+  for (const [agent, name] of [
+    ["natalia", "娜塔莉娅"],
+    ["navi", "娜薇"],
+    ["nia", "妮娅"],
+  ] as const) {
+    const prompt = agentSystemPrompt(agent);
+    expect(prompt.split(name).length - 1).toBeGreaterThanOrEqual(1);
+  }
+});

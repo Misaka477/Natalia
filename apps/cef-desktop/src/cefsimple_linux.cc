@@ -63,6 +63,11 @@ int main(int argc, char* argv[]) {
 // automatically. Pass -DUSE_SANDBOX=OFF to the CMake command-line to disable
 // use of the sandbox.
 #if !defined(CEF_USE_SANDBOX)
+  // No_sandbox is the intended posture (see CMakeLists.txt for why the
+  // sandbox is not enabled and what re-enabling it would require). A
+  // declared-but-uninitialized sandbox is worse than none: it puts the
+  // sub-processes under the seccomp policy with no broker, and every
+  // temp-file create comes back EPERM.
   settings.no_sandbox = true;
 #endif
 

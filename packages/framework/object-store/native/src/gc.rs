@@ -160,9 +160,32 @@ pub fn gc(root: &Path, keep: &[String]) -> Result<GcOutcome, String> {
     //    same rule one level down — a base may be loose, a base's base
     //    packed).
     let pack_files = load_pack_set(&packs_dir);
+    // THE INCREMENTAL RULE: a pack whose every object is kept SURVIVES
+    // whole — its bytes are already on disk in the format every reader
+    // speaks, so re-reading and re-writing them is pure waste. The
+    // full-rebuild shape read every reachable byte (a gigabyte of live
+    // chunked data to collect a megabyte of garbage); this skips it.
+    let mut survivors: Vec<PathBuf> = Vec::new();
+    let mut surviving_ids: HashSet<&str> = HashSet::new();
+    for (pack_path, records) in &pack_files {
+        if records
+            .iter()
+            .all(|record| keep_set.contains(record.id.as_str()))
+        {
+            survivors.push(pack_path.clone());
+            for record in records {
+                surviving_ids.insert(record.id.as_str());
+            }
+        }
+    }
+    // What still needs a home: the kept ids no surviving pack carries.
+    // Everything else is either loose already or rides a survivor.
     let mut originals: Vec<(&str, Vec<u8>)> = Vec::with_capacity(keep.len());
     let mut from_packs = 0usize;
     for id in keep {
+        if surviving_ids.contains(id.as_str()) {
+            continue;
+        }
         let resolved = resolve_object(root, &pack_files, id)?;
         from_packs += usize::from(resolved.from_pack);
         originals.push((id.as_str(), resolved.data));
@@ -171,6 +194,33 @@ pub fn gc(root: &Path, keep: &[String]) -> Result<GcOutcome, String> {
     // 4. The replacement pack: frame first, then write pack-then-index
     //    (the index IS the commit — a pack without one is ignored), and
     //    only then do the old files go.
+    // Nothing to re-pack: the survivors carry every kept object, and the
+    // dead packs (the ones that held an unreachable byte) retire. No new
+    // pack is written, so the store's pack set only shrinks.
+    if originals.is_empty() {
+        for file in &old_pack_files {
+            if survivors.contains(file) {
+                continue;
+            }
+            let _ = std::fs::remove_file(file);
+        }
+        for file in list_index_files(&packs_dir) {
+            let survives = survivors
+                .iter()
+                .any(|pack| pack.with_extension("idx") == file);
+            if !survives {
+                let _ = std::fs::remove_file(file);
+            }
+        }
+        return Ok(GcOutcome {
+            unreachable_objects,
+            bytes,
+            kept: keep.len(),
+            pack_file: None,
+            from_packs,
+            deleted,
+        });
+    }
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
@@ -194,13 +244,19 @@ pub fn gc(root: &Path, keep: &[String]) -> Result<GcOutcome, String> {
         return Err(format!("cannot write {}: {error}", index_path.display()));
     }
     for file in &old_pack_files {
-        if file == &pack_path {
+        if file == &pack_path || survivors.contains(file) {
             continue;
         }
         let _ = std::fs::remove_file(file);
     }
     for file in list_index_files(&packs_dir) {
         if file == index_path {
+            continue;
+        }
+        let survives = survivors
+            .iter()
+            .any(|pack| pack.with_extension("idx") == file);
+        if survives {
             continue;
         }
         let _ = std::fs::remove_file(file);
@@ -307,6 +363,74 @@ mod tests {
         assert!(first.from_pack);
         let second = resolve_object(&root, &pack_files, &id_of(&b)).unwrap();
         assert_eq!(second.data, b);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_pack_whose_every_object_is_kept_survives_the_rebuild() {
+        let root = std::env::temp_dir().join(format!("gc-survivor-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let packs = root.join("packs");
+        fs::create_dir_all(&packs).unwrap();
+        let a = b"survivor-alpha".repeat(8);
+        let b = b"survivor-beta".repeat(8);
+        let (pack, index) = crate::pack::pack_frame(&[
+            crate::pack::PackEntry { id: &id_of(&a), data: &a },
+            crate::pack::PackEntry { id: &id_of(&b), data: &b },
+        ]);
+        let pack_path = packs.join("pack-survivor.pack");
+        fs::write(&pack_path, &pack).unwrap();
+        fs::write(packs.join("pack-survivor.idx"), &index).unwrap();
+        let stamp_before = fs::metadata(&pack_path).unwrap().modified().unwrap();
+        // A second pack holding one dead object: it retires, and the
+        // survivor's objects are not re-written into a replacement.
+        let dead = b"gone".repeat(8);
+        let (dead_pack, dead_index) = crate::pack::pack_frame(&[
+            crate::pack::PackEntry { id: &id_of(&dead), data: &dead },
+        ]);
+        fs::write(packs.join("pack-dead.pack"), &dead_pack).unwrap();
+        fs::write(packs.join("pack-dead.idx"), &dead_index).unwrap();
+
+        let outcome = gc(&root, &[id_of(&a), id_of(&b)]).unwrap();
+        // No new pack: the survivor carries everything kept.
+        assert!(outcome.pack_file.is_none());
+        assert!(pack_path.exists(), "the survivor pack stays");
+        assert!(!packs.join("pack-dead.pack").exists(), "the dead pack retires");
+        assert!(!packs.join("pack-dead.idx").exists(), "and its index");
+        let stamp_after = fs::metadata(&pack_path).unwrap().modified().unwrap();
+        assert_eq!(stamp_before, stamp_after, "the survivor was not rewritten");
+        // And the reads are intact through the survivor.
+        let pack_files = load_pack_set(&packs);
+        assert_eq!(resolve_object(&root, &pack_files, &id_of(&a)).unwrap().data, a);
+        assert_eq!(resolve_object(&root, &pack_files, &id_of(&b)).unwrap().data, b);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_pack_with_one_unreachable_object_is_rebuilt_not_survived() {
+        let root = std::env::temp_dir().join(format!("gc-partial-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let packs = root.join("packs");
+        fs::create_dir_all(&packs).unwrap();
+        let a = b"partial-alpha".repeat(8);
+        let dead = b"partial-dead".repeat(8);
+        let (pack, index) = crate::pack::pack_frame(&[
+            crate::pack::PackEntry { id: &id_of(&a), data: &a },
+            crate::pack::PackEntry { id: &id_of(&dead), data: &dead },
+        ]);
+        fs::write(packs.join("pack-mixed.pack"), &pack).unwrap();
+        fs::write(packs.join("pack-mixed.idx"), &index).unwrap();
+
+        let outcome = gc(&root, &[id_of(&a)]).unwrap();
+        // A replacement WAS written (the survivor rule could not apply),
+        // the mixed pack retired, and only the kept object reads back.
+        assert!(outcome.pack_file.is_some());
+        assert!(!packs.join("pack-mixed.pack").exists());
+        assert_eq!(outcome.kept, 1);
+        let pack_files = load_pack_set(&packs);
+        assert_eq!(pack_files.len(), 1);
+        assert_eq!(resolve_object(&root, &pack_files, &id_of(&a)).unwrap().data, a);
+        assert!(resolve_object(&root, &pack_files, &id_of(&dead)).is_err());
         let _ = fs::remove_dir_all(&root);
     }
 

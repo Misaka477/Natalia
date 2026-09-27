@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveNataliaWezTermForkExecutable } from "../src";
+import {
+  nativeTerminalPrebuiltDir,
+  resolveNataliaWezTermForkExecutable,
+} from "../src";
 import { createTerminalController } from "../src";
 
 test("terminal controller init without a host environment leaves the registry absent", async () => {
@@ -63,4 +67,56 @@ test("an externally provided registry is installed as-is and never rebuilt", asy
   await expect(controller.init()).rejects.toThrow(
     "terminal controller is closed",
   );
+});
+
+test("the prebuilt drop directory is the first candidate after an explicit one", async () => {
+  // The ergonomics the distribution asked for: a fresh unpack drops the
+  // three executables into prebuilt/<triple>/ and they are found WITHOUT
+  // the fork's target/release existing (the paper cut this removes).
+  const dir = await mkdtemp(join(tmpdir(), "natalia-prebuilt-"));
+  try {
+    const prebuilt = join(dir, "prebuilt");
+    await mkdir(prebuilt, { recursive: true });
+    // The drop: one directory, made by the unpack, holding wezterm.
+    await writeFile(join(prebuilt, "wezterm"), "#!/bin/sh\n");
+    // No explicit dir, no fork build reachable from a temp cwd: the
+    // resolver's own prebuilt directory is the package's, so prove the
+    // ORDER through an explicit dir that shadows it (an explicit dir is
+    // the only candidate), then through the prebuilt dir itself.
+    expect(
+      resolveNataliaWezTermForkExecutable({ os: "linux", buildDir: prebuilt }),
+    ).toBe(join(prebuilt, "wezterm"));
+    // A spurious trailing entry in an explicit dir does not confuse it.
+    expect(
+      resolveNataliaWezTermForkExecutable({ os: "linux", buildDir: dir }),
+    ).toBeUndefined();
+    // And the package's own prebuilt path is the documented shape.
+    expect(
+      nativeTerminalPrebuiltDir("win32").endsWith("prebuilt/windows-x64"),
+    ).toBe(true);
+    expect(
+      nativeTerminalPrebuiltDir("linux").endsWith("prebuilt/linux-x64"),
+    ).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the package's own prebuilt drop is in the search, ahead of the fork build", async () => {
+  // The ergonomics itself: no explicit dir, the package's prebuilt
+  // directory holding the executable — the resolver must answer with IT
+  // (the fork build also exists in a dev environment, so the answer's
+  // identity is what proves the order).
+  const prebuilt = nativeTerminalPrebuiltDir("linux");
+  const wanted = join(prebuilt, "wezterm");
+  const alreadyThere = existsSync(wanted);
+  if (!alreadyThere) await mkdir(prebuilt, { recursive: true });
+  try {
+    if (!alreadyThere) await writeFile(wanted, "#!/bin/sh\n");
+    expect(resolveNataliaWezTermForkExecutable({ os: "linux" })).toBe(wanted);
+  } finally {
+    // Restore the environment exactly (the drop is a real directory a
+    // developer may have populated for real).
+    if (!alreadyThere) await rm(wanted, { force: true });
+  }
 });

@@ -10,6 +10,8 @@ export {
   nativeInputBrokerEndpoint,
   nativeTerminalForkBuildDir,
   nativeTerminalPaneCommand,
+  nativeTerminalPrebuiltDir,
+  platformTriple,
   reclaimStaleMuxRuntimeDirs,
   resolveNataliaWezTermForkExecutable,
   resolveWezTermExecutable,

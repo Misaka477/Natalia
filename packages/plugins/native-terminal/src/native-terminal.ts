@@ -124,6 +124,28 @@ export function resolveWezTermExecutable(
 }
 
 /**
+ * The PREBUILT drop directory: `<this package>/prebuilt/<platform-triple>/`,
+ * the one place a downloaded or unpacked Natalia drops the three terminal
+ * executables into. It exists because the fork's build directory
+ * (`wezterm/target/release`) is a path a fresh unpack does not have —
+ * asking a user to create that folder structure by hand is a paper cut the
+ * distribution should not ship. Extracting the release archive already
+ * makes such a directory, so no `mkdir -p` is needed.
+ */
+export function nativeTerminalPrebuiltDir(
+  os: NodeJS.Platform = platform(),
+): string {
+  return join(import.meta.dir, "..", "prebuilt", platformTriple(os));
+}
+
+/** The platform triple the prebuilt directory is keyed by (windows-x64, linux-x64, …). */
+export function platformTriple(os: NodeJS.Platform = platform()): string {
+  const arch = process.arch === "x64" ? "x64" : process.arch;
+  const system = os === "win32" ? "windows" : os === "darwin" ? "darwin" : os;
+  return `${system}-${arch}`;
+}
+
+/**
  * The patched current-main source is owned by this package. Its release build
  * is generated locally and intentionally excluded from version control.
  */
@@ -137,11 +159,20 @@ export function resolveNataliaWezTermForkExecutable(
   input: { os?: NodeJS.Platform; buildDir?: string } = {},
 ) {
   const os = input.os ?? platform();
-  const executable = join(
-    input.buildDir ?? nativeTerminalForkBuildDir(),
-    executableName("wezterm", os),
-  );
-  return existsSync(executable) ? executable : undefined;
+  // The search order is the ergonomics: an explicit dir, then the
+  // PREBUILT drop (a downloaded or unpacked Natalia's answer — the archive
+  // made the directory, so no `mkdir -p` by hand), then the fork's own
+  // build (a developer's answer). The three executables must sit together
+  // (the mux server is resolved beside the main one), which every
+  // candidate satisfies.
+  const candidates = input.buildDir
+    ? [input.buildDir]
+    : [nativeTerminalPrebuiltDir(os), nativeTerminalForkBuildDir()];
+  for (const dir of candidates) {
+    const executable = join(dir, executableName("wezterm", os));
+    if (existsSync(executable)) return executable;
+  }
+  return undefined;
 }
 
 /**
@@ -196,10 +227,15 @@ export function createWezTermHost(
     resolveWezTermExecutable({
       configured: process.env.NATALIA_WEZTERM_EXECUTABLE,
     });
-  if (!executable)
+  if (!executable) {
+    const suffix = os === "win32" ? ".exe" : "";
     throw new Error(
-      "WezTerm Native Terminal Host is unavailable. Build the managed Natalia fork for this platform or set NATALIA_WEZTERM_EXECUTABLE for controlled diagnostics.",
+      `WezTerm Native Terminal Host is unavailable. Drop the three terminal executables ` +
+        `(wezterm${suffix}, wezterm-gui${suffix}, wezterm-mux-server${suffix}) into ` +
+        `${nativeTerminalPrebuiltDir(os)} — or build the managed Natalia fork, or set ` +
+        `NATALIA_WEZTERM_EXECUTABLE for controlled diagnostics.`,
     );
+  }
   const run = input.run ?? runWezTermCommand;
   const measure = async <T>(name: string, work: () => Promise<T>) => {
     const startedAt = performance.now();

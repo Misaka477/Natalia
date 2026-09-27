@@ -87,6 +87,12 @@ Thumbs.db
 /packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
 /packages/framework/object-store/native-index/target/
 /packages/framework/object-store/native/target/
+# The native-terminal package's PREBUILT drop directory: the one place a
+# downloaded/unpacked Natalia (or a developer) drops the three terminal
+# executables into (prebuilt/<triple>/). It holds multi-hundred-MB binaries,
+# so it is never version-controlled — the resolver finds whatever a drop
+# left there, and the archive/release stages its own copy.
+/packages/plugins/native-terminal/prebuilt/
 /packages/hosts/confinement/native/target/
 
 # Local CEF SDK/test artifacts

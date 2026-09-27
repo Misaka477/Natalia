@@ -12,6 +12,8 @@
     "@anthelia/sandbox": "workspace:*",
     "@anthelia/session": "workspace:*",
     "@natalia/engineering-intelligence": "workspace:*",
-    "@natalia/plugin-native-terminal": "workspace:*"
+    "@natalia/plugin-native-terminal": "workspace:*",
+    "@natalia/installer": "workspace:*",
+    "@anthelia/plugin": "workspace:*"
   }
 }

@@ -4,7 +4,11 @@
   "compilerOptions": {
     "rootDir": "../../.."
   },
-  "include": ["src", "test", "bin"],
+  "include": [
+    "src",
+    "test",
+    "bin"
+  ],
   "references": [
     {
       "path": "../../core/contracts"
@@ -20,6 +24,9 @@
     },
     {
       "path": "../../domains/engineering-intelligence"
+    },
+    {
+      "path": "../../tooling/installer"
     }
   ]
 }

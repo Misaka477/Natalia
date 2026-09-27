@@ -12,6 +12,7 @@ import type {
   SubmittedTurn,
 } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "@natalia/client";
+import { officialPluginWorkspace } from "@natalia/testing";
 import { callRuntimeRPC } from "@natalia/transport";
 import { createRuntimeHttpServer } from "@natalia/transport/host";
 import { projectEvents, displayText, type AppState } from "@natalia/view-store";
@@ -50,11 +51,16 @@ async function withRuntime<T>(
   }) => Promise<T>,
   options: {} = {},
 ): Promise<T> {
-  const root = await mkdtemp(join(tmpdir(), "natalia-consumer-"));
+  // The OWN store, filled from the repo's build output: a runtime pointed
+  // at the shared dist/ts/plugin-store gets its lock and none of its plugin
+  // modules (the refresh artifact's marker makes the installer skip), which
+  // is a runtime whose every tool answers "unknown".
+  const { workspaceRoot: root, pluginStoreRoot } =
+    await officialPluginWorkspace("natalia-consumer");
   const events: RuntimeEvent[] = [];
   const runtime = createRealRuntimeClient({
     workspaceRoot: root,
-    pluginStoreRoot: resolve("dist", "ts", "plugin-store"),
+    pluginStoreRoot,
     sessionID: "ses_consumer",
     permissionMode: "auto",
     provider: {
@@ -614,11 +620,12 @@ test("a read-only integration renders the session and cannot write a byte", asyn
   // full-write one and an integration's read-only one. The integration must
   // render everything and cause no side effect, and the report it sees must
   // say so (write surface unreachable *by authorization*, never by lie).
-  const root = await mkdtemp(join(tmpdir(), "natalia-readonly-consumer-"));
+  const { workspaceRoot: root, pluginStoreRoot } =
+    await officialPluginWorkspace("natalia-readonly-consumer");
   const events: RuntimeEvent[] = [];
   const runtime = createRealRuntimeClient({
     workspaceRoot: root,
-    pluginStoreRoot: resolve("dist", "ts", "plugin-store"),
+    pluginStoreRoot,
     sessionID: "ses_consumer",
     permissionMode: "auto",
     provider: {
@@ -760,11 +767,12 @@ test("an external UI takes over approvals and answers questions", async () => {
   // the UI. The UI is told the truth about what happened: `accepted: true`
   // when the answer took effect, and a `policy.decision` event when a
   // rejection is delivered back to the model.
-  const root = await mkdtemp(join(tmpdir(), "natalia-approval-consumer-"));
+  const { workspaceRoot: root, pluginStoreRoot } =
+    await officialPluginWorkspace("natalia-approval-consumer");
   let writeCalls = 0;
   const runtime = createRealRuntimeClient({
     workspaceRoot: root,
-    pluginStoreRoot: resolve("dist", "ts", "plugin-store"),
+    pluginStoreRoot,
     globalConfigPath: join(root, "global.json"),
     sessionID: "ses_approval",
     provider: {
@@ -962,7 +970,7 @@ test("an external integration manages sessions, policy, agents and plugins over 
   );
   await writeFile(
     join(root, ".natalia", "plugins", "demo.plugin", "index.ts"),
-    `import { definePlugin } from "${pathToFileURL(join(process.cwd(), "packages", "core", "plugin", "src", "index.ts")).href}";
+    `import { definePlugin } from "${pathToFileURL(join(repositoryRoot, "packages", "core", "plugin", "src", "index.ts")).href}";
 export default definePlugin({
   manifest: { apiVersion: 1, id: "demo.plugin", version: "1.0.0", name: "Demo", capabilities: ["commands"] },
   setup(api) { api.commands.register({ name: "hello", title: "Hello", run() {} }); },
@@ -1047,15 +1055,24 @@ export default definePlugin({
  * are preferred; hosts without Developer Mode (Windows) fall back to copies,
  * which resolve identically inside the test process.
  */
+/**
+ * The repository root, derived from THIS file's location rather than the
+ * process cwd: `bun test` runs with the package directory as cwd, and a
+ * fixture that built repo paths from it imported from
+ * packages/tooling/sdk/packages/core/... — which failed the config reload
+ * and left every later write unapplied.
+ */
+const repositoryRoot = resolve(import.meta.dir, "../../../..");
+
 async function installSdkLinks(root: string) {
   const scoped = join(root, "node_modules", "@natalia");
   await mkdir(scoped, { recursive: true });
   for (const pkg of ["plugin", "contracts"]) {
     const target = join(scoped, pkg);
     try {
-      await symlink(join(process.cwd(), "packages", pkg), target, "dir");
+      await symlink(join(repositoryRoot, "packages", pkg), target, "dir");
     } catch {
-      await cp(join(process.cwd(), "packages", pkg), target, {
+      await cp(join(repositoryRoot, "packages", pkg), target, {
         recursive: true,
         filter: (source) => !source.includes(`${sep}node_modules${sep}`),
       });

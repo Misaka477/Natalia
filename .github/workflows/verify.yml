@@ -158,7 +158,8 @@ jobs:
                           ./packages/plugins/tools/process/test ./packages/plugins/ui/web/test \
                         packages/plugins/ui/pending/test ./packages/plugins/ui/kit/test
           - layer: "cli"
-            dirs: ""
+            dirs: >-
+              npm run docs:check && npm --workspace @natalia/cli run test
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -203,13 +204,7 @@ jobs:
       - name: Build the AST wasm packs
         run: npm run diff:build-wasm
       - name: Test (${{ matrix.layer }})
-        run: |
-          set -euo pipefail
-          if [ "${{ matrix.layer }}" = "cli" ]; then
-            npm run docs:check && npm --workspace @natalia/cli run test
-          else
-            ${{ matrix.dirs }}
-          fi
+        run: ${{ matrix.dirs }}
 
   guards:
     needs: test

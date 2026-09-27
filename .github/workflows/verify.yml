@@ -121,21 +121,24 @@ jobs:
                     ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
                     ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
                     ./packages/hosts/object-store/test
-      - name: Test (client runtime and domains)
+      - name: Test (client runtime and framework mechanisms)
         run: |
           bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
                     ./packages/framework/operation-log/test ./packages/framework/runtime-diagnostics/test \
                     ./packages/framework/runtime/test ./packages/framework/retry/test \
                     ./packages/framework/runtime-config/test ./packages/framework/runtime-status/test \
                     ./packages/framework/turn-orchestration/test ./packages/framework/provider-model/test \
-                    ./packages/framework/agent-prompts/test ./packages/domains/collab/test \
+                    ./packages/framework/agent-prompts/test ./packages/framework/collaboration/test \
+                    ./packages/framework/workspace/test ./packages/framework/checkpoint/test \
+                    ./packages/framework/attachments/test ./packages/framework/compaction/test \
+                    ./packages/framework/client/test ./packages/framework/sandbox/test \
+                    ./packages/framework/diff-wasm/test
+      - name: Test (domains and product policy)
+        run: |
+          bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
                     ./packages/domains/goal-runtime/test ./packages/domains/engineering-intelligence/test \
                     ./packages/domains/goal/test ./packages/domains/work-ledger/test \
-                    ./packages/domains/governance-ledger/test ./packages/framework/collaboration/test \
-                    ./packages/framework/workspace/test ./packages/framework/checkpoint/test \
-                    ./packages/framework/attachments/test ./packages/domains/context-ledger/test \
-                    ./packages/framework/compaction/test ./packages/framework/client/test \
-                    ./packages/framework/sandbox/test ./packages/framework/diff-wasm/test
+                    ./packages/domains/governance-ledger/test ./packages/domains/context-ledger/test
       - name: Test (plugins, tools, and facets)
         run: |
           bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \

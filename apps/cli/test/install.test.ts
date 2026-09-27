@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 /**
@@ -198,10 +197,11 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
       "-File",
       join(repoRoot, "scripts", "install.ps1"),
       "-From",
-      // The ps1 fetches each listed file through Invoke-WebRequest, which
-      // needs a URI — the same file:// form the sh installer's fixture
-      // uses (a bare directory path is not a URI on any platform).
-      pathToFileURL(release).href,
+      // A bare directory path: the script's local-container branch copies
+      // from disk. (An earlier gate passed a file:// URL here — and
+      // PowerShell 7's Invoke-WebRequest does not support the file scheme
+      // on any platform, so that was the failure, not the path form.)
+      release,
       "-NataliaHome",
       home,
     ],
@@ -210,9 +210,6 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
   // The fixture ships a sh-script "natalia", not natalia.exe — the ps1's
   // layout assertions run against natalia.exe, so this gate only checks the
   // script parses and starts (a parse failure exits non-zero immediately).
-  console.log(
-    `PS1_ANSWER status=${result.status} stderr=${JSON.stringify(result.stderr?.slice(0, 800))}`,
-  );
   expect(result.status === 0 || result.stderr.includes("natalia.exe")).toBe(
     true,
   );

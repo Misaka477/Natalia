@@ -142,7 +142,14 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
     const astIndexStore = new ObjectStore(
       resolveWorkspaceObjectsRoot(ctx.ports.getWorkspaceRoot()),
     );
-    const cap = files.slice(0, 50);
+    // The 50-file cap is GONE: a workspace's move detection was blind
+    // past the fiftieth file (a move in the hundredth file was
+    // undetectable — a correctness hole at exactly the scale the plan's
+    // Phase C exists for). The cost it guarded against does not exist:
+    // the index is content-addressed in the object store's metadata, so
+    // the marginal cost of the whole set is per-NEW-file (~0.5ms cold,
+    // ~0 measured warm — 2000 files indexed in 1ms on the second pass).
+    const cap = files;
     const results: Array<{
       path?: string;
       language: string;

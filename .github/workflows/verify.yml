@@ -90,6 +90,19 @@ jobs:
           key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
       - name: Build the AST wasm packs
         run: npm run diff:build-wasm
+      # The test jobs use the SAME distribution the gates just proved —
+      # rebuilding it per job costs each of them a minute of the window the
+      # platform's shutdown signal runs in, and the platform kills whatever
+      # it catches still running. It travels as a run artifact instead.
+      - name: Upload the built distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-distribution
+          path: |
+            dist/ts
+            packages/framework/diff-wasm/ast
+          retention-days: 1
+          if-no-files-found: error
 
   # The suite, by layer, IN PARALLEL. Each job is a few minutes, so the
   # external shutdown signal (whatever sends it — see the header) can
@@ -305,16 +318,19 @@ jobs:
           --manifest-path packages/hosts/confinement/native/Cargo.toml
       - name: Install
         run: bun install --frozen-lockfile
-      - name: Build the plugin distribution
-        run: npm run build:distribution
-      - name: Cache the AST wasm packs
+      - name: Fetch the built distribution from the artifacts job
+        uses: actions/download-artifact@v4
+        with:
+          name: built-distribution
+          path: dist
+      - name: Cache the AST wasm packs (the fallback when the artifact lacks them)
         uses: actions/cache@v4
         with:
           path: |
             packages/framework/diff-wasm/ast
             packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
           key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
-      - name: Build the AST wasm packs
+      - name: Build the AST wasm packs (only what the artifact/ cache did not carry)
         run: npm run diff:build-wasm
       - name: Test (${{ matrix.layer }})
         run: ${{ matrix.dirs }}

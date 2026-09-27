@@ -89,6 +89,120 @@ async function stageTerminalNatives(
   }
 }
 
+/**
+ * The release's contract, asserted against itself. The facts both
+ * installers and every downstream consumer depend on, each of which was
+ * violated by a real bug this session:
+ *
+ * 1. the layout the installers read (the binary, VERSION, SHA256SUMS,
+ *    manifest.json, plugins/);
+ * 2. NO machine-local state — the dev plugin-store, the pty stores, the
+ *    test workspaces (they tied the artifact to the building machine);
+ * 3. the terminal natives are THIS platform's own executables (a Windows
+ *    release with Linux wezterm, or an empty directory, are both lies);
+ * 4. every file on disk is covered by the checksums (an uncovered file
+ *    is a file no installer verifies).
+ */
+async function verifyRelease(
+  outDir: string,
+  platformDir: string,
+  files: Array<{ file: string; sha256: string }>,
+): Promise<void> {
+  const problems: string[] = [];
+  const isDir = async (path: string) => {
+    try {
+      return (await stat(path)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  const isFile = async (path: string) => {
+    try {
+      return (await stat(path)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  // The binary's name is the platform's own (the Windows compile emits
+  // natalia.exe), and `plugins` is a directory — Bun.file().exists() sees
+  // neither, so this is a stat.
+  const binaryName = platformDir.startsWith("windows")
+    ? "natalia.exe"
+    : "natalia";
+  for (const required of [
+    binaryName,
+    "VERSION",
+    "SHA256SUMS",
+    "manifest.json",
+    "plugins",
+  ])
+    if (
+      !(await isFile(join(outDir, required))) &&
+      !(await isDir(join(outDir, required)))
+    )
+      problems.push(`the release is missing ${required}`);
+  for (const forbidden of [
+    "client-test-workspaces",
+    "plugin-store",
+    "cli-dev-pty-stores",
+  ])
+    if (await Bun.file(join(outDir, forbidden)).exists())
+      problems.push(`machine-local state shipped: ${forbidden}/`);
+  // The terminal natives: this platform's three executables and nothing else.
+  const weztermDir = join(
+    outDir,
+    "plugins",
+    "natalia-tool-terminal",
+    "wezterm",
+  );
+  if (await isFile(join(weztermDir, "..", "index.js"))) {
+    const suffix = platformDir.startsWith("windows") ? ".exe" : "";
+    const entries = await readdir(weztermDir).catch(() => []);
+    if (entries.length !== 3)
+      problems.push(
+        `the terminal carries ${entries.length} executables, expected 3`,
+      );
+    const wantsWindows = platformDir.startsWith("windows");
+    // The check is the POSITIVE shape: a posix release must not carry
+    // an .exe, a windows release must not carry a bare one. `endsWith`
+    // against the empty suffix is the trap this replaces — every string
+    // "ends with" "" — which is how the first version of this check
+    // passed a linux release full of wezterm.exe.
+    for (const entry of entries)
+      if (entry.endsWith(".exe") !== wantsWindows)
+        problems.push(
+          `the ${platformDir} release carries a foreign terminal binary: ${entry}`,
+        );
+  }
+  // Every file on disk is covered by the checksums. VERSION and
+  // SHA256SUMS are the verification's own inputs: a checksum cannot list
+  // itself, and VERSION is what install.sh reads before it verifies.
+  const listed = new Set(files.map((file) => file.file));
+  const walk = async (dir: string, prefix = ""): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name), rel);
+        continue;
+      }
+      if (rel === "VERSION" || rel === "SHA256SUMS" || rel === "manifest.json")
+        continue;
+      if (!listed.has(rel))
+        problems.push(`${rel} is on disk but not in SHA256SUMS`);
+    }
+  };
+  await walk(outDir);
+  if (problems.length)
+    throw new Error(
+      `release verification failed for ${platformDir}:\n- ${problems.join("\n- ")}`,
+    );
+  console.log(
+    `verified ${platformDir}: layout, no machine-local state, ` +
+      `${platformDir.startsWith("windows") ? "windows" : "posix"} terminal natives, ` +
+      `${files.length} files checksummed`,
+  );
+}
+
 async function run(command: string, args: string[], cwd: string) {
   const proc = Bun.spawn([command, ...args], {
     cwd,
@@ -206,6 +320,13 @@ for (const target of targets) {
       join(outDir, "SHA256SUMS"),
       `${manifest.files.map((file) => `${file.sha256}  ${file.file}`).join("\n")}\n`,
     );
+    // THE SELF-CHECK: the release proves its own contract before it is
+    // allowed to be called a release. Everything asserted here was a real
+    // bug found by running the pipeline rather than reading it: test
+    // residue inside SHA256SUMS (628 files of it), the Windows release
+    // carrying the Linux terminal binaries, then an empty wezterm
+    // directory. A build that cannot fail ships a lie with a checksum.
+    await verifyRelease(outDir, platformDir, manifest.files);
     result.ok = true;
     result.binary = join(outDir, "natalia");
     result.files = manifest.files.length;

@@ -142,6 +142,11 @@ function workspaceRegistryPath() {
   return process.env.NATALIA_WORKSPACES_FILE ?? liveWorkspaceRegistryPath();
 }
 
+/** The explicit override wins outright — a legacy fallback never applies. */
+function explicitWorkspaceRegistryPath(): string | undefined {
+  return process.env.NATALIA_WORKSPACES_FILE;
+}
+
 /** The live state directory — where writes go. */
 function liveWorkspaceRegistryPath() {
   return join(homedir(), ".config", "natalia", "workspaces.json");
@@ -160,6 +165,8 @@ function legacyWorkspaceRegistryPaths() {
  * copied or deleted, and the next write lands on the live name.
  */
 async function readWorkspaceRegistryPath() {
+  const explicit = explicitWorkspaceRegistryPath();
+  if (explicit) return explicit;
   const live = liveWorkspaceRegistryPath();
   try {
     await access(live);

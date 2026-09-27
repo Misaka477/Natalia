@@ -8,6 +8,7 @@
 | 你是…                              | 读哪节                                                               |
 | ---------------------------------- | -------------------------------------------------------------------- |
 | 下载了 release 的用户              | [§1 安装](#1-安装) → [§2 Git Bash 仅-windows](#2-git-bash仅-windows) |
+| 想知道数据存在哪的人               | [§1 末尾的"安装位置 ≠ 状态位置"](#1-安装)                            |
 | 拿到了源码想自己编译               | [§3 一次性全编译](#3-一次性全编译)                                   |
 | 只有终端可执行文件（下载来的 exe） | [§4 终端可执行文件投放](#4-终端可执行文件投放prebuilt)               |
 
@@ -44,6 +45,10 @@ natalia doctor          # 首跑体检
 /opt/natalia/bin/natalia uninstall
 ```
 
+**安装位置 ≠ 状态位置。** 上一步装的是程序本身；你的配置、workspace
+注册表、技能和 TUI 状态在另一个目录：`~/.config/natalia/`（POSIX）/
+`%APPDATA%\natalia\`（Windows）。卸载不会动它。
+
 ### Windows
 
 在 PowerShell 里：
@@ -70,10 +75,16 @@ POSIX 完全一致的引号/重定向语义）。解析顺序：
 3. 四个默认安装根（Program Files 等）× Git 的标准相对路径
 4. `PATH` 自己的 `bash.exe`
 
-装在非默认位置（`D:\\tools\\Git`、便携版）时，在**设置 → 运行时 → Git
-Bash 路径**填你的 `bash.exe` 全路径即可；`natalia doctor` 会显示当前
-解析到哪一个、以及是不是你配置的那个。一个都没找到时，运行时会明确
-报错并指向这个设置项，而不是默默退回 cmd.exe。
+装在非默认位置（`D:\\tools\\Git`、便携版）时，在设置的**运行时**分类
+里找到 **Git Bash 路径**一行，填你的 `bash.exe` 全路径即可（留空 =
+恢复自动搜索；Linux/macOS 上这一行根本不出现——那里的 shell 就是
+`bash`，没有可配置的东西）。`natalia doctor` 会显示当前解析到哪一个、
+以及是不是你配置的那个。一个都没找到时，运行时会明确报错并指向这个
+设置项，而不是默默退回 cmd.exe。
+
+> 这一行只在 Windows 出现，判断依据是**运行时上报的宿主平台**（它的
+> 状态快照里带 `host:<platform>`），不是浏览器的 User-Agent——用
+> Linux 笔记本连一台 Windows 宿主时，只有前者是对的。
 
 ## 3. 一次性全编译
 
@@ -144,6 +155,11 @@ natalia doctor                        # the first-run health report
 /opt/natalia/bin/natalia uninstall    # removes this install only
 ```
 
+**Where it installs is not where your data lives.** The command above puts
+the program in place; your config, workspace registry, skills and TUI
+state live in a separate directory: `~/.config/natalia/` (POSIX) /
+`%APPDATA%\natalia\` (Windows). Uninstalling does not touch it.
+
 Windows (PowerShell):
 
 ```powershell
@@ -166,6 +182,13 @@ Runtime → Git Bash path** when Git for Windows lives outside the default
 roots (`D:\\tools\\Git`, a portable install); `natalia doctor` reports
 which one resolved and whether it is yours. Nothing found means a clear
 error pointing at the setting — never a silent fallback to cmd.exe.
+
+The row lives in the settings panel's Runtime category, and it appears
+only on Windows: the host comes from the RUNTIME's status snapshot
+(`host:<platform>`), not from the browser's User-Agent — a Linux laptop
+driving a Windows host would get the wrong answer from the latter. On
+Linux and macOS the row is absent because their shell IS bash and there
+is nothing to configure.
 
 ### 3. Build everything
 

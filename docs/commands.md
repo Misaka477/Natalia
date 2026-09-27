@@ -42,6 +42,9 @@ npm run ts:cli -- diagnose
 
 - `status` prints the current provider/model and runtime status.
 - `doctor` checks configuration, model selection, migration state, and sessions.
+  On Windows it also reports which bash the runtime resolved for shell
+  calls — the path configured in Settings, a discovered Git for Windows,
+  or nothing (an actionable line, not a stack trace).
 - `diagnose` prints startup diagnostics as JSON.
 
 ## Runtime Services

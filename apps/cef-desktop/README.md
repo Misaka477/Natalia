@@ -5,6 +5,31 @@ Minimal CEF-based desktop shell prototype.
 ## Dependencies
 
 - CEF SDK (Linux x64) extracted locally at `.cef-test/`
+
+## The CEF sandbox is deliberately OFF
+
+`CMakeLists.txt` does **not** define `CEF_USE_SANDBOX`, so cefsimple's
+`settings.no_sandbox = true` compiles in. It was defined once, and that
+was a misconfiguration rather than a hardening: the app links
+`libcef_dll_wrapper` + `libcef.so` but not `cef_sandbox`, never calls
+`cef_sandbox_initialize`, and passes `nullptr` as `CefInitialize`'s fourth
+argument. A sandbox that is engaged by definition but never initialized
+leaves the sub-processes under the seccomp policy with no broker behind
+it — every temp-file create returns EPERM, which surfaces as
+
+```
+ERROR:third_party/puffin/src/puffpatch.cc:122 Failed to create a
+temporary file for memory-mapping: Operation not permitted
+```
+
+Re-enabling it takes the whole set, not a flag: link `${CEF_SANDBOX_LIB}`,
+call `cef_sandbox_initialize` in `main()`, pass the result as
+`CefInitialize`'s fourth argument, and ship a root-owned setuid
+`chrome_sandbox` that a user install cannot grant. The renderer renders
+first-party UI served from the local runtime; the product's permission
+model lives at the tool/approval layer, which the renderer sandbox does
+not touch.
+
 - CMake, `/usr/bin/g++`, X11 dev headers
 
 ## Build

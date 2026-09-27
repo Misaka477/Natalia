@@ -17,7 +17,7 @@ Both use the same `RuntimeClient`, event model, and plugin registry.
 
 - Durable local sessions backed by JSON or SQLite, with history, context compaction, recovery, and session forks.
 - Multi-workspace support in one host process; each workspace owns its own runtime and session store.
-- Multiple concurrent sessions per workspace, presented as a workspace -> session tree in the web shell.
+- Three agents with distinct jobs: **Natalia** (娜塔莉娅) works in the workspace, **Navi** (娜薇) is the live-chat collaborator, and **Nia** (妮娅) is the read-only auditor whose findings are independent, not suggestions.
 - Streaming provider adapters for OpenAI-compatible APIs, Anthropic, and Gemini.
 - Typed tool execution through schema validation, policy, conditional approval, audit, and secret-redaction boundaries.
 - Checkpoint creation, preview, dry-run rollback, and confirmed rollback with safety checkpoints.

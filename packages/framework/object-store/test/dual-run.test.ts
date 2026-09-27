@@ -131,6 +131,29 @@ test("Phase D metrics: the store's counters answer for the ops it actually serve
   expect(afterGc.packedObjects).toBe(1); // the kept object was repacked
 }, 30_000);
 
+test("Phase D: the rust mode's cache lane is alive (the LRU hole is fixed)", async () => {
+  // The rust branch of get() returned before the cache write, so the LRU
+  // was dead in that mode: every repeated read of a small object paid
+  // the core's FFI and the verify again (200 reads, 201 core reads, zero
+  // cache hits — the bench that found it). The modes answer the same
+  // shape now.
+  process.env.NATALIA_OBJECT_STORE_BACKEND = "rust";
+  try {
+    const root = await mkdtemp(join(tmpdir(), "phase-d-lru-"));
+    roots.push(root);
+    const store = new ObjectStore(join(root, "objects"));
+    const id = await store.put("a small object, read repeatedly");
+    await store.get(id);
+    for (let index = 0; index < 20; index += 1) await store.get(id);
+    const stats = await store.stats();
+    // One core read (the first), twenty cache hits.
+    expect(stats.hits.loose).toBe(1);
+    expect(stats.hits.lru).toBe(20);
+  } finally {
+    delete process.env.NATALIA_OBJECT_STORE_BACKEND;
+  }
+}, 30_000);
+
 test("Phase D dual-run: the Rust-mode store answers byte-for-byte what the TS store answers", async () => {
   const payloads = {
     tiny: "hi",

@@ -260,9 +260,15 @@ export class ObjectStore {
       // contract byte-for-byte identical across backends.
       try {
         // The Rust core reads the LOOSE path (the same file readObject
-        // would); the metrics count the read, not the reader.
+        // would); the metrics count the read, not the reader. The cache
+        // is filled HERE: this branch used to return before the cache
+        // write, so the LRU was dead in rust mode and every repeated read
+        // of a small object paid the FFI and the verify again (measured:
+        // 200 reads, 201 core reads, zero cache hits).
         this.counters.looseReads += 1;
-        return this.verify(id, rustCas.get(this.root, id));
+        const verified = this.verify(id, rustCas.get(this.root, id));
+        this.cacheSet(id, verified);
+        return verified;
       } catch (error) {
         if (String(error).includes("not found")) {
           // vanished between has and get: fall to the TS path's answer

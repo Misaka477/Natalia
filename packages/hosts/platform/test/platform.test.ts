@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { win32 } from "node:path";
 import {
+  configureBashExecutable,
   detachedShellPrefix,
   executableName,
   globalConfigHome,
@@ -260,5 +261,69 @@ describe("user directories", () => {
     expect(userRuntimeHome({ os: "win32", env: { TEMP: "C:\\Temp" } })).toBe(
       "C:\\Temp",
     );
+  });
+});
+
+describe("the configured bash path (the settings UI's Git Bash row)", () => {
+  const gitBash = win32.join("C:\\Program Files", "Git", "bin", "bash.exe");
+  const windowsEnv = {
+    ProgramFiles: "C:\\Program Files",
+    ProgramW6432: "C:\\Program Files",
+    LOCALAPPDATA: "C:\\Users\\demo\\AppData\\Local",
+    PATH: "C:\\Windows\\system32",
+  };
+
+  test("wins over every discovery — a Git installed anywhere is usable", () => {
+    configureBashExecutable("D:\\tools\\Git\\bin\\bash.exe");
+    try {
+      expect(
+        resolveBashExecutable({
+          os: "win32",
+          env: windowsEnv,
+          exists: (path) => path === gitBash,
+        }),
+      ).toBe("D:\\tools\\Git\\bin\\bash.exe");
+      // Even when the default roots would have found a bash.
+      expect(resolveBashExecutable({ os: "win32", env: windowsEnv })).toBe(
+        "D:\\tools\\Git\\bin\\bash.exe",
+      );
+    } finally {
+      configureBashExecutable(undefined);
+    }
+  });
+
+  test("is a Windows-only surface — POSIX never consults it", () => {
+    configureBashExecutable("/some/where/bash");
+    try {
+      // The POSIX answer is the call site's own shell, never the setting.
+      expect(resolveBashExecutable({ os: "linux", env: {} })).toBeUndefined();
+    } finally {
+      configureBashExecutable(undefined);
+    }
+  });
+
+  test("the PATH's own bash.exe is discovered after the default roots", () => {
+    expect(
+      resolveBashExecutable({
+        os: "win32",
+        env: { ...windowsEnv, PATH: "D:\\portable\\git\\bin" },
+        exists: (path) => path.endsWith("portable\\git\\bin\\bash.exe"),
+      }),
+    ).toBe(win32.join("D:\\portable\\git\\bin", "bash.exe"));
+  });
+
+  test("an empty or unset configuration restores discovery", () => {
+    configureBashExecutable("   ");
+    try {
+      expect(
+        resolveBashExecutable({
+          os: "win32",
+          env: windowsEnv,
+          exists: (path) => path === gitBash,
+        }),
+      ).toBe(gitBash);
+    } finally {
+      configureBashExecutable(undefined);
+    }
   });
 });

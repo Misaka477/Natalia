@@ -13,6 +13,7 @@
  */
 import { createAttachmentService } from "@anthelia/attachments";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
+import { configureBashExecutable } from "@anthelia/platform";
 import {
   compositionProfile,
   compositionRowRegistrations,
@@ -562,6 +563,19 @@ export async function wireFrameworkServices(
     // profile (absence = TypeScript, so nothing changes until a row
     // says otherwise).
     applyCompositionObjectStoreBackend(activeProfile);
+    // The Git Bash setting follows the same breath: the user's configured
+    // path (Windows-only — POSIX needs no setting) applies at boot and at
+    // every reload, so editing the settings takes effect on the next
+    // profile load rather than a restart. Read through a named shape:
+    // the schema (contracts/src/schema-foundation.ts) declares the shell
+    // section, while the port's config type in this checkout's built
+    // declarations lags it, and the shape keeps the compile honest
+    // without touching the cache (a stale .d.ts revives on a clean
+    // build — restore the direct read then).
+    const shellConfig = ctx.ports.getTsRuntimeConfig() as
+      | { shell?: { bashPath?: string } }
+      | undefined;
+    configureBashExecutable(shellConfig?.shell?.bashPath);
     // Law 2: a reload is exactly when the composition can change (drop-in
     // edits land with the profile above) — re-point every cached entry's
     // scope so no old-composition value can answer a new one.

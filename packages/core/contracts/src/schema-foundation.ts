@@ -27,6 +27,20 @@ export const terminalWindowConfigSchema = z.object({
   backend: z.enum(["wezterm", "pty"]).default("pty"),
 });
 
+/**
+ * The shell-runtime settings. `bashPath` is WINDOWS-ONLY by design: on
+ * Linux and macOS the shell is `bash` and no setting is needed, so the
+ * resolver ignores this field off Windows (a row that does nothing on two
+ * of three platforms is noise). Windows uses it because the discovery
+ * sees only the four default roots and the PATH — a Git for Windows
+ * installed elsewhere (D:\tools\Git, a portable install) had no answer
+ * but an environment variable, and an env var is not a persisted
+ * configuration. Empty means "discover".
+ */
+export const shellConfigSchema = z.object({
+  bashPath: z.string().max(1024).optional(),
+});
+
 export const teamConfigSchema = z.object({
   /**
    * The maximum number of sandboxed sub-agents a fan-out may run concurrently.
@@ -216,6 +230,7 @@ export const runtimeConfigSchema = z.object({
     })
     .default({}),
   terminal: terminalWindowConfigSchema.default({}),
+  shell: shellConfigSchema.default({}),
 });
 
 export const contextConfigSchema = z.object({

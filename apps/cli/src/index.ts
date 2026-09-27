@@ -8,6 +8,7 @@ import {
   searchWorkspaceFiles,
 } from "@natalia/client";
 import { layerCensus } from "./layer-census";
+import { configuredBashPath, resolveBashExecutable } from "@anthelia/platform";
 import {
   defaultConfigV3,
   defaultGlobalConfigPath,

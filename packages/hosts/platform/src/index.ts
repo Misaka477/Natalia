@@ -95,18 +95,58 @@ const WINDOWS_BASH_RELATIVE_PATHS = [
 ];
 
 /**
+ * A bash path SET BY THE USER (the settings UI's Git Bash row, persisted in
+ * the config). The seam is module-level for the same reason the object
+ * store's backend seam is: the shell call sites are primitives that must
+ * not each learn to read the config, and one boot-time wiring is the
+ * honest place. `undefined` restores discovery.
+ *
+ * WINDOWS ONLY, deliberately: on POSIX the shell is `bash` (or a call
+ * site's own `posixShell`) and no setting is needed — a configuration row
+ * that does nothing on two of three platforms is noise, so the platform
+ * guard is the resolver's, not merely the UI's.
+ */
+let configuredBashExecutable: string | undefined;
+
+export function configureBashExecutable(path: string | undefined): void {
+  configuredBashExecutable = path && path.trim() ? path.trim() : undefined;
+}
+
+/** The configured path (the doctor's report reads it). */
+export function configuredBashPath(): string | undefined {
+  return configuredBashExecutable;
+}
+
+/**
  * Locates a bash-compatible shell on Windows. Natalia's shell call sites pass
  * `bash -lc` with POSIX quoting, so the Git for Windows bash is used rather
  * than `cmd.exe`: it preserves argument, redirection, and quoting semantics
  * exactly, which keeps a single shell contract across platforms.
+ *
+ * The order is the ergonomics the distribution asked for: the USER's
+ * configured path first (a Git installed outside the four default roots —
+ * D:\tools\Git, a portable install — is the case the default search
+ * cannot see), then the environment variable (controlled diagnostics),
+ * then discovery: the default roots, then the PATH. The registry remains
+ * the one authoritative source not read yet (HKLM\SOFTWARE\GitForWindows
+ * → InstallPath) — recorded, not shelled out to yet.
  */
 export function resolveBashExecutable(
   input: PlatformInput & { exists?: (path: string) => boolean } = {},
 ): string | undefined {
   const env = input.env ?? process.env;
-  const configured = env.NATALIA_BASH_EXECUTABLE;
-  if (configured) return configured;
-  if (!isWindows(input.os)) return undefined;
+  if (!isWindows(input.os)) {
+    // POSIX: the shell is `bash` (or a call site's own `posixShell`), so
+    // the user's configured path never applies — but the ENV's explicit
+    // override keeps its any-platform semantics (controlled diagnostics,
+    // a contract the platform tests pin).
+    return env.NATALIA_BASH_EXECUTABLE;
+  }
+  // Windows: the user's configuration first (a Git installed outside the
+  // default roots), then the env, then discovery.
+  if (configuredBashExecutable) return configuredBashExecutable;
+  const fromEnv = env.NATALIA_BASH_EXECUTABLE;
+  if (fromEnv) return fromEnv;
   const exists = input.exists ?? defaultExists;
   const roots = [
     env.ProgramFiles,
@@ -120,6 +160,13 @@ export function resolveBashExecutable(
       const candidate = win32.join(root, relative);
       if (exists(candidate)) return candidate;
     }
+  }
+  // The PATH's own bash.exe: an install that put itself on the PATH is
+  // discoverable without knowing where it lives.
+  for (const dir of (env.PATH ?? "").split(";")) {
+    if (!dir) continue;
+    const candidate = win32.join(dir, "bash.exe");
+    if (exists(candidate)) return candidate;
   }
   return undefined;
 }

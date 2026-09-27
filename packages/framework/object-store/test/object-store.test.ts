@@ -136,13 +136,17 @@ test("delta-packed similar objects survive a round trip", async () => {
 });
 
 test("garbage collection preserves reachable objects including chunk manifests", async () => {
-  const { objects } = await openStore("natalia-object-gc-");
+  const { root, objects } = await openStore("natalia-object-gc-");
   const live = await objects.put("live-content");
   const dead = await objects.put("dead-content");
   const largeText = "x".repeat(512 * 1024);
   const liveLarge = await objects.put(largeText);
   const deadLarge = await objects.put("y".repeat(512 * 1024));
 
+  const deadChunks = await objects
+    .getMeta<{ chunks?: string[] }>(`chunked:${deadLarge}`)
+    .then((meta) => meta?.chunks ?? []);
+  expect(deadChunks.length).toBeGreaterThan(0);
   const result = await objects.collectGarbage(new Set([live, liveLarge]));
   expect(result.unreachableObjects).toBeGreaterThanOrEqual(2);
   expect(await objects.has(live)).toBe(true);
@@ -150,6 +154,15 @@ test("garbage collection preserves reachable objects including chunk manifests",
   expect((await objects.get(liveLarge)).toString()).toBe(largeText);
   expect(await objects.has(dead)).toBe(false);
   expect(await objects.has(deadLarge)).toBe(false);
+  // The dead chunked object's CHUNK BYTES left the store — the whole
+  // store's id space (loose, packed, and the chunked metadata) is exactly
+  // the live set. An extension that did not filter the one-statement rows
+  // by the reachable set would keep every chunked object's manifest and
+  // chunks alive: the metadata says the object is gone, but the bytes
+  // stay (orphan files, invisible to `has`).
+  const survivors = new Set(await objects.list());
+  for (const chunkId of deadChunks) expect(survivors.has(chunkId)).toBe(false);
+  expect(survivors.has(deadLarge)).toBe(false);
 });
 
 test("a GC after a compaction drops the packed unreachable objects", async () => {

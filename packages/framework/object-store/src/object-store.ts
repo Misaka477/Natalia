@@ -646,15 +646,33 @@ export class ObjectStore {
     await this.loadPackIndexes();
     const allIds = new Set<string>(await this.list());
     const extendedReachable = new Set(reachable);
-    for (const id of reachable) {
-      const chunked = await this.getMeta<{
-        manifestId: string;
-        chunks?: string[];
-      }>(`chunked:${id}`);
-      if (!chunked) continue;
-      extendedReachable.add(chunked.manifestId);
-      for (const chunkId of chunked.chunks ?? [])
-        extendedReachable.add(chunkId);
+    // Phase A-2's measurement (the landing doc has the table): this
+    // extension used to be one getMeta per reachable id — 41ms for 10k
+    // ids, and 132ms with the legacy-file probes the misses make. The
+    // same work in ONE statement is 2ms, for both the small and the
+    // fifty-thousand-chunked shape: the query SHAPE was the cost, not
+    // the language, which is exactly why the meta.rs candidate measured
+    // against (Rust cannot beat a 2ms SQL statement, and an FFI per key
+    // would add a boundary rather than remove one).
+    const chunkedRows = this.metaDb
+      .query(
+        "SELECT key, value FROM metadata WHERE namespace = 'default' AND key LIKE 'chunked:%'",
+      )
+      .all() as Array<{ key: string; value: string }>;
+    for (const row of chunkedRows) {
+      const id = row.key.slice("chunked:".length);
+      if (!extendedReachable.has(id)) continue;
+      let parsed: { manifestId: string; chunks?: string[] };
+      try {
+        parsed = JSON.parse(row.value) as {
+          manifestId: string;
+          chunks?: string[];
+        };
+      } catch {
+        continue;
+      }
+      extendedReachable.add(parsed.manifestId);
+      for (const chunkId of parsed.chunks ?? []) extendedReachable.add(chunkId);
     }
     // Phase A's gc.rs: the object side of the collection — enumerate,
     // delete, read every kept original (the pack reader with the delta

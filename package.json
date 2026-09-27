@@ -26,8 +26,8 @@
     "native-terminal:build-wezterm:windows": "cargo build --manifest-path packages/plugins/native-terminal/wezterm/Cargo.toml --release --bin wezterm --bin wezterm-gui --bin wezterm-mux-server",
     "native-terminal:build-wezterm:windows-cross": "bun scripts/build-wezterm-windows.ts",
     "native-terminal:build-wezterm:ubuntu": "bun scripts/build-wezterm-ubuntu.ts",
-    "smoke:native-terminal:headless": "env -u DISPLAY -u WAYLAND_DISPLAY bun scripts/native-terminal-headless-smoke.ts",
-    "smoke:cli:automation": "bun scripts/cli-automation-smoke.ts",
+    "smoke:native-terminal:headless": "env -u DISPLAY -u WAYLAND_DISPLAY bun packages/tooling/testing/bin/native-terminal-headless-smoke.ts",
+    "smoke:cli:automation": "bun packages/tooling/testing/bin/cli-automation-smoke.ts",
     "guard:imports": "bun run packages/tooling/testing/bin/import-guard.ts",
     "guard:contract": "bun run packages/tooling/testing/bin/contract-producer-guard.ts",
     "guard:deps": "bun run packages/tooling/testing/bin/dependency-cycle-guard.ts",
@@ -42,7 +42,7 @@
     "licenses:check": "bun scripts/license-check.ts",
     "licenses:generate": "bun scripts/generate-third-party-licenses.ts",
     "verify": "npm run format && npm run typecheck && npm run build:distribution && npm run diff:build-wasm && npm run test && npm run guard:imports && npm run guard:contract && npm run guard:deps && npm run guard:suppressions && npm run guard:tests && npm run guard:events && npm run guard:console && npm run guard:test-workspaces",
-    "cleanup:test-tmp": "bun scripts/cleanup-test-tmp.ts",
+    "cleanup:test-tmp": "bun packages/tooling/testing/bin/cleanup-test-tmp.ts",
     "docs:api-reference": "API_REFERENCE_WRITE=1 bun run packages/hosts/transport/test/api-reference.test.ts",
     "refresh:plugin-store": "bun scripts/refresh-plugin-store.ts",
     "desktop:cef": "bash apps/cef-desktop/run-cef-desktop.sh",
@@ -53,7 +53,7 @@
     "diff:build-wasm": "CARGO_HOME=${CARGO_HOME:-${TMPDIR:-/tmp}/natalia-cargo} cargo build --release --target wasm32-unknown-unknown --manifest-path packages/framework/diff-wasm/text-build/Cargo.toml && cp packages/framework/diff-wasm/text-build/target/wasm32-unknown-unknown/release/natalia_diff_wasm.wasm packages/framework/diff-wasm/src/natalia_diff_wasm.wasm && bun scripts/build-ast-packs.ts",
     "codegen:composition-dts": "bun scripts/composition-dts.ts",
     "build:distribution": "NATALIA_BUILD_SKIP_NATIVE=1 bun scripts/ts-build.ts && npm run refresh:plugin-store",
-    "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun scripts/object-store-rust-mode.ts",
+    "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun packages/tooling/testing/bin/object-store-rust-mode.ts",
     "build:everything": "bun scripts/build-everything.ts"
   },
   "dependencies": {

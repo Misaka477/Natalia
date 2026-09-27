@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import {
   objectStoreBackendStatus,
   rustCas,
-} from "../packages/framework/object-store/src/rust-store";
+} from "../../../framework/object-store/src/rust-store";
 
 process.env.NATALIA_OBJECT_STORE_BACKEND = "rust";
 await rustCas.ensureBuilt();

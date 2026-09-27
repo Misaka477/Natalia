@@ -5,8 +5,8 @@ import {
   NativeTerminalRegistry,
   createWezTermHost,
   writeWezTermNativeDomainConfig,
-} from "../packages/plugins/native-terminal/src";
-import { createToolRegistry } from "../packages/core/tools/src";
+} from "../../../plugins/native-terminal/src";
+import { createToolRegistry } from "../../../core/tools/src";
 
 const root = await mkdtemp(join(tmpdir(), "natalia-native-headless-"));
 const runtimeDir = join(root, "runtime");
@@ -26,7 +26,7 @@ const nativeTerminal = new NativeTerminalRegistry(
   }),
   { windowMode: "windowless" },
 );
-const tools = createToolRegistry();
+const tools = createToolRegistry([]);
 const context = { workspaceRoot: root, nativeTerminal };
 
 try {

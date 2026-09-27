@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { NativeTableHit } from "./native-index";
 
@@ -72,25 +73,64 @@ async function readLine(
   }
 }
 
+/**
+ * Which NATIVE daemon binary to prefer, if any: an explicit
+ * NATALIA_PACK_DAEMON_BIN (an operator's own build, or a test's
+ * fingerprint), else the crate's release target — the build's own output
+ * beside the sources this package ships, so a built crate is a spawnable
+ * daemon with no extra install step. Undefined means no native candidate
+ * and the TS daemon module stands.
+ */
+function nativeDaemonPath(): string | undefined {
+  const explicit = process.env.NATALIA_PACK_DAEMON_BIN;
+  if (explicit) return explicit;
+  const built = join(
+    import.meta.dir,
+    "..",
+    "native",
+    "target",
+    "release",
+    process.platform === "win32"
+      ? "natalia-object-store-daemon.exe"
+      : "natalia-object-store-daemon",
+  );
+  return existsSync(built) ? built : undefined;
+}
+
 export async function openPackDaemon(
   options: PackDaemonOptions,
 ): Promise<PackDaemon | undefined> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  let child: ReturnType<typeof Bun.spawn>;
-  try {
-    const spawned = Bun.spawn(
-      [
-        process.execPath,
-        join(import.meta.dir, "daemon.ts"),
-        "--dir",
-        options.packsDir,
-      ],
-      { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
-    );
-    child = spawned;
-  } catch {
-    return undefined; // the spawn itself failed: the local path stands
+  // Phase B's preference: the NATIVE daemon when the crate is built —
+  // the resident index server holds its table in-process, with no runtime
+  // to boot and no FFI boundary per lookup. A missing binary (or any
+  // failure of it) falls through to the TS daemon module, which is the
+  // same protocol by construction. The order is a preference, never a
+  // requirement: both answers are the same object.
+  const argvSets: string[][] = [];
+  const native = nativeDaemonPath();
+  if (native && existsSync(native))
+    argvSets.push([native, "--dir", options.packsDir]);
+  argvSets.push([
+    process.execPath,
+    join(import.meta.dir, "daemon.ts"),
+    "--dir",
+    options.packsDir,
+  ]);
+  let child: ReturnType<typeof Bun.spawn> | undefined;
+  for (const argv of argvSets) {
+    try {
+      child = Bun.spawn(argv, {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      break;
+    } catch {
+      child = undefined; // this candidate failed: try the next
+    }
   }
+  if (!child) return undefined; // every candidate failed: the local path stands
   // The spawn's pipes narrow to the streams (Bun types them as a union
   // with the fd numbers); a numeric pipe means the stream is absent and
   // the client answers like any other failure — absent.

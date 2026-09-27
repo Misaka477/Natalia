@@ -50,6 +50,55 @@ test("the client speaks the daemon's protocol and survives its death", async () 
   expect(await daemon!.count()).toBe(0);
 }, 30_000);
 
+test("the client prefers the NATIVE daemon when one is named", async () => {
+  // The preference, proven by a fingerprint: a stand-in daemon that
+  // answers with values no real daemon would (count 42, a hit with pack
+  // 7) — if the client spawned it, it must have taken the native path.
+  const root = await mkdtemp(join(tmpdir(), "daemon-native-"));
+  dirs.push(root);
+  const bin = join(root, "fingerprint-daemon");
+  await writeFile(
+    bin,
+    `#!/bin/sh
+while read -r line; do
+  case "$line" in
+    *'"op":"count"'*) echo '{"ok":true,"count":42}' ;;
+    *'"op":"find"'*) echo '{"ok":true,"pack":7,"offset":11,"dataOffset":22,"origLen":33,"compLen":44,"kind":0,"deltaLen":0}' ;;
+    *) echo '{"ok":false,"reason":"unknown_op"}' ;;
+  esac
+done
+`,
+    { mode: 0o755 },
+  );
+  const previous = process.env.NATALIA_PACK_DAEMON_BIN;
+  process.env.NATALIA_PACK_DAEMON_BIN = bin;
+  try {
+    const daemon = await openPackDaemon({ packsDir: join(root, "packs") });
+    expect(daemon).toBeDefined();
+    expect(await daemon!.count()).toBe(42); // the fingerprint, not the real table
+    expect(await daemon!.find("a".repeat(64))).toMatchObject({ pack: 7 });
+    daemon!.close();
+  } finally {
+    if (previous === undefined) delete process.env.NATALIA_PACK_DAEMON_BIN;
+    else process.env.NATALIA_PACK_DAEMON_BIN = previous;
+  }
+  // The honest fallback: a named binary that does not exist leaves the TS
+  // daemon module standing (the preference is a preference, not a
+  // requirement).
+  process.env.NATALIA_PACK_DAEMON_BIN = join(root, "not-there");
+  try {
+    const packsDir = join(root, "packs");
+    await mkdir(packsDir, { recursive: true });
+    const fallback = await openPackDaemon({ packsDir });
+    expect(fallback).toBeDefined();
+    expect(await fallback!.count()).toBe(0); // an empty real directory
+    fallback!.close();
+  } finally {
+    if (previous === undefined) delete process.env.NATALIA_PACK_DAEMON_BIN;
+    else process.env.NATALIA_PACK_DAEMON_BIN = previous;
+  }
+}, 30_000);
+
 test("the store asks the daemon first when one is injected, and its own index otherwise", async () => {
   if (!nativePackIndexAvailable()) return;
   const root = await mkdtemp(join(tmpdir(), "daemon-store-"));

@@ -12,3 +12,13 @@ license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib"]
+
+# Phase B: the resident daemon is a BINARY target in this crate (the same
+# sources the cdylib exposes, one process that lives). A path dependency
+# on the index crate keeps the offline build: nothing is fetched.
+[dependencies]
+natalia-index-native = { path = "../native-index" }
+
+[[bin]]
+name = "natalia-object-store-daemon"
+path = "src/server.rs"

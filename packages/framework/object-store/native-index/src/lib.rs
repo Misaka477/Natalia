@@ -269,6 +269,59 @@ pub struct NativeIndexTableHit {
     pub delta_len: u32,
 }
 
+/// The daemon-facing API: a table over a packs directory, with the same
+/// binary search the FFI path uses. Exposed so the object-store's own
+/// crate can be a resident server (Phase B) instead of a lookup library
+/// only — the FFI below stays a thin wrapper over these.
+pub struct IndexTableApi {
+    indexes: Vec<NativeIndex>,
+}
+
+impl IndexTableApi {
+    /// Every `.idx` in the directory, in sorted order (the pack numbering
+    /// must not depend on the filesystem's mood).
+    pub fn open_dir(path: &Path) -> Option<IndexTableApi> {
+        let entries = std::fs::read_dir(path).ok()?;
+        let mut paths: Vec<std::path::PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "idx"))
+            .collect();
+        paths.sort();
+        let indexes: Vec<NativeIndex> =
+            paths.iter().filter_map(|path| load_one_index(path)).collect();
+        Some(IndexTableApi { indexes })
+    }
+
+    /// How many packs the table holds.
+    pub fn pack_count(&self) -> usize {
+        self.indexes.len()
+    }
+
+    /// The first pack that holds `id`, with its record — the same answer
+    /// `native_index_find_dir` writes into the caller's struct.
+    pub fn find(&self, id: &[u8]) -> Option<NativeIndexTableHit> {
+        for (pack, index) in self.indexes.iter().enumerate() {
+            let at = index.lower_bound(id);
+            if let Some(slot) = index.order.get(at) {
+                let record = &index.entries[*slot as usize];
+                if index.id_bytes(record) == id {
+                    return Some(NativeIndexTableHit {
+                        pack: pack as u32,
+                        offset: record.offset,
+                        data_offset: record.data_offset,
+                        orig_len: record.orig_len,
+                        comp_len: record.comp_len,
+                        kind: record.kind,
+                        delta_len: record.delta_len,
+                    });
+                }
+            }
+        }
+        None
+    }
+}
+
 fn load_one_index(path: &Path) -> Option<NativeIndex> {
     let file = std::fs::File::open(path).ok()?;
     let map = Mmap::map(&file)?;

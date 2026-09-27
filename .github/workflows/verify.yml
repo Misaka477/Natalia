@@ -181,6 +181,14 @@ jobs:
             sudo mv /opt/wasi-sdk-34.0-x86_64-linux /opt/wasi-sdk
           fi
           /opt/wasi-sdk/bin/clang --version
+      # The matrix jobs are fresh runners: the confinement backend (the
+      # shell tools fail CLOSED without it, so the shell tests fail
+      # without it) and the AST packs are built or restored per job, not
+      # shared from the artifacts job.
+      - name: Build the confinement backend
+        run: >
+          cargo build --release
+          --manifest-path packages/hosts/confinement/native/Cargo.toml
       - name: Install
         run: bun install --frozen-lockfile
       - name: Build the plugin distribution

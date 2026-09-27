@@ -11,8 +11,13 @@ import { parseConstitutionDocument } from "../src/constitution-doc";
  * constitution).
  */
 
+// The note is a committed fixture: it used to be read from the repo's own
+// .natalia/ — machine-local runtime state no clone has, so on a fresh
+// checkout (CI) the test failed with ENOENT. The fixture is the real
+// note, committed verbatim, and the parser is proven against it exactly
+// as before.
 const NOTE = readFileSync(
-  join(import.meta.dir, "../../../../.natalia/constitution.md"),
+  join(import.meta.dir, "fixtures/constitution.md"),
   "utf8",
 );
 

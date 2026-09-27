@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@anthelia/contracts": "workspace:*",
-    "@anthelia/runtime-services": "workspace:*"
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/diff-wasm": "workspace:*",
+    "@anthelia/platform": "workspace:*"
   }
 }

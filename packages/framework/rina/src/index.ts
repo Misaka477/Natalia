@@ -34,3 +34,4 @@ export * from "./embedding";
 export * from "./memory";
 export * from "./knowledge";
 export * from "./move-detect";
+export * from "./workspace-file-index";

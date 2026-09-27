@@ -15,6 +15,7 @@ import {
   type UiPanelRequirement,
 } from "@anthelia/contracts";
 import { NeuSelect } from "./components/NeuSelect";
+import { hostFromSegments, rowsForHost } from "./settings-host-rows";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 
 const BUILTIN_PERMISSION_PROFILES = ["ask", "auto", "read_only"];
@@ -249,6 +250,17 @@ const categories: Category[] = [
         description: "终端窗口模式",
         value: "auto",
       },
+      {
+        // Windows-only, and the guard is not cosmetic: on Linux and macOS
+        // the shell IS bash and no path can change that, so the resolver
+        // off Windows never reads this setting (see resolveBashExecutable's
+        // platform guard). A row that does nothing on two of three hosts
+        // is noise, so it is filtered out rather than shown-disabled.
+        label: "Git Bash 路径",
+        description:
+          "Git for Windows 的 bash.exe 位置（仅 Windows 需要；Linux/macOS 默认即 bash，无需设置）。留空 = 自动搜索默认安装位置与 PATH",
+        value: "",
+      },
     ],
   },
   {
@@ -412,10 +424,27 @@ export function SettingsPanel(props: {
   const [runtimeWriteScope, setRuntimeWriteScope] = createSignal(
     props.preferences?.get<string>("runtimeWriteScope") ?? "global",
   );
-  const current = () =>
-    categoriesWithPlugins().find(
-      (category) => category.id === activeCategory(),
-    ) ?? categoriesWithPlugins()[0]!;
+  /**
+   * The host platform, as the RUNTIME named it in its status snapshot. The
+   * settings panel cannot know it from the browser: navigator describes the
+   * browser, not the host the runtime runs on (a Linux laptop can drive a
+   * Windows host). An absent segment means "unknown", and unknown is not
+   * Windows, so host-only rows stay hidden rather than shown on a guess.
+   * The filter itself lives in settings-host-rows.ts, tested there.
+   */
+  const current = () => {
+    const category =
+      categoriesWithPlugins().find(
+        (category) => category.id === activeCategory(),
+      ) ?? categoriesWithPlugins()[0]!;
+    return {
+      ...category,
+      items: rowsForHost(
+        category.items,
+        hostFromSegments(props.state?.statusSegments),
+      ),
+    };
+  };
 
   function modelLabel(config: ConfigV3): string {
     const model = config.defaultModel;
@@ -501,6 +530,24 @@ export function SettingsPanel(props: {
   }
 
   const editableActions: Record<string, () => void> = {
+    "Git Bash 路径": () => {
+      const current = props.config?.runtime?.shell?.bashPath ?? "";
+      openEdit(
+        "Git Bash 路径 (bash.exe 全路径，留空自动探测)",
+        current,
+        (raw) => {
+          const path = raw.trim();
+          props.onUpdateConfig?.({
+            runtime: {
+              ...props.config?.runtime,
+              // An empty string means "discover" — the resolver's configured
+              // path is cleared, not set to a blank.
+              shell: { bashPath: path },
+            },
+          });
+        },
+      );
+    },
     "子 Agent 并发数": () => {
       const current = String(props.config?.team?.maxConcurrent ?? 4);
       openEdit("子 Agent 最大并发数", current, (raw) => {
@@ -691,6 +738,8 @@ export function SettingsPanel(props: {
         return `${(config.checkpoint?.additionalDirs ?? []).length} 个`;
       case "Terminal Window Mode":
         return String(config.runtime?.terminal?.windowMode ?? "auto");
+      case "Git Bash 路径":
+        return config.runtime?.shell?.bashPath || "自动探测";
       case "界面偏好保存范围":
         return uiWriteScope();
       case "运行时配置保存范围":

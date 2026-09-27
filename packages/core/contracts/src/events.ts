@@ -1745,6 +1745,14 @@ type RuntimeEventData =
       permissions: string;
       cwd: string;
       background: string;
+      /**
+       * The host platform (NodeJS.Platform). Optional so a journal written
+       * before this field still parses; the settings surface reads it to
+       * decide whether a host-only setting row applies at all — the Git
+       * Bash path, which is Windows-only by design (POSIX's shell is bash
+       * and needs no configuration).
+       */
+      platform?: string;
     }
   | {
       type: "context.status";

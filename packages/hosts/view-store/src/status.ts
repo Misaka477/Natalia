@@ -131,6 +131,10 @@ export function applyStatusEvent(
         `step:${event.step}`,
         event.permissions,
         `bg:${event.background}`,
+        // The host, as the runtime named it. Absent in a journal written
+        // before the field existed — the settings surface treats that as
+        // "unknown host" rather than assuming either way.
+        ...(event.platform ? [`host:${event.platform}`] : []),
       ];
       return true;
     case "context.status": {

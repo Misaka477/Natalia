@@ -111,6 +111,7 @@ export function statusSnapshot(
   cwd: string,
   permissionMode: "ask" | "auto" | "read_only",
   running: number,
+  platform: string = process.platform,
 ): Extract<RuntimeEvent, { type: "status.snapshot" }> {
   const status = context.journalStatus();
   return {
@@ -122,5 +123,6 @@ export function statusSnapshot(
     permissions: permissionMode,
     cwd,
     background: `${running} running`,
+    platform,
   };
 }

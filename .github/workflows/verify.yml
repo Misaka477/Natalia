@@ -322,10 +322,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: built-distribution
-          # The upload of dist/ts lands its CONTENTS at the artifact root
-          # (v4 strips the leading directory), so the download target is
-          # dist/ts, not dist.
-          path: dist/ts
+          # Two upload paths make the artifact's least common ancestor the
+          # REPO ROOT, so the artifact preserves full paths — the download
+          # target is the workspace root.
+          path: .
       - name: Cache the AST wasm packs (the fallback when the artifact lacks them)
         uses: actions/cache@v4
         with:

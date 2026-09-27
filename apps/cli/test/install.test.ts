@@ -210,7 +210,9 @@ test("install.ps1 exists for the Windows face (execution gated on pwsh)", () => 
   // The fixture ships a sh-script "natalia", not natalia.exe — the ps1's
   // layout assertions run against natalia.exe, so this gate only checks the
   // script parses and starts (a parse failure exits non-zero immediately).
-  console.log(`PS1_ANSWER status=${result.status} stderr=${JSON.stringify(result.stderr?.slice(0, 800))}`);
+  console.log(
+    `PS1_ANSWER status=${result.status} stderr=${JSON.stringify(result.stderr?.slice(0, 800))}`,
+  );
   expect(result.status === 0 || result.stderr.includes("natalia.exe")).toBe(
     true,
   );

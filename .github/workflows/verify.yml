@@ -106,57 +106,170 @@ jobs:
         include:
           - layer: "core"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/core/contracts/test \
-                          ./packages/core/runtime-services/test ./packages/core/composition/test \
-                          ./packages/core/capability/test ./packages/core/tools/test \
-                          ./packages/tooling/testing/test ./packages/tooling/installer/test \
-                          ./packages/tooling/sdk/test ./packages/core/plugin/test
+              bun test --max-concurrency=4 --timeout 60000 .
+                            ./packages/core/runtime-services/test ./packages/core/composition/test \
+                            ./packages/core/capability/test ./packages/core/tools/test \
+                            ./packages/tooling/testing/test ./packages/tooling/installer/test \
+                            ./packages/tooling/sdk/test ./packages/core/plugin/test
           - layer: "substrate"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \
-                          ./packages/hosts/config/test ./packages/hosts/confinement/test \
-                          ./packages/framework/session/test ./packages/framework/substrate/test \
-                          ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
-                          ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
-                          ./packages/hosts/object-store/test
-          - layer: "client"
+              bun test --max-concurrency=4 --timeout 60000 .
+                            ./packages/hosts/config/test ./packages/hosts/confinement/test \
+                            ./packages/framework/session/test ./packages/framework/substrate/test \
+                            ./packages/framework/session-store/test ./packages/hosts/ui-model/test \
+                            ./packages/hosts/view-store/test ./packages/hosts/ui-host/test \
+                            ./packages/hosts/object-store/test
+          - layer: "client-a"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-a.test.ts
+          - layer: "client-b"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-b.test.ts
+          - layer: "client-c"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-c.test.ts
+          - layer: "client-d"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-d.test.ts
+          - layer: "client-e"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-e.test.ts
+          - layer: "client-rest-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 \
+                              packages/framework/client/test/ast-move-face.test.ts \
+                              packages/framework/client/test/capability-settings.test.ts \
+                              packages/framework/client/test/chat-attachments.test.ts \
+                              packages/framework/client/test/chat-compaction-streams.test.ts \
+                              packages/framework/client/test/chat-stream-models.test.ts \
+                              packages/framework/client/test/checkpoint-display.test.ts \
+                              packages/framework/client/test/composition-profile-e2e.test.ts \
+                              packages/framework/client/test/config-reload-rollback.test.ts \
+                              packages/framework/client/test/confinement-profile.test.ts \
+                              packages/framework/client/test/confinement-statement-e2e.test.ts \
+                              packages/framework/client/test/constitution-rule-gate-e2e.test.ts \
+                              packages/framework/client/test/context-budget.test.ts \
+                              packages/framework/client/test/context-tools.test.ts \
+                              packages/framework/client/test/contract-constitution-e2e.test.ts \
+                              packages/framework/client/test/default-tools.test.ts \
+                              packages/framework/client/test/detour-e2e.test.ts \
+                              packages/framework/client/test/diagnostics-query.test.ts \
+                              packages/framework/client/test/drain-for-update.test.ts \
+                              packages/framework/client/test/drift-auto-correct-e2e.test.ts \
+                              packages/framework/client/test/drift-reopen-e2e.test.ts \
+                              packages/framework/client/test/drift-trigger.test.ts \
+                              packages/framework/client/test/event-sink-infrastructure-error.test.ts \
+                              packages/framework/client/test/evidence-artifact-ref-e2e.test.ts \
+                              packages/framework/client/test/fact-downgrade-e2e.test.ts \
+                              packages/framework/client/test/feedback-e2e.test.ts \
+                              packages/framework/client/test/fixture.test.ts \
+                              packages/framework/client/test/generation-inputs.test.ts \
+                              packages/framework/client/test/generation-tools.test.ts \
+                              packages/framework/client/test/goal-completion-gate.test.ts \
+                              packages/framework/client/test/goal-fact-equivalence.test.ts \
+                              packages/framework/client/test/goal-question-narration.test.ts \
+                              packages/framework/client/test/goal-status-attach.test.ts \
+                              packages/framework/client/test/governance-e2e.test.ts \
+                              packages/framework/client/test/human-validation-e2e.test.ts \
+                              packages/framework/client/test/intelligence-pure-writes.test.ts \
+                              packages/framework/client/test/mailbox-status-window.test.ts \
+                              packages/framework/client/test/model-ref-key.test.ts \
+                              packages/framework/client/test/multi-session-parallel.test.ts \
+                              packages/framework/client/test/nia-shell-policy.test.ts \
+                              packages/framework/client/test/nia-shell-tools.test.ts \
+                              packages/framework/client/test/object-store-backend.test.ts \
+                              packages/framework/client/test/operation-log-runtime.test.ts \
+                              packages/framework/client/test/operation-records.test.ts \
+                              packages/framework/client/test/p2-acceptance.test.ts \
+                              packages/framework/client/test/performance-trace.test.ts \
+                              packages/framework/client/test/permission-settings.test.ts \
+                              packages/framework/client/test/plan-active-session.test.ts \
+                              packages/framework/client/test/plan-contract.test.ts
+          - layer: "client-rest-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 \
+                              packages/framework/client/test/plan-doc-createdby.test.ts \
+                              packages/framework/client/test/plan-pause-e2e.test.ts \
+                              packages/framework/client/test/plan-tasks-e2e.test.ts \
+                              packages/framework/client/test/plugin-lifecycle-symmetry.test.ts \
+                              packages/framework/client/test/plugin-runtime.test.ts \
+                              packages/framework/client/test/plugin-workspace-resources.test.ts \
+                              packages/framework/client/test/plugins-controller.test.ts \
+                              packages/framework/client/test/process-settled-notices.test.ts \
+                              packages/framework/client/test/projection-contributions.test.ts \
+                              packages/framework/client/test/provider-management.test.ts \
+                              packages/framework/client/test/read-cache.test.ts \
+                              packages/framework/client/test/repeat-guard.test.ts \
+                              packages/framework/client/test/repository-refs.test.ts \
+                              packages/framework/client/test/response-cache-profile.test.ts \
+                              packages/framework/client/test/response-cache-surface.test.ts \
+                              packages/framework/client/test/self-review-e2e.test.ts \
+                              packages/framework/client/test/session-attach-context.test.ts \
+                              packages/framework/client/test/session-event-retention.test.ts \
+                              packages/framework/client/test/session-event-window-scan.test.ts \
+                              packages/framework/client/test/session-facts-complete.test.ts \
+                              packages/framework/client/test/session-facts.test.ts \
+                              packages/framework/client/test/session-full-events.test.ts \
+                              packages/framework/client/test/session-history-tool.test.ts \
+                              packages/framework/client/test/session-intelligence.test.ts \
+                              packages/framework/client/test/session-store-controller.test.ts \
+                              packages/framework/client/test/session-title.test.ts \
+                              packages/framework/client/test/skills-plugin.test.ts \
+                              packages/framework/client/test/subagent-fork-seed.test.ts \
+                              packages/framework/client/test/subagent-result-gate.test.ts \
+                              packages/framework/client/test/subagent-settled-notice.test.ts \
+                              packages/framework/client/test/subagent-steer.test.ts \
+                              packages/framework/client/test/three-stream-isolation.test.ts \
+                              packages/framework/client/test/tool-catalogue.test.ts \
+                              packages/framework/client/test/tool-family-capabilities.test.ts \
+                              packages/framework/client/test/tool-policy-derivation.test.ts \
+                              packages/framework/client/test/tool-policy.test.ts \
+                              packages/framework/client/test/ui-host.test.ts \
+                              packages/framework/client/test/verification-nia.test.ts \
+                              packages/framework/client/test/verification-smoke.test.ts \
+                              packages/framework/client/test/work-graph.test.ts \
+                              packages/framework/client/test/worker.test.ts \
+                              packages/framework/client/test/workgraph-integrity-e2e.test.ts \
+                              packages/framework/client/test/workgraph-query-e2e.test.ts \
+                              packages/framework/client/test/workgraph-rpc-recovery.test.ts \
+                              packages/framework/client/test/workspace-ast-move.test.ts \
+                              packages/framework/client/test/workspace-git-diff.test.ts \
+                              packages/framework/client/test/workspace-runtime-client.test.ts
           - layer: "mechanisms"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
-                          ./packages/framework/operation-log/test \
-                          ./packages/framework/runtime-diagnostics/test \
-                          ./packages/framework/runtime/test ./packages/framework/retry/test \
-                          ./packages/framework/runtime-config/test \
-                          ./packages/framework/runtime-status/test \
-                          ./packages/framework/turn-orchestration/test \
-                          ./packages/framework/provider-model/test \
-                          ./packages/framework/agent-prompts/test \
-                          ./packages/framework/collaboration/test ./packages/framework/workspace/test \
-                          ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
-                          ./packages/framework/compaction/test ./packages/framework/sandbox/test \
-                          ./packages/framework/diff-wasm/test
+              bun test --max-concurrency=4 --timeout 60000 .
+                            ./packages/framework/operation-log/test \
+                            ./packages/framework/runtime-diagnostics/test \
+                            ./packages/framework/runtime/test ./packages/framework/retry/test \
+                            ./packages/framework/runtime-config/test \
+                            ./packages/framework/runtime-status/test \
+                            ./packages/framework/turn-orchestration/test \
+                            ./packages/framework/provider-model/test \
+                            ./packages/framework/agent-prompts/test \
+                            ./packages/framework/collaboration/test ./packages/framework/workspace/test \
+                            ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
+                            ./packages/framework/compaction/test ./packages/framework/sandbox/test \
+                            ./packages/framework/diff-wasm/test
           - layer: "domains"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
-                          ./packages/domains/goal-runtime/test \
-                          ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test \
-                          ./packages/domains/work-ledger/test ./packages/domains/governance-ledger/test \
-                          ./packages/domains/context-ledger/test
+              bun test --max-concurrency=4 --timeout 60000 .
+                            ./packages/domains/goal-runtime/test \
+                            ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test \
+                            ./packages/domains/work-ledger/test ./packages/domains/governance-ledger/test \
+                            ./packages/domains/context-ledger/test
           - layer: "plugins"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
-                          ./packages/plugins/team/test ./packages/framework/tool-policy/test \
-                          ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
-                          ./packages/plugins/skills/test ./packages/hosts/transport/test \
-                          ./packages/plugins/mcp/test ./packages/framework/subagents/test \
-                          ./packages/framework/agent/test ./packages/plugins/tools/ask/test \
-                          ./packages/plugins/tools/fs-read/test ./packages/plugins/tools/fs-write/test \
-                          ./packages/plugins/tools/search/test ./packages/plugins/tools/shell/test \
-                          ./packages/plugins/tools/todo/test ./packages/plugins/tools/web/test \
-                          ./packages/plugins/tools/process/test ./packages/plugins/ui/web/test \
-                        packages/plugins/ui/pending/test ./packages/plugins/ui/kit/test
+              bun test --max-concurrency=4 --timeout 60000 .
+                            ./packages/plugins/team/test ./packages/framework/tool-policy/test \
+                            ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
+                            ./packages/plugins/skills/test ./packages/hosts/transport/test \
+                            ./packages/plugins/mcp/test ./packages/framework/subagents/test \
+                            ./packages/framework/agent/test ./packages/plugins/tools/ask/test \
+                            ./packages/plugins/tools/fs-read/test ./packages/plugins/tools/fs-write/test \
+                            ./packages/plugins/tools/search/test ./packages/plugins/tools/shell/test \
+                            ./packages/plugins/tools/todo/test ./packages/plugins/tools/web/test \
+                            ./packages/plugins/tools/process/test ./packages/plugins/ui/web/test \
+                          packages/plugins/ui/pending/test ./packages/plugins/ui/kit/test
           - layer: "cli"
             dirs: >-
               npm run docs:check && npm --workspace @natalia/cli run test

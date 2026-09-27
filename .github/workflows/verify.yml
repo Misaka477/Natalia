@@ -101,6 +101,18 @@ jobs:
         run: npm run typecheck
       - name: Build the plugin distribution
         run: npm run build:distribution
+      # The AST packs are 44 per-language wasm builds (~5-9 minutes cold);
+      # the build script skips any pack already on disk, so the OUTPUT is
+      # cached and only a real source change pays for the rebuild. Without
+      # this the packs build alone outlived the window the test chunks run
+      # in, and the external cancel ate them.
+      - name: Cache the AST wasm packs
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/framework/diff-wasm/ast
+            packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
+          key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
       - name: Build the AST wasm packs
         run: npm run diff:build-wasm
       # The suite, chunked by layer. One long step meant the external

@@ -103,8 +103,39 @@ async function provision() {
     "-lc",
     [
       "set -e",
-      "if ! command -v curl >/dev/null; then apt-get update -qq && apt-get install -y -qq curl ca-certificates build-essential pkg-config unzip zip; fi",
-      "if [ ! -x /root/.cargo/bin/rustc ]; then curl -fsSL https://sh.rustup.rs -o /tmp/rustup.sh && sh /tmp/rustup.sh -y --profile minimal --default-toolchain stable; fi",
+      // curl AND git: the fork carries a git dependency (finl_unicode), and
+      // cargo cannot fetch it without git in the image — rustup installs a
+      // toolchain without one, so the first provision built a container
+      // that failed at the fetch, not at the compile. The apt index is
+      // refreshed first (the fork's get-deps installs without updating,
+      // and an aged index answers every package with 'Unable to locate').
+      "apt-get update -qq",
+      "apt-get install -y -qq curl ca-certificates build-essential pkg-config unzip zip git",
+      // The cargo bin must be ON the path of the shell that later runs
+      // the fork's get-deps: rustup installs to /root/.cargo/bin, which a
+      // non-login `bash -lc` in the container does not carry — without
+      // this the fork's scripts answer "Rust is not installed!" and the
+      // provision fails at the deps step, one host later.
+      "export PATH=/root/.cargo/bin:$PATH",
+      // The toolchain EXPLICITLY, then verified: a half-installed rustup
+      // leaves /root/.cargo/bin/rustc as a symlink with no toolchain
+      // behind it (the rustup self-update's background download dies
+      // behind this host's proxy), and the fork's scripts then answer
+      // 'rustup could not choose a version' — one host later. `rustup
+      // default` both downloads and sets; the probe makes the failure
+      // THIS step's error rather than the deps step's mystery.
+      "if [ ! -x /root/.cargo/bin/rustc ] || ! rustup toolchain list | grep -q stable; then " +
+        "curl -fsSL https://sh.rustup.rs -o /tmp/rustup.sh && " +
+        "sh /tmp/rustup.sh -y --profile minimal --default-toolchain stable --no-modify-path; " +
+        "rustup default stable; fi",
+      "rustc --version",
+      // The apt INDEX first: the fork's get-deps installs without
+      // updating, and a container image whose index has aged out (or an
+      // image built before the archive rotated) answers every package
+      // with "Unable to locate" — the Ubuntu build's own failure this
+      // week. The update is cheap and idempotent; the deps step is not
+      // re-run once /build/get-deps.done exists.
+      "apt-get update -qq",
       "if [ ! -f /build/get-deps.done ] && ! dpkg -s libxkbcommon-dev >/dev/null 2>&1; then cd " +
         containerForkDir +
         " && bash get-deps && touch /build/get-deps.done; fi",

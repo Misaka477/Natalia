@@ -4,6 +4,7 @@ import {
   createTerminalScreen,
   renderScreen,
   renderScreenText,
+  resizeTerminalScreen,
   type TerminalScreen,
 } from "./terminal-screen";
 import {
@@ -564,6 +565,13 @@ export function createPtyTerminalController(
    */
   function armFrameSettle(session: PtySession) {
     if (!input.settlement || !session.sessionID) return;
+    // Ownership decides whether a settle is news: a terminal the human is
+    // driving (an interactive pane opened from the UI, or one the model handed
+    // over) is the human's business, and waking the model on every prompt it
+    // prints is how "I open a terminal and Natalia wakes up" happened. Only the
+    // model's own tool-driven terminal settles into a notice, because there the
+    // output IS the answer to what it asked.
+    if (session.inputOwner !== "model") return;
     if (session.settleTimer) clearTimeout(session.settleTimer);
     session.settleTimer = setTimeout(() => {
       session.settleTimer = undefined;
@@ -870,12 +878,25 @@ export function createPtyTerminalController(
   async function write(
     id: string,
     value: string,
-    options?: { idempotencyKey?: string; sessionID?: string },
+    options?: {
+      idempotencyKey?: string;
+      sessionID?: string;
+      /**
+       * Who is typing. The model's write is refused on a human-owned
+       * terminal; the human's write is refused on a secure-input pane. Both
+       * flow through this one RPC today, so the caller states which it is —
+       * without it a UI pane claimed by its human could not type at all.
+       */
+      actor?: "model" | "human";
+    },
   ) {
     const session = get(id);
     assertSessionOwner(session, options?.sessionID);
     assertRunning(session);
-    if (session.inputOwner !== "model")
+    if (options?.actor === "human") {
+      if (session.secureInput)
+        throw new Error("terminal is accepting secure human input");
+    } else if (session.inputOwner !== "model")
       throw new Error("terminal input is controlled by a human");
     if (session.secureInput)
       throw new Error("terminal is accepting secure human input");
@@ -897,7 +918,11 @@ export function createPtyTerminalController(
     const previous = writes.get(id) ?? Promise.resolve();
     let cancelled = false;
     const delivery = previous.then(() => {
-      if (session.inputOwner !== "model" || session.status !== "running") {
+      const human = options?.actor === "human";
+      if (
+        (!human && session.inputOwner !== "model") ||
+        session.status !== "running"
+      ) {
         cancelled = true;
         return;
       }
@@ -944,6 +969,12 @@ export function createPtyTerminalController(
     session.pty?.resize(cols, rows);
     session.rows = rows;
     session.cols = cols;
+    // The rendered screen the model reads must follow the pane, or the model's
+    // window stays at the spawn-time 24x80 forever: a full-screen TUI clipped
+    // to 80 columns, and a human's pane resize invisible to it. The pty
+    // resizes too, so the applications redraw for the new geometry — the grid
+    // is re-blanked (see resizeTerminalScreen) rather than re-flowed.
+    resizeTerminalScreen(session.screen, rows, cols);
     session.revision += 1;
     touch(session);
     notifyRevision(session.id);

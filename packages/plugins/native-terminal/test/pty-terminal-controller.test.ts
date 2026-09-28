@@ -65,6 +65,7 @@ function controllerInput(
   root: string,
   spawn: PtyFactory,
   events: unknown[] = [],
+  extra: Record<string, unknown> = {},
 ) {
   return {
     workspaceRoot: root,
@@ -76,6 +77,7 @@ function controllerInput(
     userRuntimeHome: () => undefined,
     windowMode: () => "windowless" as const,
     spawn,
+    ...extra,
   };
 }
 
@@ -640,5 +642,90 @@ test("read pages the scrollback, not just the viewport", async () => {
   expect(boundedLines).toHaveLength(60);
   expect(boundedLines[0]).toBe("log line 40");
   expect(boundedLines.at(-1)).toBe("log line 99");
+  await controller.close();
+});
+
+test("resize carries the pane's geometry into the screen the model reads", async () => {
+  // The regression: resize() resized the pty and the metadata but never the
+  // rendered screen, so the model's window stayed at the spawn-time 24x80
+  // forever — a full-screen TUI clipped to 80 columns, and the human's pane
+  // resize invisible to every read surface.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-resize-screen-"));
+  const { factory } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const started = await controller.start({ command: "cat", cwd: root });
+  await controller.write(started.id, "before\r\n");
+  const before = await controller.read(started.id);
+  expect(before.text).toContain("before");
+
+  await controller.resize(started.id, 50, 200, "human");
+
+  const after = await controller.read(started.id);
+  expect(after.rows).toBe(50);
+  expect(after.cols).toBe(200);
+  // The re-blanked grid reads as empty (the app redraws for the new size), and
+  // the pre-resize text is gone from the visible window — which is the point:
+  // the window is the pane's size now, not 24x80.
+  expect(after.text).toBe("");
+  await controller.close();
+});
+
+test("a settle notice only fires for the model's own terminal", async () => {
+  // The user's report: opening a terminal in the UI woke Natalia. A pane the
+  // human drives is the human's business; only the model's own tool-driven
+  // terminal settles into a notice, because there the output IS the answer to
+  // what it asked.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-settle-owner-"));
+  const { factory } = fakePty();
+  const settlements: Array<{ subject: string; summary: string }> = [];
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory, [], {
+      settlement: {
+        deliverForSession: (
+          _sessionID: string,
+          notice: { subject: string; summary: string },
+        ) => {
+          settlements.push({
+            subject: notice.subject,
+            summary: notice.summary,
+          });
+          return true;
+        },
+      },
+      frameSettleMs: 50,
+    }),
+  );
+  // The model's terminal: input owned by the model at spawn.
+  const modelOwned = await controller.start({
+    command: "cat",
+    cwd: root,
+    sessionID: "ses_model",
+  });
+  expect(modelOwned.inputOwner).toBe("model");
+  await controller.write(modelOwned.id, "model output\r\n");
+  await Bun.sleep(300);
+  expect(settlements).toHaveLength(1);
+
+  // A human pane: claimed by the human, so its output is not the model's news.
+  // (And the model can no longer write to it at all — the same ownership that
+  // gates the settle.)
+  await controller.claimHumanInput!(modelOwned.id, "ses_model");
+  await expect(
+    controller.write(modelOwned.id, "model writes into a human pane\r\n"),
+  ).rejects.toThrow("terminal input is controlled by a human");
+  await controller.write(modelOwned.id, "human types here\r\n", {
+    actor: "human",
+  });
+  await Bun.sleep(300);
+  expect(settlements).toHaveLength(1);
+
+  // A terminal nobody claimed (still model-owned) settles again.
+  await controller.releaseHumanControl(modelOwned.id, "ses_model");
+  await controller.write(modelOwned.id, "model terminal again\r\n");
+  await Bun.sleep(300);
+  expect(settlements).toHaveLength(2);
+
   await controller.close();
 });

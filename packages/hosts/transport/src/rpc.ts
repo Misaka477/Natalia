@@ -2118,6 +2118,11 @@ export async function handleRPCMessage(
           ...(optionalStringParam(body.params, "sessionID")
             ? { sessionID: optionalStringParam(body.params, "sessionID") }
             : {}),
+          // A human pane's keystrokes state their own actor; absent stays the
+          // model (a tool call writing into a terminal).
+          ...((params as { actor?: unknown }).actor === "human"
+            ? { actor: "human" as const }
+            : {}),
         }),
       };
     }

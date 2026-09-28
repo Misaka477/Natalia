@@ -74,6 +74,32 @@ function blankGrid(rows: number, cols: number): ScreenCell[][] {
   );
 }
 
+/**
+ * Resizes the grid in place, preserving the durable scrollback.
+ *
+ * The pty resizes with the pane and the applications inside redraw for the new
+ * geometry, so the grid is re-blanked rather than re-flowed: re-flowing raw
+ * cells would corrupt what the app draws next. `cursorVisible` survives (a
+ * hide-cursor mode is orthogonal to geometry); `altScreen` resets because the
+ * app re-enters the alternate screen after a resize it did not ask for.
+ */
+export function resizeTerminalScreen(
+  screen: TerminalScreen,
+  rows: number,
+  cols: number,
+): TerminalScreen {
+  const nextRows = Math.max(1, Math.floor(rows));
+  const nextCols = Math.max(1, Math.floor(cols));
+  if (nextRows === screen.rows && nextCols === screen.cols) return screen;
+  screen.rows = nextRows;
+  screen.cols = nextCols;
+  screen.grid = blankGrid(nextRows, nextCols);
+  screen.cursorX = 0;
+  screen.cursorY = 0;
+  screen.altScreen = false;
+  return screen;
+}
+
 /** The screen's visible text, one string per row (trailing blanks trimmed). */
 export function renderScreen(screen: TerminalScreen): string[] {
   const rows = screen.grid.map((row) => trimRow(row).join(""));

@@ -102,6 +102,14 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
+        // A pane opened from the UI is the human's: claim input ownership so the
+        // frame-settler does not wake the model on every prompt the shell prints
+        // (the model's settle is for terminals IT started, where the output is
+        // the answer to what it asked). A terminal the model already handed to
+        // the human is already claimed, and this is a no-op for it.
+        if (typeof client.nativeTerminalClaimHumanInput === "function") {
+          await client.nativeTerminalClaimHumanInput(session.id, sessionID);
+        }
         if (typeof client.subscribeTerminalOutput === "function") {
           ws.data.unsubscribe = client.subscribeTerminalOutput(
             session.id,
@@ -146,6 +154,7 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             id: terminalID,
             input: body.data,
             sessionID: ws.data.sessionID,
+            actor: "human",
           });
           return;
         }

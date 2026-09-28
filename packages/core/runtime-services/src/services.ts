@@ -582,6 +582,13 @@ export interface TerminalController {
     options?: {
       idempotencyKey?: string;
       sessionID?: string;
+      /**
+       * Who is typing. The model's write is refused on a human-owned terminal
+       * and the human's on a secure-input pane; both arrive through this one
+       * call today (the browser pane's keystrokes and the model's tool
+       * call), so the caller states which it is. Absent means the model.
+       */
+      actor?: "model" | "human";
     },
   ): Promise<{
     writtenBytes: number;

@@ -4,6 +4,7 @@ import {
   createTerminalScreen,
   renderScreen,
   renderScreenText,
+  resizeTerminalScreen,
 } from "../src/terminal-screen";
 
 /**
@@ -116,4 +117,50 @@ test("wide (astral) characters occupy one cell each", () => {
   const screen = screenOf("你好");
   expect(renderScreenText(screen)).toBe("你好");
   expect(screen.cursorX).toBe(2);
+});
+
+test("resizeTerminalScreen re-blanks the grid and drops the alternate screen", () => {
+  // The pane's geometry is not the screen's business: when the pty resizes,
+  // the applications inside redraw for the new size (the pty tells them), so
+  // re-flowing the old cells would corrupt what they draw next. What must
+  // survive is the durable scrollback; what must reset is everything the app
+  // will repaint.
+  const screen = createTerminalScreen({ rows: 24, cols: 80 });
+  applyTerminalOutput(screen, "line one\r\nline two");
+  applyTerminalOutput(screen, "\x1b[?1049h"); // a full-screen app takes over
+  expect(screen.altScreen).toBe(true);
+
+  resizeTerminalScreen(screen, 50, 200);
+
+  expect(screen.rows).toBe(50);
+  expect(screen.cols).toBe(200);
+  expect(renderScreenText(screen)).toBe("");
+  expect(screen.altScreen).toBe(false);
+  expect(screen.cursorX).toBe(0);
+  expect(screen.cursorY).toBe(0);
+});
+
+test("resizeTerminalScreen keeps the scrollback and clamps a zero size", () => {
+  const screen = createTerminalScreen({ rows: 3, cols: 10 });
+  applyTerminalOutput(screen, "a\r\nb\r\nc\r\nd\r\ne");
+  const before = [...screen.scrollback];
+  expect(before.length).toBeGreaterThan(0);
+
+  resizeTerminalScreen(screen, 4, 12);
+  expect([...screen.scrollback]).toEqual(before);
+
+  // A collapse to zero is a layout transient, not a command: the screen keeps
+  // one row and one column rather than becoming a degenerate grid.
+  resizeTerminalScreen(screen, 0, -5);
+  expect(screen.rows).toBe(1);
+  expect(screen.cols).toBe(1);
+});
+
+test("resizeTerminalScreen is a no-op for the geometry it already has", () => {
+  const screen = createTerminalScreen({ rows: 10, cols: 40 });
+  applyTerminalOutput(screen, "keep me");
+  const grid = screen.grid;
+  resizeTerminalScreen(screen, 10, 40);
+  expect(screen.grid).toBe(grid);
+  expect(renderScreenText(screen)).toBe("keep me");
 });

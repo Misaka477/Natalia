@@ -3865,6 +3865,8 @@ export type RuntimeClient = {
     input: string;
     idempotencyKey?: string;
     sessionID?: string;
+    /** Who is typing; absent means the model (a tool call writing in). */
+    actor?: "model" | "human";
   }): Promise<{
     id: string;
     writtenBytes: number;

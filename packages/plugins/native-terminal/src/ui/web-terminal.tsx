@@ -61,6 +61,7 @@ export function WebTerminal(props: WebTerminalProps) {
   let searchAddon: SearchAddon | undefined;
   let socket: WebSocket | undefined;
   let windowResizeHandler: (() => void) | undefined;
+  let hostObserver: ResizeObserver | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let lastError: string | undefined;
@@ -343,6 +344,26 @@ export function WebTerminal(props: WebTerminalProps) {
     term.loadAddon(searchAddon);
     term.open(host);
     fitSafely();
+    // The pane's geometry is not settled when the terminal mounts: the panel
+    // host is a flex item inside a column whose own height arrives with the
+    // shell's layout, so a mount-time fit measures a host that is still short
+    // (and `fitSafely` bails on a zero height). Without a re-trigger the xterm
+    // stays at its default 24 rows forever — the pane grows and the terminal
+    // does not, which is the "height is locked" report. A ResizeObserver is the
+    // one trigger that covers every cause: the initial layout, a sidebar drag,
+    // a split, a theme/font change and a window resize.
+    hostObserver = new ResizeObserver(() => {
+      if (!props.active) return;
+      fitSafely();
+    });
+    hostObserver.observe(host);
+    // The observer only fires on a CHANGE. When the pane was already final
+    // before the terminal mounted (a tab re-shown rather than first opened),
+    // the mount-time fit is the only chance — and it may have bailed on a
+    // zero-height measurement, so measure again now that the frame exists.
+    requestAnimationFrame(() => {
+      if (!closed) fitSafely();
+    });
     term.onData((data) => {
       if (closed) return;
       if (socket?.readyState === WebSocket.OPEN) {
@@ -378,6 +399,9 @@ export function WebTerminal(props: WebTerminalProps) {
 
   createEffect(() => {
     if (props.active) fitSafely();
+    // Becoming visible is itself a geometry event: a pane hidden while it
+    // resized has a stale host, and its observer was skipped while inactive.
+    else if (term) requestAnimationFrame(() => fitSafely());
   });
 
   let fontSize = 12;
@@ -437,6 +461,8 @@ export function WebTerminal(props: WebTerminalProps) {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (windowResizeHandler)
       window.removeEventListener("resize", windowResizeHandler);
+    hostObserver?.disconnect();
+    hostObserver = undefined;
     socket?.close();
     try {
       term?.dispose();

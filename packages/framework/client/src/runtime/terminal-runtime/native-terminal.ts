@@ -184,6 +184,8 @@ export function createNativeTerminalSurface(
       input: string;
       idempotencyKey?: string;
       sessionID?: string;
+      /** Defaults to the model: a tool call writing into a terminal. */
+      actor?: "model" | "human";
     }) {
       await ctx.ports.getReady();
       const exec = sessionExec(ctx, input.sessionID);
@@ -194,6 +196,7 @@ export function createNativeTerminalSurface(
         const result = await terminal.write(input.id, input.input, {
           idempotencyKey: input.idempotencyKey,
           ...(input.sessionID ? { sessionID: input.sessionID } : {}),
+          ...(input.actor ? { actor: input.actor } : {}),
         });
         return { id: input.id, ...result };
       } catch (error) {
@@ -205,6 +208,13 @@ export function createNativeTerminalSurface(
       rows: number;
       cols: number;
       sessionID?: string;
+      /**
+       * Who is resizing. Defaults to human: this RPC is the UI pane's path
+       * (the browser's xterm fitting its host), and auditing a human's pane
+       * drag as the model's action made the audit surface lie about who
+       * touched the geometry.
+       */
+      actor?: "model" | "human";
     }) {
       await ctx.ports.getReady();
       const exec = sessionExec(ctx, input.sessionID);
@@ -216,7 +226,7 @@ export function createNativeTerminalSurface(
           input.id,
           input.rows,
           input.cols,
-          "model",
+          input.actor ?? "human",
           input.sessionID,
         );
       } catch (error) {

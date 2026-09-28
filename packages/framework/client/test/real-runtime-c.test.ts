@@ -495,6 +495,15 @@ test("queued inputs promote in FIFO order after the active turn becomes idle", a
     // store lands in the real home).
     sessionDir: join(root, ".natalia", "sessions"),
     sessionID: "ses_ts7_queued_promotion",
+    // A session without a title makes the runtime generate one in the
+    // background — a SECOND provider request whose messages are exactly
+    // [system: "Create a concise session topic…", user: <first text>]. This
+    // test counts provider requests by their last message, so that utility
+    // call lands in the same bucket as the turn under test and the count
+    // became a rotating flake under full-suite load (it reproduced on the
+    // clean tree at roughly the same rate). A manual title skips generation
+    // entirely; every assertion below stays exact.
+    title: "queued promotion",
     provider: {
       provider: "test",
       model: "test",
@@ -555,6 +564,11 @@ test("a queued input survives cancellation and drains on the next prompt", async
   const requests: string[] = [];
   const client = createRealRuntimeClient({
     workspaceRoot: root,
+    // Same reason as the FIFO test above: a manual title stops the background
+    // session-title generation, whose provider request ends with the same
+    // "first" text this test counts. Without it the post-cancel equality saw
+    // the utility call and failed as a rotating flake.
+    title: "cancel queue",
     sessionID: "ses_ts7_cancel_queue",
     provider: {
       provider: "test",

@@ -12,6 +12,7 @@ import {
   foldProjection,
   restoreProjection,
   serializeProjectionState,
+  PROJECTION_STATE_VERSION,
   projectSessionMessages,
   SqliteSessionStore,
 } from "../src";
@@ -1278,6 +1279,105 @@ test("the projection accumulates usage per event and resumes it from the checkpo
     const stale = restoreProjection(sessionID, full, adapter);
     expect(stale.usage.main.steps).toBe(2);
     expect(stale.usage.main.inputTokens).toBe(1_040);
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
+});
+
+test("a checkpoint from an older fold version folds the store log and rewrites itself", () => {
+  // The user's shape: a journal whose only checkpoint was written by a build
+  // with an older PROJECTION_STATE_VERSION. The store discards it, so the
+  // restore falls back — and the fast path's exec surface is the post-epoch
+  // tail (empty), so the fallback would produce zeros. Folding the durable log
+  // from the store recovers the real totals and rewrites the checkpoint, so
+  // every later attach resumes from checkpoint + tail.
+  const path = join(
+    tmpdir(),
+    `natalia-usage-stale-checkpoint-${crypto.randomUUID()}.db`,
+  );
+  const store = new SqliteSessionStore(path);
+  const sessionID = "ses_usage_stale" as SessionID;
+  try {
+    store.create(sessionID, "Stale checkpoint");
+    const turn = (
+      id: string,
+      input: number,
+      output: number,
+    ): RuntimeEvent[] => [
+      {
+        type: "turn.submitted",
+        id,
+        text: `${id} question`,
+        byteLength: 12,
+        lineCount: 1,
+        sha256: "fixture",
+      },
+      {
+        type: "runtime.step_usage",
+        id: `${id}:usage:1`,
+        inputTokens: input,
+        outputTokens: output,
+      },
+      { type: "turn.finished", id, stopReason: "done", durationMs: 150 },
+    ];
+    store.appendEvents(sessionID, turn("turn_one", 1_200, 300));
+    store.appendEvents(sessionID, turn("turn_two", 2_000, 400));
+
+    // A checkpoint written by an older fold version (no usage unit).
+    const stale = initProjection();
+    stale.version = PROJECTION_STATE_VERSION - 1;
+    applyProjection(stale, {
+      type: "turn.submitted",
+      id: "turn_one",
+      text: "turn_one question",
+      byteLength: 12,
+      lineCount: 1,
+      sha256: "fixture",
+    });
+    store.saveProjectionCheckpoint(sessionID, stale);
+
+    const adapter = {
+      loadProjectionCheckpoint: (id: string) => {
+        const c = store.loadProjectionCheckpoint(id as SessionID);
+        return c
+          ? {
+              serializedState: serializeProjectionState(c.state),
+              lastSeq: c.lastSeq,
+            }
+          : undefined;
+      },
+      eventsAfter: (id: string, after: number) =>
+        store.loadEventsAfter(id as SessionID, after),
+    };
+    // The fast path's surface: the post-epoch tail, which is nothing.
+    const truncated = createSessionRecord(sessionID, "Stale checkpoint");
+    const discarded = restoreProjection(sessionID, truncated, adapter);
+    expect(discarded.replayableEvents).toHaveLength(0);
+
+    // The store-log fold (what the attach helper does) recovers the totals.
+    const state = initProjection();
+    for (const event of store.loadEventsAfter(sessionID, 0))
+      applyProjection(state, event);
+    expect(state.usage.main).toMatchObject({
+      steps: 2,
+      turns: 2,
+      inputTokens: 3_200,
+      outputTokens: 700,
+      llmMs: 300,
+    });
+    store.saveProjectionCheckpoint(sessionID, state);
+
+    // And the rewritten checkpoint is now the fast path: same numbers, and the
+    // full log is resumable (not the truncated tail).
+    const resumed = restoreProjection(sessionID, truncated, adapter);
+    expect(resumed.replayableEvents.length).toBeGreaterThan(0);
+    expect(resumed.usage.main).toMatchObject({
+      steps: 2,
+      inputTokens: 3_200,
+    });
   } finally {
     store.close();
     rmSync(path, { force: true });

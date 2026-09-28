@@ -7,7 +7,13 @@
  * running. Reads and writes host state through `RuntimeContext` ports.
  */
 import { contextStatusEvent, type TokenMeterMessage } from "@anthelia/runtime";
-import { restoreProjection } from "@anthelia/session";
+import {
+  applyProjection,
+  initProjection,
+  restoreProjection,
+  serializeProjectionState,
+  type SessionUsageTotals,
+} from "@anthelia/session";
 import { RuntimeRefusal } from "@anthelia/contracts";
 import {
   terminalController,
@@ -253,6 +259,40 @@ export function createSessionAttach(ctx: RuntimeContext) {
     }
   }
 
+  /**
+   * The session's whole-log usage, from the durable projection.
+   *
+   * Cold-read ladder, cheapest first: a usable checkpoint replays only its
+   * tail. A checkpoint written by an older fold version (or none at all) is
+   * discarded by the store, and the fallback would then fold `exec.session` —
+   * which the fast path truncates to the post-epoch tail, i.e. nothing. So
+   * when the restored projection carries no events, fold the durable log from
+   * the store instead and rewrite the checkpoint: a one-time migration that
+   * leaves every later attach paying only the tail.
+   */
+  /** Reader shape `restoreProjection` needs when no store is wired. */
+  const emptyProjectionStore = {
+    loadProjectionCheckpoint: () => undefined,
+    eventsAfter: () => [],
+  };
+
+  function usageSnapshotFor(
+    id: SessionID,
+    session: import("@anthelia/substrate").SessionExecutionState["session"],
+  ): SessionUsageTotals {
+    const store = ctx.state.serviceDirectory.getOptional(
+      sessionStoreController,
+    );
+    if (!store)
+      return restoreProjection(id, session, emptyProjectionStore).usage;
+    const projection = restoreProjection(id, session, store);
+    if (projection.replayableEvents.length > 0) return projection.usage;
+    const state = initProjection();
+    for (const event of store.eventsAfter(id, 0)) applyProjection(state, event);
+    store.saveProjectionCheckpoint(id, serializeProjectionState(state));
+    return state.usage;
+  }
+
   async function attachSession(id: string) {
     const start = performance.now();
     const mark = (name: string) =>
@@ -340,7 +380,7 @@ export function createSessionAttach(ctx: RuntimeContext) {
       // the usage snapshot costs a tail fold rather than a history load.
       publishForSession(exec, {
         type: "session.usage",
-        channels: restoreProjection(nextID, exec.session, sessionStore).usage,
+        channels: usageSnapshotFor(nextID, exec.session),
       });
       perfLog(
         `[perf] attachSession same target=${id} +${(performance.now() - start).toFixed(1)}ms`,
@@ -445,7 +485,7 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // exec surface cannot change them. Live step_usage events keep adding.
     publishForSession(exec, {
       type: "session.usage",
-      channels: projection.usage,
+      channels: usageSnapshotFor(exec.session.id, exec.session),
     });
     void seedStreamContextSnapshots(exec).catch(() => undefined);
     mark("context");

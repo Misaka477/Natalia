@@ -265,6 +265,29 @@ export function createSessionExecution(
       Boolean(epoch),
     );
     contextLedgerFactory.restore(execContext, runtimeRestoreEvents);
+    // No summary means no compaction rewrote the surface, so the replayed
+    // events rebuild exactly the entries the durable checkpoint describes.
+    // Restoring its usage anchor on top is what keeps the context ring and the
+    // compaction budget on the provider's number after a restart instead of
+    // the entry estimate — which against a large window reads as 0%.
+    const durableUsageCheckpoint =
+      latestContextCheckpoint?.type === "context.checkpoint"
+        ? latestContextCheckpoint.snapshot.checkpoint
+        : undefined;
+    if (!epoch && !checkpointHasSummary && durableUsageCheckpoint) {
+      const applied = execContext.restoreUsageCheckpoint(
+        durableUsageCheckpoint,
+      );
+      logOf(ctx.state.serviceDirectory).warn(
+        "context-restore",
+        "ensureExecution",
+        {
+          sessionID,
+          checkpointApplied: applied,
+          checkpointTokens: durableUsageCheckpoint.tokens,
+        },
+      );
+    }
     mark("restore");
     const fastPath = fastPathEnabled && Boolean(epoch);
     if (fastPath) {

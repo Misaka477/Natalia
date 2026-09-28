@@ -301,6 +301,33 @@ export class ContextLedger {
     this.compactionGeneration = checkpoint.compactionGeneration;
   }
 
+  /**
+   * Restores ONLY the exact usage anchor, leaving the entry surface the
+   * caller already replayed in place.
+   *
+   * This is the no-compaction restart path: a durable `context.checkpoint`
+   * event (JSON stores; SQLite keeps it in `context_epochs`) carries the
+   * provider-anchored usage from the last turn, and the event log replay
+   * rebuilds the same entry surface. Restoring just the anchor makes
+   * `effectiveTokens()` report the provider's number instead of the entry
+   * estimate — which against a large window rounds the context ring to 0%.
+   *
+   * Two refusals keep the anchor honest:
+   *   - `messageCount` beyond this surface (a rolled-back or truncated journal
+   *     replays fewer entries than the checkpoint covers) — the estimate wins
+   *     over reporting a surface this ledger no longer has.
+   *   - a surface compaction already rewrote (`compactionGeneration > 0`): the
+   *     checkpoint describes the pre-compaction entries, which the replay
+   *     cannot rebuild, so the compaction's own estimate stays authoritative.
+   */
+  restoreUsageCheckpoint(checkpoint: ExactUsageCheckpoint): boolean {
+    if (this.compactionGeneration > 0) return false;
+    if (checkpoint.messageCount > this.entries.length) return false;
+    this.checkpoint = { ...checkpoint };
+    this.revision += 1;
+    return true;
+  }
+
   journalStatus() {
     return {
       journalOffset: this.journalOffset,

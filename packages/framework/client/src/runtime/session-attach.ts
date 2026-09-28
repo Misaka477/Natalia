@@ -312,19 +312,30 @@ export function createSessionAttach(ctx: RuntimeContext) {
       // the same id. Do not skip context seeding just because the id is already
       // active: legacy journals have no stream context snapshots yet, and the
       // UI mounts after the runtime was initialized with this session.
+      let exec: import("@anthelia/substrate").SessionExecutionState;
       const activeExec = ctx.ports.getActiveExec();
       if (activeExec?.session.id === nextID) {
-        void seedStreamContextSnapshots(activeExec).catch(() => undefined);
+        exec = activeExec;
       } else {
-        const exec = await ensureExecution(nextID);
+        exec = await ensureExecution(nextID);
         if (exec.session.metadata?.archived)
           throw new RuntimeRefusal("cannot attach an archived session");
-        void seedStreamContextSnapshots(exec).catch(() => undefined);
       }
+      void seedStreamContextSnapshots(exec).catch(() => undefined);
       // A same-session startup attach skips `ensureExecution`, so the durable
       // goal is never replayed here; re-seed the live projection explicitly or
       // the status bar stays empty until the next goal mutation.
       await syncGoalStatus?.(nextID).catch(() => undefined);
+      // The ring's only data source: `context.status` carries no `id`, so it
+      // never enters the message-page projection and a replayed journal never
+      // carries it. A UI that attaches to the already-active session mounts
+      // after initialization published its status, so republish it here or the
+      // meter stays empty until the next provider step — which is exactly the
+      // "ring reads 0% after a restart" the UI reports.
+      publishForSession(
+        exec,
+        contextStatusEvent(exec.context.status(exec.runtimeContextConfig)),
+      );
       perfLog(
         `[perf] attachSession same target=${id} +${(performance.now() - start).toFixed(1)}ms`,
       );

@@ -442,6 +442,32 @@ export class SessionRecoveryCoordinator {
       recoveryRestoreEvents,
     );
 
+    // The no-compaction counterpart of the restore above: the replayed events
+    // rebuild exactly the surface the durable checkpoint describes, so its
+    // usage anchor can be restored on top. Without it the ring and the
+    // compaction budget read the entry estimate (7 tokens against a 32k
+    // window: a 0% ring) until the next provider step.
+    const durableUsageCheckpoint =
+      !this.sqliteEpoch &&
+      !prepared.checkpointHasSummary &&
+      prepared.latestContextCheckpoint?.type === "context.checkpoint"
+        ? prepared.latestContextCheckpoint.snapshot.checkpoint
+        : undefined;
+    if (durableUsageCheckpoint) {
+      const applied = scope.runtimeContext.restoreUsageCheckpoint(
+        durableUsageCheckpoint,
+      );
+      logOf(scope.serviceDirectory).warn(
+        "context-restore",
+        "session-recovery",
+        {
+          sessionID: scope.sessionID,
+          checkpointApplied: applied,
+          checkpointTokens: durableUsageCheckpoint.tokens,
+        },
+      );
+    }
+
     logOf(scope.serviceDirectory).warn("context-restore", "session-recovery", {
       sessionID: scope.sessionID,
       replayableEvents: projection.replayableEvents.length,

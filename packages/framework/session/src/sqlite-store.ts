@@ -1546,10 +1546,20 @@ export class SqliteSessionStore {
   }
 
   private buildMessageIndex(sessionID: SessionID) {
-    const state = this.db
-      .query(`SELECT last_seq FROM message_index_state WHERE session_id = ?`)
+    // The cursor is this session's own highest INDEXED turn, never the
+    // `message_index_state` watermark: that watermark is the session's max
+    // seq — a journal-global number once many sessions share one sequence
+    // space — and using it as a per-session cursor skips every turn written
+    // below it. A session whose turns predate the watermark was therefore
+    // never indexed at all, and its message page came back empty: the
+    // transcript blank and the usage bar at zero after a restart, while the
+    // same session was correct live (live events never go through the page).
+    const indexed = this.db
+      .query(
+        `SELECT COALESCE(MAX(start_seq), 0) AS last_seq FROM message_turns WHERE session_id = ?`,
+      )
       .get(sessionID) as { last_seq: number } | undefined;
-    const lastSeq = state?.last_seq ?? 0;
+    const lastSeq = indexed?.last_seq ?? 0;
     this.run(
       `INSERT OR IGNORE INTO message_turns(session_id, turn_id, start_seq)
        SELECT session_id, json_extract(event, '$.id'), seq
@@ -1574,13 +1584,20 @@ export class SqliteSessionStore {
       .query(`SELECT last_seq FROM message_index_state WHERE session_id = ?`)
       .get(sessionID) as { last_seq: number } | undefined;
     if (!state) return false;
+    // Currency is measured in the domain buildMessageIndex writes: the
+    // session's highest sequence. Comparing that watermark to the session's
+    // EVENT COUNT could only match when the journal held one session whose
+    // sequences started at 1, so on any real multi-session journal the check
+    // failed forever and every page load paid for a rebuild it could not skip.
+    const max = this.db
+      .query(
+        `SELECT COALESCE(MAX(seq), 0) AS max_seq FROM events WHERE session_id = ?`,
+      )
+      .get(sessionID) as { max_seq: number };
     const turnCount = this.db
       .query(`SELECT COUNT(*) AS count FROM message_turns WHERE session_id = ?`)
       .get(sessionID) as { count: number } | undefined;
-    return (
-      state.last_seq === this.eventCount(sessionID) &&
-      (turnCount?.count ?? 0) > 0
-    );
+    return state.last_seq === max.max_seq && (turnCount?.count ?? 0) > 0;
   }
 
   private projectFromEvents(

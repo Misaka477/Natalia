@@ -1069,3 +1069,118 @@ test("appending durable events auto-saves a projection checkpoint", () => {
     rmSync(path, { force: true });
   }
 });
+
+test("SQLite message pages index turns below an overshot watermark", () => {
+  // The watermark in message_index_state is the session's MAX sequence, which
+  // in a shared journal is a journal-global number. buildMessageIndex used it
+  // as a per-session cursor (`seq > last_seq`), so a turn written below it was
+  // never indexed and the page came back empty: a restart showed a blank
+  // transcript and a zero usage bar for a session that was correct live.
+  const path = join(
+    tmpdir(),
+    `natalia-message-overshoot-${crypto.randomUUID()}.db`,
+  );
+  const store = new SqliteSessionStore(path);
+  const sessionID = "ses_message_overshoot" as SessionID;
+  const raw = store as unknown as {
+    db: { run: (sql: string, params: unknown[]) => void };
+  };
+  try {
+    store.create(sessionID, "Overshoot");
+    store.appendEvents(sessionID, [
+      {
+        type: "turn.submitted",
+        id: "turn_old",
+        text: "old question",
+        byteLength: 12,
+        lineCount: 1,
+        sha256: "fixture",
+      },
+      {
+        type: "runtime.step_usage",
+        id: "turn_old:usage:1",
+        inputTokens: 1_200,
+        outputTokens: 300,
+      },
+      { type: "turn.finished", id: "turn_old", stopReason: "done" },
+    ]);
+    // The state the broken cursor produced: the turn exists in the journal but
+    // was never indexed, and the watermark sits above it (a shared journal's
+    // sequence number). Both halves are needed — an eager append indexes the
+    // turn, so the repair path only runs for a journal written by another
+    // path (an import, a rollback) or an older build.
+    raw.db.run(`DELETE FROM message_turns WHERE session_id = ?`, [sessionID]);
+    raw.db.run(
+      `INSERT INTO message_index_state(session_id, last_seq) VALUES (?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET last_seq = excluded.last_seq`,
+      [sessionID, 5_000],
+    );
+    const page = store.loadMessagePage(sessionID, { limit: 100 });
+    expect(page.data.map((message) => message.id)).toEqual(["turn_old"]);
+    const usageRows = page.data[0]?.rows.filter(
+      (row) => row.event.type === "runtime.step_usage",
+    );
+    expect(usageRows).toHaveLength(1);
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
+});
+
+test("SQLite message index currency is measured in the sequence domain", () => {
+  // messageIndexIsCurrent compared the session's max sequence against its
+  // EVENT COUNT. Those only match for a single-session journal whose
+  // sequences start at 1, so on a real multi-session journal the index was
+  // never current and every page load rebuilt it — the skip never fired.
+  const path = join(
+    tmpdir(),
+    `natalia-message-currency-${crypto.randomUUID()}.db`,
+  );
+  const store = new SqliteSessionStore(path);
+  const filler = "ses_message_currency_filler" as SessionID;
+  const sessionID = "ses_message_currency" as SessionID;
+  try {
+    // A first session takes the low sequence numbers.
+    store.create(filler, "Filler");
+    store.appendEvents(
+      filler,
+      Array.from({ length: 50 }, (_, index) => ({
+        type: "diagnostic" as const,
+        level: "info" as const,
+        message: `filler ${index}`,
+        at: new Date().toISOString(),
+      })),
+    );
+    // The session under test therefore starts far above sequence 1.
+    store.create(sessionID, "Late");
+    store.appendEvents(sessionID, [
+      {
+        type: "turn.submitted",
+        id: "turn_late",
+        text: "late question",
+        byteLength: 13,
+        lineCount: 1,
+        sha256: "fixture",
+      },
+      { type: "turn.finished", id: "turn_late", stopReason: "done" },
+    ]);
+    // First load builds the index.
+    expect(
+      store.loadMessagePage(sessionID, { limit: 100 }).data.map((m) => m.id),
+    ).toEqual(["turn_late"]);
+    // Currency is now true in the sequence domain: the watermark equals the
+    // session's max sequence (not its event count, which is 2 here while the
+    // sequence is past 50). The observable promise is that the page stays
+    // correct without a rebuild, so the second load is exact too.
+    expect(
+      store.loadMessagePage(sessionID, { limit: 100 }).data.map((m) => m.id),
+    ).toEqual(["turn_late"]);
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
+});

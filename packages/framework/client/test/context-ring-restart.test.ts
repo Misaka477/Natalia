@@ -4,7 +4,7 @@
 // replayed journal never carries it. A restarting UI therefore depends on two
 // things both holding: the restored ledger reporting the session's real usage
 // (not a tiny entry estimate), and attach republishing that status.
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
@@ -142,3 +142,131 @@ for (const useSqliteStore of [false, true]) {
     await third.dispose?.();
   });
 }
+
+test("a same-session attach republishes the session's usage as a snapshot", async () => {
+  // The web boot path: the runtime is already on the session, the UI attaches
+  // it, and the bar's static value must arrive as that snapshot — not from a
+  // message-page fold, which the fast path's truncated exec surface and the
+  // paged index both make unreliable.
+  const root = await mkdtemp(join(tmpdir(), "natalia-usage-snapshot-"));
+  const sessionDir = join(root, ".natalia", "sessions");
+  const first = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionDir,
+    sessionID: SESSION,
+    provider: usageProvider("first"),
+  });
+  first.start(() => undefined, { replay: "none" });
+  await first.submitAndWait!("first question");
+  await first.dispose?.();
+
+  const second = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionDir,
+    sessionID: SESSION,
+    provider: usageProvider("second"),
+  });
+  const events: RuntimeEvent[] = [];
+  second.start((event) => events.push(event), { replay: "none" });
+  await waitForAsync(async () =>
+    events.some((event) => event.type === "session.ready"),
+  );
+  const before = events.length;
+  await second.sessionAttach!(SESSION);
+  await waitForAsync(async () =>
+    events.slice(before).some((event) => event.type === "session.usage"),
+  );
+  const snapshot = events
+    .slice(before)
+    .filter((event) => event.type === "session.usage")
+    .at(-1) as Extract<RuntimeEvent, { type: "session.usage" }>;
+  expect(snapshot.channels.main.steps).toBe(1);
+  expect(snapshot.channels.main.inputTokens).toBe(1_200);
+  expect(snapshot.channels.main.outputTokens).toBe(300);
+  // The ledger's own snapshot and the usage snapshot travel together.
+  const status = events
+    .slice(before)
+    .filter((event) => event.type === "context.status")
+    .at(-1);
+  expect(status).toBeDefined();
+  await second.dispose?.();
+});
+
+test("a stale projection checkpoint still publishes the session's real usage", async () => {
+  // The user's journal: sqlite, an epoch (so the fast path truncates the exec
+  // surface), and a checkpoint written before the usage unit existed. The store
+  // discards that checkpoint, so attach must fold the durable log from the store
+  // — the exec surface holds only bootstrap events and folding it yields zeros.
+  const root = await mkdtemp(join(tmpdir(), "natalia-stale-checkpoint-usage-"));
+  await mkdir(join(root, ".natalia"), { recursive: true });
+  // The journal resolver prefers the workspace-local path when it exists.
+  await Bun.write(join(root, ".natalia", "sessions.db"), "");
+  const first = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: SESSION,
+    useSqliteStore: true,
+    provider: usageProvider("first"),
+  });
+  first.start(() => undefined, { replay: "none" });
+  await first.submitAndWait!("first question");
+  await waitForAsync(async () => {
+    const page = await first.messages?.({ sessionID: SESSION, limit: 100 });
+    return Boolean(
+      page?.data.some((message) =>
+        message.rows.some((row) => row.event.type === "runtime.step_usage"),
+      ),
+    );
+  });
+  await first.dispose?.();
+
+  // Downgrade the checkpoint to a pre-usage fold version, as an older build
+  // would have written it.
+  const { SqliteSessionStore } = await import("@anthelia/session");
+  const store = new SqliteSessionStore(join(root, ".natalia", "sessions.db"));
+  const raw = store as unknown as {
+    db: { run: (sql: string, params: unknown[]) => void };
+  };
+  raw.db.run(
+    `UPDATE projection_checkpoints SET state_version = 1 WHERE session_id = ?`,
+    [SESSION],
+  );
+  store.close();
+
+  const second = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: SESSION,
+    useSqliteStore: true,
+    provider: usageProvider("second"),
+  });
+  const events: RuntimeEvent[] = [];
+  // replay "none" is what makes the recovery load take the indexed-recovery
+  // branch (empty events), exactly like the CEF runtime's fast path.
+  second.start((event) => events.push(event), { replay: "none" });
+  await waitForAsync(async () =>
+    events.some((event) => event.type === "session.ready"),
+  );
+  const before = events.length;
+  await second.sessionAttach!(SESSION);
+  await waitForAsync(async () =>
+    events.slice(before).some((event) => event.type === "session.usage"),
+  );
+  const snapshot = events
+    .slice(before)
+    .filter((event) => event.type === "session.usage")
+    .at(-1) as Extract<RuntimeEvent, { type: "session.usage" }>;
+  expect(snapshot.channels.main.steps).toBe(1);
+  expect(snapshot.channels.main.inputTokens).toBe(1_200);
+  expect(snapshot.channels.main.turns).toBe(1);
+  // The migration rewrote the checkpoint, so a second attach resumes it.
+  const afterFirst = events.length;
+  await second.sessionAttach!(SESSION);
+  await waitForAsync(async () =>
+    events.slice(afterFirst).some((event) => event.type === "session.usage"),
+  );
+  const resumed = events
+    .slice(afterFirst)
+    .filter((event) => event.type === "session.usage")
+    .at(-1) as Extract<RuntimeEvent, { type: "session.usage" }>;
+  expect(resumed.channels.main.inputTokens).toBe(1_200);
+  await second.dispose?.();
+});

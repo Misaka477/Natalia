@@ -285,8 +285,18 @@ export function createSessionAttach(ctx: RuntimeContext) {
     );
     if (!store)
       return restoreProjection(id, session, emptyProjectionStore).usage;
-    const projection = restoreProjection(id, session, store);
-    if (projection.replayableEvents.length > 0) return projection.usage;
+    // A JSON store has no checkpoint table; its exec surface is the full log,
+    // so the projection's own fallback already folds it correctly. Only the
+    // sqlite case needs the store-log fold below — and there the checkpoint's
+    // presence is the usable signal, because the store itself discards a row
+    // written by an older fold version. (Checking the restored projection for
+    // emptiness does NOT work: an indexed-recovery exec surface carries the
+    // runtime's bootstrap events, so it is never empty while holding none of
+    // the session's turns — and folding it yields zeros.)
+    if (store.status().mode !== "sqlite" || store.loadProjectionCheckpoint(id))
+      return restoreProjection(id, session, store).usage;
+    // Fold the durable log from the store and rewrite the checkpoint: a
+    // one-time migration, after which every attach replays only the tail.
     const state = initProjection();
     for (const event of store.eventsAfter(id, 0)) applyProjection(state, event);
     store.saveProjectionCheckpoint(id, serializeProjectionState(state));

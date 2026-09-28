@@ -28,6 +28,7 @@ import {
   niaChatProviderMessagesFromHistory,
 } from "@natalia/collab";
 import { perfLog } from "@anthelia/runtime-services";
+import { logOf } from "@anthelia/operation-log";
 import type { StatusSnapshotController } from "@anthelia/runtime-status";
 import type { SessionStoreController } from "@anthelia/session-store";
 
@@ -388,9 +389,16 @@ export function createSessionAttach(ctx: RuntimeContext) {
       );
       // Same cold-read ladder as the full path below (checkpoint + tail), so
       // the usage snapshot costs a tail fold rather than a history load.
+      const usageChannels = usageSnapshotFor(nextID, exec.session);
+      logOf(ctx.state.serviceDirectory).warn("usage-snapshot", "attach", {
+        sessionID: nextID,
+        steps: usageChannels.main.steps,
+        turns: usageChannels.main.turns,
+        inputTokens: usageChannels.main.inputTokens,
+      });
       publishForSession(exec, {
         type: "session.usage",
-        channels: usageSnapshotFor(nextID, exec.session),
+        channels: usageChannels,
       });
       perfLog(
         `[perf] attachSession same target=${id} +${(performance.now() - start).toFixed(1)}ms`,

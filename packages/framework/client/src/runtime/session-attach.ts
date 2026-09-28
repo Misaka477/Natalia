@@ -336,6 +336,12 @@ export function createSessionAttach(ctx: RuntimeContext) {
         exec,
         contextStatusEvent(exec.context.status(exec.runtimeContextConfig)),
       );
+      // Same cold-read ladder as the full path below (checkpoint + tail), so
+      // the usage snapshot costs a tail fold rather than a history load.
+      publishForSession(exec, {
+        type: "session.usage",
+        channels: restoreProjection(nextID, exec.session, sessionStore).usage,
+      });
       perfLog(
         `[perf] attachSession same target=${id} +${(performance.now() - start).toFixed(1)}ms`,
       );
@@ -433,6 +439,14 @@ export function createSessionAttach(ctx: RuntimeContext) {
       exec,
       contextStatusEvent(exec.context.status(exec.runtimeContextConfig)),
     );
+    // The usage bar's static value: the projection's whole-session totals,
+    // accumulated per event and resumed from the durable checkpoint above —
+    // not a page fold, so paging, compaction and the fast path's truncated
+    // exec surface cannot change them. Live step_usage events keep adding.
+    publishForSession(exec, {
+      type: "session.usage",
+      channels: projection.usage,
+    });
     void seedStreamContextSnapshots(exec).catch(() => undefined);
     mark("context");
     publishForSession(

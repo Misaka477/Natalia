@@ -28,6 +28,12 @@ export type SessionProjection = {
   settlements: SettlementNoticeRecord[];
   /** The subagents' mid-run messages this session was told. */
   subagentMessages: Array<{ agentId: string; text: string; at: string }>;
+  /**
+   * Cumulative per-channel usage folded from the same events — a whole-session
+   * total, so paging and compaction cannot change it and a restart reads it
+   * from the durable checkpoint instead of replaying history.
+   */
+  usage: SessionUsageTotals;
 };
 
 /**
@@ -60,6 +66,7 @@ export function modelVisibleEvents(events: RuntimeEvent[]) {
 export function projectSession(session: SessionRecord): SessionProjection {
   const active = new Set<string>();
   const completed = new Set<string>();
+  const usage = emptySessionUsageTotals();
   for (const event of session.events) {
     if (event.type === "turn.submitted") {
       active.add(event.id);
@@ -69,6 +76,7 @@ export function projectSession(session: SessionRecord): SessionProjection {
       active.delete(event.id);
       completed.add(event.id);
     }
+    foldSessionUsageInto(usage, event);
   }
   // A crashed turn may contain partial model/tool state. Keep its durable
   // audit events on disk, but do not feed its input back into a new model turn.
@@ -88,6 +96,7 @@ export function projectSession(session: SessionRecord): SessionProjection {
     permissionProfile: permissionProfileFromEvents(replayable),
     settlements: settlementRecordsFromEvents(replayable),
     subagentMessages: subagentMessageRecordsFromEvents(replayable),
+    usage,
   };
 }
 
@@ -137,7 +146,114 @@ export function subagentMessageRecordsFromEvents(
  * shape or semantics change so a persisted checkpoint from an older build is
  * discarded rather than mis-replayed.
  */
-export const PROJECTION_STATE_VERSION = 2;
+export const PROJECTION_STATE_VERSION = 3;
+
+/** One channel's cumulative usage buckets; field names mirror the UI's. */
+export type SessionUsageBuckets = {
+  steps: number;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  llmMs: number;
+  toolMs: number;
+  ttftMs: number;
+  ttftSteps: number;
+  decodeMs: number;
+};
+
+export type SessionUsageTotals = Record<
+  "main" | "navi" | "nia",
+  SessionUsageBuckets
+>;
+
+const emptyUsageBuckets = (): SessionUsageBuckets => ({
+  steps: 0,
+  turns: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadInputTokens: 0,
+  cacheCreationInputTokens: 0,
+  llmMs: 0,
+  toolMs: 0,
+  ttftMs: 0,
+  ttftSteps: 0,
+  decodeMs: 0,
+});
+
+/** Zeroed totals for every channel, so a channel with no steps still reports. */
+export function emptySessionUsageTotals(): SessionUsageTotals {
+  return {
+    main: emptyUsageBuckets(),
+    navi: emptyUsageBuckets(),
+    nia: emptyUsageBuckets(),
+  };
+}
+
+/** The channel a `runtime.step_usage` event belongs to (legacy events: main). */
+function usageChannelOf(event: {
+  channel?: "main" | "navi" | "nia";
+  type: string;
+}): "main" | "navi" | "nia" {
+  if (event.channel) return event.channel;
+  if (event.type === "navi.runtime.step_usage") return "navi";
+  if (event.type === "nia.runtime.step_usage") return "nia";
+  return "main";
+}
+
+/**
+ * Folds the durable usage of one event into `totals`.
+ *
+ * `runtime.step_usage` (and its navi/nia namespaced forms) is the token
+ * authority — one event per provider step, carrying that step's provider
+ * sample and measured timing. `turn.finished` counts the turn and adds its
+ * wall time; the chat streams count their own turns through
+ * `*.chat.turn.finished`. A whole-log fold of these is the session's static
+ * usage: the numbers a restarting UI starts from before any live step.
+ */
+export function foldSessionUsageInto(
+  totals: SessionUsageTotals,
+  event: RuntimeEvent,
+): SessionUsageTotals {
+  if (
+    event.type === "runtime.step_usage" ||
+    event.type === "navi.runtime.step_usage" ||
+    event.type === "nia.runtime.step_usage"
+  ) {
+    const bucket = totals[usageChannelOf(event)];
+    bucket.steps += 1;
+    bucket.inputTokens += event.inputTokens ?? 0;
+    bucket.outputTokens += event.outputTokens ?? 0;
+    bucket.cacheReadInputTokens += event.cacheReadInputTokens ?? 0;
+    bucket.cacheCreationInputTokens += event.cacheCreationInputTokens ?? 0;
+    bucket.llmMs += event.llmMs ?? 0;
+    bucket.toolMs += event.toolMs ?? 0;
+    if (event.ttftMs !== undefined) {
+      bucket.ttftMs += event.ttftMs;
+      bucket.ttftSteps += 1;
+    }
+    bucket.decodeMs += event.decodeMs ?? 0;
+    return totals;
+  }
+  if (event.type === "turn.finished") {
+    const bucket = totals.main;
+    bucket.turns += 1;
+    bucket.llmMs += Math.max(0, event.durationMs ?? 0);
+    return totals;
+  }
+  if (
+    event.type === "navi.chat.turn.finished" ||
+    event.type === "nia.chat.turn.finished"
+  ) {
+    const bucket =
+      totals[event.type === "navi.chat.turn.finished" ? "navi" : "nia"];
+    bucket.turns += 1;
+    bucket.llmMs += Math.max(0, event.endedAt - event.startedAt);
+    return totals;
+  }
+  return totals;
+}
 
 /**
  * Foldable session projection state. The same shape can be advanced one event
@@ -151,6 +267,8 @@ export type ProjectionState = {
   events: RuntimeEvent[];
   activeTurnIDs: Set<string>;
   completedTurnIDs: Set<string>;
+  /** Cumulative per-channel usage, folded from the same events. */
+  usage: SessionUsageTotals;
 };
 
 export function initProjection(): ProjectionState {
@@ -159,6 +277,7 @@ export function initProjection(): ProjectionState {
     events: [],
     activeTurnIDs: new Set(),
     completedTurnIDs: new Set(),
+    usage: emptySessionUsageTotals(),
   };
 }
 
@@ -173,6 +292,7 @@ export function applyProjection(
     state.activeTurnIDs.delete(event.id);
     state.completedTurnIDs.add(event.id);
   }
+  foldSessionUsageInto(state.usage, event);
   return state;
 }
 
@@ -203,6 +323,11 @@ export function viewProjection(
     permissionProfile: permissionProfileFromEvents(replayable),
     settlements: settlementRecordsFromEvents(replayable),
     subagentMessages: subagentMessageRecordsFromEvents(replayable),
+    usage: {
+      main: { ...state.usage.main },
+      navi: { ...state.usage.navi },
+      nia: { ...state.usage.nia },
+    },
   };
 }
 
@@ -251,6 +376,7 @@ export type SerializedProjectionState = {
   events: RuntimeEvent[];
   activeTurnIDs: string[];
   completedTurnIDs: string[];
+  usage?: SessionUsageTotals;
 };
 
 export function serializeProjectionState(state: ProjectionState): string {
@@ -259,6 +385,7 @@ export function serializeProjectionState(state: ProjectionState): string {
     events: state.events,
     activeTurnIDs: [...state.activeTurnIDs],
     completedTurnIDs: [...state.completedTurnIDs],
+    usage: state.usage,
   };
   return JSON.stringify(payload);
 }
@@ -291,11 +418,21 @@ export function deserializeProjectionState(
     !Array.isArray(payload.completedTurnIDs)
   )
     return undefined;
+  // A same-version payload without usage predates the accumulator; fold it
+  // from the replayed events rather than reporting zeros for a live session.
+  const usage =
+    payload.usage ??
+    (() => {
+      const totals = emptySessionUsageTotals();
+      for (const event of payload.events) foldSessionUsageInto(totals, event);
+      return totals;
+    })();
   return {
     version: payload.version,
     events: payload.events,
     activeTurnIDs: new Set(payload.activeTurnIDs ?? []),
     completedTurnIDs: new Set(payload.completedTurnIDs ?? []),
+    usage,
   };
 }
 

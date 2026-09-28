@@ -159,6 +159,33 @@ export function applyStatusEvent(
       }`;
       return true;
     }
+    case "session.usage": {
+      // A whole-session snapshot from the runtime's projection, published at
+      // attach. SET (not add): the live `runtime.step_usage` events that
+      // follow accumulate on top of it, and a replayed snapshot must never
+      // double-count. This is the bar's static value after a restart — the
+      // message-page fold is only the fallback for a UI that never saw one.
+      const empty = () => ({
+        steps: 0,
+        turns: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        llmMs: 0,
+        toolMs: 0,
+        ttftMs: 0,
+        ttftSteps: 0,
+        decodeMs: 0,
+      });
+      for (const channel of ["main", "navi", "nia"] as const) {
+        const buckets = event.channels[channel];
+        if (!buckets) continue;
+        state.usageByChannel[channel] = { ...empty(), ...buckets };
+      }
+      state.sessionUsage = { ...state.usageByChannel.main };
+      return true;
+    }
     case "context.snapshot": {
       // Legacy journal replay only: live writers emit
       // navi./nia.context.snapshot.

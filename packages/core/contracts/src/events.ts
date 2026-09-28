@@ -1818,6 +1818,35 @@ type RuntimeEventData =
       messageTokens?: number;
     }
   | {
+      /**
+       * Durable session usage snapshot: the per-channel totals a restarting UI
+       * needs before any live step arrives. Folded from the whole session log
+       * by the session projection and published at attach, so paging,
+       * compaction and the fast path's truncated exec surface cannot change
+       * it — the numbers are the session's, not a window's. Live
+       * `runtime.step_usage` / `*.chat.turn.finished` events keep accumulating
+       * afterwards. Field names mirror the UI's per-channel stats so the two
+       * swap wholesale.
+       */
+      type: "session.usage";
+      channels: Record<
+        "main" | "navi" | "nia",
+        {
+          steps: number;
+          turns: number;
+          inputTokens: number;
+          outputTokens: number;
+          cacheReadInputTokens: number;
+          cacheCreationInputTokens: number;
+          llmMs: number;
+          toolMs: number;
+          ttftMs: number;
+          ttftSteps: number;
+          decodeMs: number;
+        }
+      >;
+    }
+  | {
       type: "compaction.begin";
       id: string;
       trigger: CompactionTrigger;

@@ -1184,3 +1184,104 @@ test("SQLite message index currency is measured in the sequence domain", () => {
     rmSync(`${path}-shm`, { force: true });
   }
 });
+
+test("the projection accumulates usage per event and resumes it from the checkpoint", () => {
+  // The bar's static value is an accumulator, not a history fold: each event
+  // advances the live projection, a flush barrier persists it, and a later
+  // attach resumes from the checkpoint plus the tail.
+  const path = join(
+    tmpdir(),
+    `natalia-usage-accumulator-${crypto.randomUUID()}.db`,
+  );
+  const store = new SqliteSessionStore(path);
+  const sessionID = "ses_usage_accumulator" as SessionID;
+  try {
+    store.create(sessionID, "Usage accumulator");
+    const turn = (
+      id: string,
+      input: number,
+      output: number,
+    ): RuntimeEvent[] => [
+      {
+        type: "turn.submitted" as const,
+        id,
+        text: `${id} question`,
+        byteLength: 12,
+        lineCount: 1,
+        sha256: "fixture",
+      },
+      {
+        type: "runtime.step_usage" as const,
+        id: `${id}:usage:1`,
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadInputTokens: input / 2,
+        llmMs: 120,
+      },
+      {
+        type: "turn.finished" as const,
+        id,
+        stopReason: "done",
+        durationMs: 200,
+      },
+    ];
+    store.appendEvents(sessionID, turn("turn_one", 1_000, 200));
+    store.appendEvents(sessionID, [
+      { type: "content.delta", id: "turn_live", text: "a trailing step" },
+      {
+        type: "runtime.step_usage" as const,
+        id: "turn_live:usage:1",
+        inputTokens: 40,
+        outputTokens: 10,
+      },
+    ]);
+
+    const full = createSessionRecord(sessionID, "Usage accumulator");
+    full.events = store.loadEvents(sessionID);
+    // The controller's checkpoint shape (what restoreProjection consumes):
+    // the store persists the state, the contract hands it over serialized.
+    const adapter = {
+      loadProjectionCheckpoint: (id: string) => {
+        const checkpoint = store.loadProjectionCheckpoint(id as SessionID);
+        return checkpoint
+          ? {
+              serializedState: serializeProjectionState(checkpoint.state),
+              lastSeq: checkpoint.lastSeq,
+            }
+          : undefined;
+      },
+      eventsAfter: (id: string, after: number) =>
+        store.loadEventsAfter(id as SessionID, after),
+    };
+    // The checkpoint carries the accumulated usage (not just turn bookkeeping).
+    const written = store.loadProjectionCheckpoint(sessionID);
+    expect(written?.state.usage.main.steps).toBe(2);
+    const restored = restoreProjection(sessionID, full, adapter);
+    expect(restored.usage.main).toMatchObject({
+      steps: 2,
+      turns: 1,
+      inputTokens: 1_040,
+      outputTokens: 210,
+      cacheReadInputTokens: 500,
+      llmMs: 320, // 120 (step) + 200 (turn wall time)
+    });
+
+    // A checkpoint written by an older fold shape (no usage) fails soft to a
+    // fold of the replayed events rather than reporting zeros.
+    const raw = store as unknown as {
+      db: { run: (sql: string, params: unknown[]) => void };
+    };
+    raw.db.run(
+      `UPDATE projection_checkpoints SET state_version = state_version - 1 WHERE session_id = ?`,
+      [sessionID],
+    );
+    const stale = restoreProjection(sessionID, full, adapter);
+    expect(stale.usage.main.steps).toBe(2);
+    expect(stale.usage.main.inputTokens).toBe(1_040);
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
+});

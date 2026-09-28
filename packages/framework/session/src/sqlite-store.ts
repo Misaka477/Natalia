@@ -556,12 +556,17 @@ export class SqliteSessionStore {
     const txn = this.db.transaction(() => {
       // This synchronous recovery-settlement helper deliberately retains its
       // established narrow semantics. New streaming batches use the complete
-      // writeBufferedBatch path below.
+      // writeBufferedBatch path below. It still advances the session
+      // projection: a settled `turn.finished` written here is a real turn, and
+      // the usage accumulator must see it or the totals a later attach
+      // publishes would miss the interrupted turns.
       for (const event of events) {
         this.insertEvent(sessionID, event);
         this.applyRecoveryEvent(sessionID, event);
+        applyProjection(this.projectionStateFor(sessionID), event);
       }
       this.bumpRecoveryState(sessionID, events.length);
+      this.persistProjectionCheckpoint(sessionID);
     });
     txn();
   }

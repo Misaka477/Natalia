@@ -54,6 +54,7 @@ import { applyStatusEvent } from "./status";
 import { applyWorkspaceEvent } from "./workspace";
 import {
   cloneState,
+  emptySessionUsageStats,
   initialState,
   synchronizeStreamSlices,
   type AppState,
@@ -328,6 +329,29 @@ export function hydrateProjectedMessages(
     state.streams = { ...projected.streams, ...liveStreams };
     state.streamPhases = { ...projected.streamPhases, ...livePhases };
     state.tools = { ...projected.tools, ...liveTools };
+    // The metering surfaces the page's fold COMPUTED. This is the whole
+    // reason the session usage bar and the context ring read zero after a
+    // restart: `projected` above folds every row's event through
+    // applyEvent, which accumulates `runtime.step_usage` into
+    // projected.sessionUsage / projected.usageByChannel — and then this
+    // branch copied only the transcript-shaped fields back, so the
+    // numbers were computed and thrown away. The live path never refills
+    // them on a cold attach (attach does not replay the durable log), so
+    // the bar stayed at "0 轮 · 0 步" until the next provider step.
+    //
+    // Replacing (not adding) is right for the initial page: the page's
+    // fold is the session's own accounting for the window it covers, and
+    // a cold start has nothing accumulated yet. The older-page path
+    // below adds, because its pages are disjoint turn windows.
+    state.sessionUsage = projected.sessionUsage;
+    state.usageByChannel = projected.usageByChannel;
+    // The context meters: carried when the page's fold produced one. A
+    // live `context.status` (attach republishes it) still wins afterwards
+    // because it mutates state directly.
+    if (projected.context) state.context = projected.context;
+    if (projected.navi?.context) state.navi.context = projected.navi.context;
+    if (projected.nia?.context) state.nia.context = projected.nia.context;
+    if (projected.footer) state.footer = projected.footer;
     synchronizeStreamSlices(state);
     return false;
   }
@@ -366,6 +390,40 @@ export function hydrateProjectedMessages(
       state.streamPhases[id] = projected.streamPhases[id];
   for (const id of Object.keys(projected.tools))
     if (!(id in state.tools)) state.tools[id] = projected.tools[id];
+  // The older-page counterpart of the replace path above: the pages are
+  // disjoint turn windows (the cursor pages by turn), so each step's usage
+  // appears in exactly one page and ADDING is the correct fold — no double
+  // count, and paging back through history grows the bar.
+  for (const [channel, stats] of Object.entries(projected.usageByChannel)) {
+    const target =
+      state.usageByChannel[channel as keyof typeof state.usageByChannel] ??
+      emptySessionUsageStats();
+    target.steps += stats.steps;
+    target.turns += stats.turns;
+    target.inputTokens += stats.inputTokens;
+    target.outputTokens += stats.outputTokens;
+    target.cacheReadInputTokens += stats.cacheReadInputTokens;
+    target.cacheCreationInputTokens += stats.cacheCreationInputTokens;
+    target.llmMs += stats.llmMs;
+    target.toolMs += stats.toolMs;
+    target.ttftMs += stats.ttftMs;
+    target.ttftSteps += stats.ttftSteps;
+    target.decodeMs += stats.decodeMs;
+    state.usageByChannel[channel as keyof typeof state.usageByChannel] = target;
+  }
+  state.sessionUsage.steps += projected.sessionUsage.steps;
+  state.sessionUsage.turns += projected.sessionUsage.turns;
+  state.sessionUsage.inputTokens += projected.sessionUsage.inputTokens;
+  state.sessionUsage.outputTokens += projected.sessionUsage.outputTokens;
+  state.sessionUsage.cacheReadInputTokens +=
+    projected.sessionUsage.cacheReadInputTokens;
+  state.sessionUsage.cacheCreationInputTokens +=
+    projected.sessionUsage.cacheCreationInputTokens;
+  state.sessionUsage.llmMs += projected.sessionUsage.llmMs;
+  state.sessionUsage.toolMs += projected.sessionUsage.toolMs;
+  state.sessionUsage.ttftMs += projected.sessionUsage.ttftMs;
+  state.sessionUsage.ttftSteps += projected.sessionUsage.ttftSteps;
+  state.sessionUsage.decodeMs += projected.sessionUsage.decodeMs;
   // Preserve interactive requests projected from the hydrated turns so a
   // message-first startup still surfaces pending approvals/questions.
   const approvalIDs = new Set(

@@ -73,6 +73,11 @@ function interactiveStartTool(): RuntimeTool {
       properties: {
         command: { type: "string" },
         id: { type: "string" },
+        // The grid to spawn at. Ask for a big one when the command is a
+        // full-screen TUI: the default is already practical, but a TUI that
+        // wants its own layout says so here instead of resizing afterwards.
+        rows: { type: "number" },
+        cols: { type: "number" },
       },
       required: ["command"],
       additionalProperties: false,
@@ -89,6 +94,12 @@ function interactiveStartTool(): RuntimeTool {
         // focus — the human's Open terminal brings it up later.
         sessionID: context.parentSessionID,
         ...(context.parentAgentID ? { agentID: context.parentAgentID } : {}),
+        ...(optionalInteger(args.rows, "rows") !== undefined
+          ? { rows: optionalInteger(args.rows, "rows")! }
+          : {}),
+        ...(optionalInteger(args.cols, "cols") !== undefined
+          ? { cols: optionalInteger(args.cols, "cols")! }
+          : {}),
       });
       return JSON.stringify(modelNativeTerminalInfo(session), null, 2);
     },

@@ -72,6 +72,15 @@ function optionalStringParam(
   return value;
 }
 
+/** An optional integer parameter (a geometry), rejected when it is not one. */
+function intParam(params: Record<string, unknown> | undefined, name: string) {
+  const value = params?.[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value))
+    throw invalidParams(`${name} must be an integer`);
+  return value;
+}
+
 export function arrayParam(
   params: Record<string, unknown> | undefined,
   name: string,
@@ -2076,6 +2085,10 @@ export async function handleRPCMessage(
         typeof (params as { agentID?: unknown }).agentID === "string"
           ? (params as { agentID: string }).agentID
           : undefined;
+      // The spawn geometry: a caller (a tool call that knows it is about to run
+      // a TUI) asks for a big grid up front instead of resizing afterwards.
+      const rows = intParam(body.params, "rows");
+      const cols = intParam(body.params, "cols");
       return {
         jsonrpc: "2.0",
         id: body.id ?? null,
@@ -2085,6 +2098,8 @@ export async function handleRPCMessage(
           id,
           sessionID,
           ...(agentID ? { agentID } : {}),
+          ...(rows !== undefined ? { rows } : {}),
+          ...(cols !== undefined ? { cols } : {}),
         }),
       };
     }

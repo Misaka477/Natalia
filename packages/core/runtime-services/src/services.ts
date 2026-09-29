@@ -575,6 +575,9 @@ export interface TerminalController {
     id?: string;
     sessionID?: string;
     agentID?: string;
+    /** The grid to spawn at; absent means the controller's default. */
+    rows?: number;
+    cols?: number;
   }): Promise<RuntimeNativeTerminalSession>;
   write(
     id: string,

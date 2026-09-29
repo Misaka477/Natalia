@@ -547,6 +547,10 @@ test("a frame with new scrollback reports scrolled, not settled", async () => {
     cwd: root,
     id: "term_scroll",
     sessionID: "ses_scroll",
+    // A screenful is defined by the grid, so say so: 4 rows by 40 lines is
+    // always an overflow, whatever the spawn default happens to be.
+    rows: 4,
+    cols: 20,
   });
   // A screenful of new lines: the scrollback grows past its last frame.
   for (let line = 0; line < 30; line += 1)
@@ -656,19 +660,37 @@ test("resize carries the pane's geometry into the screen the model reads", async
     controllerInput(root, factory),
   );
   const started = await controller.start({ command: "cat", cwd: root });
-  await controller.write(started.id, "before\r\n");
-  const before = await controller.read(started.id);
-  expect(before.text).toContain("before");
+  // More lines than the grid's rows: the overflow is what makes the scrollback
+  // carry content, and the scrollback is the part a resize must never lose.
+  const lines = Array.from(
+    { length: 60 },
+    (_unused, index) => `scroll-${index}`,
+  );
+  for (const line of lines) await controller.write(started.id, `${line}\r\n`);
+  // The echo travels the write's delivery chain, so wait for the screen to
+  // carry it before asserting on what a resize keeps.
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const before = await controller.read(started.id);
+    if (before.text.includes("scroll-9")) break;
+    await Bun.sleep(10);
+  }
 
-  await controller.resize(started.id, 50, 200, "human");
+  // The pane's geometry, deliberately different from the spawn default so the
+  // resize is a real geometry change rather than a no-op guard.
+  await controller.resize(started.id, 60, 240, "human");
 
   const after = await controller.read(started.id);
-  expect(after.rows).toBe(50);
-  expect(after.cols).toBe(200);
-  // The re-blanked grid reads as empty (the app redraws for the new size), and
-  // the pre-resize text is gone from the visible window — which is the point:
-  // the window is the pane's size now, not 24x80.
-  expect(after.text).toBe("");
+  expect(after.rows).toBe(60);
+  expect(after.cols).toBe(240);
+  // The scrollback is the durable part, and it survives the resize.
+  expect(after.text).toContain("scroll-0");
+  // The rendered screen — the model's window, the pane's size — is re-blanked
+  // (the app redraws for the new geometry), so the window is empty and its size
+  // is the pane's, not the spawn-time default.
+  const window = await controller.snapshot(started.id);
+  expect(window.rows).toBe(60);
+  expect(window.cols).toBe(240);
+  expect(window.text).toBe("");
   await controller.close();
 });
 
@@ -727,5 +749,68 @@ test("a settle notice only fires for the model's own terminal", async () => {
   await Bun.sleep(300);
   expect(settlements).toHaveLength(2);
 
+  await controller.close();
+});
+
+test("a terminal spawns at a grid a TUI can render, and honours a caller's size", async () => {
+  // The old 24x80 default clipped every full-screen TUI this terminal exists to
+  // run: vim's split, htop's meters and tmux's status line all ran out of
+  // columns, and a 24-row window hid most of a build log. The session, the
+  // rendered screen the model reads and the spawned pty must all agree on it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-geometry-"));
+  const { factory, processes } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const spawned = processes[0];
+  const spawnSizes: Array<{ rows: number; cols: number }> = [];
+  // Record every spawn's geometry before the fake pty records nothing.
+  const instrumented = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+
+  const byId = await instrumented.start({
+    command: "cat",
+    cwd: root,
+    id: "t_default",
+  });
+  expect(byId.rows).toBe(50);
+  expect(byId.cols).toBe(200);
+  const screenRead = await instrumented.read(byId.id);
+  expect(screenRead.rows).toBe(50);
+  expect(screenRead.cols).toBe(200);
+
+  const sized = await instrumented.start({
+    command: "cat",
+    cwd: root,
+    id: "t_sized",
+    rows: 40,
+    cols: 160,
+  });
+  expect(sized.rows).toBe(40);
+  expect(sized.cols).toBe(160);
+
+  const tiny = await instrumented.start({
+    command: "cat",
+    cwd: root,
+    id: "t_tiny",
+    rows: 0,
+    cols: -3,
+  });
+  // A nonsensical size falls back to the default, never a zero-column pty.
+  expect(tiny.rows).toBe(50);
+  expect(tiny.cols).toBe(200);
+
+  const huge = await instrumented.start({
+    command: "cat",
+    cwd: root,
+    id: "t_huge",
+    rows: 9000,
+    cols: 9000,
+  });
+  // Upper-bounded so a caller cannot allocate an absurd grid.
+  expect(huge.rows).toBe(500);
+  expect(huge.cols).toBe(500);
+  await instrumented.close();
   await controller.close();
 });

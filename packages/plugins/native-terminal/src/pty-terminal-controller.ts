@@ -21,9 +21,34 @@ import type {
 import type { TerminalController } from "@anthelia/runtime-services";
 import { nativeTerminalPaneCommand } from "./native-terminal";
 
-const DEFAULT_ROWS = 24;
-const DEFAULT_COLS = 80;
+/**
+ * The spawn geometry for a terminal nobody sized yet.
+ *
+ * A vt100 24x80 was the old default, and it is too small for the full-screen
+ * TUIs this terminal exists to run: vim's split, htop's meters and tmux's
+ * status line all clip at 80 columns, and a 24-row window hides most of a
+ * build log. The pane a human drags open is routinely 40+ rows and 150+ cols,
+ * and a headless model terminal has no reason to be smaller: the cost is grid
+ * memory (rows * cols cells), not pixels. 50x200 matches the pane and leaves
+ * the room a TUI needs; a caller who knows better still passes rows/cols.
+ */
+const DEFAULT_ROWS = 50;
+const DEFAULT_COLS = 200;
 const MAX_OUTPUT_BYTES = 256 * 1024;
+
+/**
+ * A caller's geometry, or the default when it is absent or nonsense.
+ *
+ * A negative or zero grid is not a small terminal, it is an invalid one — and
+ * spawning at it produces a pty no program can draw into, so it falls back
+ * rather than clamps up to one row. The upper bound stops a caller from
+ * allocating an absurd grid for a screen that does not exist.
+ */
+function clampGeometry(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isInteger(value) || value < 1)
+    return fallback;
+  return Math.min(500, value);
+}
 const DEFAULT_MAX_PER_SESSION = 8;
 const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 
@@ -794,6 +819,14 @@ export function createPtyTerminalController(
     id?: string;
     sessionID?: string;
     agentID?: string;
+    /**
+     * The grid to spawn at. Absent means the default; a human pane resizes the
+     * running terminal the moment it opens, so this matters for headless
+     * (model-only) terminals — which is exactly where "too small to render a
+     * TUI" bites.
+     */
+    rows?: number;
+    cols?: number;
   }) {
     if (closed) throw new Error("terminal controller is closed");
     if (!initialized) await init();
@@ -827,6 +860,11 @@ export function createPtyTerminalController(
     const file = argv[0] ?? "/bin/sh";
     const args = argv.slice(1);
     const id = startInput.id ?? `terminal_${randomUUID()}`;
+    // The one geometry the session, its screen and the spawned pty share. A
+    // caller's rows/cols win; anything absent or nonsensical falls back to the
+    // default rather than spawning a zero-column pty.
+    const rows = clampGeometry(startInput.rows, DEFAULT_ROWS);
+    const cols = clampGeometry(startInput.cols, DEFAULT_COLS);
     const now = Date.now();
     const session: PtySession = {
       id,
@@ -840,14 +878,11 @@ export function createPtyTerminalController(
       geometryOwner: "human",
       secureInput: false,
       attached: true,
-      rows: DEFAULT_ROWS,
-      cols: DEFAULT_COLS,
+      rows,
+      cols,
       revision: 0,
       output: "",
-      screen: createTerminalScreen({
-        rows: DEFAULT_ROWS,
-        cols: DEFAULT_COLS,
-      }),
+      screen: createTerminalScreen({ rows, cols }),
       lastActivityAt: now,
       disposers: [],
     };
@@ -856,8 +891,8 @@ export function createPtyTerminalController(
       file,
       args,
       cwd: startInput.cwd,
-      cols: DEFAULT_COLS,
-      rows: DEFAULT_ROWS,
+      cols,
+      rows,
       env: envRecord(),
     });
     session.pty = pty;

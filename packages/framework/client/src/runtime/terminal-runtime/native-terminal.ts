@@ -154,7 +154,15 @@ export function createNativeTerminalSurface(
     // --- P0-H: the terminal write surface, host-gated at the transport ---
     // Remote callers are treated as model-side actors: ownership, secure-input
     // and geometry arbitration are the same ones the model tools go through.
-    async nativeTerminalStart(input) {
+    async nativeTerminalStart(input: {
+      command: string;
+      cwd?: string;
+      id?: string;
+      sessionID?: string;
+      agentID?: string;
+      rows?: number;
+      cols?: number;
+    }) {
       await ctx.ports.getReady();
       const owner = ctx.ports.getActiveExec();
       const sessionID = input.sessionID ?? owner?.session.id;
@@ -174,6 +182,8 @@ export function createNativeTerminalSurface(
           id: input.id,
           sessionID,
           ...(input.agentID ? { agentID: input.agentID } : {}),
+          ...(input.rows !== undefined ? { rows: input.rows } : {}),
+          ...(input.cols !== undefined ? { cols: input.cols } : {}),
         });
       } catch (error) {
         throw refusalFromRegistry(error);

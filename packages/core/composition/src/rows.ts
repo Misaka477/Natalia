@@ -2,10 +2,8 @@ import {
   CONFINEMENT_COMPOSITION_ROW_ID,
   CONFINEMENT_MODES,
   OBJECTSTORE_COMPOSITION_ROW_ID,
-  RESPONSE_CACHE_COMPOSITION_ROW_ID,
   confinementConfigSchema,
   objectStoreConfigSchema,
-  responseCacheConfigSchema,
 } from "@anthelia/contracts";
 import type { CompositionRowRegistration } from "./profile";
 
@@ -52,21 +50,6 @@ export const compositionRowRegistrations: readonly CompositionRowRegistration[] 
       configSchemaRef: {
         from: "@anthelia/contracts",
         name: "objectStoreConfigSchema",
-      },
-    },
-    {
-      // RINA Phase 4's opt-in: the exact-match provider-response cache,
-      // default-off. impl is empty — this row selects no implementation,
-      // it carries the one boolean the cache's switch reads. Absence in
-      // a profile = false, so no profile changes behavior until a
-      // drop-in says otherwise (the same acceptance the other rows hold).
-      rowID: RESPONSE_CACHE_COMPOSITION_ROW_ID,
-      implIDs: [],
-      legalSummary: "enabled ∈ true | false",
-      configSchema: responseCacheConfigSchema,
-      configSchemaRef: {
-        from: "@anthelia/contracts",
-        name: "responseCacheConfigSchema",
       },
     },
   ];

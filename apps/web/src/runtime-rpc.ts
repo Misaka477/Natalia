@@ -39,10 +39,6 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   configGet: "config.get",
   settingsGet: "settings.get",
   settingsSet: "settings.set",
-  // The response cache's live face. Without this route the method is simply
-  // absent from the client, and the settings panel's row then reads
-  // "未接通" — a click that does nothing at all.
-  responseCache: "cache.response",
   agents: "agent.list",
   selectAgent: "agent.select",
   modelCatalog: "model.catalog",

@@ -333,7 +333,9 @@ test("the write surface is an enumerated, test-pinned list", () => {
   expect(RPC_WRITE_METHODS.has("config.reload")).toBe(true);
   expect(RPC_WRITE_METHODS.has("settings.get")).toBe(false);
   expect(RPC_WRITE_METHODS.has("settings.set")).toBe(true);
-  expect(RPC_WRITE_METHODS.has("cache.response")).toBe(true);
+  // The response cache was removed; its route must not come back as a write
+  // without an explicit decision (and an entry here).
+  expect(RPC_WRITE_METHODS.has("cache.response")).toBe(false);
   expect(RPC_WRITE_METHODS.has("growth.propose")).toBe(true);
   expect(RPC_WRITE_METHODS.has("eval.external_run")).toBe(true);
   expect(RPC_WRITE_METHODS.has("checkpoint.rollback")).toBe(true);

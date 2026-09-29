@@ -9,23 +9,13 @@
 // the declarations-file convention from nixpkgs (spec §6.5).
 
 import type { z } from "zod";
-import type { responseCacheConfigSchema } from "@anthelia/contracts";
 import type { objectStoreConfigSchema } from "@anthelia/contracts";
 import type { confinementConfigSchema } from "@anthelia/contracts";
 
 export type CompositionProfileSchema = "natalia.composition-profile/1";
 
 /** The union a drop-in file's `rows` array accepts — discriminated by id. */
-export type CompositionRow = CacheResponse | Objectstore | Sandbox;
-
-/** origin: registry — @anthelia/contracts.responseCacheConfigSchema */
-export type CacheResponse = {
-  id: "anthelia.cache.response";
-  /** Selectable impls: none — the backend is discovered at runtime, not selected (§6.1). */
-  impl?: never;
-  disabled?: boolean;
-  config?: z.input<typeof responseCacheConfigSchema>;
-};
+export type CompositionRow = Objectstore | Sandbox;
 
 /** origin: registry — @anthelia/contracts.objectStoreConfigSchema */
 export type Objectstore = {

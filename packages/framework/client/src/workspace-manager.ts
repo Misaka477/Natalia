@@ -927,9 +927,8 @@ export function createWorkspaceRuntimeClient(
     "projectionContributions",
     // Workspace-scoped settings faces. Without a route these fell through to
     // the manager's own fallback, which reads `active.client` WITHOUT starting
-    // it — so a click on the panel's response-cache row hit an unstarted (or
-    // absent) workspace and did nothing at all, with no error surfaced.
-    "responseCache",
+    // it — so a click on a panel's settings row hit an unstarted (or absent)
+    // workspace and did nothing at all, with no error surfaced.
     "settingsGet",
     "settingsSet",
   ]);
@@ -1249,11 +1248,10 @@ export function createWorkspaceRuntimeClient(
             // Refuse, do not resolve to undefined: these are the faces a user
             // CLICKS in the settings panel. A silent undefined is
             // indistinguishable from a working runtime that answered "no" —
-            // which is how the response-cache row came to accept a click and
-            // then do nothing at all.
+            // which is how a settings row came to accept a click and then do
+            // nothing at all.
             if (
               prop.startsWith("nativeTerminal") ||
-              prop === "responseCache" ||
               prop === "settingsGet" ||
               prop === "settingsSet"
             )

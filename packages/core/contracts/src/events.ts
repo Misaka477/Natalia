@@ -3641,12 +3641,6 @@ export type RuntimeClient = {
    * sets. The stats answer "is it earning its keep" — the study's
    * metrics, readable without opening the operation log.
    */
-  responseCache?(input?: { enabled?: boolean }): Promise<{
-    enabled: boolean;
-    hits: number;
-    misses: number;
-    entries: number;
-  }>;
   /**
    * Applies the config on disk. Refusal is a value rather than an exception,
    * because refusing is a normal outcome — applying new policy underneath a

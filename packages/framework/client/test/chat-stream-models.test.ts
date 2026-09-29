@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { defaultConfigV3 } from "@anthelia/config";
 import { ContextLedger, TokenMeter } from "@anthelia/runtime";
@@ -12,7 +14,6 @@ import type {
 } from "@anthelia/substrate";
 import type { ProductRuntimeContext } from "@natalia/collab";
 import { createNaviChatTurn } from "@natalia/collab";
-import { createResponseCache, rinaResponseCache } from "@anthelia/rina";
 import { createNiaChatTurn } from "@natalia/collab";
 import { createCollaborationWake } from "@natalia/collab";
 import type { ProviderChatTurnInput } from "@anthelia/provider-model";
@@ -254,94 +255,32 @@ test("Nia normal and Navi expert resolve independent adapters, models and thinki
   }
 });
 
-test("RINA Phase 4: the enabled response cache answers the identical navi request without a provider call", async () => {
-  // The non-main-path exact-match cut (the study: "metrics and non-main-path
-  // exact match first"): the identical request (same session state, same
-  // messages, same tools) answers from the cache the second time — the
-  // provider is not called. Default-off stays untouched by this test.
-  const events: RuntimeEvent[] = [];
-  // The chat turn resolves its provider from the config; an unknown model
-  // falls through to the runtime's chat-default seam, which is where the
-  // counting provider rides in — no network, exact call accounting.
-  const config = defaultConfigV3();
-  config.providers = {} as never;
-  config.catalog.providers = {} as never;
-  let providerCalls = 0;
-  const countingProvider = {
-    async *stream() {
-      providerCalls += 1;
-      yield { type: "content" as const, text: "cached answer" };
-      yield {
-        type: "usage" as const,
-        inputTokens: 10,
-        outputTokens: 2,
-      };
-      yield { type: "done" as const };
-    },
-  };
-  const exec = {
-    session: { id: "ses_response_cache", events },
-    fullEventsLoaded: true,
-    tokenMeter: new TokenMeter(),
-    naviTokenMeter: new TokenMeter(),
-    niaTokenMeter: new TokenMeter(),
-    naviChatLedger: new ContextLedger(),
-    niaChatLedger: new ContextLedger(),
-    naviPendingQueue: [],
-    niaPendingQueue: [],
-    naviChatModelProfile: {
-      normal: { modelID: "expert/expert-model", reasoningEffort: "low" },
-      expert: { modelID: "expert/expert-model", reasoningEffort: "low" },
-    },
-    niaChatModelProfile: { normal: { modelID: "expert/expert-model" } },
-    provider: countingProvider,
-  } as unknown as SessionExecutionState;
-  let sequence = 0;
-  const responseCache = createResponseCache({ enabled: true });
-  const ctx = {
-    state: {
-      serviceDirectory: createTestContext([
-        rinaResponseCache.mock(responseCache),
-      ]),
-    },
-    ports: {
-      getTsRuntimeConfig: () => config,
-      getContextWindowResolver: () => ({
-        resolve: async () => ({ contextWindow: 32768, source: "test" }),
-      }),
-      resolveContextStatusConfig: async () => ({ max: 32768 }),
-      modelRefKeyForSelection: () => undefined,
-      getChatDefaultProvider: () => countingProvider as never,
-      providerFromEnvironment: () => undefined,
-      publishForSession: (_: unknown, event: RuntimeEvent) => {
-        events.push(event);
-      },
-      nextChatSequence: () => sequence++,
-      naviChatPersona: () => "Navi only",
-      naviChatLiveContext: () => "",
-      niaChatPersona: () => "Nia only",
-      niaChatLiveContext: () => "",
-      naviChatTools: () => [],
-      niaChatTools: () => [],
-      effectiveMaxSteps: () => 1,
-      redactToolOutput: (text: string) => text,
-      getWorkspaceRoot: () => "/tmp/kilo",
-    },
-  } as unknown as RuntimeContext;
-  const navi = createNaviChatTurn(ctx);
-  const input = {
-    sessionID: "ses_response_cache" as never,
-    responseMessageID: "navi-chat:1",
-    text: "status?",
-    internal: true,
-    exec,
-  } as never;
-  await navi.runNaviChatTurn(input, new AbortController().signal);
-  // A no-tool turn is one provider call, stored under one key.
-  expect(providerCalls).toBe(1);
-  const afterFirst = events.length;
-  await navi.runNaviChatTurn(input, new AbortController().signal);
-  expect(providerCalls).toBe(1);
-  expect(events.length).toBeGreaterThan(afterFirst);
-  expect(responseCache.stats()).toMatchObject({ hits: 1, misses: 1 });
+test("the navi turn carries no response cache", () => {
+  // The cache was removed: its replay synthesized a content-only stream, so a
+  // hit on a step whose correct behaviour was a tool call ended the turn with a
+  // sentence instead of the work — the whole of this loop's job. A source-level
+  // pin, because the behaviour (a second identical request must reach the
+  // provider again) is otherwise invisible until a cache reappears.
+  const source = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "domains",
+      "collab",
+      "src",
+      "chat-turn-navi.ts",
+    ),
+    "utf8",
+  );
+  for (const symbol of [
+    "rinaResponseCache",
+    "responseCache",
+    "cacheKey",
+    "cacheHit",
+  ])
+    expect(source, `${symbol} must not return to the navi turn`).not.toContain(
+      symbol,
+    );
 });

@@ -428,7 +428,7 @@ test("readCompositionLayer validates one layer before it becomes one", async () 
     const unknownRow = join(dir, "unknown-row.json");
     writeFileSync(unknownRow, envelope([{ id: "anthelia.nope" }]));
     await expect(readCompositionLayer(unknownRow, registry)).rejects.toThrow(
-      /anthelia\.nope.*not a registered composition row \(registered: anthelia\.cache\.response, anthelia\.objectstore, anthelia\.sandbox\)/,
+      /anthelia\.nope.*not a registered composition row \(registered: anthelia\.objectstore, anthelia\.sandbox\)/,
     );
 
     const badEnvelope = join(dir, "bad-envelope.json");

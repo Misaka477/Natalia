@@ -100,7 +100,7 @@ test("the settings and response-cache faces are routed, not silently absent", as
   // state change. These three were not routable, so they fell through to the
   // manager's fallback, which reads an UNSARTED workspace client.
   const client = createWorkspaceRuntimeClient(emptyManager());
-  for (const face of ["responseCache", "settingsGet", "settingsSet"] as const) {
+  for (const face of ["settingsGet", "settingsSet"] as const) {
     expect(
       typeof (client as unknown as Record<string, unknown>)[face],
       `${face} must be reachable on the workspace client`,
@@ -108,9 +108,6 @@ test("the settings and response-cache faces are routed, not silently absent", as
   }
   // And they reject loudly rather than resolving to nothing, so the panel can
   // report the failure instead of accepting a click and doing nothing.
-  await expect(client.responseCache?.({ enabled: true })).rejects.toThrow(
-    "no active workspace",
-  );
   await expect(client.settingsGet?.()).rejects.toThrow("no active workspace");
 });
 

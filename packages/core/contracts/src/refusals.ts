@@ -150,11 +150,6 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "an invalid patch or unwritable file leaves no safe partial write",
   },
-  responseCache: {
-    refusal: "value",
-    expressedBy: "enabled",
-    note: "the flip always lands (a cache is always toggleable); the answer's `enabled` is the process's new state — process-local, not persisted",
-  },
 
   // --- selection ---
   agents: { refusal: "none", note: "pure read" },

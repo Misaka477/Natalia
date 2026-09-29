@@ -23,21 +23,14 @@ test("the panel derives a config writer instead of waiting for one", () => {
   expect(source).not.toMatch(/props\.onUpdateConfig\?\./u);
 });
 
-test("an action that does not write config is not gated on the writer", () => {
-  // The response cache flips the runtime's live switch; it has nothing to do
-  // with the config file, so gating it on a config writer was simply wrong.
-  const gate = source.slice(
-    source.indexOf('updateConfig || item.label === "Response Cache"') - 200,
-    source.indexOf('updateConfig || item.label === "Response Cache"') + 80,
-  );
-  expect(gate).toContain('item.label === "Response Cache"');
-});
-
-test("an unwired runtime face is reported, never silently ignored", () => {
-  // The cache row used to accept a click and do nothing. It now checks the face
-  // exists and writes the failure into the value cell.
-  expect(source).toContain("typeof props.runtime?.responseCache");
-  expect(source).toContain("responseCacheError()");
+test("the panel derives a config writer instead of waiting for one", () => {
+  // The app mounts WorkspaceSettingsPanel WITHOUT onUpdateConfig (it passes only
+  // the runtime), and every config row's clickable branch was gated on that
+  // prop — so compaction, the threshold, the terminal mode, max steps and max
+  // retry all rendered as inert spans. The runtime carries `config.update`.
+  expect(source).toContain("props.runtime?.updateConfig");
+  // The writer must feed the rows' own writes, not a parallel path.
+  expect(source).not.toMatch(/props\.onUpdateConfig\?\./u);
 });
 
 test("every row that writes config derives its writer, inline gates included", () => {
@@ -50,14 +43,6 @@ test("every row that writes config derives its writer, inline gates included", (
   expect(source).toMatch(
     /item\.label === "Terminal Window Mode" &&\s*updateConfig &&/u,
   );
-});
-
-test("a config write re-reads the runtime rather than trusting the snapshot", () => {
-  // The panel's config prop is a snapshot taken at open; a compose-time row
-  // changes the live runtime, not that snapshot, so the value cell must be fed
-  // the runtime's own answer.
-  expect(source).toContain("props.runtime?.configGet?.()");
-  expect(source).toContain("props.onConfig?.");
 });
 
 test("the panel reads the runtime's config itself instead of trusting the app's snapshot", () => {

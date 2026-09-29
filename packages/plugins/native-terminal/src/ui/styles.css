@@ -178,9 +178,25 @@
 .terminal-xterm-host[data-active="true"] {
   display: flex;
 }
+/*
+ * The xterm host's box must be layout-driven, never content-driven.
+ *
+ * `min-width: auto` (the flex default) makes a flex item refuse to shrink below
+ * its min-content width — and xterm's min-content width IS its rendered width
+ * (columns * cell). So the moment the pane widened and xterm refitted, the
+ * host's own floor rose with it and the pane could never narrow back: the
+ * split cell could not shrink below the host, and the host could not shrink
+ * below the terminal it contained. `min-width: 0` breaks that loop, and the
+ * explicit `width/height: 100%` makes the host's box equal the cell's box, so
+ * the ResizeObserver that refits the terminal sees the pane's geometry rather
+ * than the terminal's own feedback.
+ */
 .web-terminal {
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   padding: 8px;
   border-radius: 10px;
   overflow: hidden;

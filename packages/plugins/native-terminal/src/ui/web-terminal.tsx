@@ -356,7 +356,13 @@ export function WebTerminal(props: WebTerminalProps) {
       if (!props.active) return;
       fitSafely();
     });
+    // The host's own box is content-sized in the width direction, so a pane
+    // that narrows can move the host's floor without moving its measured box.
+    // The split cell around it is pane-driven (flex, min-width 0), so watching
+    // it too means a pane change always triggers a refit.
     hostObserver.observe(host);
+    const pane = host.parentElement;
+    if (pane) hostObserver.observe(pane);
     // The observer only fires on a CHANGE. When the pane was already final
     // before the terminal mounted (a tab re-shown rather than first opened),
     // the mount-time fit is the only chance — and it may have bailed on a

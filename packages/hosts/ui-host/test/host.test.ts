@@ -396,6 +396,52 @@ test("remounting the same panel key disposes the previous panel first", async ()
   await host.close();
 });
 
+test("remounting a panel into the same container replaces its DOM", async () => {
+  // The field report: the terminal occupied exactly half the sidebar's height
+  // and the console showed the panel's cleanup running. The host disposed the
+  // previous panel (its listeners) but never cleared the container it mounted
+  // into, so every re-mount APPENDED a second root. The mount slot is a flex
+  // column, so two pane roots split the height between them — the terminal got
+  // ~597px of a 1193px sidebar and the rest went to the stale copy's empty box.
+  const root = fakeRoot();
+  const fixture = runtimeFixture();
+  const disposals: string[] = [];
+  const plugin = defineUiPlugin({
+    id: "panels.web",
+    name: "Panels",
+    version: "1.0.0",
+    panels: [
+      {
+        id: "chat",
+        title: "Chat",
+        region: "side",
+        mount: (ctx, container) => {
+          container.appendChild(fakeRoot());
+          return () => {
+            disposals.push("chat");
+          };
+        },
+      },
+    ],
+    mount: () => undefined,
+  });
+  const host = await createUiPluginHost({ root, runtime: fixture.runtime });
+  await host.load(plugin);
+
+  // The web shell's side panel is keyed and re-mounts into the SAME element on
+  // every activation, so the container is reused rather than replaced.
+  const container = fakeRoot();
+  await host.mountPanel("panels.web", "chat", container);
+  expect(container.children).toHaveLength(1);
+  await host.mountPanel("panels.web", "chat", container);
+  expect(container.children).toHaveLength(1);
+  await host.mountPanel("panels.web", "chat", container);
+  expect(container.children).toHaveLength(1);
+  // Disposal still happens once per replaced panel.
+  expect(disposals).toEqual(["chat", "chat"]);
+  await host.close();
+});
+
 /** A runtime whose catalog declares panels (the arm source). */
 function catalogRuntimeFixture(
   catalog: Array<{

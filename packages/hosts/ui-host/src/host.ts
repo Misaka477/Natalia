@@ -530,6 +530,14 @@ export async function createUiPluginHost<TContext = unknown>(
       const existing = mountedPanels.get(key);
       existing?.dispose?.();
       existing?.lifecycle?.dispose?.();
+      // The container is the host's element, and the shell re-mounts into the
+      // SAME one on every activation. Disposing a panel unwires its listeners
+      // and timers; it does not remove the DOM it appended, so without this a
+      // re-mount stacks a second root inside the slot. The slot is a flex
+      // column, so the panes then split the sidebar's height between them —
+      // the field report was a terminal occupying exactly half of a 1193px
+      // sidebar, the other half going to a stale copy that painted nothing.
+      container.replaceChildren();
       const dispose = (await panel.mount(
         ctxFor(entry.record.plugin),
         container,

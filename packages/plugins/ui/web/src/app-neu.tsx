@@ -3014,7 +3014,18 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     container: HTMLDivElement,
   ) {
     if (!props.ctx.host) return;
-    void props.ctx.host.mountPanel(item.pluginId, item.panel.id, container);
+    // The mount races the plugin catalog: a panel whose plugin is still loading
+    // throws "ui plugin not loaded", and an unhandled rejection is noise in the
+    // console. The catalog's revision change re-renders this slot and retries,
+    // so a miss here is expected once — it must be visible, not fatal.
+    void props.ctx.host
+      .mountPanel(item.pluginId, item.panel.id, container)
+      .catch((error: unknown) => {
+        console.warn(
+          `[panel] ${item.pluginId}:${item.panel.id} mount deferred:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      });
   }
 
   const topbarPanels = () => {

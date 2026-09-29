@@ -151,6 +151,8 @@ export const RPC_ROUTE_MEMBERS = {
   "settings.get": "settingsGet",
   "settings.set": "settingsSet",
   "cache.response": "responseCache",
+  "skill.setEnabled": "skillSetEnabled",
+  "skill.remove": "skillRemove",
   "agent.list": "agents",
   "agent.select": "selectAgent",
   "model.catalog": "modelCatalog",
@@ -409,6 +411,8 @@ export const RPC_WRITE_METHODS: ReadonlySet<string> = new Set([
   // Both faces: the same route reads (no params) and flips (`enabled`), so
   // it is a write for a read-only credential.
   "cache.response",
+  "skill.setEnabled",
+  "skill.remove",
   // growth.propose journals the proposal fact (proposals are records).
   "growth.propose",
   // eval.external_run journals the join fact.
@@ -3772,6 +3776,50 @@ export async function handleRPCMessage(
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: await client.settingsGet?.(),
+      };
+    }
+    if (body.method === "skill.setEnabled") {
+      optionsGuard(client, "skillSetEnabled");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("skill.setEnabled.params must be an object");
+      const name = (params as { name?: unknown }).name;
+      const enabled = (params as { enabled?: unknown }).enabled;
+      if (typeof name !== "string" || !name)
+        throw invalidParams("skill.setEnabled.params.name must be a string");
+      if (typeof enabled !== "boolean")
+        throw invalidParams(
+          "skill.setEnabled.params.enabled must be a boolean",
+        );
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.skillSetEnabled?.({
+          name,
+          enabled,
+          ...(optionalStringParam(body.params, "workspaceID")
+            ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
+            : {}),
+        }),
+      };
+    }
+    if (body.method === "skill.remove") {
+      optionsGuard(client, "skillRemove");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("skill.remove.params must be an object");
+      const name = (params as { name?: unknown }).name;
+      if (typeof name !== "string" || !name)
+        throw invalidParams("skill.remove.params.name must be a string");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.skillRemove?.({
+          name,
+          ...(optionalStringParam(body.params, "workspaceID")
+            ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
+            : {}),
+        }),
       };
     }
     if (body.method === "cache.response") {

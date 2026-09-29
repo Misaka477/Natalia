@@ -2822,6 +2822,8 @@ export type RuntimeAgentCatalogEntry = {
 };
 export type RuntimeSkillCatalogEntry = {
   name: string;
+  /** The workspace's switch; a disabled skill is listed but refused by resolve. */
+  enabled: boolean;
   qualifiedName: string;
   description: string;
   source: "project" | "user" | "remote" | "plugin";
@@ -3699,6 +3701,17 @@ export type RuntimeClient = {
   skills?(input?: {
     workspaceID?: string;
   }): Promise<RuntimeSkillCatalogEntry[]>;
+  /** The settings panel's switch: a disabled skill stays listed but is refused. */
+  skillSetEnabled?(input: {
+    name: string;
+    enabled: boolean;
+    workspaceID?: string;
+  }): Promise<{ name: string }>;
+  /** Deletes a workspace-owned skill (project/user); other sources refuse. */
+  skillRemove?(input: {
+    name: string;
+    workspaceID?: string;
+  }): Promise<{ removed: string }>;
   workspaceFiles?(input?: {
     workspaceID?: string;
     query?: string;

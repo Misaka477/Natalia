@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
@@ -6,6 +7,7 @@ import {
   authorizeSkillTool,
   createSkillLoadTool,
   discoverSkills,
+  SkillRegistry,
   formatSkillForModel,
   pullRemoteSkills,
   readSkillResource,
@@ -411,4 +413,80 @@ test("a project root overrides a plugin skill of the same name", async () => {
       .sort(),
   ).toEqual(["plugin:shared", "project:shared"]);
   expect(registry.resolve("shared").source).toBe("project");
+});
+
+test("the workspace's disabled set turns a skill off and back on", async () => {
+  // The settings panel's switch: a disabled skill stays listed (so it can be
+  // switched back on) but resolve refuses it, so the model can neither load nor
+  // run it. Both halves matter — a skill that vanishes cannot be re-enabled.
+  const root = await mkdtemp(join(tmpdir(), "natalia-skill-toggle-"));
+  await mkdir(join(root, ".natalia", "skills", "alpha"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "skills", "alpha", "SKILL.md"),
+    '---\nname: alpha\ndescription: "A"\n---\n\nbody\n',
+  );
+  await mkdir(join(root, ".natalia", "skills", "beta"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "skills", "beta", "SKILL.md"),
+    '---\nname: beta\ndescription: "B"\n---\n\nbody\n',
+  );
+  const registry = new SkillRegistry();
+  await registry.reload({ workspaceRoot: root });
+  expect(registry.list().map((skill) => skill.name)).toEqual(["alpha", "beta"]);
+  expect(() => registry.resolve("beta")).not.toThrow();
+
+  await registry.setSkillEnabled("beta", false);
+
+  // Still listed, but refused.
+  expect(registry.list().map((skill) => skill.name)).toEqual(["alpha", "beta"]);
+  expect(registry.list().find((skill) => skill.name === "beta")!.enabled).toBe(
+    false,
+  );
+  expect(() => registry.resolve("beta")).toThrow(/disabled/);
+  expect(() => registry.resolve("alpha")).not.toThrow();
+
+  // Durable: a fresh registry (a restart) reads the same set.
+  const reopened = new SkillRegistry();
+  await reopened.reload({ workspaceRoot: root });
+  expect(reopened.list().find((skill) => skill.name === "beta")!.enabled).toBe(
+    false,
+  );
+
+  // And back on.
+  await reopened.setSkillEnabled("beta", true);
+  expect(() => reopened.resolve("beta")).not.toThrow();
+});
+
+test("removing a skill deletes it, and refuses a source it does not own", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-skill-remove-"));
+  await mkdir(join(root, ".natalia", "skills", "mine"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "skills", "mine", "SKILL.md"),
+    '---\nname: mine\ndescription: "M"\n---\n\nbody\n',
+  );
+  const registry = new SkillRegistry();
+  await registry.reload({ workspaceRoot: root });
+
+  await registry.removeSkill("mine");
+  expect(registry.list().map((skill) => skill.name)).not.toContain("mine");
+  expect(existsSync(join(root, ".natalia", "skills", "mine"))).toBe(false);
+
+  // A plugin's skill ships with the plugin: removing it would be undone by the
+  // next reload (or would corrupt the install), so it is refused with the
+  // reason rather than deleting files it does not own.
+  const pluginDir = join(root, "plugin-skills");
+  await mkdir(join(pluginDir, "shipped"), { recursive: true });
+  await writeFile(
+    join(pluginDir, "shipped", "SKILL.md"),
+    '---\nname: shipped\ndescription: "S"\n---\n\nbody\n',
+  );
+  const withPlugin = new SkillRegistry();
+  await withPlugin.reload({ workspaceRoot: root, pluginDirs: [pluginDir] });
+  const shipped = withPlugin.list().find((skill) => skill.name === "shipped")!;
+  expect(shipped.source).toBe("plugin");
+  await expect(withPlugin.removeSkill("shipped")).rejects.toThrow(
+    /cannot remove a plugin skill/,
+  );
+  // The refusal is a refusal: the files are still there.
+  expect(existsSync(join(pluginDir, "shipped", "SKILL.md"))).toBe(true);
 });

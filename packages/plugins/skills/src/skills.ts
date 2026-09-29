@@ -28,6 +28,47 @@ import type {
 export type Skill = SkillMetadata;
 
 /**
+ * The workspace's durable "these skills are off" set, as a sibling of the
+ * skills directory itself. A disabled skill is still discovered and listed —
+ * the settings panel shows it with its switch off — but `resolve` refuses it,
+ * so the model can neither load nor run it.
+ */
+function disabledSkillsPath(workspaceRoot: string): string {
+  return join(resolve(workspaceRoot), ".natalia", "skills-disabled.json");
+}
+
+async function readDisabledSkills(workspaceRoot: string): Promise<Set<string>> {
+  try {
+    const raw = JSON.parse(
+      await readFile(disabledSkillsPath(workspaceRoot), "utf8"),
+    ) as unknown;
+    return new Set(
+      Array.isArray(raw)
+        ? raw.filter((name): name is string => typeof name === "string")
+        : [],
+    );
+  } catch {
+    // Absent (the common case) or unreadable: nothing is disabled. A corrupt
+    // file must not take every skill down with it.
+    return new Set();
+  }
+}
+
+async function writeDisabledSkills(
+  workspaceRoot: string,
+  names: Set<string>,
+): Promise<void> {
+  const path = disabledSkillsPath(workspaceRoot);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  // Written atomically: a half-written set would silently disable skills.
+  const temp = `${path}.${process.pid}.tmp`;
+  await writeFile(temp, `${JSON.stringify([...names].sort(), null, 2)}\n`, {
+    mode: 0o600,
+  });
+  await rename(temp, path);
+}
+
+/**
  * An integrity failure (a declared digest did not match the bytes) is not
  * a transient fetch failure: it never degrades silently, even with a
  * cached skill present. The pull's catch keeps the old skill for network
@@ -74,6 +115,8 @@ export class SkillRegistry implements SkillService {
    * silently forget user/remote skills).
    */
   origin?: SkillDiscoverInput;
+  /** The workspace's durable off-switch, stamped onto every discovered skill. */
+  disabled: Set<string> = new Set();
 
   register(skill: Skill) {
     if (this.skills.has(skill.qualifiedName))
@@ -85,10 +128,15 @@ export class SkillRegistry implements SkillService {
 
   resolve(name: string) {
     const direct = this.skills.get(name);
-    if (direct) return direct;
-    const selected = this.selected.get(name);
-    if (!selected) throw new Error(`skill not found: ${name}`);
-    return selected;
+    const skill = direct ?? this.selected.get(name);
+    if (!skill) throw new Error(`skill not found: ${name}`);
+    // A disabled skill is listed, not usable: the model's load and the tool's
+    // authorize both go through resolve, so one refusal covers both.
+    if (!skill.enabled)
+      throw new Error(
+        `skill is disabled: ${name} (enable it in the settings panel)`,
+      );
+    return skill;
   }
 
   list() {
@@ -126,6 +174,37 @@ export class SkillRegistry implements SkillService {
     return { created: !existed, name: proposal.name };
   }
 
+  async setSkillEnabled(
+    name: string,
+    enabled: boolean,
+  ): Promise<{ name: string }> {
+    if (!this.origin?.workspaceRoot)
+      throw new Error("skill registry has no workspace origin");
+    if (![...this.skills.values()].some((skill) => skill.name === name))
+      throw new Error(`skill not found: ${name}`);
+    const next = new Set(this.disabled);
+    if (enabled) next.delete(name);
+    else next.add(name);
+    await writeDisabledSkills(this.origin.workspaceRoot, next);
+    await this.reload(this.origin);
+    return { name };
+  }
+
+  async removeSkill(name: string): Promise<{ removed: string }> {
+    const skill = [...this.skills.values()].find((item) => item.name === name);
+    if (!skill) throw new Error(`skill not found: ${name}`);
+    // Only a workspace-owned skill can be removed: a plugin's skill ships with
+    // the plugin and a remote one is pulled into a cache, so deleting either
+    // would be undone by the next reload (or would corrupt the plugin).
+    if (skill.source !== "project" && skill.source !== "user")
+      throw new Error(
+        `cannot remove a ${skill.source} skill: it ships with its ${skill.source} source`,
+      );
+    await rm(skill.root, { recursive: true, force: true });
+    if (this.origin) await this.reload(this.origin);
+    return { removed: name };
+  }
+
   async reload(input: {
     workspaceRoot: string;
     userRoot?: string;
@@ -137,6 +216,11 @@ export class SkillRegistry implements SkillService {
     const next = await discoverSkills(input);
     this.skills = next.skills;
     this.selected = next.selected;
+    // The origin is what the write faces need, and reload IS the discovery
+    // operation — a registry built by reload must be as usable as one built by
+    // discoverSkills, or its writes have no root to write to.
+    this.origin = { ...input };
+    this.disabled = next.disabled;
   }
 
   authorizeTool(skill: Skill, tool: string, policy: SkillPolicy) {
@@ -178,6 +262,12 @@ export async function discoverSkills(input: SkillDiscoverInput) {
     "project",
   );
   registry.origin = { ...input };
+  // The switch: whatever the workspace turned off reads disabled, while staying
+  // listed so the panel can switch it back on.
+  const disabled = await readDisabledSkills(input.workspaceRoot);
+  registry.disabled = disabled;
+  for (const skill of registry.list())
+    skill.enabled = !disabled.has(skill.name);
   return registry;
 }
 
@@ -199,6 +289,9 @@ export function parseSkill(
   return {
     qualifiedName: `${input.source}:${name}`,
     name,
+    // Enabled unless the workspace's disabled set says otherwise; discoverSkills
+    // narrows it after reading the set.
+    enabled: true,
     description,
     allowedTools: listValue(frontmatter["allowed-tools"]),
     requireApproval: boolValue(frontmatter["require-approval"]),

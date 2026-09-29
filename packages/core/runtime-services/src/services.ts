@@ -106,6 +106,13 @@ export type TerminalInput = TerminalControllerInput;
 
 export type SkillMetadata = {
   name: string;
+  /**
+   * Whether the skill may be used. A disabled skill is still discovered and
+   * listed (so a settings panel can show it and switch it back on), but
+   * `resolve` refuses it, so the model can neither load nor run it. The switch
+   * is per-workspace and durable.
+   */
+  enabled: boolean;
   description: string;
   allowedTools: string[];
   requireApproval: boolean;
@@ -138,6 +145,17 @@ export interface SkillService {
    * proposals throw with the reason.
    */
   upsertSkill(candidate: unknown): Promise<{ created: boolean; name: string }>;
+  /**
+   * The settings panel's switch: a disabled skill stays listed (so it can be
+   * re-enabled) but `resolve` refuses it. Durable per workspace.
+   */
+  setSkillEnabled(name: string, enabled: boolean): Promise<{ name: string }>;
+  /**
+   * Deletes the skill's directory. Only a workspace-owned skill (project or
+   * user source) can be removed: a plugin's skill ships with the plugin and a
+   * remote one is pulled, so removing either is refused with the reason.
+   */
+  removeSkill(name: string): Promise<{ removed: string }>;
   authorizeTool(
     skill: SkillMetadata,
     tool: string,

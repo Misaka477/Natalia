@@ -3619,6 +3619,46 @@ button.neu-settings-item.neu-settings-item-button:active {
 .neu-extension-toggle[data-enabled="false"] {
   color: var(--neu-error);
 }
+/*
+ * The skill row's switch (iOS shape): a pill with a knob, so "off" is a
+ * position, not a colour. The pill's own track colour follows the state; the
+ * knob slides. A disabled attribute keeps the busy row from being toggled
+ * twice.
+ */
+.neu-extension-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow:
+    inset 2px 2px 4px var(--neu-shadow-dark),
+    inset -2px -2px 4px var(--neu-shadow-light);
+}
+.neu-extension-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.neu-extension-switch-knob {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--neu-muted);
+  transition: transform 120ms ease;
+}
+.neu-extension-switch[data-enabled="true"] {
+  color: var(--neu-success);
+}
+.neu-extension-switch[data-enabled="true"] .neu-extension-switch-knob {
+  background: var(--neu-success);
+  transform: translateX(2px);
+}
 .neu-extension-actions {
   display: flex;
   justify-content: flex-end;

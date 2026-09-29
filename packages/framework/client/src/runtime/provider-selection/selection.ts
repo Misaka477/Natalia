@@ -1,4 +1,5 @@
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
+import { skillService } from "@anthelia/runtime-services";
 import { modelRefKey, parseModelRef } from "@anthelia/contracts";
 import { nextContextInstructionsRevision } from "@anthelia/session";
 import { discoverProviderModels, updateConfigAtScope } from "@anthelia/config";
@@ -16,6 +17,8 @@ type Surface = Pick<
   | "reasoningEffort"
   | "setReasoningEffort"
   | "skills"
+  | "skillSetEnabled"
+  | "skillRemove"
   | "agentCreate"
   | "agentUpdate"
   | "agentDelete"
@@ -189,12 +192,29 @@ export function createSelectionSurface(
       await ctx.ports.getReady();
       return ctx.ports.skillsList().map((skill) => ({
         name: skill.name,
+        enabled: skill.enabled,
         qualifiedName: skill.qualifiedName,
         description: skill.description,
         source: skill.source,
         requireApproval: skill.requireApproval,
         sandboxRequired: skill.sandboxRequired,
       }));
+    },
+    async skillSetEnabled(input: {
+      name: string;
+      enabled: boolean;
+      workspaceID?: string;
+    }) {
+      await ctx.ports.getReady();
+      const services = ctx.state.serviceDirectory.getOptional(skillService);
+      if (!services) throw new Error("skill service is unavailable");
+      return await services.setSkillEnabled(input.name, input.enabled);
+    },
+    async skillRemove(input: { name: string; workspaceID?: string }) {
+      await ctx.ports.getReady();
+      const services = ctx.state.serviceDirectory.getOptional(skillService);
+      if (!services) throw new Error("skill service is unavailable");
+      return await services.removeSkill(input.name);
     },
     async agentCreate(input) {
       await ctx.ports.getReady();

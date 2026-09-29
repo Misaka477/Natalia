@@ -180,6 +180,17 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     note: "an unsupported effort or unavailable session leaves no partial state change",
   },
   skills: { refusal: "none", note: "pure read" },
+  // The workspace's own switch and its own files: a miss is an error naming the
+  // skill (not found, or a source it does not own), never a silent no-op — the
+  // settings panel shows the reason instead of pretending the click worked.
+  skillSetEnabled: {
+    refusal: "error",
+    note: "a name that is not a skill, or a registry without a workspace origin, throws with the reason",
+  },
+  skillRemove: {
+    refusal: "error",
+    note: "a name that is not a skill, or a plugin/remote source the workspace does not own, throws with the reason",
+  },
 
   // --- workspace ---
   workspaceFiles: { refusal: "none", note: "pure read of the catalog" },

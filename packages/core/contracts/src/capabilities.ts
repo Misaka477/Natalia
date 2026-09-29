@@ -126,6 +126,8 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "reasoningEffort",
     "setReasoningEffort",
     "skills",
+    "skillSetEnabled",
+    "skillRemove",
     "agentCreate",
     "agentUpdate",
     "agentDelete",

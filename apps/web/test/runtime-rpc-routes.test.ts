@@ -41,3 +41,11 @@ test("the settings panel's cache row can reach the method it flips", () => {
     typeof (RPC_METHOD_ROUTES as Record<string, unknown>).responseCache,
   ).toBe("string");
 });
+
+test("the skill panel's switch and remove have web routes", () => {
+  // The panel shipped with a hardcoded, non-interactive toggle (a span) and a
+  // disabled delete button. The faces now exist; without the routes they would
+  // be just as dead as the buttons were.
+  expect(RPC_METHOD_ROUTES.skillSetEnabled).toBe("skill.setEnabled");
+  expect(RPC_METHOD_ROUTES.skillRemove).toBe("skill.remove");
+});

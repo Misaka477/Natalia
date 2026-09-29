@@ -52,6 +52,8 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   reasoningEffort: "model.reasoning",
   setReasoningEffort: "model.reasoning.set",
   skills: "skills.list",
+  skillSetEnabled: "skill.setEnabled",
+  skillRemove: "skill.remove",
   workspaceFiles: "workspace.files",
   workspaceSearch: "workspace.search",
   workspaceList: "workspace.list",

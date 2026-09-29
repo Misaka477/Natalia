@@ -1299,6 +1299,7 @@ test("runtime skill catalog exposes discovery metadata without skill body", asyn
   expect(await client.skills?.()).toEqual([
     {
       name: "release",
+      enabled: true,
       qualifiedName: "project:release",
       description: "Prepare release evidence",
       source: "project",

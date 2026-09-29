@@ -75,6 +75,7 @@ test("SDK uses the TS RPC transport rather than runtime internals", async () => 
       return [
         {
           name: "release",
+          enabled: true,
           qualifiedName: "project:release",
           description: "Prepare release evidence",
           source: "project",

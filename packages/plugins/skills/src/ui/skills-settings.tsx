@@ -5,6 +5,17 @@ import type {
 } from "@anthelia/contracts";
 import type { UiEventBus } from "@natalia/ui-host";
 
+/**
+ * The skill panel: list, switch, remove.
+ *
+ * The switch and the remove are the workspace's own two write faces
+ * (`skill.setEnabled` / `skill.remove`) — a disabled skill stays LISTED with its
+ * switch off, because `resolve` refuses it (so the model can neither load nor
+ * run it) while the panel must still be able to switch it back on. Removing is
+ * refused for a source the workspace does not own (a plugin's skill ships with
+ * the plugin; a remote one is pulled), and the refusal's reason is shown rather
+ * than swallowed.
+ */
 export function SkillsSettings(props: {
   runtime: RuntimeClient;
   events: UiEventBus;
@@ -14,6 +25,7 @@ export function SkillsSettings(props: {
   const [source, setSource] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal("");
+  const [pending, setPending] = createSignal<string | undefined>();
 
   async function refresh() {
     const next = await props.runtime.skills?.();
@@ -43,8 +55,57 @@ export function SkillsSettings(props: {
       setSource("");
       setAdding(false);
       setStatus("已提交安装，技能安装完成后会自动刷新列表");
+    } catch (error) {
+      // The install is a command; a refusal names its reason.
+      setStatus(
+        `安装失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setBusy(false);
+      void refresh();
+    }
+  }
+
+  async function toggle(skill: RuntimeSkillCatalogEntry) {
+    if (busy()) return;
+    setBusy(true);
+    setPending(skill.name);
+    setStatus("");
+    try {
+      await props.runtime.skillSetEnabled?.({
+        name: skill.name,
+        enabled: !skill.enabled,
+      });
+      // The registry reloaded behind the call, so re-read rather than flip
+      // locally: the value must be the runtime's, not the panel's guess.
+      await refresh();
+    } catch (error) {
+      setStatus(
+        `${skill.name} 切换失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setBusy(false);
+      setPending(undefined);
+    }
+  }
+
+  async function remove(skill: RuntimeSkillCatalogEntry) {
+    if (busy()) return;
+    setBusy(true);
+    setPending(skill.name);
+    setStatus("");
+    try {
+      await props.runtime.skillRemove?.({ name: skill.name });
+      setStatus(`已删除 ${skill.name}`);
+      await refresh();
+    } catch (error) {
+      // A plugin-sourced skill refuses: the reason is the answer, so show it.
+      setStatus(
+        `${skill.name} 删除失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setBusy(false);
+      setPending(undefined);
     }
   }
 
@@ -66,20 +127,39 @@ export function SkillsSettings(props: {
       >
         <For each={skills()}>
           {(skill) => (
-            <div class="neu-extension-row">
+            <div class="neu-extension-row" data-enabled={skill.enabled}>
               <span class="neu-extension-name">{skill.name}</span>
               <span class="neu-extension-description">
                 {skill.description || skill.source}
               </span>
-              <span class="neu-extension-toggle" data-enabled={true}>
-                已启用
-              </span>
+              {/* The switch: a real button, so a click is never swallowed. Its
+                  state is the runtime's answer, and the label says both. */}
+              <button
+                type="button"
+                class="neu-extension-switch"
+                data-enabled={skill.enabled}
+                role="switch"
+                aria-checked={skill.enabled}
+                aria-label={`${skill.enabled ? "停用" : "启用"} ${skill.name}`}
+                disabled={busy() && pending() === skill.name}
+                onClick={() => void toggle(skill)}
+              >
+                <span class="neu-extension-switch-knob" />
+                <span class="neu-extension-switch-text">
+                  {pending() === skill.name && busy()
+                    ? "…"
+                    : skill.enabled
+                      ? "已启用"
+                      : "已停用"}
+                </span>
+              </button>
               <button
                 type="button"
                 class="neu-extension-btn neu-extension-remove"
-                disabled={true}
+                disabled={busy() && pending() === skill.name}
+                onClick={() => void remove(skill)}
               >
-                删除
+                {pending() === skill.name && busy() ? "…" : "删除"}
               </button>
             </div>
           )}

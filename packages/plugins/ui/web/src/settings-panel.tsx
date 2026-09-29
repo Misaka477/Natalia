@@ -340,6 +340,13 @@ export function SettingsPanel(props: {
   };
   registeredTools?: RegisteredToolView[];
   onUpdateConfig?: (patch: Record<string, unknown>) => unknown;
+  /**
+   * The runtime's own answer after a write. The panel's `config` prop is a
+   * snapshot; a write that changes the live runtime (a compose-time row versus
+   * this process) makes the snapshot stale, and re-reading puts the value cell
+   * back on what IS rather than what was passed in.
+   */
+  onConfig?: (config: Record<string, unknown>) => void;
   runtime?: RuntimeClient;
   host?: import("@natalia/ui-host").UiPluginContext["host"];
 }) {
@@ -369,6 +376,28 @@ export function SettingsPanel(props: {
           props.runtime?.updateConfig?.(patch as never)
       : undefined);
   const [responseCacheError, setResponseCacheError] = createSignal<string>();
+  /** A config write's failure, shown in the panel rather than swallowed. */
+  const [configError, setConfigError] = createSignal<string>();
+  /**
+   * The one config write path. A refused or failed patch reports itself: the
+   * row shows the reason and the panel re-reads the runtime's own answer,
+   * because a local config object and the live runtime can disagree (the
+   * compose-time row versus this process) and the value cell must show what IS.
+   */
+  async function writeConfig(patch: Record<string, unknown>) {
+    console.log("[settings] config write ->", patch);
+    try {
+      await updateConfig?.(patch);
+      const next = await props.runtime?.configGet?.();
+      console.log("[settings] config write <-", next);
+      if (next) props.onConfig?.(next as never);
+    } catch (error) {
+      console.log("[settings] config write FAILED", error);
+      setConfigError(
+        `写入失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   onMount(() => {
     // A missing face must say so: `runtime?.responseCache?.()` is silent when
     // the workspace client does not expose the method, and a settings row that
@@ -623,11 +652,18 @@ export function SettingsPanel(props: {
     },
     "Response Cache": () => {
       const next = !(responseCache()?.enabled ?? false);
-      // The flip is process-local (not persisted): the answer's state is
-      // the new truth, and the value cell shows it.
+      // The flip is process-local (not persisted): the answer's state is the
+      // new truth, and the value cell shows it. A refusal must be visible —
+      // this row has already shipped twice as a click that does nothing, and
+      // both times the reason was silent.
       void props.runtime
         ?.responseCache?.({ enabled: next })
-        .then(setResponseCache);
+        .then(setResponseCache)
+        .catch((error: unknown) =>
+          setResponseCacheError(
+            `切换失败：${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
     },
     "Permission Profile": () => {
       setPermissionListOpen(true);
@@ -1016,7 +1052,7 @@ export function SettingsPanel(props: {
                       }
                       if (
                         item.label === "Compaction" &&
-                        props.onUpdateConfig &&
+                        updateConfig &&
                         props.config
                       ) {
                         return (
@@ -1026,7 +1062,8 @@ export function SettingsPanel(props: {
                             onClick={() => {
                               const next =
                                 !props.config?.context?.compactionEnabled;
-                              updateConfig?.({
+                              setConfigError("");
+                              void writeConfig({
                                 context: {
                                   ...props.config?.context,
                                   compactionEnabled: next,
@@ -1048,7 +1085,7 @@ export function SettingsPanel(props: {
                       }
                       if (
                         item.label === "Terminal Window Mode" &&
-                        props.onUpdateConfig &&
+                        updateConfig &&
                         props.config
                       ) {
                         return (

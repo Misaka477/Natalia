@@ -4540,6 +4540,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           const next = await props.ctx.runtime.configGet?.();
           if (next) setConfig(next);
         }}
+        // The runtime's own answer after a write: the panel's `config` prop is a
+        // snapshot, and a compose-time row changes the live runtime rather than
+        // that snapshot, so the re-read keeps the value cell honest.
+        onConfig={(next) => setConfig(next as unknown as ConfigV3)}
       />
       {dialog}
     </div>

@@ -39,3 +39,23 @@ test("an unwired runtime face is reported, never silently ignored", () => {
   expect(source).toContain("typeof props.runtime?.responseCache");
   expect(source).toContain("responseCacheError()");
 });
+
+test("every row that writes config derives its writer, inline gates included", () => {
+  // The compaction row had its OWN gate (not the shared editableActions one),
+  // and that gate also read `props.onUpdateConfig` — so the previous fix, which
+  // rewired only the shared gate, left compaction (and the terminal mode) inert
+  // exactly as before. Both are rewired to the derived writer now.
+  expect(source).not.toMatch(/props\.onUpdateConfig &&/u);
+  expect(source).toMatch(/item\.label === "Compaction" &&\s*updateConfig &&/u);
+  expect(source).toMatch(
+    /item\.label === "Terminal Window Mode" &&\s*updateConfig &&/u,
+  );
+});
+
+test("a config write re-reads the runtime rather than trusting the snapshot", () => {
+  // The panel's config prop is a snapshot taken at open; a compose-time row
+  // changes the live runtime, not that snapshot, so the value cell must be fed
+  // the runtime's own answer.
+  expect(source).toContain("props.runtime?.configGet?.()");
+  expect(source).toContain("props.onConfig?.");
+});

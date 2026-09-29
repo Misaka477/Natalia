@@ -1006,7 +1006,14 @@ export function SettingsPanel(props: {
                   </div>
                   <For each={current().items}>
                     {(item) => {
-                      const value = runtimeValue(item.label) ?? item.value;
+                      // A GETTER, not a const: `{value()}` in JSX is static
+                      // text, so a const computed once freezes the cell at its
+                      // first render — the write succeeded and the re-read
+                      // answered the new value, and the row still showed the
+                      // old one because nothing re-ran this expression. The
+                      // getter re-runs whenever the config it reads changes.
+                      const value = () =>
+                        runtimeValue(item.label) ?? item.value;
                       if (
                         item.label === "Providers & Models" &&
                         props.onOpenModels
@@ -1111,7 +1118,9 @@ export function SettingsPanel(props: {
                                 {item.description}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">{value}</span>
+                            <span class="neu-settings-item-value">
+                              {value()}
+                            </span>
                           </button>
                         );
                       }
@@ -1153,7 +1162,9 @@ export function SettingsPanel(props: {
                                 {item.description}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">{value}</span>
+                            <span class="neu-settings-item-value">
+                              {value()}
+                            </span>
                           </button>
                         );
                       }
@@ -1175,7 +1186,9 @@ export function SettingsPanel(props: {
                                 {item.description}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">{value}</span>
+                            <span class="neu-settings-item-value">
+                              {value()}
+                            </span>
                           </button>
                         );
                       }
@@ -1189,7 +1202,7 @@ export function SettingsPanel(props: {
                               {item.description}
                             </span>
                           </div>
-                          <span class="neu-settings-item-value">{value}</span>
+                          <span class="neu-settings-item-value">{value()}</span>
                         </div>
                       );
                     }}

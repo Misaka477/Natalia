@@ -79,3 +79,20 @@ test("the panel reads the runtime's config itself instead of trusting the app's 
   expect(source).not.toMatch(/const config = props\.config;/u);
   expect(source).not.toMatch(/String\(props\.config\.runtime/u);
 });
+
+test("the row's value is a getter, not a frozen const", () => {
+  // The console proved the write side works end to end (write -> applied ->
+  // re-read returns the new value), and the row still showed the old one. The
+  // cause is Solid-specific: `{value}` with `const value = ...` inserts static
+  // text, so the expression runs once and the cell never moves again — no
+  // matter how many times the config signal it reads changes. `{value()}` with
+  // a getter re-runs on that dependency.
+  expect(source).toMatch(
+    /const value = \(\) =>\s*\n?\s*runtimeValue\(item\.label\)/u,
+  );
+  // Every JSX site must call it; a bare `{value}` is the frozen form.
+  expect(source).not.toMatch(/\{value\}/u);
+  expect(source.match(/\{value\(\)\}/gu)?.length ?? 0).toBeGreaterThanOrEqual(
+    4,
+  );
+});

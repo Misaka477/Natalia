@@ -353,6 +353,21 @@ export function SettingsPanel(props: {
     misses: number;
     entries: number;
   }>();
+  // The config writer. The app mounts this panel without one (it passes only
+  // the runtime), which left EVERY row that writes config — compaction, the
+  // threshold, the terminal mode, max steps, max retry — rendering as a plain
+  // span: clickable-looking, and dead. The runtime already carries the face
+  // (`config.update`), so the panel derives its writer instead of trusting a
+  // callback that was never passed. A panel with neither (no callback and no
+  // runtime) has no writer, and its config rows stay inert — honestly so.
+  const updateConfig:
+    | ((patch: Record<string, unknown>) => unknown)
+    | undefined =
+    props.onUpdateConfig ??
+    (props.runtime?.updateConfig
+      ? (patch: Record<string, unknown>) =>
+          props.runtime?.updateConfig?.(patch as never)
+      : undefined);
   const [responseCacheError, setResponseCacheError] = createSignal<string>();
   onMount(() => {
     // A missing face must say so: `runtime?.responseCache?.()` is silent when
@@ -585,7 +600,7 @@ export function SettingsPanel(props: {
         current,
         (raw) => {
           const path = raw.trim();
-          props.onUpdateConfig?.({
+          updateConfig?.({
             runtime: {
               ...props.config?.runtime,
               // An empty string means "discover" — the resolver's configured
@@ -601,7 +616,7 @@ export function SettingsPanel(props: {
       openEdit("子 Agent 最大并发数", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 1 && value <= 32)
-          props.onUpdateConfig?.({
+          updateConfig?.({
             team: { ...props.config?.team, maxConcurrent: value },
           });
       });
@@ -622,7 +637,7 @@ export function SettingsPanel(props: {
         ? String(props.config.runtime.maxStepsPerTurn)
         : "";
       openEdit("单轮最大执行步数", current, (raw) => {
-        props.onUpdateConfig?.({
+        updateConfig?.({
           runtime: {
             ...props.config?.runtime,
             maxStepsPerTurn: raw.trim() ? Number(raw) : undefined,
@@ -639,7 +654,7 @@ export function SettingsPanel(props: {
       openEdit("单步最大重试次数", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0)
-          props.onUpdateConfig?.({
+          updateConfig?.({
             runtime: { ...props.config?.runtime, maxAttemptsPerStep: value },
           });
       });
@@ -649,7 +664,7 @@ export function SettingsPanel(props: {
       openEdit("请求超时（秒，0 表示不设置）", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 0)
-          props.onUpdateConfig?.({
+          updateConfig?.({
             runtime: {
               ...props.config?.runtime,
               timeouts: {
@@ -667,7 +682,7 @@ export function SettingsPanel(props: {
       openEdit("Compaction 阈值（%）", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0 && value <= 100)
-          props.onUpdateConfig?.({
+          updateConfig?.({
             context: {
               ...props.config?.context,
               compactionThresholdPercent: value,
@@ -680,7 +695,7 @@ export function SettingsPanel(props: {
         ",",
       );
       openEdit("额外 checkpoint 目录（逗号分隔）", current, (raw) => {
-        props.onUpdateConfig?.({
+        updateConfig?.({
           checkpoint: {
             ...props.config?.checkpoint,
             additionalDirs: raw
@@ -1011,7 +1026,7 @@ export function SettingsPanel(props: {
                             onClick={() => {
                               const next =
                                 !props.config?.context?.compactionEnabled;
-                              props.onUpdateConfig?.({
+                              updateConfig?.({
                                 context: {
                                   ...props.config?.context,
                                   compactionEnabled: next,
@@ -1053,7 +1068,7 @@ export function SettingsPanel(props: {
                                 current as (typeof modes)[number],
                               );
                               const next = modes[(index + 1) % modes.length];
-                              props.onUpdateConfig?.({
+                              updateConfig?.({
                                 runtime: {
                                   ...props.config?.runtime,
                                   terminal: { windowMode: next },
@@ -1073,7 +1088,10 @@ export function SettingsPanel(props: {
                           </button>
                         );
                       }
-                      if (editableActions[item.label] && props.onUpdateConfig) {
+                      if (
+                        editableActions[item.label] &&
+                        (updateConfig || item.label === "Response Cache")
+                      ) {
                         return (
                           <button
                             type="button"
@@ -1179,7 +1197,7 @@ export function SettingsPanel(props: {
                         type="button"
                         class="neu-settings-item neu-settings-item-button"
                         onClick={() => {
-                          props.onUpdateConfig?.({
+                          updateConfig?.({
                             defaultAgentMode: name,
                             defaultPermission: name,
                           });
@@ -1371,7 +1389,7 @@ export function SettingsPanel(props: {
                         .split(",")
                         .map((item) => item.trim())
                         .filter(Boolean);
-                    props.onUpdateConfig?.({
+                    updateConfig?.({
                       agentModes: {
                         ...props.config?.agentModes,
                         [name]: {

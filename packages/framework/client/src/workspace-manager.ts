@@ -925,6 +925,13 @@ export function createWorkspaceRuntimeClient(
     "attachmentDataUrl",
     "capabilities",
     "projectionContributions",
+    // Workspace-scoped settings faces. Without a route these fell through to
+    // the manager's own fallback, which reads `active.client` WITHOUT starting
+    // it — so a click on the panel's response-cache row hit an unstarted (or
+    // absent) workspace and did nothing at all, with no error surfaced.
+    "responseCache",
+    "settingsGet",
+    "settingsSet",
   ]);
 
   const workspaceIDSecondArg = new Set([
@@ -1239,9 +1246,21 @@ export function createWorkspaceRuntimeClient(
         return async (...args: unknown[]) => {
           const owner = await resolveRoutedWorkspace(prop, args);
           if (!owner) {
-            if (prop.startsWith("nativeTerminal"))
+            // Refuse, do not resolve to undefined: these are the faces a user
+            // CLICKS in the settings panel. A silent undefined is
+            // indistinguishable from a working runtime that answered "no" —
+            // which is how the response-cache row came to accept a click and
+            // then do nothing at all.
+            if (
+              prop.startsWith("nativeTerminal") ||
+              prop === "responseCache" ||
+              prop === "settingsGet" ||
+              prop === "settingsSet"
+            )
               throw new Error(
-                "no active workspace: open or activate a workspace before using the terminal",
+                prop.startsWith("nativeTerminal")
+                  ? "no active workspace: open or activate a workspace before using the terminal"
+                  : `no active workspace: ${prop} needs a runtime`,
               );
             return undefined;
           }

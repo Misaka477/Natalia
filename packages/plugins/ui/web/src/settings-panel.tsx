@@ -353,8 +353,24 @@ export function SettingsPanel(props: {
     misses: number;
     entries: number;
   }>();
+  const [responseCacheError, setResponseCacheError] = createSignal<string>();
   onMount(() => {
-    void props.runtime?.responseCache?.().then(setResponseCache);
+    // A missing face must say so: `runtime?.responseCache?.()` is silent when
+    // the workspace client does not expose the method, and a settings row that
+    // accepts a click and then does nothing is indistinguishable from a broken
+    // runtime. (It was exactly that: the method had no route through the
+    // workspace client, so every click fell through to an unstarted client.)
+    if (typeof props.runtime?.responseCache !== "function") {
+      setResponseCacheError("运行时不响应（responseCache 未接通）");
+      return;
+    }
+    props.runtime!.responseCache!()
+      .then(setResponseCache)
+      .catch((error: unknown) =>
+        setResponseCacheError(
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
   });
   const { alert, dialog } = useConfirmDialog();
   const [uiWriteScope, setUiWriteScope] = createSignal(
@@ -757,7 +773,7 @@ export function SettingsPanel(props: {
       }
       case "Response Cache": {
         const live = responseCache();
-        if (!live) return "…";
+        if (!live) return responseCacheError() ?? "…";
         // The value states the switch and the hit rate's raw numbers — the
         // study's metrics, readable without opening the operation log.
         return `${live.enabled ? "开启" : "关闭"}（命中 ${live.hits} / 未中 ${live.misses}，${live.entries} 条）`;

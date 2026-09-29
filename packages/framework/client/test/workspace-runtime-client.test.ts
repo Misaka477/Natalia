@@ -93,6 +93,27 @@ test("workspace proxy throws when native terminal is used without an active work
   ).rejects.toThrow("no active workspace");
 });
 
+test("the settings and response-cache faces are routed, not silently absent", async () => {
+  // The field report: clicking the settings panel's response-cache row did
+  // nothing. `runtime?.responseCache?.()` is a double optional call, so a face
+  // the workspace client does not expose is a silent no-op — no error, no
+  // state change. These three were not routable, so they fell through to the
+  // manager's fallback, which reads an UNSARTED workspace client.
+  const client = createWorkspaceRuntimeClient(emptyManager());
+  for (const face of ["responseCache", "settingsGet", "settingsSet"] as const) {
+    expect(
+      typeof (client as unknown as Record<string, unknown>)[face],
+      `${face} must be reachable on the workspace client`,
+    ).toBe("function");
+  }
+  // And they reject loudly rather than resolving to nothing, so the panel can
+  // report the failure instead of accepting a click and doing nothing.
+  await expect(client.responseCache?.({ enabled: true })).rejects.toThrow(
+    "no active workspace",
+  );
+  await expect(client.settingsGet?.()).rejects.toThrow("no active workspace");
+});
+
 for (const useSqliteStore of [false, true]) {
   test(`workspace restores selected session and preserves selection on settings updates (${useSqliteStore ? "sqlite" : "json"})`, async () => {
     const root = await officialPluginWorkspace("workspace-restore");

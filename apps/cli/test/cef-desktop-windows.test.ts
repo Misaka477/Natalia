@@ -25,7 +25,16 @@ test("the build selects a per-platform CEF SDK root and artifact names", () => {
   for (const root0 of [".cef-windows", ".cef-test", ".cef-macos"])
     expect(cmake).toContain(root0);
   expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/libcef.lib")');
-  expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/lib/libcef.so")');
+  // Linux's libcef.so is the 1.4GB shared object in bin/, and lib/ holds ONLY
+  // the import wrapper. The symmetry-with-Windows assumption ("lib/libcef.so")
+  // was written once and the real build caught it: three objects compiled, then
+  // the link failed naming a file that exists under a different name.
+  expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/bin/libcef.so")');
+  expect(cmake).not.toContain('set(CEF_LIB "${CEF_ROOT}/lib/libcef.so")');
+  // The wrapper's location is the asymmetry's other half.
+  expect(cmake).toContain(
+    'set(CEF_WRAPPER_LIB "${CEF_ROOT}/lib/libcef_dll_wrapper.a")',
+  );
   expect(cmake).toContain(
     'set(CEF_WRAPPER_LIB "${CEF_ROOT}/libcef_dll_wrapper.lib")',
   );

@@ -18,10 +18,15 @@ endif()
 set(CEF_ROOT "${_default_cef_root}" CACHE PATH "CEF SDK root")
 
 # The distributions lay their artifacts out differently per platform:
-#   Linux/macOS: include/ + lib/libcef_dll_wrapper.a + bin/libcef.so
-#   Windows:     include/ + libcef.lib + libcef_dll_wrapper.lib at the ROOT,
-#                with libcef.dll and the .pak files beside them and
-#                Resources/ + locales/ as directories.
+#   Linux:   include/ + lib/libcef_dll_wrapper.a (the IMPORT library) +
+#            bin/libcef.so (the 1.4GB shared object) + bin/*.pak;
+#   Windows: include/ + libcef.lib + libcef_dll_wrapper.lib at the ROOT,
+#            with libcef.dll and the .pak files beside them and
+#            Resources/ + locales/ as directories.
+# The asymmetry is real and easy to get wrong: on Linux `lib/` holds only the
+# wrapper .a while the shared object lives in `bin/`; on Windows everything sits
+# at the root. Assuming symmetry here is a link error about a file that exists
+# under a different name.
 if(WIN32)
   set(CEF_INCLUDE_DIR "${CEF_ROOT}/include")
   set(CEF_LIB "${CEF_ROOT}/libcef.lib")
@@ -30,7 +35,7 @@ if(WIN32)
   set(CEF_RUNTIME_DIR "${CEF_ROOT}")
 else()
   set(CEF_INCLUDE_DIR "${CEF_ROOT}/include")
-  set(CEF_LIB "${CEF_ROOT}/lib/libcef.so")
+  set(CEF_LIB "${CEF_ROOT}/bin/libcef.so")
   set(CEF_DLL "${CEF_ROOT}/bin/libcef.so")
   set(CEF_WRAPPER_LIB "${CEF_ROOT}/lib/libcef_dll_wrapper.a")
   set(CEF_BINARY_DIR "${CEF_ROOT}/bin")

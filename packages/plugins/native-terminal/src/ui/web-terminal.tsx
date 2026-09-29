@@ -367,8 +367,19 @@ export function WebTerminal(props: WebTerminalProps) {
           minW: style.minWidth,
           minH: style.minHeight,
           flex: style.flex,
+          dir: style.flexDirection,
           pos: style.position,
           overflow: style.overflow,
+          // The siblings are what a half-height slot is hiding: a second flex
+          // child splitting the container between them.
+          siblings: node.parentElement
+            ? [...node.parentElement.children].map(
+                (sibling) =>
+                  `${(sibling as HTMLElement).className || sibling.tagName}(${
+                    (sibling as HTMLElement).clientHeight
+                  }x${(sibling as HTMLElement).clientWidth})`,
+              )
+            : [],
         });
         node = node.parentElement;
       }

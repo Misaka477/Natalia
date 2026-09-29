@@ -61,8 +61,9 @@ const baseRows = [
 
 test("list shows every registered row with its legal values", () => {
   const rows = compositionRowViews(registry());
+  // The response-cache row left with its feature: its replay erased the tool
+  // calls it cached, so the row selected nothing worth keeping.
   expect(rows.map((row) => row.rowID)).toEqual([
-    "anthelia.cache.response",
     "anthelia.objectstore",
     "anthelia.sandbox",
   ]);

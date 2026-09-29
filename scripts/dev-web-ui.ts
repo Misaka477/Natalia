@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
@@ -40,6 +40,34 @@ if (
 }
 let serve: ChildProcess | undefined;
 
+/**
+ * Spawn a command the way this host can actually spawn it.
+ *
+ * Two Windows traps this used to fall into:
+ *
+ *  1. `npm` is `npm.cmd` on Windows, and Node refuses to spawn a `.cmd`
+ *     without `shell: true` (ENOENT since the 18.20/20.12/21.7 security
+ *     fixups). Passing the shell through is the documented escape hatch, and
+ *     it is applied per platform so POSIX keeps its argument-vector
+ *     semantics (no shell quoting surprises on a path with a space in it).
+ *  2. a hard-coded `/tmp/...` for the npm cache resolves to the current
+ *     drive's root on Windows (`C:\tmp`), which is not writable for an
+ *     unprivileged user — so the spawn failed with EPERM on a cache nobody
+ *     needed. The cache now goes under the OS temp dir on every platform.
+ */
+const isWindows = process.platform === "win32";
+const npmCacheDir = join(tmpdir(), "natalia-npm-cache");
+function spawnCommand(
+  command: string,
+  args: string[],
+  options: Parameters<typeof spawn>[2] = {},
+): ChildProcess {
+  return spawn(isWindows ? `${command}.cmd` : command, args, {
+    ...options,
+    ...(isWindows ? { shell: true } : {}),
+  });
+}
+
 function portFree(port: number): Promise<boolean> {
   return new Promise((resolvePromise) => {
     const server = createServer();
@@ -74,15 +102,15 @@ async function waitForServer(port: number, tries = 20): Promise<void> {
 
 const port = await findFreePort();
 console.log(`[dev-web-ui] starting runtime serve on ${port}`);
-serve = spawn("bun", ["apps/cli/src/main.ts", "serve", String(port)], {
+serve = spawnCommand("bun", ["apps/cli/src/main.ts", "serve", String(port)], {
   cwd: root,
   stdio: "inherit",
   env: {
     ...process.env,
     NATALIA_CONFIG: runtimeConfigPath,
     NATALIA_WORKSPACES_FILE: runtimeWorkspacesPath,
-    npm_config_cache: "/tmp/natalia-npm-cache",
-    NPM_CONFIG_CACHE: "/tmp/natalia-npm-cache",
+    npm_config_cache: npmCacheDir,
+    NPM_CONFIG_CACHE: npmCacheDir,
   },
 });
 serve.on("exit", (code) => {
@@ -91,14 +119,18 @@ serve.on("exit", (code) => {
 
 await waitForServer(port);
 
-const vite = spawn("npm", ["--workspace", "@natalia/web-shell", "run", "dev"], {
-  cwd: root,
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    VITE_NATALIA_RUNTIME_URL: `http://127.0.0.1:${port}`,
+const vite = spawnCommand(
+  "npm",
+  ["--workspace", "@natalia/web-shell", "run", "dev"],
+  {
+    cwd: root,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      VITE_NATALIA_RUNTIME_URL: `http://127.0.0.1:${port}`,
+    },
   },
-});
+);
 
 async function shutdown(signal: string) {
   console.log(`[dev-web-ui] received ${signal}, shutting down`);

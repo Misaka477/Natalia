@@ -97,6 +97,9 @@ Thumbs.db
 
 # Local CEF SDK/test artifacts
 .cef-test/
+.cef-windows/
+.cef-macos/
+.cef-windows-download.tar.bz2
 about-gpu-*.txt
 *.bdic
 apps/cef-desktop/build/

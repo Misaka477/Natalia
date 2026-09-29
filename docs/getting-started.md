@@ -107,7 +107,19 @@ This starts a local runtime and the Vite dev server for `@natalia/web-shell`. Th
 Production build:
 
 ```bash
-npm --workspace @natalia/web-shell run build
+npm run build:web
+```
+
+**This step is not optional.** No other script builds it — `ts:build`,
+`build:everything` and `release:build` all skip `apps/web/dist`, and it is
+exactly what the runtime's web server and the CEF desktop serve. A checkout
+without it renders a blank page.
+
+The full set a source checkout needs before anything can run:
+
+```bash
+npm run build:distribution   # dist/ts: the CLI bundle, the plugins, the plugin UI bundles
+npm run build:web            # apps/web/dist: the web shell
 ```
 
 ## 6. Multi-workspace

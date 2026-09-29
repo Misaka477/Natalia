@@ -45,9 +45,16 @@ natalia doctor          # 首跑体检
 /opt/natalia/bin/natalia uninstall
 ```
 
-**安装位置 ≠ 状态位置。** 上一步装的是程序本身；你的配置、workspace
-注册表、技能和 TUI 状态在另一个目录：`~/.config/natalia/`（POSIX）/
-`%APPDATA%\natalia\`（Windows）。卸载不会动它。
+**安装位置 ≠ 状态位置。** 上一步装的是程序本身。你的状态在**两个**根下，
+卸载都不动它们：
+
+| 根     | POSIX                | Windows                   | 装什么                                                      |
+| ------ | -------------------- | ------------------------- | ----------------------------------------------------------- |
+| 配置根 | `~/.config/natalia/` | `%APPDATA%\natalia\`      | config、workspace 注册表、技能、UI 状态                     |
+| 状态根 | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | `logs/`（操作日志）、`stores/`（SQLite 会话日志）、`vault/` |
+
+**状态根是大的那个**——会话日志按工作区哈希分库，长年累月可以到 GB 级。
+换机器/迁移数据时，两个根都要带走。
 
 ### Windows
 
@@ -137,6 +144,63 @@ release 包里已带对应平台的三个文件，无需再投。
 环境变量）。该目录已被 git 忽略（它放大块二进制），你放什么都没
 会被误提交。
 
+## 5. 从源码跑（Windows / Linux 通用）
+
+上面四节讲的是「拿到 release 目录」。**从源码跑**要另外两步，而且这两步
+任何脚本都不会替你做（这是本轮补上的坑）：
+
+```bash
+bun install                        # 不要用 npm：workspace:* 依赖
+npm run build:distribution         # dist/ts：CLI + 插件 + 插件 UI bundle
+npm run build:web                  # apps/web/dist：web shell（只有它构建这个）
+```
+
+- **`build:web` 是必须的**：`ts:build`、`build:everything`、`release:build`
+  三者都**不**构建 `apps/web/dist`，而 CEF 桌面和 `serve-web.ts` 伺服的正是
+  它。跳过这一步 = 空白页面。
+- **插件 store 别再手动同步**：`build:distribution` 已经带了
+  `refresh:plugin-store`。
+
+然后起服务：
+
+```bash
+bun apps/cli/src/main.ts serve 8790     # 运行时 API
+bun apps/cef-desktop/serve-web.ts       # 静态 web → 127.0.0.1:5178
+```
+
+浏览器开 `http://127.0.0.1:5178`。
+
+## 6. CEF 桌面：平台矩阵
+
+CEF 本身跨平台（Chromium Embedded Framework，Windows/macOS/Linux 全都支持）。
+**这个仓库目前接了两个平台**，差的从来不是 CEF：
+
+| 平台    | CEF SDK 根      | 入口                             | 启动器                | 构建                                |
+| ------- | --------------- | -------------------------------- | --------------------- | ----------------------------------- |
+| Linux   | `.cef-test/`    | `cefsimple_linux.cc`（`main`）   | `run-cef-desktop.sh`  | `npm run desktop:cef:build`         |
+| Windows | `.cef-windows/` | `cefsimple_win.cc`（`wWinMain`） | `run-cef-desktop.cmd` | `npm run desktop:cef:build:windows` |
+| macOS   | —               | 同上（views 框架无需改）         | —                     | 待补                                |
+
+Windows 从零开始：
+
+```powershell
+pwsh -NoProfile -File scripts\build-cef-windows.ps1
+```
+
+它做三件事：拉同版本 Windows CEF 分发（`scripts/fetch-cef-windows.ts`，
+版本从 `.cef-test/include/cef_version.h` 读，**不一致就报错**而不是链到
+奇奇怪怪的符号错误）→ 用 clang-cl/Ninja 或 MSVC 构建 → 校验 CEF 运行时
+落在 exe 旁边。
+
+只有 Linux 机器、想产出 Windows 包：CEF 的 Windows 分发给的是 **MSVC 格式**
+（`libcef.lib` / `libcef_dll_wrapper.lib`），所以交叉链需要一套面向
+`x86_64-pc-windows-msvc` 的 clang-cl + lld-link，并借 MSVC 的 CRT/头。
+CMake 侧已经按平台分支（`WIN32`），工具链自备。
+
+我们的 app 代码只有 `cefsimple_win.cc` 是 Windows 专属（入口）；
+`simple_app.cc` 用的是 CEF 152 的 views 框架，平台无关；X11 那段全在
+`#if defined(CEF_X11)` 里，Windows 上根本不编译。
+
 <a id="english"></a>
 
 ## English
@@ -156,9 +220,16 @@ natalia doctor                        # the first-run health report
 ```
 
 **Where it installs is not where your data lives.** The command above puts
-the program in place; your config, workspace registry, skills and TUI
-state live in a separate directory: `~/.config/natalia/` (POSIX) /
-`%APPDATA%\natalia\` (Windows). Uninstalling does not touch it.
+the program in place. Your state lives under TWO roots, and uninstalling
+touches neither:
+
+| Root        | POSIX                | Windows                   | Holds                                          |
+| ----------- | -------------------- | ------------------------- | ---------------------------------------------- |
+| config root | `~/.config/natalia/` | `%APPDATA%\natalia\`      | config, workspace registry, skills, UI state   |
+| state root  | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | `logs/`, `stores/` (SQLite journals), `vault/` |
+
+The STATE root is the big one — journals are per-workspace SQLite files and
+grow to GBs over time. Carry both when migrating a machine.
 
 Windows (PowerShell):
 
@@ -169,6 +240,57 @@ natalia.exe uninstall
 
 (The installer's flag is `-NataliaHome`, not `-Home` — PowerShell's
 read-only automatic variable.)
+
+### 1b. From source (Windows and Linux alike)
+
+Two extra steps no script performs for you, plus why:
+
+```bash
+bun install                        # not npm: workspace:* dependencies
+npm run build:distribution         # dist/ts: CLI + plugins + plugin UI bundles
+npm run build:web                  # apps/web/dist: the web shell
+```
+
+`build:web` is REQUIRED: `ts:build`, `build:everything` and `release:build`
+all skip `apps/web/dist`, and that is exactly what the CEF desktop and
+`serve-web.ts` serve. Skipping it yields a blank page. Then:
+
+```bash
+bun apps/cli/src/main.ts serve 8790     # the runtime API
+bun apps/cef-desktop/serve-web.ts       # static web on 127.0.0.1:5178
+```
+
+### 1c. The CEF desktop's platform matrix
+
+CEF itself is cross-platform (Windows, macOS, Linux). This repository wires
+**two** platforms today; what was missing was never CEF:
+
+| Platform | CEF SDK root    | Entry                            | Launcher              | Build                               |
+| -------- | --------------- | -------------------------------- | --------------------- | ----------------------------------- |
+| Linux    | `.cef-test/`    | `cefsimple_linux.cc` (`main`)    | `run-cef-desktop.sh`  | `npm run desktop:cef:build`         |
+| Windows  | `.cef-windows/` | `cefsimple_win.cc` (`wWinMain`)  | `run-cef-desktop.cmd` | `npm run desktop:cef:build:windows` |
+| macOS    | —               | (the views code needs no change) | —                     | pending                             |
+
+On Windows, from nothing:
+
+```powershell
+pwsh -NoProfile -File scripts\build-cef-windows.ps1
+```
+
+It fetches the matching Windows CEF distribution (the version is read from
+`.cef-test/include/cef_version.h`, so a mismatch fails loudly instead of at
+link time), builds with clang-cl/Ninja or MSVC, and verifies the runtime
+landed beside the executable.
+
+On Linux, producing the Windows binary is a CROSS build: CEF's Windows
+distribution is MSVC-format (`libcef.lib`, `libcef_dll_wrapper.lib`), so you
+need a clang-cl + lld-link toolchain targeting `x86_64-pc-windows-msvc` and
+MSVC's CRT/headers. The CMake side is already branched on `WIN32`; the
+toolchain is yours to supply.
+
+Our app code is Windows-specific in exactly one file (the entry point).
+`simple_app.cc` uses the CEF 152 views framework and is platform-agnostic;
+the X11 parts are guarded by `#if defined(CEF_X11)` and never compile there.
 
 ### 2. Git Bash (Windows only)
 

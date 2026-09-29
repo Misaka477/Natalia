@@ -351,6 +351,22 @@ export function SettingsPanel(props: {
   host?: import("@natalia/ui-host").UiPluginContext["host"];
 }) {
   const [activeCategory, setActiveCategory] = createSignal<CategoryId>("model");
+  /**
+   * The panel's own view of the runtime config.
+   *
+   * `props.config` is a snapshot the app holds, and it is undefined until the
+   * app's own load finishes — which can easily be AFTER the panel is opened.
+   * While it is undefined every row falls back to the category's static value
+   * (Compaction's is a literal "开启"), and the rows that gate on `props.config`
+   * do not render as buttons at all: the panel looks alive and does nothing.
+   * So the panel reads the runtime itself and prefers its own answer, while
+   * still tracking the app's snapshot for everything it does not re-read.
+   */
+  const [ownConfig, setOwnConfig] = createSignal<
+    Record<string, unknown> | undefined
+  >();
+  const effectiveConfig = (): ConfigV3 | undefined =>
+    (ownConfig() as ConfigV3 | undefined) ?? props.config;
   // RINA Phase 4's live switch: the cache is process-scoped, so this host's
   // face reads and flips the connected runtime's cache (the boot-time
   // opt-in is the composition row).
@@ -390,6 +406,8 @@ export function SettingsPanel(props: {
       await updateConfig?.(patch);
       const next = await props.runtime?.configGet?.();
       console.log("[settings] config write <-", next);
+      // Our own view first (the rows read it), then the app's snapshot.
+      if (next) setOwnConfig(next as never);
       if (next) props.onConfig?.(next as never);
     } catch (error) {
       console.log("[settings] config write FAILED", error);
@@ -398,6 +416,16 @@ export function SettingsPanel(props: {
       );
     }
   }
+  createEffect(() => {
+    // Opening is the read: `props.config` is the app's snapshot and may still be
+    // undefined, which leaves every row on its static value with the config
+    // gates closed. Reading the runtime here makes the panel self-sufficient.
+    if (!props.open) return;
+    void props.runtime?.configGet?.().then((next) => {
+      if (next) setOwnConfig(next as never);
+    });
+  });
+
   onMount(() => {
     // A missing face must say so: `runtime?.responseCache?.()` is silent when
     // the workspace client does not expose the method, and a settings row that
@@ -588,7 +616,7 @@ export function SettingsPanel(props: {
   }
 
   function openPermissionEditorFor(name: string) {
-    const config = props.config;
+    const config = effectiveConfig();
     const profile = config?.agentModes?.[name];
     setPermissionName(name);
     setPermissionDescription(profile?.description ?? "");
@@ -623,7 +651,7 @@ export function SettingsPanel(props: {
 
   const editableActions: Record<string, () => void> = {
     "Git Bash 路径": () => {
-      const current = props.config?.runtime?.shell?.bashPath ?? "";
+      const current = effectiveConfig()?.runtime?.shell?.bashPath ?? "";
       openEdit(
         "Git Bash 路径 (bash.exe 全路径，留空自动探测)",
         current,
@@ -631,7 +659,7 @@ export function SettingsPanel(props: {
           const path = raw.trim();
           updateConfig?.({
             runtime: {
-              ...props.config?.runtime,
+              ...effectiveConfig()?.runtime,
               // An empty string means "discover" — the resolver's configured
               // path is cleared, not set to a blank.
               shell: { bashPath: path },
@@ -641,12 +669,12 @@ export function SettingsPanel(props: {
       );
     },
     "子 Agent 并发数": () => {
-      const current = String(props.config?.team?.maxConcurrent ?? 4);
+      const current = String(effectiveConfig()?.team?.maxConcurrent ?? 4);
       openEdit("子 Agent 最大并发数", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 1 && value <= 32)
           updateConfig?.({
-            team: { ...props.config?.team, maxConcurrent: value },
+            team: { ...effectiveConfig()?.team, maxConcurrent: value },
           });
       });
     },
@@ -669,13 +697,12 @@ export function SettingsPanel(props: {
       setPermissionListOpen(true);
     },
     "Max Steps": () => {
-      const current = props.config?.runtime?.maxStepsPerTurn
-        ? String(props.config.runtime.maxStepsPerTurn)
-        : "";
+      const steps = effectiveConfig()?.runtime?.maxStepsPerTurn;
+      const current = steps ? String(steps) : "";
       openEdit("单轮最大执行步数", current, (raw) => {
         updateConfig?.({
           runtime: {
-            ...props.config?.runtime,
+            ...effectiveConfig()?.runtime,
             maxStepsPerTurn: raw.trim() ? Number(raw) : undefined,
           },
         });
@@ -683,28 +710,33 @@ export function SettingsPanel(props: {
     },
     "Max Retry": () => {
       const effective =
-        props.config?.runtime?.maxAttemptsPerStep ??
-        props.config?.runtime?.retry?.maxAttemptsPerStep;
+        effectiveConfig()?.runtime?.maxAttemptsPerStep ??
+        effectiveConfig()?.runtime?.retry?.maxAttemptsPerStep;
       const current =
         effective === null || effective === undefined ? "" : String(effective);
       openEdit("单步最大重试次数", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0)
           updateConfig?.({
-            runtime: { ...props.config?.runtime, maxAttemptsPerStep: value },
+            runtime: {
+              ...effectiveConfig()?.runtime,
+              maxAttemptsPerStep: value,
+            },
           });
       });
     },
     "Request Timeout": () => {
-      const current = String(props.config?.runtime?.timeouts?.requestSec ?? 0);
+      const current = String(
+        effectiveConfig()?.runtime?.timeouts?.requestSec ?? 0,
+      );
       openEdit("请求超时（秒，0 表示不设置）", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 0)
           updateConfig?.({
             runtime: {
-              ...props.config?.runtime,
+              ...effectiveConfig()?.runtime,
               timeouts: {
-                ...props.config?.runtime?.timeouts,
+                ...effectiveConfig()?.runtime?.timeouts,
                 requestSec: value,
               },
             },
@@ -713,27 +745,27 @@ export function SettingsPanel(props: {
     },
     "Compaction Threshold": () => {
       const current = String(
-        props.config?.context?.compactionThresholdPercent ?? 85,
+        effectiveConfig()?.context?.compactionThresholdPercent ?? 85,
       );
       openEdit("Compaction 阈值（%）", current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0 && value <= 100)
           updateConfig?.({
             context: {
-              ...props.config?.context,
+              ...effectiveConfig()?.context,
               compactionThresholdPercent: value,
             },
           });
       });
     },
     "Checkpoint 目录": () => {
-      const current = (props.config?.checkpoint?.additionalDirs ?? []).join(
-        ",",
-      );
+      const current = (
+        effectiveConfig()?.checkpoint?.additionalDirs ?? []
+      ).join(",");
       openEdit("额外 checkpoint 目录（逗号分隔）", current, (raw) => {
         updateConfig?.({
           checkpoint: {
-            ...props.config?.checkpoint,
+            ...effectiveConfig()?.checkpoint,
             additionalDirs: raw
               .split(",")
               .map((entry) => entry.trim())
@@ -800,7 +832,7 @@ export function SettingsPanel(props: {
   );
 
   function runtimeValue(label: string): string | undefined {
-    const config = props.config;
+    const config = effectiveConfig() as ConfigV3 | undefined;
     if (!config) return undefined;
     switch (label) {
       case "Default Model":
@@ -1053,7 +1085,7 @@ export function SettingsPanel(props: {
                       if (
                         item.label === "Compaction" &&
                         updateConfig &&
-                        props.config
+                        effectiveConfig()
                       ) {
                         return (
                           <button
@@ -1061,11 +1093,11 @@ export function SettingsPanel(props: {
                             class="neu-settings-item neu-settings-item-button"
                             onClick={() => {
                               const next =
-                                !props.config?.context?.compactionEnabled;
+                                !effectiveConfig()?.context?.compactionEnabled;
                               setConfigError("");
                               void writeConfig({
                                 context: {
-                                  ...props.config?.context,
+                                  ...effectiveConfig()?.context,
                                   compactionEnabled: next,
                                 },
                               });
@@ -1086,7 +1118,7 @@ export function SettingsPanel(props: {
                       if (
                         item.label === "Terminal Window Mode" &&
                         updateConfig &&
-                        props.config
+                        effectiveConfig()
                       ) {
                         return (
                           <button
@@ -1099,15 +1131,15 @@ export function SettingsPanel(props: {
                                 "window",
                               ] as const;
                               const current =
-                                props.config?.runtime?.terminal?.windowMode ??
-                                "auto";
+                                effectiveConfig()?.runtime?.terminal
+                                  ?.windowMode ?? "auto";
                               const index = modes.indexOf(
                                 current as (typeof modes)[number],
                               );
                               const next = modes[(index + 1) % modes.length];
                               updateConfig?.({
                                 runtime: {
-                                  ...props.config?.runtime,
+                                  ...effectiveConfig()?.runtime,
                                   terminal: { windowMode: next },
                                 },
                               });
@@ -1206,7 +1238,7 @@ export function SettingsPanel(props: {
             <div class="neu-settings-body neu-edit-body">
               <Show
                 when={
-                  Object.entries(props.config?.agentModes ?? {}).filter(
+                  Object.entries(effectiveConfig()?.agentModes ?? {}).filter(
                     ([name]) => !BUILTIN_PERMISSION_PROFILES.includes(name),
                   ).length
                 }
@@ -1224,7 +1256,9 @@ export function SettingsPanel(props: {
                 }
               >
                 <For
-                  each={Object.entries(props.config?.agentModes ?? {}).filter(
+                  each={Object.entries(
+                    effectiveConfig()?.agentModes ?? {},
+                  ).filter(
                     ([name]) => !BUILTIN_PERMISSION_PROFILES.includes(name),
                   )}
                 >
@@ -1243,7 +1277,7 @@ export function SettingsPanel(props: {
                         <div class="neu-settings-item-main">
                           <span class="neu-settings-item-label">
                             {name}
-                            {props.config?.defaultAgentMode === name
+                            {effectiveConfig()?.defaultAgentMode === name
                               ? "（默认）"
                               : ""}
                           </span>
@@ -1420,7 +1454,7 @@ export function SettingsPanel(props: {
                   onClick={() => {
                     const name = permissionName().trim();
                     if (!name) return;
-                    const previousMode = props.config?.agentModes?.[name];
+                    const previousMode = effectiveConfig()?.agentModes?.[name];
                     const split = (value: string) =>
                       value
                         .split(",")
@@ -1428,7 +1462,7 @@ export function SettingsPanel(props: {
                         .filter(Boolean);
                     updateConfig?.({
                       agentModes: {
-                        ...props.config?.agentModes,
+                        ...effectiveConfig()?.agentModes,
                         [name]: {
                           description: permissionDescription(),
                           approval: permissionApproval(),

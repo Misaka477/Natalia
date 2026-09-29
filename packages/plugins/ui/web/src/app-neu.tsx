@@ -4533,17 +4533,30 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         registeredTools={registeredTools()}
         runtime={props.ctx.runtime}
         onUpdateConfig={async (patch) => {
-          await props.ctx.runtime.updateConfig?.({
+          console.log("[settings] write ->", JSON.stringify(patch));
+          const applied = await props.ctx.runtime.updateConfig?.({
             patch,
             scope: "global",
           });
+          console.log("[settings] write applied <-", applied);
           const next = await props.ctx.runtime.configGet?.();
+          console.log(
+            "[settings] re-read <-",
+            JSON.stringify({
+              compactionEnabled: next?.context?.compactionEnabled,
+              terminalMode: next?.runtime?.terminal?.windowMode,
+              maxSteps: next?.runtime?.maxStepsPerTurn,
+            }),
+          );
           if (next) setConfig(next);
         }}
         // The runtime's own answer after a write: the panel's `config` prop is a
         // snapshot, and a compose-time row changes the live runtime rather than
         // that snapshot, so the re-read keeps the value cell honest.
-        onConfig={(next) => setConfig(next as unknown as ConfigV3)}
+        onConfig={(next) => {
+          console.log("[settings] onConfig ->", JSON.stringify(next));
+          setConfig(next as unknown as ConfigV3);
+        }}
       />
       {dialog}
     </div>

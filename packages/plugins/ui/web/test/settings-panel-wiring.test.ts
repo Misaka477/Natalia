@@ -59,3 +59,23 @@ test("a config write re-reads the runtime rather than trusting the snapshot", ()
   expect(source).toContain("props.runtime?.configGet?.()");
   expect(source).toContain("props.onConfig?.");
 });
+
+test("the panel reads the runtime's config itself instead of trusting the app's snapshot", () => {
+  // The reported failure was "press it and nothing happens, no feedback, is it
+  // off, on, or unchanged". Both rows were inert for a reason no gate explains:
+  // `props.config` is the app's SNAPSHOT, and it is undefined until the app's
+  // own load finishes — which can be after the panel opens. While undefined,
+  // every row shows the category's static literal (compaction's is a hardcoded
+  // "开启") and the config-gated rows do not render as buttons at all. The
+  // writes were fine all along; the panel was rendering a snapshot that had not
+  // arrived, and never re-read it after a write.
+  expect(source).toContain("props.runtime?.configGet?.()");
+  // The effective view must PREFER the panel's own read, or the snapshot's
+  // undefined wins and the panel is inert exactly as before.
+  expect(source).toMatch(
+    /const effectiveConfig = \(\)[^=]*=>\s*\n?\s*\(ownConfig\(\) as ConfigV3 \| undefined\) \?\? props\.config/u,
+  );
+  // And the rows must read it, not the prop.
+  expect(source).not.toMatch(/const config = props\.config;/u);
+  expect(source).not.toMatch(/String\(props\.config\.runtime/u);
+});

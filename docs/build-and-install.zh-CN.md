@@ -70,6 +70,23 @@ pwsh -NoProfile -File scripts\\install.ps1 -From <release目录>
 
 卸载：`natalia.exe uninstall`。
 
+## 2b. 原生构件的前置（Windows）
+
+要一个功能完整的分发，宿主需要：
+
+| 工具                                  | 用途                                                        |
+| ------------------------------------- | ----------------------------------------------------------- |
+| Rust 稳定版（rustup）+ 你用的 target  | confinement 后端、object-store crate                        |
+| target `wasm32-unknown-unknown`       | text-diff wasm                                              |
+| target `wasm32-wasip1` + **WASI SDK** | 44 个 AST wasm 包（`build-ast-packs.ts` 通过它的 clang 编） |
+
+WASI SDK 默认按平台找安装根（`/opt/wasi-sdk` / `C:\wasi-sdk`），可用
+`WASI_SDK=<路径>` 覆盖。**它是真外部依赖，不是路径风格问题**——没有它，
+AST 工具（`ast.diff` / `ast.refactor`）不可用。
+
+这三个产物（`diff-wasm/ast/`、`natalia_diff_wasm.wasm`）都是 **gitignore 的构建产物**，
+干净 clone 里没有，必须在宿主上编。
+
 ## 2. Git Bash（仅 Windows）
 
 Linux 和 macOS 的 shell 就是 `bash`，**不需要任何设置**。
@@ -107,17 +124,24 @@ daemon）→ AST wasm 包（核心 + 44 语言）→ 许可清单 → wezterm Ub
 双平台 release（自带契约自检：布局/无机器本地状态/本平台终端二进制/
 全部文件在校验和清单里）。
 
-没有 podman 或交叉工具链的机器：
+跳过标志的**确切含义**（只有 wezterm 是可跳的）：
 
-```bash
-npm run build:everything -- --skip-wezterm-ubuntu --skip-wezterm-windows
+| 跳过                                               | 影响                                                                                                                                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--skip-wezterm-ubuntu` / `--skip-wezterm-windows` | 不编 wezterm。**唯一可跳的一项**——如果你已编译好三个可执行文件，把它们投到 `packages/plugins/native-terminal/wezterm/target/release/`（`ts-build` 只读这个路径）即可，分发与源码运行都能用 |
+| `--skip-release`                                   | 只编原生构件，不打 release 包                                                                                                                                                              |
+
+**其余没有跳过标志，也不该有**：confinement 后端、object-store 原生 crate、AST wasm 包都是运行时真正需要的能力，跳掉 = 少功能或静默降级，不是一个等价构建。
+
+在本机构建全部原生件的命令（`build:everything` 会同时打 **linux-x64 + windows-x64** 两个 release，没有 podman/交叉链的机器做不到——所以在 Windows 上请用这条而不是 `build:everything`）：
+
+```powershell
+npm run native:all          # confinement 后端 + object-store 原生 crate（cargo）
+npm run diff:build-wasm     # text-diff wasm + 44 个 AST wasm 包
+npm run build:windows       # 上面全部 + licenses + ts:build(不跳native) + plugin store + web
 ```
 
-只编原生构件、不打 release 包：
-
-```bash
-npm run build:everything -- --skip-release
-```
+`build:windows` 里的 `ts:build` **不带** `NATALIA_BUILD_SKIP_NATIVE`——它会检查三个 wezterm 可执行文件在 `wezterm/target/release/` 并把它们 stage 进插件分发，缺一个就大声报错（半成品不是分发）。
 
 每一步的成功/跳过/失败都带耗时打印；结束时列出每个产物的实际大小
 （或“未构建”）。某一步失败会让整条构建停在那里并打印该命令的输出
@@ -143,6 +167,16 @@ release 包里已带对应平台的三个文件，无需再投。
 目录。解析不到时，报错信息会直接点名 prebuilt 目录（而不是只甩一个
 环境变量）。该目录已被 git 忽略（它放大块二进制），你放什么都没
 会被误提交。
+
+⚠️ **两个目录，两种用途，别只放一个**：
+
+| 路径                      | 谁读它                                      | 什么时候要                             |
+| ------------------------- | ------------------------------------------- | -------------------------------------- |
+| `prebuilt/windows-x64/`   | **运行时**（源码跑 `serve` 时插件自己解析） | 从源码跑                               |
+| `wezterm/target/release/` | **`ts-build`**（打分发时 stage 进插件包）   | 打分发（`build:windows` / `ts:build`） |
+
+`ts-build` 不跳 native 时**只读 `wezterm/target/release/`**：三个可执行文件缺一个，就直接抛
+`missing terminal executable wezterm.exe`。要打分发，就把编译好的三个文件**同时**投到这两处。
 
 ## 5. 从源码跑（Windows / Linux 通用）
 
@@ -247,9 +281,11 @@ Two extra steps no script performs for you, plus why:
 
 ```bash
 bun install                        # not npm: workspace:* dependencies
-npm run build:distribution         # dist/ts: CLI + plugins + plugin UI bundles
-npm run build:web                  # apps/web/dist: the web shell
+npm run build:windows              # see the native table below
+npm run build:web                  # apps/web/dist: the web shell (still separate)
 ```
+
+`build:distribution` 带 `NATALIA_BUILD_SKIP_NATIVE=1`，**那是 CI/测试专用**——它跳过 wezterm 的 stage。要一个功能完整的分发，用 `build:windows`（Windows）或 §3 的 `native:all` + `build:distribution:native`。
 
 `build:web` is REQUIRED: `ts:build`, `build:everything` and `release:build`
 all skip `apps/web/dist`, and that is exactly what the CEF desktop and

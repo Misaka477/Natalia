@@ -8,6 +8,7 @@ import {
   statSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
 const repo = resolve(process.cwd());
@@ -318,7 +319,10 @@ for (const lang of LANGUAGES) {
     built += 1;
     continue;
   }
-  const dir = join("/tmp", `ast-pack-${id}`);
+  // The OS temp dir, not a POSIX literal: `/tmp` resolves to the current
+  // drive's root on Windows (`C:\tmp`), which an unprivileged user cannot
+  // write — the build then dies on a directory nobody asked for.
+  const dir = join(tmpdir(), `ast-pack-${id}`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "src"), { recursive: true });
   const dep = `${lang.crate} = "${lang.version}"`;
@@ -337,13 +341,21 @@ pub fn grammar(language_id: &str) -> Option<Language> {
 }
 `,
   );
+  // The WASI SDK. It is a real external dependency (not a path style): the
+  // 44 tree-sitter packs are built through its clang targeting wasm32-wasip1.
+  // The install root is env-overridable, and the default follows the platform
+  // instead of hard-coding a POSIX path a Windows host does not have.
+  const wasiSdk =
+    process.env.WASI_SDK ??
+    (process.platform === "win32" ? "C:\\wasi-sdk" : "/opt/wasi-sdk");
+  const clang = process.platform === "win32" ? "clang.exe" : "clang";
   const env = {
     ...process.env,
-    WASI_SDK: "/opt/wasi-sdk",
-    CC: "/opt/wasi-sdk/bin/clang",
+    WASI_SDK: wasiSdk,
+    CC: join(wasiSdk, "bin", clang),
     CFLAGS: "--target=wasm32-wasip1",
-    CARGO_HOME: "/tmp/cargo-diff-home",
-    CARGO_TARGET_DIR: `/tmp/ast-pack-target/${id}`,
+    CARGO_HOME: join(tmpdir(), "cargo-diff-home"),
+    CARGO_TARGET_DIR: join(tmpdir(), `ast-pack-target-${id}`),
   };
   try {
     execFileSync("cargo", ["build", "--release", "--target", "wasm32-wasip1"], {
@@ -353,7 +365,9 @@ pub fn grammar(language_id: &str) -> Option<Language> {
     });
     const wasm = join(
       env.CARGO_TARGET_DIR!,
-      "wasm32-wasip1/release/natalia_ast_wasm.wasm",
+      "wasm32-wasip1",
+      "release",
+      "natalia_ast_wasm.wasm",
     );
     copyFileSync(wasm, out);
     built += 1;

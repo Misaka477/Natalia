@@ -97,3 +97,92 @@ test("the Windows SDK fetch refuses a version mismatch", () => {
   expect(fetcher).toContain("sha256");
   expect(fetcher).toContain("the fetched distribution is");
 });
+
+test("the native build chain skips only wezterm, and says so", () => {
+  // The user's rule: wezterm is the ONLY skippable native artifact (they build
+  // the three executables themselves). Everything else — the confinement
+  // backend, the object-store crate, the text-diff and 44 AST wasm packs — is a
+  // capability the runtime actually uses, so skipping it is a different build,
+  // not a faster one.
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  expect(pkg.scripts["build:distribution"]).toContain(
+    "NATALIA_BUILD_SKIP_NATIVE=1",
+  );
+  // The full chain exists and does NOT skip.
+  expect(pkg.scripts["native:all"]).toContain("native:confinement");
+  expect(pkg.scripts["native:all"]).toContain("native:object-store");
+  expect(pkg.scripts["diff:build-wasm"]).toContain("build-ast-packs.ts");
+  for (const chain of ["build:windows", "build:distribution:native"]) {
+    const script = pkg.scripts[chain]!;
+    expect(script).toContain("native:all");
+    // ts:build in a full chain must run WITHOUT the skip: that is what stages
+    // the wezterm executables into the plugin distribution.
+    expect(script).not.toContain("SKIP_NATIVE");
+    expect(script).toContain("ts-build.ts");
+    expect(script).toContain("refresh:plugin-store");
+  }
+  // The wasm packs are a capability too, so they belong in the full chain —
+  // `build:distribution:native` is the crates-only variant, and it does not
+  // pretend otherwise.
+  expect(pkg.scripts["build:windows"]).toContain("diff:build-wasm");
+  expect(pkg.scripts["build:distribution:native"]).not.toContain(
+    "diff:build-wasm",
+  );
+});
+
+test("the wasm builds carry no POSIX-only shell or path", () => {
+  // `cp` and `${VAR:-default}` are bash; npm runs scripts through the host
+  // shell, which is cmd.exe on Windows. The whole step is a bun script now.
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  expect(pkg.scripts["diff:build-wasm"]).not.toMatch(/\bcp\b/u);
+  expect(pkg.scripts["diff:build-wasm"]).not.toContain(":-");
+  // The builders' own paths: no hard-coded /tmp anywhere, and no /opt without a
+  // platform branch beside it.
+  for (const script of ["build-ast-packs.ts", "build-text-diff-wasm.ts"]) {
+    const source = readFileSync(join(root, "scripts", script), "utf8");
+    expect(source, `${script} must not hard-code /tmp`).not.toContain(
+      'join("/tmp"',
+    );
+    expect(source, `${script} must use the OS temp dir`).toContain("tmpdir()");
+  }
+  // Only the AST pack builder needs the WASI SDK; its root is env-overridable
+  // with a per-platform default. The POSIX default is fine — what must not
+  // exist is a /opt path with no platform branch beside it.
+  const astPacks = readFileSync(
+    join(root, "scripts", "build-ast-packs.ts"),
+    "utf8",
+  );
+  expect(astPacks).toContain("process.env.WASI_SDK");
+  expect(astPacks).toContain('process.platform === "win32"');
+  const wasiLines = astPacks
+    .split("\n")
+    .filter((line) => line.includes("/opt/wasi-sdk"));
+  expect(
+    wasiLines,
+    "every /opt default sits in the platform branch",
+  ).toHaveLength(1);
+  expect(wasiLines[0]).toContain("win32");
+  // And the cargo home lands outside the checkout.
+  const textDiff = readFileSync(
+    join(root, "scripts", "build-text-diff-wasm.ts"),
+    "utf8",
+  );
+  expect(textDiff).toContain("tmpdir()");
+  expect(textDiff).not.toContain('join(root, ".cargo-home")');
+});
+
+test("ts-build reads the wezterm executables from the fork's release dir", () => {
+  // The pin that keeps the two wezterm drop directories honest: the distribution
+  // build stages from `wezterm/target/release/` and fails loudly on a miss,
+  // while the RUNTIME resolves through the prebuilt drop. They are different
+  // consumers, so "I dropped the exe in prebuilt" does not satisfy the packager.
+  const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
+  expect(source).toContain('join(root, "wezterm/target/release")');
+  expect(source).toContain("missing terminal executable");
+  // And the skip is explicit, not an accident of a missing file.
+  expect(source).toContain("NATALIA_BUILD_SKIP_NATIVE");
+});

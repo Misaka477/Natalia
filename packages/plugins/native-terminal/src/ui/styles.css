@@ -74,6 +74,10 @@
 .terminal-split-stack {
   display: flex;
   flex: 1;
+  /* Same loop-breaker as the xterm host: a flex item refuses to shrink below
+     its min-content, and the min-content here is the sum of the terminals'
+     rendered widths, so a widened pane could never narrow back. */
+  min-width: 0;
   min-height: 0;
   gap: 4px;
   padding: 4px;

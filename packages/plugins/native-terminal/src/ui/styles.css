@@ -1,7 +1,13 @@
 .terminal-pane {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Stretch, do not resolve a percentage: the mount slot is a flex column, and
+     `flex: 1` gives this root the slot's height. `height: 100%` resolved to
+     auto when the slot was a plain block, which made the pane's height depend
+     on the terminal's content — the terminal then sized itself to its own
+     rows and the pane stopped there, empty sidebar below. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   background: var(--neu-bg-light);
   border-radius: 12px;

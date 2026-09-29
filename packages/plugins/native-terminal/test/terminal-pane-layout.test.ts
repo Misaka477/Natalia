@@ -55,12 +55,45 @@ test("the host's parent chain lets the pane drive both axes", () => {
   expect(layer).toContain("inset: 0");
 });
 
-test("the pane root stretches to the panel slot the host mounts into", () => {
-  // The plugin is mounted into `.neu-side-panel-host` (height:100%), so a pane
-  // root that sized itself to content would cap the whole chain — the terminal
-  // then stayed at its spawn geometry while the sidebar grew.
+test("the pane root stretches to the panel slot instead of resolving a percentage", () => {
+  // The field report: the terminal box was ~430px inside a ~900px sidebar, with
+  // the rest empty. The pane root had `height: 100%`, its mount slot was a plain
+  // block, so the percentage resolved to auto and the pane's height became
+  // mutually dependent on the terminal's own content — it settled at its
+  // content height and stopped. `flex: 1` against a slot that is a flex column
+  // gives it the slot's height instead.
   const root = ruleOf(".terminal-pane");
-  expect(root).toMatch(/height:\s*100%/u);
+  expect(root).toContain("flex: 1 1 auto");
+  expect(root).toContain("min-height: 0");
   expect(root).toContain("overflow: hidden");
   expect(root).toContain("flex-direction: column");
+});
+
+test("the plugin mount slot is a flex column so a plugin root can stretch", () => {
+  // The slot is the last definite link in the chain. Without a definite basis
+  // here, every plugin root that sizes itself in percentages resolves to auto.
+  // native-terminal/test -> repo root -> packages/plugins/ui/web.
+  const sheet = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "..",
+      "packages",
+      "plugins",
+      "ui",
+      "web",
+      "src",
+      "styles",
+      "base.ts",
+    ),
+    "utf8",
+  );
+  const start = sheet.indexOf(".neu-side-panel-host {");
+  if (start < 0) throw new Error("missing rule: .neu-side-panel-host");
+  const rule = sheet.slice(start, sheet.indexOf("}", start));
+  expect(rule).toContain("display: flex");
+  expect(rule).toContain("flex-direction: column");
+  expect(rule).toContain("min-height: 0");
 });

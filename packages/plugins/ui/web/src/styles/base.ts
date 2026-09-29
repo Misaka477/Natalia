@@ -1442,6 +1442,21 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   border-radius: var(--neu-radius-sm);
 }
 .neu-secondary-content > * { flex: 1; min-height: 0; }
+/*
+ * The plugin panel slot. It is a percentage-height chain's last definite link:
+ * the plugin's root sizes itself against this element, and a plain block here
+ * resolves a height of 100% to auto -- which makes a terminal pane's height
+ * mutually dependent on the terminal's own content, so the pane stops at its
+ * content height and leaves the rest of the sidebar empty (the reported
+ * "height is locked"). A flex column gives the plugin root a basis to stretch
+ * against instead of a percentage to resolve.
+ */
+.neu-side-panel-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
 
 /* ===== Review / Diff ===== */
 .review-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }

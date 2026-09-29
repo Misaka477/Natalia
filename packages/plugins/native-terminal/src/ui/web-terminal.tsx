@@ -358,7 +358,7 @@ export function WebTerminal(props: WebTerminalProps) {
     const measure = (reason: string) => {
       const chain: Array<Record<string, unknown>> = [];
       let node: HTMLElement | null = host ?? null;
-      for (let depth = 0; node && depth < 6; depth += 1) {
+      for (let depth = 0; node && depth < 8; depth += 1) {
         const style = getComputedStyle(node);
         chain.push({
           cls: node.className || node.tagName,

@@ -430,11 +430,26 @@ export async function createUiPluginHost<TContext = unknown>(
         panel,
       })),
     );
-    const mountedKeys = new Set(
-      rows.map((row) => `${row.pluginId}:${row.panel.id}`),
+    // The identity the shell actually keys on: a tab is its panel id and region
+    // (see the rail's `rightTabs`). Keying the armed fallback by
+    // `${pluginId}:${panel.id}` never matched, because a plugin's UI bundle
+    // registers under its own id (`natalia.ui.terminal`) while the catalog row
+    // carries the plugin's id (`natalia-tool-terminal`) — so every panel was
+    // listed TWICE: once mounted, once armed. Two rows with the same panel id
+    // are the same tab (the shell cannot tell them apart), and for a side panel
+    // the shell mounts both into two slots that then split the sidebar's
+    // height between them.
+    const panelIdentity = (region: string | undefined, panelID: string) =>
+      `${region ?? "none"}:${panelID}`;
+    const listedKeys = new Set(
+      rows.map((row) => panelIdentity(row.panel.region, row.panel.id)),
     );
-    for (const [key, armed] of armedPanels) {
-      if (mountedKeys.has(key)) continue;
+    for (const [_key, armed] of armedPanels) {
+      const identity = panelIdentity(armed.panel.region, armed.panel.id);
+      if (listedKeys.has(identity)) continue;
+      // The first declaration of a panel wins, so two armed rows for the same
+      // panel list once rather than as two mount slots.
+      listedKeys.add(identity);
       // An armed catalog row is metadata (the manifest's panel), and the
       // rail lists only panels it can mount — a metadata row would vanish
       // from it (exactly the bug this mount fixes). So the armed row

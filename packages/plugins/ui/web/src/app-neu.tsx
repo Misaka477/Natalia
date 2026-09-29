@@ -2958,6 +2958,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       // cannot be rendered into the rail.
       .filter((item) => typeof item.panel.mount === "function")
       .filter((item) => panelVisible(item.panel))
+      // One row per panel id: the shell keys its tabs on the panel id alone, so
+      // a duplicate is not a second tab but a second mount slot — and two slots
+      // split the sidebar's height between them (the terminal occupied exactly
+      // half of it). The host's own dedup covers the armed/mounted split; this
+      // keeps the invariant local to the place that mounts.
+      .filter(
+        (item, index, all) =>
+          all.findIndex((other) => other.panel.id === item.panel.id) === index,
+      )
       .filter(
         (item) =>
           item.panel.id !== "terminal" || interactiveTerminalAvailable(),

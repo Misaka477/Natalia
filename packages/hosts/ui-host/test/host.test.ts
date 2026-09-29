@@ -442,6 +442,75 @@ test("remounting a panel into the same container replaces its DOM", async () => 
   await host.close();
 });
 
+test("a loaded panel is not listed twice beside its armed catalog row", async () => {
+  // The field report: the terminal occupied exactly half the sidebar, and the
+  // console showed the panel's mount deferred. The UI bundle registers under
+  // its OWN id (`natalia.ui.terminal`) while the catalog row carries the
+  // plugin's id (`natalia-tool-terminal`), so the armed/mounted dedup keyed by
+  // `${pluginId}:${panel.id}` never matched. Every panel was therefore listed
+  // twice — once mounted, once armed — and the shell keys its tabs on the panel
+  // id alone, so both rows matched the active tab and mounted into two slots
+  // that split the sidebar's height between them.
+  const root = fakeRoot();
+  const runtime = catalogRuntimeFixture([
+    {
+      id: "natalia-tool-terminal",
+      ui: { panels: [{ id: "terminal", title: "Terminal", region: "side" }] },
+    },
+  ]);
+  const host = await createUiPluginHost({ root, runtime });
+  await host.armPanelsFromCatalog();
+  expect(host.listPanels()).toHaveLength(1);
+
+  // The bundle loads and registers under a DIFFERENT id than the catalog row —
+  // that mismatch is the whole defect.
+  await host.load({
+    id: "natalia.ui.terminal",
+    name: "Terminal UI",
+    version: "1.0.0",
+    mount: () => undefined,
+    panels: [
+      {
+        id: "terminal",
+        title: "Terminal",
+        region: "side",
+        mount: (_ctx: unknown, container: HTMLElement) => {
+          container.replaceChildren();
+          return () => undefined;
+        },
+      },
+    ],
+  } as never);
+
+  const listed = host.listPanels();
+  expect(listed).toHaveLength(1);
+  expect(listed[0]!.pluginId).toBe("natalia.ui.terminal");
+  await host.close();
+});
+
+test("two plugins declaring the same panel id list once", async () => {
+  // The shell cannot address a second panel with the same id: its tabs and its
+  // mount slots are keyed on it. Listing both is how a second mount slot
+  // appears, and two slots split the sidebar's height.
+  const root = fakeRoot();
+  const runtime = catalogRuntimeFixture([
+    {
+      id: "one",
+      ui: { panels: [{ id: "terminal", title: "T", region: "side" }] },
+    },
+    {
+      id: "two",
+      ui: { panels: [{ id: "terminal", title: "T", region: "side" }] },
+    },
+  ]);
+  const host = await createUiPluginHost({ root, runtime });
+  await host.armPanelsFromCatalog();
+  const listed = host.listPanels();
+  expect(listed).toHaveLength(1);
+  expect(listed[0]!.pluginId).toBe("one");
+  await host.close();
+});
+
 /** A runtime whose catalog declares panels (the arm source). */
 function catalogRuntimeFixture(
   catalog: Array<{

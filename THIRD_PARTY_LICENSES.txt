@@ -239,7 +239,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/compat-data@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+helper-compilation-targets@7.29.7/node_modules/@babel/compat-data/LICENSE
+Source file: node_modules/.bun/@babel+compat-data@7.29.7/node_modules/@babel/compat-data/LICENSE
 ================================================================================
 MIT License
 
@@ -267,7 +267,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/core@7.28.0
 Declared license: MIT
-Source file: node_modules/.bun/vite-plugin-solid@2.11.10+14246d20d46d4d45/node_modules/@babel/core/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/core/LICENSE
 ================================================================================
 MIT License
 
@@ -295,7 +295,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/generator@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/solid-refresh@0.6.3+ac9bd97bed21f560/node_modules/@babel/generator/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/generator/LICENSE
 ================================================================================
 MIT License
 
@@ -323,7 +323,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-compilation-targets@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+helper-compilation-targets@7.29.7/node_modules/@babel/helper-compilation-targets/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/helper-compilation-targets/LICENSE
 ================================================================================
 MIT License
 
@@ -351,7 +351,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-globals@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+traverse@7.29.7/node_modules/@babel/helper-globals/LICENSE
+Source file: node_modules/.bun/@babel+helper-globals@7.29.7/node_modules/@babel/helper-globals/LICENSE
 ================================================================================
 MIT License
 
@@ -379,7 +379,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-module-imports@7.18.6
 Declared license: MIT
-Source file: node_modules/.bun/babel-plugin-jsx-dom-expressions@0.40.7+6c39b2892b0950f6/node_modules/@babel/helper-module-imports/LICENSE
+Source file: node_modules/.bun/@babel+helper-module-imports@7.18.6/node_modules/@babel/helper-module-imports/LICENSE
 ================================================================================
 MIT License
 
@@ -407,7 +407,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-module-imports@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/solid-refresh@0.6.3+ac9bd97bed21f560/node_modules/@babel/helper-module-imports/LICENSE
+Source file: node_modules/.bun/@babel+helper-module-imports@7.29.7/node_modules/@babel/helper-module-imports/LICENSE
 ================================================================================
 MIT License
 
@@ -463,7 +463,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-plugin-utils@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+plugin-syntax-jsx@7.29.7+6c39b2892b0950f6/node_modules/@babel/helper-plugin-utils/LICENSE
+Source file: node_modules/.bun/@babel+helper-plugin-utils@7.29.7/node_modules/@babel/helper-plugin-utils/LICENSE
 ================================================================================
 MIT License
 
@@ -491,7 +491,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-string-parser@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+types@7.29.7/node_modules/@babel/helper-string-parser/LICENSE
+Source file: node_modules/.bun/@babel+helper-string-parser@7.29.7/node_modules/@babel/helper-string-parser/LICENSE
 ================================================================================
 MIT License
 
@@ -604,7 +604,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/parser@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@types+babel__core@7.20.5/node_modules/@babel/parser/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/parser/LICENSE
 ================================================================================
 Copyright (C) 2012-2014 by various contributors (see AUTHORS)
 
@@ -629,7 +629,7 @@ THE SOFTWARE.
 ================================================================================
 @babel/plugin-syntax-jsx@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/babel-plugin-jsx-dom-expressions@0.40.7+6c39b2892b0950f6/node_modules/@babel/plugin-syntax-jsx/LICENSE
+Source file: node_modules/.bun/@babel+plugin-syntax-jsx@7.29.7+6c39b2892b0950f6/node_modules/@babel/plugin-syntax-jsx/LICENSE
 ================================================================================
 MIT License
 
@@ -713,7 +713,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/types@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@types+babel__core@7.20.5/node_modules/@babel/types/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/types/LICENSE
 ================================================================================
 MIT License
 
@@ -768,7 +768,7 @@ THE SOFTWARE.
 ================================================================================
 @codemirror/commands@6.11.0
 Declared license: MIT
-Source file: node_modules/.bun/codemirror@6.0.2/node_modules/@codemirror/commands/LICENSE
+Source file: node_modules/.bun/@codemirror+commands@6.11.0/node_modules/@codemirror/commands/LICENSE
 ================================================================================
 MIT License
 
@@ -1146,7 +1146,7 @@ THE SOFTWARE.
 ================================================================================
 @codemirror/lint@6.9.7
 Declared license: MIT
-Source file: node_modules/.bun/codemirror@6.0.2/node_modules/@codemirror/lint/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-javascript@6.2.5/node_modules/@codemirror/lint/LICENSE
 ================================================================================
 MIT License
 
@@ -1173,7 +1173,7 @@ THE SOFTWARE.
 ================================================================================
 @codemirror/search@6.7.1
 Declared license: MIT
-Source file: node_modules/.bun/codemirror@6.0.2/node_modules/@codemirror/search/LICENSE
+Source file: node_modules/.bun/@codemirror+search@6.7.1/node_modules/@codemirror/search/LICENSE
 ================================================================================
 MIT License
 
@@ -1252,9 +1252,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ================================================================================
-@esbuild/linux-x64@0.25.12
+@esbuild/win32-x64@0.25.12
 Declared license: MIT
-Source file: node_modules/.bun/esbuild@0.25.12/node_modules/@esbuild/linux-x64/package.json
+Source file: node_modules/.bun/@esbuild+win32-x64@0.25.12/node_modules/@esbuild/win32-x64/package.json
 ================================================================================
 No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
 
@@ -1286,7 +1286,7 @@ SOFTWARE.
 ================================================================================
 @jridgewell/resolve-uri@3.1.2
 Declared license: MIT
-Source file: node_modules/.bun/@jridgewell+trace-mapping@0.3.31/node_modules/@jridgewell/resolve-uri/LICENSE
+Source file: node_modules/.bun/@jridgewell+resolve-uri@3.1.2/node_modules/@jridgewell/resolve-uri/LICENSE
 ================================================================================
 Copyright 2019 Justin Ridgewell <jridgewell@google.com>
 
@@ -1311,7 +1311,7 @@ SOFTWARE.
 ================================================================================
 @jridgewell/sourcemap-codec@1.5.5
 Declared license: MIT
-Source file: node_modules/.bun/@jridgewell+trace-mapping@0.3.31/node_modules/@jridgewell/sourcemap-codec/LICENSE
+Source file: node_modules/.bun/@jridgewell+gen-mapping@0.3.13/node_modules/@jridgewell/sourcemap-codec/LICENSE
 ================================================================================
 Copyright 2024 Justin Ridgewell <justin@ridgewell.name>
 
@@ -2243,7 +2243,7 @@ THE SOFTWARE.
 ================================================================================
 @lezer/css@1.3.6
 Declared license: MIT
-Source file: node_modules/.bun/@lezer+css@1.3.6/node_modules/@lezer/css/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-css@6.3.1/node_modules/@lezer/css/LICENSE
 ================================================================================
 MIT License
 
@@ -2270,7 +2270,7 @@ THE SOFTWARE.
 ================================================================================
 @lezer/go@1.0.1
 Declared license: MIT
-Source file: node_modules/.bun/@lezer+go@1.0.1/node_modules/@lezer/go/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-go@6.0.1/node_modules/@lezer/go/LICENSE
 ================================================================================
 MIT License
 
@@ -2297,7 +2297,7 @@ THE SOFTWARE.
 ================================================================================
 @lezer/highlight@1.2.3
 Declared license: MIT
-Source file: node_modules/.bun/@lezer+css@1.3.6/node_modules/@lezer/highlight/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-sql@6.10.0/node_modules/@lezer/highlight/LICENSE
 ================================================================================
 MIT License
 
@@ -2405,7 +2405,7 @@ THE SOFTWARE.
 ================================================================================
 @lezer/lr@1.4.10
 Declared license: MIT
-Source file: node_modules/.bun/@lezer+css@1.3.6/node_modules/@lezer/lr/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-sql@6.10.0/node_modules/@lezer/lr/LICENSE
 ================================================================================
 MIT License
 
@@ -2432,7 +2432,7 @@ THE SOFTWARE.
 ================================================================================
 @lezer/markdown@1.7.2
 Declared license: MIT
-Source file: node_modules/.bun/@lezer+markdown@1.7.2/node_modules/@lezer/markdown/LICENSE
+Source file: node_modules/.bun/@codemirror+lang-markdown@6.5.2/node_modules/@lezer/markdown/LICENSE
 ================================================================================
 MIT License
 
@@ -2565,23 +2565,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ================================================================================
-@napi-rs/lzma-linux-x64-gnu@1.5.1
+@rollup/rollup-win32-x64-gnu@4.63.0
 Declared license: MIT
-Source file: node_modules/.bun/@napi-rs+lzma-linux-x64-gnu@1.5.1/node_modules/@napi-rs/lzma-linux-x64-gnu/package.json
+Source file: node_modules/.bun/@rollup+rollup-win32-x64-gnu@4.63.0/node_modules/@rollup/rollup-win32-x64-gnu/package.json
 ================================================================================
 No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
 
 ================================================================================
-@rollup/rollup-linux-x64-gnu@4.63.0
+@rollup/rollup-win32-x64-msvc@4.63.0
 Declared license: MIT
-Source file: node_modules/.bun/@rollup+rollup-linux-x64-gnu@4.63.0/node_modules/@rollup/rollup-linux-x64-gnu/package.json
-================================================================================
-No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
-
-================================================================================
-@rollup/rollup-linux-x64-musl@4.63.0
-Declared license: MIT
-Source file: node_modules/.bun/@rollup+rollup-linux-x64-musl@4.63.0/node_modules/@rollup/rollup-linux-x64-musl/package.json
+Source file: node_modules/.bun/@rollup+rollup-win32-x64-msvc@4.63.0/node_modules/@rollup/rollup-win32-x64-msvc/package.json
 ================================================================================
 No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
 
@@ -2669,7 +2662,7 @@ SOFTWARE
 ================================================================================
 @types/babel__core@7.20.5
 Declared license: MIT
-Source file: node_modules/.bun/vite-plugin-solid@2.11.10+14246d20d46d4d45/node_modules/@types/babel__core/LICENSE
+Source file: node_modules/.bun/@types+babel__core@7.20.5/node_modules/@types/babel__core/LICENSE
 ================================================================================
 MIT License
 
@@ -2831,7 +2824,7 @@ MIT License
 ================================================================================
 @types/hast@3.0.5
 Declared license: MIT
-Source file: node_modules/.bun/lowlight@3.3.0/node_modules/@types/hast/LICENSE
+Source file: node_modules/.bun/@types+hast@3.0.5/node_modules/@types/hast/LICENSE
 ================================================================================
 MIT License
 
@@ -2858,7 +2851,7 @@ MIT License
 ================================================================================
 @types/node@26.1.2
 Declared license: MIT
-Source file: node_modules/.bun/vite@7.1.5+7cb241fc07b679d9/node_modules/@types/node/LICENSE
+Source file: node_modules/.bun/@types+node@26.1.2/node_modules/@types/node/LICENSE
 ================================================================================
 MIT License
 
@@ -3089,7 +3082,7 @@ THE SOFTWARE.
 ================================================================================
 @xterm/xterm@5.5.0
 Declared license: MIT
-Source file: node_modules/.bun/@xterm+addon-web-links@0.11.0+c27fd418321dfbfb/node_modules/@xterm/xterm/LICENSE
+Source file: node_modules/.bun/@xterm+addon-canvas@0.7.0+c27fd418321dfbfb/node_modules/@xterm/xterm/LICENSE
 ================================================================================
 Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com)

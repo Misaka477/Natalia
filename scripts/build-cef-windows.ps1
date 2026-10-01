@@ -77,9 +77,12 @@ try {
     # .lib files directly.
     $clang = if (Get-Command clang-cl -ErrorAction SilentlyContinue) { "clang-cl" } else { $null }
     if (-not $clang) { throw "clang-cl not found (install LLVM for Windows)" }
-    & cmake .. -G Ninja -DCMAKE_BUILD_TYPE=$Config -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+    # The variables are quoted: PowerShell passes bare tokens to native
+    # commands WITHOUT expanding them, which would send a literal "$Config"
+    # to cmake as the build type.
+    & cmake .. -G Ninja -DCMAKE_BUILD_TYPE="$Config" -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
   } else {
-    & cmake .. -G $generator -A x64
+    & cmake .. -G "$generator" -A x64
   }
   if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
   & cmake --build . --config $Config --parallel

@@ -22,7 +22,6 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
 
 const root = resolve(import.meta.dir, "..");
 const linuxSdk = join(root, ".cef-test");
@@ -55,10 +54,15 @@ function archiveCoordinates(cefVersion: string) {
   return { version: match[1]!, hash: `g${match[2]!}` };
 }
 
+/** The shape check the coordinates above enforce, kept as a guard on the input. */
 const cefVersion = linuxCefVersion();
-const { version, hash } = archiveCoordinates(cefVersion);
+archiveCoordinates(cefVersion);
 const platform = "windows64";
-const archiveName = `cef_binary_${version}_${hash}_${platform}_minimal.tar.bz2`;
+// The CDN's archive name carries the FULL CEF_VERSION with its `+`
+// separators URL-encoded, e.g.
+// cef_binary_152.0.6%2Bg708dc14%2Bchromium-152.0.7977.83_windows64_minimal.tar.bz2
+// — the version and the git hash alone (joined with `_`) 404s.
+const archiveName = `cef_binary_${cefVersion.replace(/\+/gu, "%2B")}_${platform}_minimal.tar.bz2`;
 const downloadURL = `https://cef-builds.spotifycdn.com/${archiveName}`;
 const sha256URL = `${downloadURL}.sha256`;
 
@@ -133,14 +137,15 @@ async function download(url: string, destination: string) {
   const total = Number(response.headers.get("content-length") ?? 0);
   let received = 0;
   let lastReported = -1;
-  const file = createWriteStream(destination);
-  const writer = file.getWriter();
+  // bun's node:fs write streams carry no WHATWG writer (getWriter is
+  // undefined there), so the body streams through Bun's file writer.
+  const writer = Bun.file(destination).writer();
   const reader = response.body.getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     await writer.write(value);
-    received += value.byteLength;
+    received += value.length;
     if (total > 0) {
       const percent = Math.floor((received / total) * 100);
       if (percent >= lastReported + 20) {
@@ -151,7 +156,7 @@ async function download(url: string, destination: string) {
       }
     }
   }
-  await writer.close();
+  await writer.end();
   const size = (await stat(destination)).size;
   if (size === 0) throw new Error(`downloaded nothing: ${url}`);
   console.log(`[fetch-cef] downloaded ${(size / 1e6).toFixed(0)} MiB`);

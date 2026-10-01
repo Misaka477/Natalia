@@ -1,4 +1,5 @@
-import { cp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile } from "node:fs/promises";
 import { basename, resolve, join } from "node:path";
 
 /**
@@ -8,12 +9,25 @@ import { basename, resolve, join } from "node:path";
  */
 const storeRoot = resolve("dist/ts/plugin-store");
 const pluginsRoot = resolve("dist/ts/plugins");
-await rm(storeRoot, { recursive: true, force: true });
+// Rebuilding from scratch wants to `rm -rf` the store first, but a RUNNING
+// runtime holds it: its ignore-free watcher keeps every directory under the
+// workspace open (ReadDirectoryChangesW on Windows), and removing a directory
+// with an open handle fails EACCES. So the rm is best-effort: when it does not
+// go through, refresh IN PLACE instead. Overwriting the files the new build
+// ships is enough — loaded modules are read, not held open — and `natalia.lock`
+// (written below) is the authority for what actually loads. Stale directories
+// of plugins no longer in dist/ts/plugins stay behind unlisted, which is inert.
+try {
+  await rm(storeRoot, { recursive: true, force: true });
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "EACCES") throw error;
+}
 await mkdir(storeRoot, { recursive: true });
 await mkdir(join(storeRoot, "node_modules", "@natalia"), { recursive: true });
 
 const lockPlugins: Record<string, unknown> = {};
 const storeDependencies: Record<string, string> = {};
+let skipped = 0;
 for (const packageDir of await readdirSorted(pluginsRoot)) {
   const abs = join(pluginsRoot, packageDir);
   const manifest = JSON.parse(
@@ -29,7 +43,7 @@ for (const packageDir of await readdirSorted(pluginsRoot)) {
     ...packageJSON.name.split("/"),
   );
   await mkdir(join(target), { recursive: true });
-  await cp(abs, target, { recursive: true });
+  skipped += await copyTreeInPlace(abs, target);
   lockPlugins[manifest.id] = {
     packageName: packageJSON.name,
     manifest: join(target, "natalia.plugin.json"),
@@ -59,6 +73,41 @@ await writeFile(
   "initialized\n",
 );
 console.log(`[refresh-plugin-store] rebuilt ${storeRoot}`);
+if (skipped > 0)
+  console.log(
+    `[refresh-plugin-store] ${skipped} file(s) held open by a running process were left as-is (a running exe's image is locked on Windows); they stage with the next refresh after that process stops`,
+  );
+
+/**
+ * A per-file, best-effort copy: on Windows a RUNNING process owns the file it
+ * was loaded from — the mux server exe of a live terminal, for instance — and
+ * refusing to overwrite it (EBUSY/EACCES/EPERM) must not fail a whole refresh.
+ * The store serves the next runtime, so a kept-as-is file is a stale copy, not
+ * a broken one, and the count is reported at the end.
+ */
+async function copyTreeInPlace(src: string, dest: string): Promise<number> {
+  let skipped = 0;
+  for (const entry of await readdir(src, { withFileTypes: true })) {
+    const from = join(src, entry.name);
+    const to = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await mkdir(to, { recursive: true });
+      skipped += await copyTreeInPlace(from, to);
+      continue;
+    }
+    try {
+      await copyFile(from, to);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EBUSY" || code === "EACCES" || code === "EPERM") {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+  return skipped;
+}
 
 async function readdirSorted(dir: string) {
   return (await import("node:fs/promises"))

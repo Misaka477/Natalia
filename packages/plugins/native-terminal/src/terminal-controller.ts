@@ -14,6 +14,7 @@ import {
   type NativeInputBroker,
 } from "./native-terminal";
 import type { TerminalController } from "@anthelia/runtime-services";
+import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
 
 export type { TerminalControllerInput } from "@anthelia/runtime-services";
 
@@ -38,7 +39,10 @@ export function createTerminalController(input: {
   /** How foreground terminal starts relate to the human window (§TERM-9). */
   windowMode(): "auto" | "windowless" | "window";
   external?: NativeTerminalRegistry;
-}): TerminalController {
+}): TerminalController & {
+  /** The host registry this controller built (the pty spawn borrows it on Windows). */
+  nativeRegistry(): NativeTerminalRegistry | undefined;
+} {
   let nativeTerminal: NativeTerminalRegistry | undefined = input.external;
   let nativeInputBroker: NativeInputBroker | undefined;
   let closed = false;
@@ -252,6 +256,15 @@ export function createTerminalController(input: {
     return (await requireTerminal().reconcile()).map(publicSession);
   }
 
+  /**
+   * The host registry this controller built. The PTY backend borrows it on
+   * Windows for its panes: there is no in-process PTY there, but a mux pane
+   * is a real PTY the panel can render.
+   */
+  function nativeRegistry() {
+    return nativeTerminal;
+  }
+
   async function list(_sessionID?: string) {
     return nativeTerminal ? await reconcile() : [];
   }
@@ -307,7 +320,12 @@ export function createTerminalController(input: {
   async function write(
     id: string,
     value: string,
-    options?: { idempotencyKey?: string; sessionID?: string },
+    options?: {
+      idempotencyKey?: string;
+      sessionID?: string;
+      /** Who is typing — the PTY controller's shape, forwarded to the registry. */
+      actor?: "model" | "human";
+    },
   ) {
     return await requireTerminal().write(id, value, options);
   }
@@ -353,6 +371,50 @@ export function createTerminalController(input: {
     return requireTerminal().lastObservedRevision(id);
   }
 
+  /**
+   * Live output for the web panel. The WezTerm host has no push channel (the
+   * PTY backend gets onData from node-pty), so the pane's text is polled
+   * through the mux. Each view is the whole screen, so a view is emitted as
+   * an append when it extends what was sent before (a shell's normal case)
+   * and as a full redraw when it does not (a TUI repainted its frame): the
+   * panel's consumer appends to an xterm, and appending a whole screen would
+   * duplicate it.
+   */
+  function subscribeOutput(id: string, listener: (chunk: string) => void) {
+    let stopped = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let sent = "";
+    const stop = () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      timer = undefined;
+    };
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const view = await requireTerminal().observe(id, 0, {
+          maxLines: 500,
+          timeoutMs: 1_000,
+        });
+        if (stopped) return;
+        const text = trimScreenTail(view.text ?? "");
+        const chunk = terminalOutputChunk(sent, text, view.rows);
+        if (chunk) {
+          sent = text;
+          listener(chunk);
+        }
+        if (view.exited) stop();
+      } catch {
+        // The pane is gone; the exit reaches the panel through the session
+        // events, and a dead poll loop would just spin on a missing pane.
+        stop();
+      }
+    };
+    timer = setInterval(() => void poll(), 600);
+    void poll();
+    return stop;
+  }
+
   async function requestHuman(id: string, reason: string, sessionID?: string) {
     return publicSession(
       await requireTerminal().requestHuman(id, reason, sessionID),
@@ -384,6 +446,7 @@ export function createTerminalController(input: {
     init,
     list,
     reconcile,
+    nativeRegistry,
     read,
     openHub,
     claimHumanInput,
@@ -400,6 +463,7 @@ export function createTerminalController(input: {
     markObserved,
     lastObservedRevision,
     requestHuman,
+    subscribeOutput,
     ttyName,
     setActiveSession,
     stopForSession,

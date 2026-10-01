@@ -169,9 +169,17 @@ for (const root of pluginRoots) {
     const nativeRelease = join(root, "wezterm/target/release");
     const nativeOutdir = join(packageOutdir, "wezterm");
     const executableSuffix = process.platform === "win32" ? ".exe" : "";
-    const executables = ["wezterm", "wezterm-gui", "wezterm-mux-server"].map(
-      (name) => `${name}${executableSuffix}`,
-    );
+    const executables = [
+      "wezterm",
+      "wezterm-gui",
+      "wezterm-mux-server",
+      // The Windows PTY bridge (ConPTY host): the PTY backend's spawn on
+      // win32, built by native-terminal:build-conpty:windows. It is a native
+      // artifact of this package like the wezterm three, so it rides the same
+      // staging list - otherwise the store copy has no bridge and every
+      // Windows panel silently falls back to the mux's screen-dump path.
+      ...(process.platform === "win32" ? ["natalia-conpty-bridge"] : []),
+    ].map((name) => `${name}${executableSuffix}`);
     if (skipNative) {
       // The distribution stays truthful about what it carries: the release
       // manifest omits the native tier rather than advertising it.

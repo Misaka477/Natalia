@@ -90,12 +90,14 @@ test("the prebuilt drop directory is the first candidate after an explicit one",
     expect(
       resolveNataliaWezTermForkExecutable({ os: "linux", buildDir: dir }),
     ).toBeUndefined();
-    // And the package's own prebuilt path is the documented shape.
+    // And the package's own prebuilt path is the documented shape. The
+    // separator is the platform's: join() builds with the native separator,
+    // so the expected suffix must too.
     expect(
-      nativeTerminalPrebuiltDir("win32").endsWith("prebuilt/windows-x64"),
+      nativeTerminalPrebuiltDir("win32").endsWith(join("prebuilt", "windows-x64")),
     ).toBe(true);
     expect(
-      nativeTerminalPrebuiltDir("linux").endsWith("prebuilt/linux-x64"),
+      nativeTerminalPrebuiltDir("linux").endsWith(join("prebuilt", "linux-x64")),
     ).toBe(true);
   } finally {
     await rm(dir, { recursive: true, force: true });

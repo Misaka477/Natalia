@@ -352,56 +352,9 @@ export function WebTerminal(props: WebTerminalProps) {
     // does not, which is the "height is locked" report. A ResizeObserver is the
     // one trigger that covers every cause: the initial layout, a sidebar drag,
     // a split, a theme/font change and a window resize.
-    // The measured chain, printed when the terminal refits. A pane that does
-    // not follow its sidebar has one link in this chain still content-sized,
-    // and the numbers name it instead of guessing at the CSS.
-    const measure = (reason: string) => {
-      const chain: Array<Record<string, unknown>> = [];
-      let node: HTMLElement | null = host ?? null;
-      for (let depth = 0; node && depth < 8; depth += 1) {
-        const style = getComputedStyle(node);
-        chain.push({
-          cls: node.className || node.tagName,
-          w: node.clientWidth,
-          h: node.clientHeight,
-          minW: style.minWidth,
-          minH: style.minHeight,
-          flex: style.flex,
-          dir: style.flexDirection,
-          pos: style.position,
-          overflow: style.overflow,
-          // The siblings are what a half-height slot is hiding: a second flex
-          // child splitting the container between them.
-          siblings: node.parentElement
-            ? [...node.parentElement.children].map(
-                (sibling) =>
-                  `${(sibling as HTMLElement).className || sibling.tagName}(${
-                    (sibling as HTMLElement).clientHeight
-                  }x${(sibling as HTMLElement).clientWidth})`,
-              )
-            : [],
-        });
-        node = node.parentElement;
-      }
-      console.log(
-        "[web-terminal] fit",
-        JSON.stringify(
-          {
-            reason,
-            rows: term?.rows,
-            cols: term?.cols,
-            active: props.active,
-            chain,
-          },
-          null,
-          1,
-        ),
-      );
-    };
     hostObserver = new ResizeObserver(() => {
       if (!props.active) return;
       fitSafely();
-      measure("observer");
     });
     // The host's own box is content-sized in the width direction, so a pane
     // that narrows can move the host's floor without moving its measured box.

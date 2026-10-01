@@ -1263,6 +1263,9 @@ export function projectedChatMessages(
           name: event.toolName,
           status: event.status,
           summary: event.summary,
+          ...((event as { toolCallID?: string }).toolCallID
+            ? { toolCallID: (event as { toolCallID: string }).toolCallID }
+            : {}),
           ...(event.result !== undefined ? { result: event.result } : {}),
           ...(event.argumentsRaw !== undefined
             ? { argumentsRaw: event.argumentsRaw }

@@ -32,6 +32,7 @@ import {
   promptData,
   streamEvent,
 } from "./chat-turn-common";
+import { ensureSessionFullEvents } from "@anthelia/substrate";
 
 const MAX_PROTOCOL_CORRECTIONS = 2;
 
@@ -139,6 +140,24 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
         at: new Date().toISOString(),
       });
     };
+    // The history is rebuilt from the projected log, so it needs the WHOLE log:
+    // on the fast-attach path `exec.session.events` is the post-epoch tail, and
+    // folding it silently drops every earlier exchange — the model then sees a
+    // conversation that starts mid-air (and a tool call whose pairing it can no
+    // longer find). `ensureSessionFullEvents` loads the durable log once and
+    // re-seeds the fact state behind it; later turns hit its memoized promise.
+    // A consumer without a store (an embedded/test runtime) has no full log to
+    // load, and a turn must not die because of it: the rebuild still runs over
+    // whatever the exec holds.
+    try {
+      await ensureSessionFullEvents(ctx, input.exec);
+    } catch (error) {
+      logOf(ctx.state.serviceDirectory).warn(
+        "collab-chat",
+        "full event load failed; the history rebuild uses the exec window",
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+    }
     const history = naviChatHistory(input.exec, input.responseMessageID);
     const consumedMessageIDs = history.messageIDs;
     // ADR D1/D2: the system message is the static persona only; the live work
@@ -619,6 +638,9 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
             ),
             result,
             argumentsRaw: call.arguments,
+            // Pairs this result with the assistant toolCalls entry when the
+            // history is rebuilt for the next turn (issue: P30).
+            ...(call.id ? { toolCallID: call.id } : {}),
             at: new Date().toISOString(),
           });
           setPhase("waiting");

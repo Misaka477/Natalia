@@ -459,6 +459,14 @@ type ChatEventData<Namespace extends ChatEventNamespace> =
       summary: string;
       result?: string;
       argumentsRaw?: string;
+      /**
+       * The provider call's id, the ONLY thing that pairs a tool result with
+       * the assistant `toolCalls` entry an OpenAI-compatible gateway requires.
+       * Without it the rebuilt history either drops the tool exchange or emits
+       * an unpaired `role: "tool"` message, and the gateway rejects the next
+       * turn with "tool_calls.id and tool_calls.type are required".
+       */
+      toolCallID?: string;
       startedAt?: number;
       endedAt?: number;
       at: string;

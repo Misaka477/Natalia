@@ -43,9 +43,9 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     note: "the live-context builders pass the events into fact-first helpers (mailbox/collab/drift/decision/constitution ternaries); the audit/constitution-check display folds read the diagnostic slice through diagnosticStreamFor (paid since the slice rollout)",
   },
   "packages/domains/collab/src/chat-turn-common.ts": {
-    count: 3,
+    count: 4,
     cls: "state-first",
-    note: "provider-history ternaries (fact fold -> resident projection)",
+    note: "provider-history ternaries (fact fold -> resident projection); the fourth is chatHistoryEvents, which must read the SAME events the tool-call pairing looks at so the pairing cannot describe a different window than the fold",
   },
   "packages/domains/collab/src/collab-snapshot.ts": {
     count: 1,

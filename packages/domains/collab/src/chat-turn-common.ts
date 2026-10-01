@@ -29,6 +29,7 @@ import type {
   SessionExecutionState,
 } from "@anthelia/substrate";
 import { logOf } from "@anthelia/operation-log";
+import type { RuntimeEvent } from "@anthelia/contracts";
 
 const ledgerHistories = new WeakMap<ContextLedger, ProviderMessage[]>();
 
@@ -208,6 +209,119 @@ export function promptData(value: string): string {
 }
 
 /**
+ * The tool call ids a chat stream's turns used, keyed by the message the turn
+ * belongs to — the pairing an OpenAI-compatible gateway requires.
+ *
+ * A tool row projects as `role: "chat"` with a display summary, so the history
+ * fold has to look at the events to recover the call's identity; without it the
+ * rebuilt request either loses the tool exchange entirely or carries a
+ * `role: "tool"` result with no assistant `toolCalls` to pair it with, which
+ * the gateway rejects with "tool_calls.id and tool_calls.type are required".
+ */
+/**
+ * Rebuild the provider messages for a chat transcript.
+ *
+ * A tool row is a DISPLAY row (its summary is prose for the transcript), and it
+ * is projected BEFORE the message that settles the turn. Left as-is it produces
+ * an unpaired `role: "tool"` message, which an OpenAI-compatible gateway
+ * rejects with "tool_calls.id and tool_calls.type are required".
+ *
+ * So the tool rows are pulled forward onto the assistant entry that owns them:
+ * `assistant(toolCalls=…)` immediately followed by one `role: "tool"` result
+ * per call, in call order.
+ */
+/** A projected chat row, as the mapper needs it (a display tool row + its result). */
+type HistoryChatRow = {
+  messageID: string;
+  role: "user" | "chat" | "system";
+  text: string;
+  kind?: "message" | "thinking" | "tool" | "compaction" | "collab";
+  tool?: { name: string; result?: string };
+};
+
+function chatProviderMessages(
+  history: readonly HistoryChatRow[],
+  callsByMessage: ReadonlyMap<
+    string,
+    Array<{ id: string; name: string; arguments: string }>
+  >,
+): ProviderMessage[] {
+  const pending = new Map(callsByMessage);
+  const messages: ProviderMessage[] = [];
+  for (const message of history) {
+    if (message.kind === "tool") continue;
+    const calls = pending.get(message.messageID);
+    messages.push(
+      calls?.length
+        ? { role: "assistant", content: message.text, toolCalls: calls }
+        : {
+            role:
+              message.role === "user"
+                ? ("user" as const)
+                : ("assistant" as const),
+            content: message.text,
+          },
+    );
+    if (!calls?.length) continue;
+    pending.delete(message.messageID);
+    // The tool rows that belong to this message, in projection order.
+    for (const toolRow of history.filter(
+      (candidate) =>
+        candidate.kind === "tool" && candidate.messageID === message.messageID,
+    )) {
+      const call = calls.find((c) => c.name === toolRow.tool?.name);
+      messages.push({
+        role: "tool",
+        toolCallID: call?.id ?? "",
+        content: toolRow.tool?.result ?? toolRow.text,
+      });
+    }
+  }
+  return messages;
+}
+
+function chatToolCallsByMessage(
+  events: readonly RuntimeEvent[],
+  channel: "navi" | "nia",
+): Map<string, Array<{ id: string; name: string; arguments: string }>> {
+  const byMessage = new Map<
+    string,
+    Array<{ id: string; name: string; arguments: string }>
+  >();
+  const prefix =
+    channel === "navi" ? "navi.chat.tool.used" : "nia.chat.tool.used";
+  for (const event of events) {
+    if (event.type !== prefix) continue;
+    const used = event as Extract<
+      RuntimeEvent,
+      { type: "navi.chat.tool.used" }
+    >;
+    if (!used.toolCallID) continue;
+    const calls = byMessage.get(used.messageID) ?? [];
+    calls.push({
+      id: used.toolCallID,
+      name: used.toolName,
+      arguments: used.argumentsRaw ?? "",
+    });
+    byMessage.set(used.messageID, calls);
+  }
+  return byMessage;
+}
+
+/** The durable events a chat stream's history is rebuilt from. */
+function chatHistoryEvents(
+  exec: SessionExecutionState,
+  channel: "navi" | "nia",
+): readonly RuntimeEvent[] {
+  const state = exec.factStateComplete === true ? exec.factState : undefined;
+  return state
+    ? channel === "navi"
+      ? state.naviChatEvents
+      : state.niaChatEvents
+    : exec.session.events;
+}
+
+/**
  * Navi transcript, folded from hot state when complete, otherwise projected
  * from the resident event log.
  */
@@ -265,11 +379,12 @@ export function naviChatHistory(
     (message) =>
       message.messageID !== responseMessageID && message.kind !== "thinking",
   );
+  const callsByMessage = chatToolCallsByMessage(
+    chatHistoryEvents(exec, "navi"),
+    "navi",
+  );
   return {
-    messages: history.map((message) => ({
-      role: message.role === "user" ? "user" : "assistant",
-      content: message.text,
-    })),
+    messages: chatProviderMessages(history, callsByMessage),
     attachments: history.map((message) => message.attachments),
     messageIDs: new Set(history.map((message) => message.messageID)),
     durableMessages: history,
@@ -293,11 +408,12 @@ export function niaChatHistory(
     (message) =>
       message.messageID !== responseMessageID && message.kind !== "thinking",
   );
+  const callsByMessage = chatToolCallsByMessage(
+    chatHistoryEvents(exec, "nia"),
+    "nia",
+  );
   return {
-    messages: history.map((message) => ({
-      role: message.role === "user" ? "user" : "assistant",
-      content: message.text,
-    })),
+    messages: chatProviderMessages(history, callsByMessage),
     attachments: history.map((message) => message.attachments),
     messageIDs: new Set(history.map((message) => message.messageID)),
     durableMessages: history,

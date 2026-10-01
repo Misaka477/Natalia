@@ -32,6 +32,7 @@ import {
   promptData,
   streamEvent,
 } from "./chat-turn-common";
+import { ensureSessionFullEvents } from "@anthelia/substrate";
 
 const MAX_PROTOCOL_CORRECTIONS = 2;
 
@@ -140,6 +141,20 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
         at: new Date().toISOString(),
       });
     };
+    // Same as the navi channel: the rebuilt history needs the whole durable
+    // log, not the fast-attach tail.
+    // A consumer without a store (an embedded/test runtime) has no full log to
+    // load, and a turn must not die because the history could not be widened:
+    // the rebuild still runs over whatever the exec holds.
+    try {
+      await ensureSessionFullEvents(ctx, input.exec);
+    } catch (error) {
+      logOf(ctx.state.serviceDirectory).warn(
+        "collab-chat",
+        "full event load failed; the history rebuild uses the exec window",
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+    }
     const history = niaChatHistory(input.exec, input.responseMessageID);
     const consumedMessageIDs = history.messageIDs;
     // ADR D1/D2: the system message is the static persona only; the live work
@@ -675,6 +690,9 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
             ),
             result,
             argumentsRaw: call.arguments,
+            // Pairs this result with the assistant toolCalls entry when the
+            // history is rebuilt for the next turn (issue: P30).
+            ...(call.id ? { toolCallID: call.id } : {}),
             at: new Date().toISOString(),
           });
           setPhase("waiting");

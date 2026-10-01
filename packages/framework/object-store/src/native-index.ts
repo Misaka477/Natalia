@@ -15,13 +15,16 @@ export type NativeIndexEntry = {
 
 type NativeLib = {
   symbols: {
-    native_index_load: (path: string) => unknown;
-    native_index_find: (handle: unknown, id: string, out: unknown) => number;
+    // The cstring parameters take the ENCODED form: bun's FFI rejects a raw
+    // JS string for a cstring argument at runtime ("To convert a string to
+    // a pointer, encode it as a buffer"), even though its types say string.
+    native_index_load: (path: Uint8Array) => unknown;
+    native_index_find: (handle: unknown, id: Uint8Array, out: unknown) => number;
     native_index_free: (handle: unknown) => void;
-    native_index_open_dir: (path: string) => unknown;
+    native_index_open_dir: (path: Uint8Array) => unknown;
     native_index_find_dir: (
       handle: unknown,
-      id: string,
+      id: Uint8Array,
       out: unknown,
     ) => number;
     native_index_table_count: (handle: unknown) => number;
@@ -35,16 +38,21 @@ let libAttempted = false;
 function candidatePaths(): string[] {
   const dir = import.meta.dir;
   const base = "native-index/target/release";
+  // MSVC cdylib naming (`natalia_index_native.dll`) has no `lib` prefix.
+  const libName =
+    process.platform === "win32"
+      ? "natalia_index_native.dll"
+      : "libnatalia_index_native.so";
   return [
-    resolve(dir, "..", base, "libnatalia_index_native.so"),
-    resolve(dir, "..", "..", base, "libnatalia_index_native.so"),
+    resolve(dir, "..", base, libName),
+    resolve(dir, "..", "..", base, libName),
     resolve(
       process.cwd(),
       "packages",
       "hosts",
       "object-store",
       base,
-      "libnatalia_index_native.so",
+      libName
     ),
   ];
 }
@@ -93,12 +101,24 @@ function loadLib(): NativeLib | undefined {
   return undefined;
 }
 
+/**
+ * A NUL-terminated utf8 buffer for a `cstring` FFI argument. bun's FFI takes
+ * the encoded buffer for cstring args — a bare JS string is rejected with
+ * "To convert a string to a pointer, encode it as a buffer".
+ */
+function cstr(value: string): Uint8Array {
+  const bytes = Buffer.from(value, "utf8");
+  const out = new Uint8Array(bytes.length + 1);
+  out.set(bytes, 0);
+  return out;
+}
+
 export class NativePackIndex {
   private handle: unknown;
   constructor(path: string) {
     const loaded = loadLib();
     if (!loaded) throw new Error("native index library unavailable");
-    const handle = loaded.symbols.native_index_load(path);
+    const handle = loaded.symbols.native_index_load(cstr(path));
     if (!handle) throw new Error("native index load failed");
     this.handle = handle;
   }
@@ -108,7 +128,11 @@ export class NativePackIndex {
     if (!loaded) return undefined;
     const out = Buffer.alloc(24); // repr(C): 4*u32 + u8 + padding + u32
     const outPtr = ffiPtr(out);
-    const found = loaded.symbols.native_index_find(this.handle, id, outPtr);
+    const found = loaded.symbols.native_index_find(
+      this.handle,
+      cstr(id),
+      outPtr,
+    );
     if (!found) return undefined;
     return {
       offset: out.readUInt32LE(0),
@@ -148,7 +172,7 @@ export class NativePackIndexSet {
   constructor(dir: string) {
     const loaded = loadLib();
     if (!loaded) throw new Error("native index library unavailable");
-    const handle = loaded.symbols.native_index_open_dir(dir);
+    const handle = loaded.symbols.native_index_open_dir(cstr(dir));
     if (!handle) throw new Error("native index table open failed");
     this.handle = handle;
   }
@@ -167,7 +191,11 @@ export class NativePackIndexSet {
     // 64 hex characters). A kind-1 hit without its base is unreadable.
     const out = Buffer.alloc(28 + 64 + 4);
     const outPtr = ffiPtr(out);
-    const found = loaded.symbols.native_index_find_dir(this.handle, id, outPtr);
+    const found = loaded.symbols.native_index_find_dir(
+      this.handle,
+      cstr(id),
+      outPtr,
+    );
     if (!found) return undefined;
     const baseLen = out.readUInt32LE(92);
     const baseId =

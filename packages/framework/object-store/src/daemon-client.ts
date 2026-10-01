@@ -164,7 +164,10 @@ export async function openPackDaemon(
     request: unknown,
   ): Promise<Record<string, unknown> | undefined> => {
     try {
-      stdin.write(`${JSON.stringify(request)}\n`);
+      // The write is awaited: on a dead daemon's pipe the failure surfaces
+      // as a promise rejection (Windows reports EPIPE exactly there), and an
+      // unawaited rejection would escape this catch as an unhandled error.
+      await stdin.write(`${JSON.stringify(request)}\n`);
       stdin.flush();
       return await readLine(reader, decoder, timeoutMs, pending);
     } catch {

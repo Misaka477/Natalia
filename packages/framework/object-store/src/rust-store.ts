@@ -73,11 +73,15 @@ export function objectStoreBackendStatus():
 // layer; the architecture assigns the store to the engine, and a native
 // module belongs to its owning package.
 const CRATE_DIR = resolve(import.meta.dir, "..", "native");
+// The MSVC toolchain names the cdylib `natalia_object_store.dll` (no `lib`
+// prefix); the same crate is `libnatalia_object_store.so` elsewhere.
 let LIB_PATH = join(
   CRATE_DIR,
   "target",
   "release",
-  "libnatalia_object_store.so",
+  process.platform === "win32"
+    ? "natalia_object_store.dll"
+    : "libnatalia_object_store.so",
 );
 
 type RustCasLib = {
@@ -172,10 +176,16 @@ async function buildIfStale(): Promise<void> {
     cwd: CRATE_DIR,
     env: {
       ...process.env,
-      // ~/.cargo is read-only here (the same family as ~/.npm): a /tmp
-      // cargo home keeps the build writable, and a std-only crate means
-      // nothing is ever fetched into it.
-      CARGO_HOME: process.env.CARGO_HOME ?? "/tmp/natalia-cargo",
+      // ~/.cargo is read-only in this sandbox (same family as ~/.npm): a /tmp
+      // cargo home keeps the build writable on POSIX. Windows has no such
+      // restriction — cargo's own default home is already writable, and
+      // injecting a POSIX default there would break the spawn.
+      ...(process.platform === "win32"
+        ? {}
+        : {
+            CARGO_HOME:
+              process.env.CARGO_HOME ?? "/tmp/natalia-cargo",
+          }),
     },
     encoding: "utf8",
     timeout: 120_000,

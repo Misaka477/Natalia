@@ -78,11 +78,18 @@ function ensurePlanPath(ctx: RuntimeContext, inputPath: string) {
   if (!inputPath || typeof inputPath !== "string")
     throw new RuntimeInvalidParams("plan document path is required");
   const rootPath = planRoot(ctx);
-  const root = rootPath + "/";
+  // Windows: `resolve()` returns backslash-separated paths, so the containment
+  // check has to normalize the separator before comparing — mixing `/` and `\`
+  // fails every valid path on win32 while the same code passes on POSIX.
+  // Inlined (not via normalizeSlashes) because it must not depend on a
+  // function declaration that happens to sit further down the file.
+  const toPolicyPath = (value: string) => value.split(/[\\/]/u).join("/");
+  const rootPolicy = toPolicyPath(rootPath);
+  const root = rootPolicy + "/";
 
   if (isAbsolute(inputPath)) {
-    const resolved = resolve(inputPath);
-    if (resolved !== rootPath && !resolved.startsWith(root))
+    const resolved = toPolicyPath(resolve(inputPath));
+    if (resolved !== rootPolicy && !resolved.startsWith(root))
       throw new RuntimeInvalidParams(
         `plan document path must be under ${PLAN_DIR}: ${inputPath}`,
       );
@@ -95,9 +102,9 @@ function ensurePlanPath(ctx: RuntimeContext, inputPath: string) {
     .trim()
     .replace(/^[.\/]*natalia\/plans[\/]*/u, "")
     .replace(/^\.natalia[\/]plans[\/]*/u, "")
-    .replace(/^[\/]+/u, "");
-  const resolved = resolve(rootPath, normalizedInput);
-  if (resolved !== rootPath && !resolved.startsWith(root))
+    .replace(/^[\/\\]+/u, "");
+  const resolved = toPolicyPath(resolve(rootPath, normalizedInput));
+  if (resolved !== rootPolicy && !resolved.startsWith(root))
     throw new RuntimeInvalidParams(
       `plan document path is outside ${PLAN_DIR}: ${inputPath}`,
     );
@@ -178,15 +185,31 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
     return { ...(planID ? { planID } : {}), updated: true };
   }
 
+  // The plan directory is part of the workspace's shape, not something the
+  // model has to discover by failing: an empty workspace gets `.natalia/plans/`
+  // on the first runtime touch, so `plan_doc_write` finds a home and the model
+  // never has to guess whether the feature is wired up.
+  let planDirEnsured: Promise<string> | undefined;
+  function ensurePlanRoot(ctx: RuntimeContext) {
+    planDirEnsured ??= (async () => {
+      const root = planRoot(ctx);
+      await mkdir(root, { recursive: true, mode: 0o700 });
+      return root;
+    })();
+    return planDirEnsured;
+  }
+
   return {
     async planDocList(_sessionID?: string) {
       await ctx.ports.getReady();
+      await ensurePlanRoot(ctx);
       const entries = await readIndex(ctx);
       return Object.values(entries);
     },
 
     async planDocRead(input) {
       await ctx.ports.getReady();
+      await ensurePlanRoot(ctx);
       const entries = await readIndex(ctx);
       const record =
         (input.planID && entries[input.planID]) ||

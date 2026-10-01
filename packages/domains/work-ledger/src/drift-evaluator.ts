@@ -671,7 +671,16 @@ export function createDriftEvaluator(input: {
     const findings: Array<
       Extract<RuntimeEvent, { type: "drift.finding_opened" }>
     > = [];
+    // The reference frame: drift is a comparison, and the reference-based
+    // rules compare the change against the objective/contract. With no
+    // active goal and no plan there is nothing to drift FROM — an empty
+    // objective trivially "does not mention" anything, so a manifest edit
+    // would open a finding about nothing. The session-scoped behaviour
+    // rules (no-progress, failure loop) judge the turn itself and still run.
+    const hasReference =
+      Boolean(signal.objective?.trim()) || Boolean(signal.contract);
     for (const rule of rulesToRun) {
+      if (!rule.sessionScoped && !hasReference) continue;
       const result = rule.match(signal);
       if (!result) continue;
       if (result.confidence < minimumConfidence) continue;

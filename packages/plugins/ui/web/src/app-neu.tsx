@@ -4481,7 +4481,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         selection={modelSelectionSignal() ?? undefined}
         providers={config()?.providers}
         config={config()}
-        onSetDefault={(modelID) => props.ctx.runtime.setDefaultModel?.(modelID)}
+        onSetDefault={async (modelID) => {
+          // The same post-write refresh the add/remove handlers do: the
+          // runtime reloads its config, and the panel's rows (the 默认 tag)
+          // are only re-read on a restart otherwise — the click looked dead.
+          const result = await props.ctx.runtime.setDefaultModel?.(modelID);
+          await refreshModelConfig();
+          return result;
+        }}
         onAddProvider={async (input) => {
           if (!props.ctx.runtime.providerAdd) {
             throw new Error("providerAdd runtime method unavailable");

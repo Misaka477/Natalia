@@ -22,7 +22,7 @@ test("workspace framework services construct and release their resources", async
   const mutations: MutationRegistry = createMutationRegistry();
   const files: WorkspaceFilesController = createWorkspaceFilesController({
     workspaceRoot: root,
-    listPaths: async () => ["main.ts"],
+    listPaths: async () => ({ paths: ["main.ts"], truncated: false }),
     resolveMutation: (path) => {
       const mutation = mutations.match({ path, operation: "modified" });
       if (!mutation) return undefined;

@@ -5,6 +5,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import {
   ensureSessionEventWindow,
+  ensureSessionFullEvents,
   sessionWindowEvents,
 } from "@anthelia/substrate";
 
@@ -48,6 +49,14 @@ async function terminalIDsFor(
   exec: import("@anthelia/substrate").SessionExecutionState | undefined,
 ) {
   if (!exec?.session) return new Set<string>();
+  // The full-events discipline, the same one the constitution check reads
+  // with: a freshly started terminal publishes its `terminal.timeline`
+  // events live, and a session event window that has not replayed them yet
+  // does not contain them. Reading ownership from that window alone
+  // rejected the terminal's OWN claim — "[terminal ... does not belong to
+  // session ...]" — whenever the claim arrived before the first history
+  // load, which is the WS-open path's normal timing.
+  await ensureSessionFullEvents(ctx, exec);
   const window = await ensureSessionEventWindow(ctx, exec);
   const events = window
     ? sessionWindowEvents(exec, window)
@@ -64,10 +73,20 @@ async function assertTerminalOwned(
   exec: import("@anthelia/substrate").SessionExecutionState,
   id: string,
 ) {
-  if (!(await terminalIDsFor(ctx, exec)).has(id))
-    throw new Error(
-      `terminal ${id} does not belong to session ${exec.session.id}`,
-    );
+  if ((await terminalIDsFor(ctx, exec)).has(id)) return;
+  // The registry is the ownership authority; the event window is a replay
+  // seam, and a terminal's fresh `terminal.timeline` events have no session
+  // sequence yet, so the window cannot see them until a store round-trip.
+  // Reading ownership from the window alone therefore rejected the
+  // terminal's OWN claim ("[terminal ... does not belong to session ...]")
+  // on the WS-open path, which claims immediately after start. Consult the
+  // registry before believing the window.
+  const terminal = ctx.state.serviceDirectory.getOptional(terminalController);
+  const owned = (await terminal?.list(exec.session.id)) ?? [];
+  if (owned.some((pane) => pane.id === id)) return;
+  throw new Error(
+    `terminal ${id} does not belong to session ${exec.session.id}`,
+  );
 }
 
 export function createNativeTerminalSurface(

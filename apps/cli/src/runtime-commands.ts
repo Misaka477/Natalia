@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import {
   createRealRuntimeClient,
   createUiAdapterHost,
@@ -48,6 +48,17 @@ export async function handleRuntimeCommand(argv: string[]) {
       ),
     });
     await manager.load();
+    // A fresh install has no workspace registry, and every runtime face
+    // resolves through the manager's ACTIVE workspace — with none active
+    // the whole surface is undefined (the UI parks on its startup page
+    // with `pluginCatalog` "not supported"). Seed the working directory
+    // as the default workspace in that case.
+    if (!manager.getActive()) {
+      await manager.workspaceAdd({
+        path: process.cwd(),
+        title: basename(process.cwd()),
+      });
+    }
     perfLog(
       `[perf] runtime manager loaded +${(performance.now() - commandStart).toFixed(1)}ms`,
     );

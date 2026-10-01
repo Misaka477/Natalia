@@ -261,6 +261,7 @@ export function createProviderSelection(
   function applyAgentProvider(exec: SessionExecutionState | undefined) {
     const {
       getTsRuntimeConfig,
+      getProvider,
       getProviderSource,
       getSelectedAgent,
       getSelectedModel,
@@ -268,7 +269,16 @@ export function createProviderSelection(
       setProvider,
       publishForSession,
     } = ctx.ports;
-    if (options.provider || getProviderSource() !== "ts_config") return;
+    if (options.provider) return;
+    // A provider that came from the environment or an explicit injection is
+    // never overridden by a selection. `unconfigured` is exactly the case
+    // that needs this call: with no default model in the config and no env
+    // key, the session's own selection is the ONLY thing that can produce a
+    // provider - gating it out left every turn dying at not-configured, which
+    // is what a config-only deployment (or a fresh machine that has not set
+    // a default model yet) hits.
+    const source = getProviderSource();
+    if (source === "environment" || source === "explicit") return;
     const tsRuntimeConfig = getTsRuntimeConfig();
     if (!tsRuntimeConfig) return;
     const selectedAgent = getSelectedAgent();

@@ -70,7 +70,25 @@ const trackedClients = new Set<{ dispose?: () => Promise<void> }>();
  * btrfs metadata). The test-workspace hygiene guard at the end of `npm test`
  * fails loudly on any residue, so a forgotten call cannot pass silently.
  */
+/**
+ * Whether this module already registered its cleanup hook.
+ *
+ * `useWorkspaceCleanup` is called both by test files directly and by
+ * `real-runtime-harness` at module scope, so a file that imports the harness and
+ * also calls it registers the hook TWICE — observed as two `afterEach`
+ * invocations for a single test. The second is a no-op (the tracked sets are
+ * already cleared by then), so this is a smell rather than a leak, but it runs
+ * every such file's cleanup twice and hides the real hook's cost.
+ *
+ * Idempotent registration serves both directions: a file that relies on the
+ * harness still gets exactly one hook, and a file that calls it directly does
+ * not get a second one on top.
+ */
+let cleanupRegistered = false;
+
 export function useWorkspaceCleanup(): void {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
   afterEach(async () => {
     const clients = [...trackedClients];
     trackedClients.clear();

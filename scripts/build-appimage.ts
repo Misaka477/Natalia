@@ -74,11 +74,23 @@ async function main(): Promise<number> {
 
   // Packing needs appimagetool, which is an optional download. Degrade rather
   // than fail: the AppDir is installable and runnable as-is.
-  const tool = Bun.which("appimagetool");
+  // The tool may live in .tools/ (where `npm run appimage:fetch` puts it) rather
+  // than on PATH — a build host that fetched it once should not have to export
+  // anything.
+  const tool =
+    Bun.which("appimagetool") ??
+    (existsSync(join(root, ".tools", "appimagetool"))
+      ? join(root, ".tools", "appimagetool")
+      : undefined);
   if (!tool) {
-    console.log(
-      "[appimage] appimagetool not on PATH — the AppDir is the deliverable; " +
-        "packing it is optional.",
+    // NOT "optional": the AppDir installs, but the single file a user
+    // double-clicks is what this step exists to make. Say what is missing and
+    // what produces it, rather than reporting success.
+    console.error(
+      "[appimage] appimagetool is not available, so no .AppImage was produced. " +
+        "The AppDir above is complete and installable, but it is not the " +
+        "single-file artifact a user double-clicks.\n" +
+        "  fix: npm run appimage:fetch   (then re-run npm run appimage)",
     );
     return 0;
   }
@@ -88,7 +100,16 @@ async function main(): Promise<number> {
     { cwd: root, stdout: "inherit", stderr: "inherit" },
   );
   if (packed.exitCode !== 0) {
-    console.error(`[appimage] appimagetool failed (exit ${packed.exitCode})`);
+    // appimagetool is a FUSE AppImage itself, and it links libgpgme.so.11 (an ABI
+    // this repository's build hosts do not all carry). Measured on the Linux
+    // workspace that produced the AppDir: it downloads and unpacks, then dies on
+    // the missing library — so the failure is the host's, not the AppDir's.
+    console.error(
+      `[appimage] appimagetool failed (exit ${packed.exitCode}). The AppDir is ` +
+        `complete and installable as-is; packing it needs a host with ` +
+        `/dev/fuse (to run the AppImage) or libgpgme.so.11 (to run the ` +
+        `extracted binary).`,
+    );
     return 1;
   }
   console.log(`[appimage] image: ${imagePath}`);

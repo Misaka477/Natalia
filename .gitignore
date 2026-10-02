@@ -107,3 +107,6 @@ apps/cef-desktop/build/
 # Local Bun install cache (BUN_INSTALL override for sandboxed/read-only-home environments)
 /.bun-local/
 /.nataliaignore
+
+# Downloaded build tools (the AppImage packer, ~9MB): never a repo artifact.
+.tools/

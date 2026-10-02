@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildAppImage,
   isPackableRelease,
@@ -267,3 +267,37 @@ async function withAppRun(
   };
   await body({ run, stateDir });
 }
+
+const repoRoot = join(import.meta.dir, "..", "..");
+
+test("a packer without its tool says so, and does not report success", () => {
+  // The AppDir installs, but the single file a user double-clicks is what this
+  // step exists to make — so "appimagetool not on PATH" must not read as done.
+  const source = readFileSync(
+    new URL("../build-appimage.ts", import.meta.url),
+    "utf8",
+  );
+  // It looks in .tools/ as well as PATH, because that is where the fetch script
+  // puts it.
+  expect(source).toContain('join(root, ".tools", "appimagetool")');
+  // And when it is absent, the message names what produces it.
+  expect(source).toContain("no .AppImage was produced");
+  expect(source).toContain("npm run appimage:fetch");
+});
+
+test("the fetch script is a real script, not an inline heredoc", () => {
+  // An inline `bun -e` with shell escaping broke on its first attempt; the fix
+  // was a file. This pins the shape so it does not regress to something
+  // unreadable.
+  expect(existsSync(join(repoRoot, "scripts", "fetch-appimagetool.ts"))).toBe(
+    true,
+  );
+  const pkg = JSON.parse(
+    readFileSync(join(repoRoot, "package.json"), "utf8"),
+  ) as {
+    scripts: Record<string, string>;
+  };
+  expect(pkg.scripts["appimage:fetch"]).toBe(
+    "bun scripts/fetch-appimagetool.ts",
+  );
+});

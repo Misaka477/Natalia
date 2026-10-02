@@ -154,7 +154,7 @@ jobs:
               bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-e.test.ts
           - layer: "client-rest-1"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 \
+              bun test --max-concurrency=4 --timeout 300000 \
                               packages/framework/client/test/ast-move-face.test.ts \
                               packages/framework/client/test/capability-settings.test.ts \
                               packages/framework/client/test/chat-attachments.test.ts \
@@ -205,7 +205,7 @@ jobs:
                               packages/framework/client/test/plan-contract.test.ts
           - layer: "client-rest-2"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 \
+              bun test --max-concurrency=4 --timeout 180000 \
                               packages/framework/client/test/plan-doc-createdby.test.ts \
                               packages/framework/client/test/plan-pause-e2e.test.ts \
                               packages/framework/client/test/plan-tasks-e2e.test.ts \

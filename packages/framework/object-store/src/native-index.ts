@@ -19,7 +19,11 @@ type NativeLib = {
     // JS string for a cstring argument at runtime ("To convert a string to
     // a pointer, encode it as a buffer"), even though its types say string.
     native_index_load: (path: Uint8Array) => unknown;
-    native_index_find: (handle: unknown, id: Uint8Array, out: unknown) => number;
+    native_index_find: (
+      handle: unknown,
+      id: Uint8Array,
+      out: unknown,
+    ) => number;
     native_index_free: (handle: unknown) => void;
     native_index_open_dir: (path: Uint8Array) => unknown;
     native_index_find_dir: (
@@ -46,14 +50,7 @@ function candidatePaths(): string[] {
   return [
     resolve(dir, "..", base, libName),
     resolve(dir, "..", "..", base, libName),
-    resolve(
-      process.cwd(),
-      "packages",
-      "hosts",
-      "object-store",
-      base,
-      libName
-    ),
+    resolve(process.cwd(), "packages", "hosts", "object-store", base, libName),
   ];
 }
 

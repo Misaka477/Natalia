@@ -91,8 +91,7 @@ test("Rust writes, TS reads: the TS verify-on-read accepts Rust's bytes", async 
   // Windows has no mode bits in std, and the store root already lives under
   // the user's profile)
   const shard = await stat(join(storeRoot, id.slice(0, 2)));
-  if (process.platform !== "win32")
-    expect(shard.mode & 0o777).toBe(0o700);
+  if (process.platform !== "win32") expect(shard.mode & 0o777).toBe(0o700);
 });
 
 test("a corrupt object fails identically on both sides (verify-on-read)", async () => {

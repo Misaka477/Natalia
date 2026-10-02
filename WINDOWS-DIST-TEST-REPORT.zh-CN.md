@@ -8,19 +8,19 @@
 
 ## 环境
 
-| 项 | 值 |
-| --- | --- |
-| Windows | Windows 11 (10.0.26200) |
-| Git | 2.53.0.windows.2（`D:\Software_Development\Git`） |
-| Bun | 1.3.14 |
-| Node | 24.15.0（`D:\Software_Development\nodejs`） |
-| CMake | 4.3.1（conda env `natalia`） |
-| Ninja | 官方 1.12.1（`D:\Software_Development\ninja`，**替换了 conda 的魔改版**，见 P16） |
-| MSVC | VS 2022 Community 14.44.35207（`D:\Software_Development\Microsoft Visual Studio`） |
-| Rust | 1.98.1 stable（`D:\Software_Development\rustup` + `D:\Software_Development\cargo`），targets `x86_64-pc-windows-msvc` / `wasm32-unknown-unknown` / `wasm32-wasip1` |
-| LLVM | 19.1.7（`D:\Software_Development\LLVM`，CEF 构建用 clang-cl 19.1.7） |
-| WASI SDK | 34.0（`D:\Software_Development\wasi-sdk`） |
-| node-pty | 1.0.0 已本机编译（`conpty.node` / `conpty_console_list.node` / `pty.node`） |
+| 项       | 值                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows  | Windows 11 (10.0.26200)                                                                                                                                            |
+| Git      | 2.53.0.windows.2（`D:\Software_Development\Git`）                                                                                                                  |
+| Bun      | 1.3.14                                                                                                                                                             |
+| Node     | 24.15.0（`D:\Software_Development\nodejs`）                                                                                                                        |
+| CMake    | 4.3.1（conda env `natalia`）                                                                                                                                       |
+| Ninja    | 官方 1.12.1（`D:\Software_Development\ninja`，**替换了 conda 的魔改版**，见 P16）                                                                                  |
+| MSVC     | VS 2022 Community 14.44.35207（`D:\Software_Development\Microsoft Visual Studio`）                                                                                 |
+| Rust     | 1.98.1 stable（`D:\Software_Development\rustup` + `D:\Software_Development\cargo`），targets `x86_64-pc-windows-msvc` / `wasm32-unknown-unknown` / `wasm32-wasip1` |
+| LLVM     | 19.1.7（`D:\Software_Development\LLVM`，CEF 构建用 clang-cl 19.1.7）                                                                                               |
+| WASI SDK | 34.0（`D:\Software_Development\wasi-sdk`）                                                                                                                         |
+| node-pty | 1.0.0 已本机编译（`conpty.node` / `conpty_console_list.node` / `pty.node`）                                                                                        |
 
 新增开发工具全部装在 `D:\Software_Development`；User 级环境变量已持久化：
 `PATH` 追加 `D:\Software_Development\cargo\bin` 与 `D:\Software_Development\LLVM\bin`
@@ -54,14 +54,14 @@ without a backend, only `danger-full-access` remains usable"；Windows 没有 la
 
 ### P3 object-store 原生 crate 的 Unix 假设（已移植）
 
-| # | 位置 | 问题 | 修法 |
-| --- | --- | --- | --- |
-| 1 | `object-store/native-index/src/lib.rs` | `use std::os::unix::io::AsRawFd` + extern mmap | 增加 `#[cfg(windows)]` 实现：`CreateFileMappingW`+`MapViewOfFile`，Drop 里 `UnmapViewOfFile`+`CloseHandle`；struct 加 Windows-only `section` 句柄 |
-| 2 | `object-store/native/src/packread.rs` | 同上（pack 阅读端） | 同 #1 |
-| 3 | `object-store/native/src/lib.rs` | `Permissions::from_mode` | 抽 `restrict(path, mode)`：Unix 走 `from_mode`，Windows no-op |
-| 4 | `object-store/src/rust-store.ts` | 加载器写死 `libnatalia_object_store.so` | win32 加载 `natalia_object_store.dll`；CARGO_HOME 的 `/tmp` 默认值改仅 POSIX |
-| 5 | `object-store/src/native-index.ts` | 候选路径写死 `.so` | 按平台选 `.dll`（与 `daemon-client.ts` 既有分支同一惯例） |
-| 6 | `package.json` | 链里没有单独编 index cdylib 的步骤（产物落不到 loader 找的位置） | 新增 `"native:index"`，并入 `native:windows` |
+| #   | 位置                                   | 问题                                                             | 修法                                                                                                                                              |
+| --- | -------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `object-store/native-index/src/lib.rs` | `use std::os::unix::io::AsRawFd` + extern mmap                   | 增加 `#[cfg(windows)]` 实现：`CreateFileMappingW`+`MapViewOfFile`，Drop 里 `UnmapViewOfFile`+`CloseHandle`；struct 加 Windows-only `section` 句柄 |
+| 2   | `object-store/native/src/packread.rs`  | 同上（pack 阅读端）                                              | 同 #1                                                                                                                                             |
+| 3   | `object-store/native/src/lib.rs`       | `Permissions::from_mode`                                         | 抽 `restrict(path, mode)`：Unix 走 `from_mode`，Windows no-op                                                                                     |
+| 4   | `object-store/src/rust-store.ts`       | 加载器写死 `libnatalia_object_store.so`                          | win32 加载 `natalia_object_store.dll`；CARGO_HOME 的 `/tmp` 默认值改仅 POSIX                                                                      |
+| 5   | `object-store/src/native-index.ts`     | 候选路径写死 `.so`                                               | 按平台选 `.dll`（与 `daemon-client.ts` 既有分支同一惯例）                                                                                         |
+| 6   | `package.json`                         | 链里没有单独编 index cdylib 的步骤（产物落不到 loader 找的位置） | 新增 `"native:index"`，并入 `native:windows`                                                                                                      |
 
 验证：bun 下 `objectStoreBackendStatus()` = `rust`、`nativePackIndexAvailable()` = `true`；
 产物 `natalia_object_store.dll` / `natalia-object-store-daemon.exe` / `natalia_index_native.dll`。
@@ -101,17 +101,17 @@ Windows 侧 tar 支持 bzip2（§2-#3 解除），sha256 校验通过。
 `apps/cef-desktop/CMakeLists.txt` 的 Windows 分支是按**旧版 CEF 布局**写的（一切在发行版根下），
 CEF 152 的真实布局完全不同：库在 `Release/`，wrapper 无预编译、要从 `libcef_dll/` 源码编。
 
-| # | 问题 | 修法 |
-| --- | --- | --- |
-| 1 | 库路径指向发行版根 | 改指 `Release/{libcef.lib, libcef.dll}`；runtime 拷贝 `Release/` + `Resources/` |
-| 2 | 链接不存在的 `libcef_dll_wrapper.lib` | `find_package(CEF)` + `add_subdirectory(${CEF_LIBCEF_DLL_WRAPPER_PATH})`，链接 `libcef_dll_wrapper` target |
-| 3 | `SimpleHandler::PlatformTitleChange` 只有 Linux 实现 | 照 upstream CEF Windows 示例新增 `simple_handler_win.cc` |
-| 4 | `wWinMain` 用 `LPTSTR`（UNICODE 未定义时是窄串）与宽字符原型冲突 | 改 `LPWSTR` |
-| 5 | app 目标没开 `NOMINMAX`，windows.h 的 `min/max` 宏吃掉 CEF 的 `std::min/max` | Windows 分支补 `NOMINMAX` + `WIN32_LEAN_AND_MEAN`（`_FILE_OFFSET_BITS=64` 改仅 POSIX） |
-| 6 | CEF cmake 清空 `CMAKE_CXX_FLAGS*`，app 目标拿不到 `-DNDEBUG`，与 wrapper 的 `DCHECK_IS_ON` 不一致 → 链接错误 | 调 `SET_EXECUTABLE_TARGET_PROPERTIES`（CEF 官方集成方式），与 wrapper 同一 flag 家族 |
-| 7 | clang-cl 不接受 CEF flag 里的 `/MP`（-Werror 下报 unused）/`/MT`（与 CMake 的 `-MD` 运行时冲突） | add_subdirectory 前过滤这两个 flag |
-| 8 | clang 对 CEF 自家代码的三个诊断在 /WX 下成错误（FARPROC 转换、部分初始化、undefined-var-template） | wrapper 与 app 目标分别 `-Wno-error=` 降级为警告 |
-| 9 | lld-link 缺 `__delayLoadHelper2`（link.exe 隐式带 delayimp，lld 要显式） | 链接 `delayimp` |
+| #   | 问题                                                                                                         | 修法                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 1   | 库路径指向发行版根                                                                                           | 改指 `Release/{libcef.lib, libcef.dll}`；runtime 拷贝 `Release/` + `Resources/`                            |
+| 2   | 链接不存在的 `libcef_dll_wrapper.lib`                                                                        | `find_package(CEF)` + `add_subdirectory(${CEF_LIBCEF_DLL_WRAPPER_PATH})`，链接 `libcef_dll_wrapper` target |
+| 3   | `SimpleHandler::PlatformTitleChange` 只有 Linux 实现                                                         | 照 upstream CEF Windows 示例新增 `simple_handler_win.cc`                                                   |
+| 4   | `wWinMain` 用 `LPTSTR`（UNICODE 未定义时是窄串）与宽字符原型冲突                                             | 改 `LPWSTR`                                                                                                |
+| 5   | app 目标没开 `NOMINMAX`，windows.h 的 `min/max` 宏吃掉 CEF 的 `std::min/max`                                 | Windows 分支补 `NOMINMAX` + `WIN32_LEAN_AND_MEAN`（`_FILE_OFFSET_BITS=64` 改仅 POSIX）                     |
+| 6   | CEF cmake 清空 `CMAKE_CXX_FLAGS*`，app 目标拿不到 `-DNDEBUG`，与 wrapper 的 `DCHECK_IS_ON` 不一致 → 链接错误 | 调 `SET_EXECUTABLE_TARGET_PROPERTIES`（CEF 官方集成方式），与 wrapper 同一 flag 家族                       |
+| 7   | clang-cl 不接受 CEF flag 里的 `/MP`（-Werror 下报 unused）/`/MT`（与 CMake 的 `-MD` 运行时冲突）             | add_subdirectory 前过滤这两个 flag                                                                         |
+| 8   | clang 对 CEF 自家代码的三个诊断在 /WX 下成错误（FARPROC 转换、部分初始化、undefined-var-template）           | wrapper 与 app 目标分别 `-Wno-error=` 降级为警告                                                           |
+| 9   | lld-link 缺 `__delayLoadHelper2`（link.exe 隐式带 delayimp，lld 要显式）                                     | 链接 `delayimp`                                                                                            |
 
 另外 `scripts/build-cef-windows.ps1` 两个 bug（见 P8）。构建结果：
 `natalia-cef-desktop.exe` + `libcef.dll` + `*.pak` + `icudtl.dat` + `locales/` + `Resources/` 全部落地。
@@ -151,6 +151,7 @@ Linux 下 spawn 是 Python 桥（`python3` + POSIX `pty` 模块）；Windows 两
 dlopen 也失败。
 
 **修法（后端默认不动，只补 Windows 的 spawn）**：
+
 1. `pty-terminal-controller.ts`：`defaultSpawn` 在 win32 且拿得到 host registry 时走 `spawnWithWezTermPty`——
    在 WezTerm mux 里起一个**真 pane**（`background: true`，窗口语义即 registry 自带的"background pane"：
    真 pane、不开窗），轮询 `observe` 喂 `onData`（增量追加 / 全屏重画，与 WS 面板同一纪律），
@@ -185,8 +186,9 @@ Windows 需要不同的默认值。已全部回退；正确的修法是补 spawn
 （这是真 bug 不是硬编码假数据：数据源是 watcher 真事件，只是删除判定被有界枚举污染。）
 
 **修法**：
+
 1. `platform/workspace-files.ts` 新增 `listWorkspaceFilePaths`：完整走查 + `.nataliaignore` 规则剪枝
-   （node_modules/dist/target/*.log…），带 `truncated` 诚实上报，上限 50k。
+   （node_modules/dist/target/\*.log…），带 `truncated` 诚实上报，上限 50k。
 2. `workspace-change-auditor`：`reconcile(currentPaths, complete)`——集合不完整时，缺失的提示路径
    **保持 pending**（下次完整 reconcile 再确认），绝不编造删除；`observe` 对 ignore 规则命中的提示直接丢弃。
 3. controller 契约改为 `listPaths: () => Promise<{paths, truncated}>`；注入换成新函数 + `isExcludedPath`。
@@ -211,24 +213,24 @@ Windows 需要不同的默认值。已全部回退；正确的修法是补 spawn
 
 ## 步骤结果（交接文档 §9 格式）
 
-| 步骤 | 结果 |
-| --- | --- |
-| ① 干净克隆 explore | ✅（tarball 导入 + 本地 git 化，a061272d 内容） |
-| ② 装工具（rustup + wasm targets + WASI SDK + LLVM + 官方 ninja） | ✅ 全装 `D:\Software_Development` |
-| ③ bun install（node-pty 本机编译） | ✅ exit 0 |
-| ④ npm run native:all | ⚠️ Linux-only 的 confinement 必失败（P2，设计内降级）；`native:windows` ✅ |
-| ⑤ npm run diff:build-wasm | ✅ 44/44 AST packs + diff core（WASI SDK 34） |
-| ⑥ npm run licenses:check | ✅（重新生成 Windows 路径版清单） |
-| ⑦ bun scripts/ts-build.ts | ✅ 16 插件 + node-abi（v137）+ wezterm 三 exe stage |
-| ⑧ npm run refresh:plugin-store | ✅ 17 插件写入 store |
-| ⑨ npm run build:web | ✅ vite 产物 |
-| ⑩ desktop:cef:fetch:windows | ✅ 152.0.6 sha256 校验通过 |
-| ⑪ build-cef-windows.ps1 | ✅ exe + runtime 落地（P7 九修） |
-| ⑫ run-cef-desktop.cmd | ✅ 8790/5178/CEF 窗口全起 |
-| ⑬ bun test（object-store / workspace） | ✅ 39+45 pass，0 fail |
-| ⑭ npm run typecheck | ✅ exit 0 |
-| ⑮ 终端面板 | ✅ wezterm 后端 Git Bash running |
-| ⑯ 启动页工作负载 | ✅ 17 插件目录 + runtime.status + 会话 |
+| 步骤                                                             | 结果                                                                       |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| ① 干净克隆 explore                                               | ✅（tarball 导入 + 本地 git 化，a061272d 内容）                            |
+| ② 装工具（rustup + wasm targets + WASI SDK + LLVM + 官方 ninja） | ✅ 全装 `D:\Software_Development`                                          |
+| ③ bun install（node-pty 本机编译）                               | ✅ exit 0                                                                  |
+| ④ npm run native:all                                             | ⚠️ Linux-only 的 confinement 必失败（P2，设计内降级）；`native:windows` ✅ |
+| ⑤ npm run diff:build-wasm                                        | ✅ 44/44 AST packs + diff core（WASI SDK 34）                              |
+| ⑥ npm run licenses:check                                         | ✅（重新生成 Windows 路径版清单）                                          |
+| ⑦ bun scripts/ts-build.ts                                        | ✅ 16 插件 + node-abi（v137）+ wezterm 三 exe stage                        |
+| ⑧ npm run refresh:plugin-store                                   | ✅ 17 插件写入 store                                                       |
+| ⑨ npm run build:web                                              | ✅ vite 产物                                                               |
+| ⑩ desktop:cef:fetch:windows                                      | ✅ 152.0.6 sha256 校验通过                                                 |
+| ⑪ build-cef-windows.ps1                                          | ✅ exe + runtime 落地（P7 九修）                                           |
+| ⑫ run-cef-desktop.cmd                                            | ✅ 8790/5178/CEF 窗口全起                                                  |
+| ⑬ bun test（object-store / workspace）                           | ✅ 39+45 pass，0 fail                                                      |
+| ⑭ npm run typecheck                                              | ✅ exit 0                                                                  |
+| ⑮ 终端面板                                                       | ✅ wezterm 后端 Git Bash running                                           |
+| ⑯ 启动页工作负载                                                 | ✅ 17 插件目录 + runtime.status + 会话                                     |
 
 ## 遗留与建议
 
@@ -284,6 +286,7 @@ Windows 上 node-pty（conpty.node）在 bun 下 dlopen 失败、Python 无 `pty
 control 行 input/resize/kill），所以 pty 控制器、面板、模型看到的就是 Linux 那套**真实字节**。
 
 实现要点：
+
 - `pty-terminal-controller.ts` 抽出共享的 `spawnPtyBridge(child, options)`，Python 桥与 ConPTY 桥
   共用全部帧解析逻辑；`defaultSpawn` 在 win32 上**优先 ConPTY 桥**，helper 未构建时才回退 wezterm differ。
 - ConPTY 关键坑：`CreateProcessW` 带伪控制台属性时**不能传 lpApplicationName**（ERROR_INVALID_PARAMETER 87）；
@@ -311,6 +314,7 @@ control 行 input/resize/kill），所以 pty 控制器、面板、模型看到�
 provider 端点直连实测 200（stepfun step_plan 通道，key 有效）。
 
 **根因（两层，都在 `packages/framework/client/src/runtime`）**：
+
 1. **boot 只认 env**：`plugin-assembly.ts` 的 `initialize()` 只走 `providerFromEnvironment()`；
    config 侧建 provider 的路径（`providerForModel` + defaultModel 兜底）**只由 config 重载触发**。
    纯配置文件部署（或没设默认模型的新机器）→ provider 恒为 not-configured →
@@ -320,6 +324,7 @@ provider 端点直连实测 200（stepfun step_plan 通道，key 有效）。
    （没 provider → 不建 provider 的首轮死循环）。
 
 **修复（代码，治本）**：
+
 - `plugin-assembly.ts`：initialize 增加 config 兜底——无 env provider 时按
   `getSelectedModel() ?? config.defaultModel` 解析 provider（source=ts_config）。
 - `provider-selection.ts`：`applyAgentProvider` 门禁从"仅 ts_config"放开为
@@ -329,6 +334,7 @@ provider 端点直连实测 200（stepfun step_plan 通道，key 有效）。
   不做隐式持久化（不把每次面板选择偷偷写成全局默认）。
 
 **验证（三种形态都通）**：
+
 1. 无 defaultModel、无 env、会话有选择 → boot 即 `model=step-5-preview / provider=openai-compatible`，
    turn 完整跑完（thinking.done + content.partial + content.done + turn.finished）。
 2. 有 defaultModel（对象）→ boot 即解析，模型中文回复正常。
@@ -343,6 +349,7 @@ provider 端点直连实测 200（stepfun step_plan 通道，key 有效）。
 
 `bun test packages/framework/client/test` 12 个失败：sandbox 路径 / checkpoint 恢复 /
 EBUSY 临时目录清理（Windows 句柄未释放）。`git stash` A/B 确认与本次改动无关。
+
 ### P23 终端：ConPTY 桥的 mute pane 回归，默认切回 wezterm pane（桥降为开关）
 
 **现象**：ConPTY 桥的 pane 只输出 16 字节初始化序列（`ESC[?9001h ESC[?1004h`）后静默——
@@ -350,6 +357,7 @@ console 起来了、子进程 bash 活着（0 CPU 阻塞），但没有任何屏
 路径同症状。
 
 **取证事实**：
+
 - 同一个二进制（177664B 的 env-free 构建）在 06:2x 的 E2E 中收到 echo（`echo seen: true`），
   07:2x 起同样二进制只有 16 字节——二进制相同、spec 相同，行为不同。
 - 期间累计过约 10 个卡死的桥+bash（每次失败探针留一个；已全部 taskkill 清理，进程归零），
@@ -360,11 +368,13 @@ console 起来了、子进程 bash 活着（0 CPU 阻塞），但没有任何屏
   prompt 渲染 / echo 回显 / 光标归位均正常（realpath-check code=0）。
 
 **当前形态**：
+
 - win32 默认 spawn = wezterm mux pane 适配器（screen-dump differ，带首帧修复+行对齐追加+
   光标归位）；`NATALIA_TERMINAL_CONPTY=1` 时走 ConPTY 桥。
 - 桥代码保留、编译产物保留（ts-build 暂存清单已修，4 个 exe 都进 store），只是运行时默认不选它。
 
 **下一轮定位方向**（按优先级）：
+
 1. 用 Process Monitor 抓一次 mute 期的桥：看 WriteFile(conin) / ReadFile(conout) 哪一侧无流量；
 2. 对照 06:2x 成功时与现在的差异变量——唯一未排除的是 ConPTY 的 host 侧握手
    （conhost 与 host 之间的 viewport 协商：成功那次前 pane 恰好被 resize 过）；
@@ -379,6 +389,7 @@ console 起来了、子进程 bash 活着（0 CPU 阻塞），但没有任何屏
 xterm 把光标一路吃到窗底；首帧又把内容从第 1 行开始画，所以提示符贴顶。
 
 **修复（`src/output-chunk.ts` + 两个调用点）**：
+
 1. `trimScreenTail()`：diff / 发送 / 暂存前一律剃掉尾部空行——光标不再被推到窗底。
 2. 首帧整屏重画增加"贴底内衬"：首帧按 view.rows 在内容上方补空行，提示符落在窗底
    （集成终端的首屏形态），caret 显式归位序列。
@@ -393,6 +404,7 @@ xterm 把光标一路吃到窗底；首帧又把内容从第 1 行开始画，�
 **症状**：Providers & Models 弹窗里点"设为默认"无反应（虚空接线）；且改完不刷新，要重启才生效。
 
 **链路取证**（从 UI 按钮一路查到服务端）：
+
 1. 服务端 `model.setDefault`（`provider-selection/selection.ts`）本身正确：RPC 直调返回 `saved:true`
    并把 `defaultModel: {provider, model}` 写进全局 config。
 2. **断点 1（真凶）**：web 客户端 `runtime-rpc.ts` 的路由表有
@@ -420,6 +432,7 @@ xterm 把光标一路吃到窗底；首帧又把内容从第 1 行开始画，�
 两个 bun server 会遗留占端口和数百 MB——每次都要手动猜进程杀。
 
 **机制**（`run-cef-desktop.ps1`）：
+
 1. **Job Object（父进程即 owner）**：`CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`，
    launcher 是所有子进程（runtime/web/CEF 窗口）的父；**launcher 以任何方式退出**
    （关窗、Ctrl+C、脚本错误、甚至父进程被硬杀），OS 关 Job 句柄时整棵树一起消失——
@@ -451,8 +464,9 @@ by declaration rather than by a name guess: "protocol": { "format": "openai-chat
 这类名字会猜错）。
 
 **修复**：
+
 1. `providerAdd` 写入时声明格式：`protocol.format = current.protocol.format
-   ?? providerFormatFromDriver(input.type)`（复用运行时的同一词表，
+?? providerFormatFromDriver(input.type)`（复用运行时的同一词表，
    老条目保留自己的声明）。
 2. 用户现有 `.natalia/global-config.json` 的 step-plan 补 `protocol: {format: "openai-chat"}`。
 
@@ -471,6 +485,7 @@ ts-build/refresh 完成。
 按 connection 分类反复重试——我当时把这一串读成了"网络抖动后成功"。
 
 **真实过程**（详见 P30）：
+
 1. 第一轮 `plan_doc_write` 内存配对完整，`{"written":true}` 成功
 2. 该 tool_call 落库为投影事件 `navi.chat.tool.used`，**只保存了展示摘要**
 3. 第二轮 `naviChatHistory()` 从事件重建历史，`assistant.toolCalls` 字段缺失
@@ -479,6 +494,7 @@ ts-build/refresh 完成。
 
 **影响面**：navi / nia 对话通道。**natalia 主 agent 不受影响**
 （其请求体由内存 ledger 实时构造，不经过 chat 投影重建）。
+
 ### P30 navi/nia 历史重建丢失 assistant.toolCalls（已定位）
 
 **症状**：对话第一轮工具调用成功（`{"written":true}`），第二轮必炸
@@ -492,9 +508,9 @@ ts-build/refresh 完成。
    请求体配对无损，所以第一轮成功。
 2. **持久化丢字段**：tool_call 落库为 `navi.chat.tool.used` 事件
    （`chat-turn-navi.ts:610-623`），载荷只有 `toolName/status/summary/result/
-   argumentsRaw`——**没有 id、没有 assistant 消息侧的 toolCalls 结构**。
+argumentsRaw`——**没有 id、没有 assistant 消息侧的 toolCalls 结构**。
 3. **投影不还原**：`projectChatStream`（`packages/framework/session/src/
-   projector.ts`）把 `chat.tool.used` 投影成 `kind:"tool"` 的**展示行**；
+projector.ts`）把 `chat.tool.used` 投影成 `kind:"tool"` 的**展示行**；
    `chat.message.new` 结算事件只带 `role + text`。`naviChatHistory()`
    （`chat-turn-common.ts:264-277`）把它映射成 ProviderMessage 时**只取
    role + content**，`toolCalls` 无处可来。
@@ -511,6 +527,7 @@ ts-build/refresh 完成。
 不影响 CI 断言。
 
 **修复方向**（未实施，待确认）：
+
 - 方案 A（最小）：`chat.tool.used` 事件补 `toolCallID` 载荷；投影层在
   `kind:"tool"` 行邻接的 assistant 结算消息上还原 `toolCalls`
   （需要 assistant 消息记录自己带了哪些 call）。

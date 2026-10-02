@@ -134,7 +134,8 @@ export function ModelPanel(props: {
         // is about the persistent default, and reading the selection here made
         // the tag follow every per-session pick.
         default: props.config?.defaultModel
-          ? `${props.config.defaultModel.provider}/${props.config.defaultModel.model}` === entry.id
+          ? `${props.config.defaultModel.provider}/${props.config.defaultModel.model}` ===
+            entry.id
           : false,
       })),
     }));

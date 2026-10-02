@@ -79,10 +79,7 @@ import {
   contextVaultDir,
   searchWorkspaceFiles,
 } from "@anthelia/platform";
-import {
-  isSnapshotIgnored,
-  loadNataliaIgnore,
-} from "@anthelia/platform";
+import { isSnapshotIgnored, loadNataliaIgnore } from "@anthelia/platform";
 import { createSessionHistoryTool } from "../session-history-tool";
 import { createRinaContextTools } from "../context-tools";
 import {

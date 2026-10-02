@@ -183,8 +183,7 @@ async function buildIfStale(): Promise<void> {
       ...(process.platform === "win32"
         ? {}
         : {
-            CARGO_HOME:
-              process.env.CARGO_HOME ?? "/tmp/natalia-cargo",
+            CARGO_HOME: process.env.CARGO_HOME ?? "/tmp/natalia-cargo",
           }),
     },
     encoding: "utf8",

@@ -988,7 +988,8 @@ export class NativeTerminalRegistry {
     const owningSession = input.sessionID ?? this.activeSession;
     const background =
       input.background === true ||
-      (this.activeSession !== undefined && owningSession !== this.activeSession);
+      (this.activeSession !== undefined &&
+        owningSession !== this.activeSession);
     // A restarted mux server numbers panes from scratch, so stale session
     // records can collide with the pane about to be created. Recovery marks
     // them exited first, which also clears the host readiness cache.

@@ -1432,59 +1432,84 @@ test("restart durably rejects orphaned interactive requests from a crashed turn"
   );
 });
 
-test("provider can load a discovered skill through the canonical tool path", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-ts7-skill-tool-"));
-  const skillRoot = join(root, ".natalia", "skills", "review");
-  await mkdir(join(skillRoot, "references"), { recursive: true });
-  await writeFile(
-    join(skillRoot, "SKILL.md"),
-    "---\nname: review\ndescription: Review\n---\nReview guidance",
-  );
-  await writeFile(join(skillRoot, "references", "guide.md"), "guide");
-  const events: RuntimeEvent[] = [];
-  const client = createRealRuntimeClient({
-    workspaceRoot: root,
-    sessionID: "ses_ts7_skill_tool",
-    permissionMode: "auto",
-    provider: {
-      provider: "test",
-      model: "test",
-      async *stream(request) {
-        if (!request.messages.some((message) => message.role === "tool")) {
-          yield {
-            type: "tool_call" as const,
-            calls: [
-              {
-                id: "call_skill",
-                name: "skill_load",
-                arguments: JSON.stringify({ name: "review" }),
-              },
-            ],
-          };
+// A real-runtime integration case: it boots a runtime and runs a provider
+// round, so its cost scales with whatever else the machine is doing. CI builds
+// the AST wasm packs and installs a toolchain in the same job, which is enough
+// to push a 60s budget over — and a hung runtime must still fail, so the budget
+// is raised rather than the assertion loosened.
+// A real-runtime integration case: it boots a runtime and runs a provider round,
+// so its cost scales with whatever else the machine is doing. CI builds the AST
+// wasm packs and installs a toolchain in the same job, which is enough to push a
+// 60s budget over. `@types/bun` 1.3.13 predates the options form the runtime
+// accepts, so the call goes through a typed shim rather than a dependency bump
+// this workspace cannot install.
+const integrationTest = (name: string, fn: () => Promise<void>): void => {
+  (
+    test as unknown as (
+      n: string,
+      o: { timeout: number },
+      f: () => Promise<void>,
+    ) => void
+  )(name, { timeout: 180_000 }, fn);
+};
+
+integrationTest(
+  "provider can load a discovered skill through the canonical tool path",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "natalia-ts7-skill-tool-"));
+    const skillRoot = join(root, ".natalia", "skills", "review");
+    await mkdir(join(skillRoot, "references"), { recursive: true });
+    await writeFile(
+      join(skillRoot, "SKILL.md"),
+      "---\nname: review\ndescription: Review\n---\nReview guidance",
+    );
+    await writeFile(join(skillRoot, "references", "guide.md"), "guide");
+    const events: RuntimeEvent[] = [];
+    const client = createRealRuntimeClient({
+      workspaceRoot: root,
+      sessionID: "ses_ts7_skill_tool",
+      permissionMode: "auto",
+      provider: {
+        provider: "test",
+        model: "test",
+        async *stream(request) {
+          if (!request.messages.some((message) => message.role === "tool")) {
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_skill",
+                  name: "skill_load",
+                  arguments: JSON.stringify({ name: "review" }),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          yield { type: "content" as const, text: "skill loaded" };
           yield { type: "done" as const };
-          return;
-        }
-        yield { type: "content" as const, text: "skill loaded" };
-        yield { type: "done" as const };
+        },
       },
-    },
-  });
-  client.start((event) => events.push(event));
-  await client.submitAndWait!("load review skill");
-  expect(
-    events.some(
-      (event) =>
-        event.type === "tool.update" &&
-        event.name === "skill_load" &&
-        event.status === "succeeded",
-    ),
-  ).toBe(true);
-  expect(
-    events.some(
-      (event) => event.type === "content.done" && event.text === "skill loaded",
-    ),
-  ).toBe(true);
-});
+    });
+    client.start((event) => events.push(event));
+    await client.submitAndWait!("load review skill");
+    expect(
+      events.some(
+        (event) =>
+          event.type === "tool.update" &&
+          event.name === "skill_load" &&
+          event.status === "succeeded",
+      ),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "content.done" && event.text === "skill loaded",
+      ),
+    ).toBe(true);
+  },
+);
 
 test("two local clients serialize provider turns for one durable session", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-ts7-shared-session-"));

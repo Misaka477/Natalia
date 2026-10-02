@@ -32,6 +32,14 @@ export type ShellExecRequest = {
    */
   loginShell?: boolean | undefined;
   /**
+   * The platform to resolve against, overriding the host's own.
+   *
+   * Testability, not a second shell: two call sites inject a platform so they can
+   * assert both branches without running on both. `shellExecutable` decides which
+   * shell, `os` decides how the platform layers behave around it.
+   */
+  os?: NodeJS.Platform | undefined;
+  /**
    * A caller-named shell executable, honoured when present.
    *
    * A valve, and a temporary one: two call sites currently choose their own

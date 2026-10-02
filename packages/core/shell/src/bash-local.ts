@@ -33,9 +33,10 @@ export class BashLocalExecutor extends ShellExecutor {
     // and the skill and terminal callers want the profile-reading one.
     const shell = request.loginShell
       ? profileShellCommand(request.command, {
+          os: request.os,
           posixShell: request.shellExecutable,
         })
-      : isolatedShellCommand(request.command);
+      : isolatedShellCommand(request.command, { os: request.os });
     return {
       command: shell.executable,
       args: shell.args,

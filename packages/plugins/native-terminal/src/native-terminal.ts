@@ -11,11 +11,8 @@ import {
 import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
-import {
-  executableName,
-  isWindows,
-  profileShellCommand,
-} from "@anthelia/platform";
+import { executableName, isWindows } from "@anthelia/platform";
+import { BashLocalExecutor } from "@anthelia/shell";
 
 export {
   NATIVE_INPUT_BROKER_VERSION,
@@ -188,12 +185,24 @@ const WINDOWS_MUX_READY_TIMEOUT_MS = 120_000;
  * quoting, and its profile semantics are identical for the model regardless of
  * host. Windows resolves this to the Git for Windows bash.
  */
+// The shell that owns the pane command's spelling. Stateless, so one per module.
+const shell = new BashLocalExecutor();
+
 export function nativeTerminalPaneCommand(
   command: string,
   os?: NodeJS.Platform,
 ): string[] {
-  const shell = profileShellCommand(command, { os, posixShell: "/bin/sh" });
-  return [shell.executable, ...shell.args];
+  // The argv is unchanged — it is the public contract its callers and tests pin —
+  // but the spelling now belongs to the shell rather than being built here.
+  // `/bin/sh`, not bash: the pane command is derived for the workspace's own
+  // shell, and the seam carries that through its `shellExecutable` valve.
+  const spec = shell.resolve({
+    command,
+    loginShell: true,
+    os,
+    shellExecutable: "/bin/sh",
+  });
+  return [spec.command, ...spec.args];
 }
 
 export function createWezTermHost(

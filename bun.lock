@@ -657,6 +657,7 @@
         "@anthelia/platform": "workspace:*",
         "@anthelia/plugin": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@anthelia/tools": "workspace:*",
         "@natalia/ui-host": "workspace:*",
         "solid-js": "1.9.12",

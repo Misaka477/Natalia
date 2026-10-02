@@ -17,7 +17,7 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { profileShellCommand } from "@anthelia/platform";
+import { BashLocalExecutor } from "@anthelia/shell";
 import type { RuntimeTool, ToolExecutionContext } from "@anthelia/tools";
 import type {
   SkillMetadata,
@@ -396,6 +396,9 @@ export function createSkillLoadTool(options: {
   };
 }
 
+// The shell that owns the script's invocation. Stateless, so one per module.
+const shell = new BashLocalExecutor();
+
 export async function runSkillScript(
   skill: Skill,
   name: string,
@@ -403,10 +406,15 @@ export async function runSkillScript(
 ) {
   const command = skill.scripts[name];
   if (!command) throw new Error(`skill script not found: ${name}`);
-  const shell = profileShellCommand(command, {
-    posixShell: process.env.SHELL ?? "/usr/bin/bash",
+  // The user's own shell when they have one, else the absolute bash path this
+  // call site has always fallen back to. Both ride the seam, so the choice is
+  // still data rather than a shell built here.
+  const spec = shell.resolve({
+    command,
+    loginShell: true,
+    shellExecutable: process.env.SHELL ?? "/usr/bin/bash",
   });
-  const child = Bun.spawn([shell.executable, ...shell.args], {
+  const child = Bun.spawn([spec.command, ...spec.args], {
     cwd: skill.root,
     stdout: "pipe",
     stderr: "pipe",

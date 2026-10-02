@@ -301,3 +301,56 @@ test("the Linux tray is a detected system package, never a hard link", () => {
   // PASSIVE, not simply going away: that is what removes the item from the panel.
   expect(linuxTray).toContain("APP_INDICATOR_STATUS_PASSIVE");
 });
+
+test("P23's fix re-applies the viewport before any output can flow", () => {
+  const bridge = readFileSync(
+    new URL(
+      "../../../packages/plugins/native-terminal/src/win/natalia-conpty-bridge.cc",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  // The mute pane: the console's init sequence arrives, then nothing. The child
+  // is alive and blocked at zero CPU. The report's ranked direction was to
+  // re-apply the spec's size once the child exists, because the host side of the
+  // ConPTY viewport negotiation never ran.
+  expect(bridge).toContain("ResizePseudoConsole(g_pseudoConsole, size)");
+
+  // It must be BEFORE the output pump starts: a resize issued after the reader
+  // is already blocked on the pipe is what failed, not a fix. The pump's CALL
+  // SITE, not its definition — the function is defined earlier in the file, so
+  // comparing against the definition made this assertion meaningless.
+  const resizeAt = bridge.indexOf(
+    "ResizePseudoConsole(g_pseudoConsole, size);",
+  );
+  const pumpAt = bridge.indexOf("CreateThread(nullptr, 0, pumpConsoleOutput");
+  expect(resizeAt).toBeGreaterThan(0);
+  expect(pumpAt).toBeGreaterThan(resizeAt);
+
+  // And it must be AFTER the child exists: resizing before CreateProcessW is a
+  // resize with nothing to negotiate.
+  const createAt = bridge.indexOf("CreateProcessW(");
+  expect(createAt).toBeGreaterThan(0);
+  expect(resizeAt).toBeGreaterThan(createAt);
+
+  // The handshake reports itself, so the next Windows run can confirm or refute
+  // this in one run instead of re-deriving it from a silent pane.
+  expect(bridge).toContain("viewport handshake requested");
+
+  // The bridge must NOT silently drop the spec's env overlay while pretending it
+  // applies it. The divergence from the POSIX bridge is real, and it is stated.
+  const controller = readFileSync(
+    new URL(
+      "../../../packages/plugins/native-terminal/src/pty-terminal-controller.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  // The POSIX bridge honours the spec's env overlay; the ConPTY one does not.
+  expect(controller).toContain('env.update(spec.get("env") or {})');
+  expect(bridge).toContain("DIVERGENCE");
+  // The ConPTY route stays opt-in: the mute pane is not verified fixed here, so
+  // nothing may quietly change the default.
+  expect(controller).toContain('NATALIA_TERMINAL_CONPTY === "1"');
+});

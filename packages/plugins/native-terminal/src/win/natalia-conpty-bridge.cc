@@ -240,12 +240,16 @@ int main() {
   ZeroMemory(&process, sizeof(process));
   const std::wstring workingDirectory = cwd.empty() ? std::wstring() : widen(cwd);
   // The child inherits the bridge's environment (lpEnvironment = nullptr).
-  // The spec's env overlay was tried entry-by-entry (SetEnvironmentVariableW)
-  // and taken back out: the pane it produced was mute - the ConPTY console
-  // came up and the child ran, but no screen bytes ever followed. Inheritance
-  // alone is what renders the shell prompt. The TERM default is NOT set here
-  // for the same reason: adding it changed the pane's behavior, and the
-  // inherited environment is the one the panel demonstrably works with.
+  //
+  // The spec's env overlay is NOT applied, and that is a DIVERGENCE from the
+  // POSIX bridge (pty-terminal-controller.ts does `env.update(spec.get("env"))`).
+  // It is not the cause of the mute pane — the report excluded env by building
+  // both ways and seeing the same silence — and this comment used to imply
+  // otherwise, which sent a later reader looking in the wrong place. The overlay
+  // is still off because re-adding it was never the goal; if it is wanted, the
+  // safe Windows spelling is a SORTED block passed as lpEnvironment, not
+  // SetEnvironmentVariableW, because Windows requires the block sorted by name.
+  //
   // With a pseudo-console, CreateProcessW takes the command line ONLY: passing
   // lpApplicationName alongside the attribute list fails with
   // ERROR_INVALID_PARAMETER. commandLine already starts with the quoted exe.
@@ -265,6 +269,35 @@ int main() {
   const int pidLength = _snprintf_s(pidLine, sizeof(pidLine), _TRUNCATE,
                                     "{\"pid\":%lu}\n", process.dwProcessId);
   writeAll(pidLine, (size_t)pidLength);
+
+  // P23's fix, from the ranked direction list in the report: re-apply the spec's
+  // size once the child exists.
+  //
+  // The mute pane was this — the console's initialisation sequence
+  // (ESC[?9001h ESC[?1004h) arrives and then nothing does. The child is alive
+  // and blocked at zero CPU, and input does not reach it. The evidence ruled out
+  // the binary, the environment, the console pool and a reboot, and the one
+  // variable never ruled out was the HOST side of the handshake: the successful
+  // run differed only in that the pane had been resized before it.
+  //
+  // ConPTY's viewport is negotiated between the host and conhost, and a
+  // CreatePseudoConsole size does not reliably trigger that negotiation on its
+  // own — until something resizes, no screen bytes flow. Saying the same size
+  // again is what forces it, and it is the same call the "resize" message below
+  // makes, so there is no second mechanism to maintain.
+  //
+  // If a same-size resize turns out to be a no-op on some host, the next step is
+  // the nudge-and-restore variant (size+1 then back), not a new mechanism.
+  //
+  // It reports to stderr rather than staying silent: the next Windows run should
+  // be able to confirm or refute this in ONE run, and a fix that cannot be told
+  // apart from nothing happening is not a fix. The line also records the size,
+  // because "the handshake ran with the wrong viewport" is the other way this
+  // fails.
+  const HRESULT resized = ResizePseudoConsole(g_pseudoConsole, size);
+  fprintf(stderr,
+          "conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
+          (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
 
   const HANDLE outputPump = CreateThread(nullptr, 0, pumpConsoleOutput, nullptr, 0, nullptr);
 

@@ -90,6 +90,67 @@ async function stageTerminalNatives(
 }
 
 /**
+ * Assemble the CEF window host into the release tree.
+ *
+ * `release:build` compiles the CLI bundle and the plugins; the desktop WINDOW is
+ * a separate build (`npm run desktop:cef:build`) whose output lived only in
+ * `apps/cef-desktop/build/output/`. Nothing ever copied it into a release, so a
+ * release tree could not be turned into an installable application — the
+ * packaging step refused it for a missing binary, which is exactly the failure
+ * this closes.
+ *
+ * The same rule as the terminal natives: the binary either ships or the build
+ * says so. A release that silently omits its window is a directory that installs
+ * and then does nothing.
+ */
+async function stageDesktopHost(
+  outDir: string,
+  platformDir: string,
+): Promise<void> {
+  const suffix = platformDir.startsWith("windows") ? ".exe" : "";
+  const built = join(root, "apps", "cef-desktop", "build", "output");
+  const host = join(built, `natalia-cef-desktop${suffix}`);
+  let source = host;
+  if (!(await Bun.file(host).exists())) {
+    // A macOS bundle keeps it under Contents/MacOS when the host was built as a
+    // .app; look there before deciding it is missing.
+    const bundled = join(
+      built,
+      "Natalia.app",
+      "Contents",
+      "MacOS",
+      `natalia-cef-desktop${suffix}`,
+    );
+    if (await Bun.file(bundled).exists()) source = bundled;
+  }
+  if (!(await Bun.file(source).exists()))
+    throw new Error(
+      `${platformDir}: the desktop host is not built — run \`npm run desktop:cef:build\` (or scripts/build-cef-windows.ps1) before packaging`,
+    );
+  await cp(source, join(outDir, `natalia-cef-desktop${suffix}`));
+  // The CEF runtime it loads, which the host build already assembled beside
+  // itself (libcef, the .pak files, locales). Without them the binary starts and
+  // immediately dies on a missing shared library, so they travel together.
+  for (const name of [
+    "libcef.so",
+    "libcef.dll",
+    "libcef.dylib",
+    "libEGL.so",
+    "libGLESv2.so",
+    "icudtl.dat",
+    "chrome_100_percent.pak",
+    "chrome_200_percent.pak",
+    "resources.pak",
+    "v8_context_snapshot.bin",
+    "locales",
+  ]) {
+    const candidate = join(built, name);
+    if (!(await Bun.file(candidate).exists())) continue;
+    await cp(candidate, join(outDir, name), { recursive: true });
+  }
+}
+
+/**
  * The release's contract, asserted against itself. The facts both
  * installers and every downstream consumer depend on, each of which was
  * violated by a real bug this session:
@@ -286,6 +347,7 @@ for (const target of targets) {
     // staged last — each release keeps only the executables its platform
     // can run (a Windows release shipping Linux wezterm was the bug).
     await stageTerminalNatives(outDir, platformDir);
+    await stageDesktopHost(outDir, platformDir);
     // The shipped composition base (P3 "base profile 随包机制"): copied
     // into the app root BEFORE the hash walk, so SHA256SUMS lists it and
     // install.sh's files loop lands it next to the binary — where the

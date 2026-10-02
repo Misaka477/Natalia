@@ -63,6 +63,7 @@
     "build:distribution:native": "npm run native:all && bun scripts/ts-build.ts && npm run refresh:plugin-store",
     "build:windows": "npm run native:all && npm run diff:build-wasm && npm run licenses:check && bun scripts/ts-build.ts && npm run refresh:plugin-store && npm run build:web",
     "appimage": "bun scripts/build-appimage.ts",
+    "appbundle": "bun scripts/build-app-bundle.ts",
     "package:linux": "npm run release:build && npm run appimage",
     "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun packages/tooling/testing/bin/object-store-rust-mode.ts",
     "build:everything": "bun scripts/build-everything.ts"

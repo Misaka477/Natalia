@@ -117,6 +117,32 @@ export class ObjectStore {
     | { hit: false; handle: undefined }
     | { hit: true; handle: PackDaemon }
     | undefined;
+  private disposed = false;
+
+  /**
+   * Release the store's OS-level holders: the lazily spawned pack daemon
+   * and the SQLite meta database. POSIX unlinks tolerate open files, so
+   * this is optional there; on Windows an open database or a live daemon
+   * keeps the store's root undeletable (EBUSY), which any cleanup routine
+   * that removes temp roots will hit.
+   */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.daemon?.hit) {
+      try {
+        this.daemon.handle.close();
+      } catch {
+        /* already gone */
+      }
+    }
+    this.daemon = undefined;
+    try {
+      this.metaDb.close();
+    } catch {
+      /* already closed */
+    }
+  }
 
   constructor(
     /**

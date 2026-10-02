@@ -41,10 +41,13 @@ void* cef_sandbox_info = nullptr;
 // broker, and every temp-file create comes back EPERM.
 #endif
 
-// Entry point function for all processes.
+// Entry point function for all processes. The command-line parameter is
+// spelled LPWSTR (not LPTSTR): `wWinMain`'s prototype in the Windows headers
+// is always wide, and the UNICODE define that would widen LPTSTR is not
+// guaranteed on this target — an LPTSTR here is a signed-vs-wide clash.
 int APIENTRY wWinMain(HINSTANCE hInstance,
                       HINSTANCE hPrevInstance,
-                      LPTSTR lpCmdLine,
+                      LPWSTR lpCmdLine,
                       int nCmdShow) {
   UNREFERENCED_PARAMETER(hPrevInstance);
   UNREFERENCED_PARAMETER(lpCmdLine);

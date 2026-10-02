@@ -12,6 +12,13 @@ export type WorkspaceMutationIdentity = {
   origin: "tool" | "sandbox_merge" | "checkpoint_rollback";
 };
 
+/** A workspace path enumeration, with its completeness stated honestly. */
+export type WorkspacePathSet = {
+  paths: string[];
+  /** True when a walk budget cut the enumeration short. */
+  truncated: boolean;
+};
+
 /**
  * The workspace-files watcher controller — cut of the resource controllers
  * split (mainline plan §15) and WG4's observation owner (mainline plan §56.9).
@@ -27,10 +34,16 @@ export type WorkspaceMutationIdentity = {
  */
 export function createWorkspaceFilesController(input: {
   workspaceRoot: string;
-  /** Enumerate the current workspace-relative paths, for baseline/reconcile. */
-  listPaths: () => Promise<string[]>;
+  /**
+   * Enumerate the current workspace-relative paths for baseline/reconcile.
+   * `truncated` must be truthful: the auditor keeps an absent hinted path
+   * pending rather than confirming a deletion when the set is incomplete.
+   */
+  listPaths: () => Promise<WorkspacePathSet>;
   /** Consult the expected-mutation registry (WG4 Phase 3) to attribute a path. */
   resolveMutation?: (path: string) => WorkspaceMutationIdentity | undefined;
+  /** Paths the snapshot ignore set excludes (build/runtime bulk). */
+  isExcludedPath?: (path: string) => boolean;
 }): WorkspaceFilesController {
   let cleanup: (() => void) | undefined;
   const auditor = createWorkspaceChangeAuditor({
@@ -38,6 +51,7 @@ export function createWorkspaceFilesController(input: {
     resolveOrigin: (path) => input.resolveMutation?.(path)?.origin,
     resolveIdentity: (path) => input.resolveMutation?.(path),
     hasReliableIdentity: () => true,
+    ...(input.isExcludedPath ? { isExcludedPath: input.isExcludedPath } : {}),
   });
 
   async function init() {
@@ -45,7 +59,7 @@ export function createWorkspaceFilesController(input: {
     // leaked watcher keeps the process alive on Windows (ReadDirectoryChangesW
     // holds the event loop) and duplicates change events everywhere.
     close();
-    await auditor.baseline(await input.listPaths());
+    await auditor.baseline((await input.listPaths()).paths);
     cleanup = await watchWorkspaceFiles(input.workspaceRoot, (change) =>
       auditor.observe(change),
     ).catch(() => undefined);
@@ -57,7 +71,8 @@ export function createWorkspaceFilesController(input: {
   }
 
   async function reconcile() {
-    return auditor.reconcile(await input.listPaths());
+    const set = await input.listPaths();
+    return auditor.reconcile(set.paths, !set.truncated);
   }
 
   function observationStatus() {

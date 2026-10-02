@@ -6,8 +6,23 @@ use std::path::Path;
 // (it is loaded through bun:ffi), and an mmap is three libc calls. A
 // zero-dependency native surface is the ObjectStore study's whole premise —
 // one fewer crate to audit, build and vendor for a read-only page mapping.
+
+/// A read-only private mapping of one file. `Drop` unmaps; the bytes are
+/// the file's, faulted in on demand — the cold start pays a page table
+/// entry, not a copy of the file.
+struct Mmap {
+    ptr: *mut c_void,
+    len: usize,
+    #[cfg(windows)]
+    // The section object outlives the view on Windows, so the handle rides
+    // along to be closed on drop (POSIX closes with the fd alone).
+    section: *mut c_void,
+}
+
+#[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
+#[cfg(unix)]
 extern "C" {
     fn mmap(
         addr: *mut c_void,
@@ -20,19 +35,32 @@ extern "C" {
     fn munmap(addr: *mut c_void, length: usize) -> i32;
 }
 
-const PROT_READ: i32 = 1;
-const MAP_PRIVATE: i32 = 2;
-
-/// A read-only private mapping of one file. `Drop` unmaps; the bytes are
-/// the file's, faulted in on demand — the cold start pays a page table
-/// entry, not a copy of the file.
-struct Mmap {
-    ptr: *mut c_void,
-    len: usize,
+#[cfg(windows)]
+extern "system" {
+    fn CreateFileMappingW(
+        file: *mut c_void,
+        attributes: *mut c_void,
+        protect: u32,
+        maximum_size_high: u32,
+        maximum_size_low: u32,
+        name: *const u16,
+    ) -> *mut c_void;
+    fn MapViewOfFile(
+        section: *mut c_void,
+        desired_access: u32,
+        file_offset_high: u32,
+        file_offset_low: u32,
+        number_of_bytes: usize,
+    ) -> *mut c_void;
+    fn UnmapViewOfFile(base: *mut c_void) -> i32;
+    fn CloseHandle(handle: *mut c_void) -> i32;
 }
 
+#[cfg(unix)]
 impl Mmap {
     fn map(file: &std::fs::File) -> Option<Mmap> {
+        const PROT_READ: i32 = 1;
+        const MAP_PRIVATE: i32 = 2;
         let len = file.metadata().ok()?.len() as usize;
         if len == 0 {
             return None;
@@ -50,9 +78,40 @@ impl Mmap {
         if ptr == usize::MAX as *mut c_void {
             return None;
         }
-        Some(Mmap { ptr, len })
+        Some(Mmap {
+            ptr,
+            len,
+            #[cfg(windows)]
+            section: std::ptr::null_mut(),
+        })
     }
+}
 
+#[cfg(windows)]
+impl Mmap {
+    fn map(file: &std::fs::File) -> Option<Mmap> {
+        use std::os::windows::io::AsRawHandle;
+        const PAGE_READONLY: u32 = 0x02;
+        const FILE_MAP_READ: u32 = 0x04;
+        let len = file.metadata().ok()?.len() as usize;
+        if len == 0 {
+            return None;
+        }
+        let section =
+            unsafe { CreateFileMappingW(file.as_raw_handle(), std::ptr::null_mut(), PAGE_READONLY, 0, 0, std::ptr::null()) };
+        if section.is_null() {
+            return None;
+        }
+        let ptr = unsafe { MapViewOfFile(section, FILE_MAP_READ, 0, 0, len) };
+        if ptr.is_null() {
+            unsafe { CloseHandle(section) };
+            return None;
+        }
+        Some(Mmap { ptr, len, section })
+    }
+}
+
+impl Mmap {
     fn bytes(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.ptr as *const u8, self.len) }
     }
@@ -60,8 +119,16 @@ impl Mmap {
 
 impl Drop for Mmap {
     fn drop(&mut self) {
+        #[cfg(unix)]
         unsafe {
             munmap(self.ptr, self.len);
+        }
+        #[cfg(windows)]
+        unsafe {
+            UnmapViewOfFile(self.ptr);
+            if !self.section.is_null() {
+                CloseHandle(self.section);
+            }
         }
     }
 }

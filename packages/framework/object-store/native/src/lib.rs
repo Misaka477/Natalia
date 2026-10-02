@@ -14,8 +14,24 @@ mod packread;
 
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+
+/// POSIX restricts the CAS to its owner (700 dirs, 600 files). Windows has
+/// no mode bits in std and the store root already lives under the user's
+/// profile, so the restriction is a portable no-op there.
+fn restrict(path: &Path, mode: u32) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+        Ok(())
+    }
+}
 
 // ---------------------------------------------------------------------------
 // SHA-256 (FIPS 180-4). Written from the standard: the environment's
@@ -164,8 +180,7 @@ pub fn put(root: &Path, data: &[u8]) -> Result<String, String> {
     let dir = path.parent().unwrap();
     fs::create_dir_all(dir)
         .map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
-    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
-        .map_err(|e| format!("chmod {}: {e}", dir.display()))?;
+    restrict(dir, 0o700).map_err(|e| format!("chmod {}: {e}", dir.display()))?;
     let tmp = path.with_extension("tmp-write");
     {
         let mut file = fs::File::create(&tmp)
@@ -173,8 +188,7 @@ pub fn put(root: &Path, data: &[u8]) -> Result<String, String> {
         file.write_all(data)
             .map_err(|e| format!("write {}: {e}", tmp.display()))?;
     }
-    fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
-        .map_err(|e| format!("chmod {}: {e}", tmp.display()))?;
+    restrict(&tmp, 0o600).map_err(|e| format!("chmod {}: {e}", tmp.display()))?;
     fs::rename(&tmp, &path)
         .map_err(|e| format!("rename {} -> {}: {e}", tmp.display(), path.display()))?;
     Ok(id_hex)

@@ -262,6 +262,14 @@ test("pty controller subscribeOutput replays buffer then live chunks", async () 
 });
 
 test("default python pty spawn runs an interactive shell", async () => {
+  if (process.platform === "win32") {
+    // The default spawn under bun is the Python pty bridge: `python3` plus the
+    // POSIX pty/fcntl/termios modules. Windows has neither, so the default
+    // spawn is not exercisable here (the wezterm-backed controller is the
+    // Windows path). Skipped rather than asserted against a missing tool.
+    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    return;
+  }
   const root = await mkdtemp(join(tmpdir(), "natalia-python-pty-"));
   const controller = createPtyTerminalController({
     workspaceRoot: root,
@@ -290,6 +298,12 @@ test("default python pty spawn runs an interactive shell", async () => {
 }, 15_000);
 
 test("input written the instant a pty starts is not dropped by the bridge", async () => {
+  if (process.platform === "win32") {
+    // Same reason as the default-spawn test above: the bridge under test is
+    // the Python one (python3 + the POSIX pty module), which Windows lacks.
+    console.warn("skipped on win32: the python pty bridge needs POSIX pty");
+    return;
+  }
   // Regression: the python bridge reads the startup spec with its own line
   // reader. An input message that landed in the same socket read as the spec
   // was left in that reader's buffer while the select loop only watched for

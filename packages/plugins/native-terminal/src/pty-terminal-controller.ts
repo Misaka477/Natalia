@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   applyTerminalOutput,
   createTerminalScreen,
@@ -13,13 +14,19 @@ import {
 } from "@natalia/collaboration";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type {
   RuntimeEvent,
   RuntimeNativeTerminalSession,
 } from "@anthelia/contracts";
 import type { TerminalController } from "@anthelia/runtime-services";
-import { nativeTerminalPaneCommand } from "./native-terminal";
+import {
+  nativeTerminalForkBuildDir,
+  nativeTerminalPaneCommand,
+  nativeTerminalPrebuiltDir,
+} from "./native-terminal";
+import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
+import type { NativeTerminalRegistry } from "./native-terminal";
 
 /**
  * The spawn geometry for a terminal nobody sized yet.
@@ -70,6 +77,12 @@ export type PtySpawnOptions = {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /**
+   * The command text as it was requested, before the shell argv was derived.
+   * The WezTerm adapter passes it to the host's own start (which applies the
+   * same profile-shell wrapping once); the in-process PTYs use file/args.
+   */
+  command?: string;
 };
 
 export type PtyFactory = (options: PtySpawnOptions) => PtyProcess;
@@ -114,6 +127,14 @@ export type PtyTerminalControllerInput = {
   userRuntimeHome(): string | undefined;
   windowMode(): "auto" | "windowless" | "window";
   backend?: "wezterm" | "pty";
+  /**
+   * The WezTerm host registry, when one exists — a GETTER because the registry
+   * is built by the host controller's init. The PTY backend uses it on Windows
+   * for its pane: the in-process PTYs it has everywhere else (node-pty, the
+   * Python bridge) do not exist there, and a mux pane is a real PTY the panel
+   * can render.
+   */
+  nativeTerminal?: () => NativeTerminalRegistry | undefined;
   spawn?: PtyFactory;
   maxPerSession?: number;
   idleMs?: number;
@@ -287,12 +308,19 @@ function spawnWithNodePty(options: PtySpawnOptions): PtyProcess {
   };
 }
 
-function spawnWithPythonPty(options: PtySpawnOptions): PtyProcess {
-  const child = spawn("python3", ["-u", "-c", PYTHON_PTY_BRIDGE], {
-    stdio: ["pipe", "pipe", "inherit"],
-  });
+/**
+ * The framing both PTY bridges speak: a JSON spec line on stdin; `{kind} {size}`
+ * frames and a `{"pid":N}` handshake on stdout; JSON control lines back. The
+ * POSIX implementation is Python, the Windows one the ConPTY helper. The
+ * controller, the panel and the model see the same real byte stream from
+ * either, so the bridge in use is a detail of this file.
+ */
+function spawnPtyBridge(
+  child: ReturnType<typeof spawn>,
+  options: PtySpawnOptions,
+): PtyProcess {
   if (!child.stdin || !child.stdout || child.pid == null)
-    throw new Error("python pty bridge failed to start");
+    throw new Error("pty bridge failed to start");
   child.stdin.write(
     `${JSON.stringify({
       file: options.file,
@@ -401,14 +429,224 @@ function spawnWithPythonPty(options: PtySpawnOptions): PtyProcess {
   };
 }
 
-function defaultSpawn(): PtyFactory {
+function spawnWithPythonPty(options: PtySpawnOptions): PtyProcess {
+  return spawnPtyBridge(
+    spawn("python3", ["-u", "-c", PYTHON_PTY_BRIDGE], {
+      stdio: ["pipe", "pipe", "inherit"],
+    }),
+    options,
+  );
+}
+
+/**
+ * The Windows PTY: a ConPTY host compiled from src/win/natalia-conpty-bridge.cc
+ * (`npm run native-terminal:build-conpty:windows`), staged next to the wezterm
+ * executables in prebuilt/<triple>/. It is the platform's own pseudo
+console
+ * speaking the POSIX bridge's protocol, so this path delivers the same real
+ * byte stream Linux gets - not a screen dump differ.
+ *
+ * The search mirrors `resolveNataliaWezTermForkExecutable`: the prebuilt drop
+ * (a downloaded/unpacked Natalia's answer) first, then the fork's own build
+ * directory (a developer's answer) - the plugin as loaded from the store has
+ * the fork's build dir, and a downloaded distribution has the prebuilt one, so
+ * asking only one of them misses depending on where the code runs from.
+ */
+function spawnWithConptyBridge(options: PtySpawnOptions): PtyProcess {
+  const helperName = "natalia-conpty-bridge.exe";
+  const candidates = [
+    join(nativeTerminalPrebuiltDir("win32"), helperName),
+    join(nativeTerminalForkBuildDir(), helperName),
+  ];
+  const helper = candidates.find((candidate) => existsSync(candidate));
+  if (!helper)
+    throw new Error(
+      `the ConPTY bridge is not built: run native-terminal:build-conpty:windows (expected ${candidates[0]})`,
+    );
+  return spawnPtyBridge(
+    spawn(helper, [], { stdio: ["pipe", "pipe", "inherit"] }),
+    options,
+  );
+}
+
+function defaultSpawn(input?: {
+  nativeTerminal?: () => NativeTerminalRegistry | undefined;
+}): PtyFactory {
   return (options) => {
+    if (process.platform === "win32") {
+      // The ConPTY bridge (a real byte stream, the Linux-route equivalent) is
+      // opt-in: NATALIA_TERMINAL_CONPTY=1. It rendered correctly in early
+      // runs but later began producing a mute pane (console initialized, no
+      // screen bytes) whose trigger was not found - so the default stays the
+      // WezTerm mux pane adapter, which paints the prompt, the caret and the
+      // echo through the stream diff. The bridge code stays compiled and
+      // staged; this is the runtime's choice, not the code's.
+      const conptyRequested = process.env.NATALIA_TERMINAL_CONPTY === "1";
+      if (conptyRequested) {
+        try {
+          return spawnWithConptyBridge(options);
+        } catch (error) {
+          const registry = input?.nativeTerminal?.();
+          if (registry) return spawnWithWezTermPty(registry, options);
+          throw error;
+        }
+      }
+      const registry = input?.nativeTerminal?.();
+      if (registry) return spawnWithWezTermPty(registry, options);
+      if (typeof Bun !== "undefined") return spawnWithPythonPty(options);
+      try {
+        return spawnWithNodePty(options);
+      } catch {
+        return spawnWithPythonPty(options);
+      }
+    }
     if (typeof Bun !== "undefined") return spawnWithPythonPty(options);
     try {
       return spawnWithNodePty(options);
     } catch {
       return spawnWithPythonPty(options);
     }
+  };
+}
+
+/**
+ * The Windows pane of the PTY backend: a real pane in the WezTerm mux, which
+ * is the process's own host (the runtime owns the mux connection). It exists
+ * because the PTY backend has no other Windows answer — node-pty's native
+ * modules cannot load under bun, and the Python bridge needs the POSIX pty
+ * module (and a python3 on PATH). It is a drop-in PtyProcess: the controller's
+ * output stream, screen, settlement and write paths all keep working, so the
+ * web panel renders it exactly as it renders the Linux pane.
+ *
+ * The pane is started in the BACKGROUND: a pane the panel opened must not
+ * pop a native WezTerm window (that is what the hub attach does), and the
+ * background start is the registry's own windowless path.
+ */
+function spawnWithWezTermPty(
+  host: NativeTerminalRegistry,
+  options: PtySpawnOptions,
+): PtyProcess {
+  // The registry's start carries no geometry (the host applies its own, and
+  // resize is the authoritative setter), so the requested grid is applied
+  // right after the pane exists.
+  const started = host.start({
+    command:
+      options.command ?? [options.file, ...options.args].join(" ").trim(),
+    cwd: options.cwd,
+    background: true,
+  });
+  void (async () => {
+    try {
+      const session = await started;
+      await host.resize(session.id, options.rows, options.cols, "human");
+    } catch {
+      /* the pane is gone; the exit path already fired */
+    }
+  })();
+  let pid = 0;
+  const dataListeners = new Set<(data: string) => void>();
+  const exitListeners = new Set<
+    (event: { exitCode: number; signal?: number }) => void
+  >();
+  let disposed = false;
+  let sent = "";
+  const pump = (view: {
+    text?: string;
+    rows?: number;
+    cols?: number;
+    cursorX?: number;
+    cursorY?: number;
+  }) => {
+    if (disposed || !view.text) return;
+    // The same new-region discipline the panel feed uses (./output-chunk),
+    // with the dump's tail trimmed so the caret never walks to the bottom of
+    // the pane: appends while the screen grows, only the new lines once it
+    // scrolls, and a full repaint solely when nothing aligns. That is the
+    // difference between "the terminal flickered on every command" and a shell
+    // that streams like the Linux PTY byte path.
+    const text = trimScreenTail(view.text);
+    const chunk = terminalOutputChunk(sent, text, view.rows);
+    if (!chunk) return;
+    sent = text;
+    for (const listener of dataListeners) listener(chunk);
+  };
+  void (async () => {
+    try {
+      const session = await started;
+      // A mux pane has no host pid; the pane id is its process identity here.
+      pid = session.paneID;
+      while (!disposed) {
+        const view = await host.observe(session.id, 0, {
+          maxLines: 200,
+          timeoutMs: 1_000,
+        });
+        if (disposed) break;
+        pump(view);
+        if (view.exited) {
+          for (const listener of exitListeners) listener({ exitCode: 0 });
+          disposed = true;
+          break;
+        }
+      }
+    } catch {
+      // The pane never started or died mid-read: an exited process with no
+      // further output is the honest shape, and the controller marks the
+      // session out.
+      for (const listener of exitListeners) listener({ exitCode: 1 });
+      disposed = true;
+    }
+  })();
+  return {
+    get pid() {
+      return pid;
+    },
+    write(data) {
+      if (disposed) return;
+      void (async () => {
+        try {
+          const session = await started;
+          await host.write(session.id, data, { actor: "human" });
+        } catch {
+          // a dead pane's write is a no-op: the exit path already fired
+        }
+      })();
+    },
+    resize(cols, rows) {
+      if (disposed) return;
+      void (async () => {
+        try {
+          const session = await started;
+          await host.resize(session.id, rows, cols, "human");
+        } catch {
+          /* the pane is gone */
+        }
+      })();
+    },
+    kill() {
+      if (disposed) return;
+      disposed = true;
+      void (async () => {
+        try {
+          const session = await started;
+          await host.stop(session.id, "system");
+        } catch {
+          /* already gone */
+        }
+      })();
+    },
+    onData(listener) {
+      dataListeners.add(listener);
+      if (sent) listener(sent);
+      return { dispose: () => dataListeners.delete(listener) };
+    },
+    onExit(listener) {
+      if (disposed) {
+        listener({ exitCode: 0 });
+        return { dispose: () => undefined };
+      }
+      exitListeners.add(listener);
+      return { dispose: () => exitListeners.delete(listener) };
+    },
   };
 }
 
@@ -450,7 +688,8 @@ export function createPtyTerminalController(
   let activeSession: string | undefined;
   let closed = false;
   let initialized = false;
-  const spawnPty = input.spawn ?? defaultSpawn();
+  const spawnPty =
+    input.spawn ?? defaultSpawn({ nativeTerminal: input.nativeTerminal });
   const maxPerSession = Math.max(
     1,
     input.maxPerSession ?? DEFAULT_MAX_PER_SESSION,
@@ -904,6 +1143,7 @@ export function createPtyTerminalController(
       cols,
       rows,
       env: envRecord(),
+      command: startInput.command,
     });
     session.pty = pty;
     session.disposers.push(

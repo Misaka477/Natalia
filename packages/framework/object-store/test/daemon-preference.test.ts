@@ -16,7 +16,11 @@ import type { PackDaemon } from "../src/daemon-client";
  */
 
 const dirs: string[] = [];
+const stores: ObjectStore[] = [];
 afterAll(() => {
+  // Dispose first: on Windows an open SQLite meta db or a live pack daemon
+  // holds the temp root open (EBUSY on rm).
+  for (const store of stores) store.dispose();
   for (const dir of dirs) rm(dir, { recursive: true, force: true });
 });
 
@@ -51,6 +55,25 @@ test("the client speaks the daemon's protocol and survives its death", async () 
 }, 30_000);
 
 test("the client prefers the NATIVE daemon when one is named", async () => {
+  // The stand-in below is a `#!/bin/sh` script: Windows has no shebang
+  // execution, so the fingerprint half of this proof is POSIX-only. The
+  // fallback half (a named-but-missing binary) still runs everywhere.
+  if (process.platform === "win32") {
+    const root = await mkdtemp(join(tmpdir(), "daemon-native-"));
+    dirs.push(root);
+    process.env.NATALIA_PACK_DAEMON_BIN = join(root, "not-there");
+    try {
+      const packsDir = join(root, "packs");
+      await mkdir(packsDir, { recursive: true });
+      const fallback = await openPackDaemon({ packsDir });
+      expect(fallback).toBeDefined();
+      expect(await fallback!.count()).toBe(0); // an empty real directory
+      fallback!.close();
+    } finally {
+      delete process.env.NATALIA_PACK_DAEMON_BIN;
+    }
+    return;
+  }
   // The preference, proven by a fingerprint: a stand-in daemon that
   // answers with values no real daemon would (count 42, a hit with pack
   // 7) — if the client spawned it, it must have taken the native path.
@@ -126,6 +149,7 @@ test("a delta entry reads THROUGH the daemon — its answer carries the base", a
   expect(hit).toMatchObject({ kind: 1, baseId });
   // And the store READS the delta object through the daemon's location.
   const store = new ObjectStore(root);
+  stores.push(store);
   expect((await store.get(derivedId)).equals(derived)).toBe(true);
   expect((await store.get(baseId)).equals(base)).toBe(true);
   daemon!.close();

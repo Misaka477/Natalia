@@ -87,6 +87,13 @@ export function createWorkspaceChangeAuditor(input: {
   /** Whether the auditor has a reliable identity for attribution (Phase 3). */
   hasReliableIdentity?: () => boolean;
   debounceMs?: number;
+  /**
+   * Whether a workspace-relative path is excluded from observation (the
+   * `.nataliaignore` bulk set). Hints for excluded paths are build/tool
+   * noise, never facts — and an enumeration that prunes them would
+   * otherwise confirm every one as a deletion.
+   */
+  isExcludedPath?: (path: string) => boolean;
 }) {
   const { workspaceRoot } = input;
   const debounceMs = input.debounceMs ?? DEFAULT_DEBOUNCE_MS;
@@ -108,6 +115,10 @@ export function createWorkspaceChangeAuditor(input: {
     operation: WorkspaceOperation;
     at?: string;
   }) {
+    // The exclusion set is decided up front: a hint for a bulk path is not
+    // a fact, and keeping it would make reconciliation confirm its deletion
+    // every time the enumeration (which prunes the same paths) misses it.
+    if (input.isExcludedPath?.(inputHint.path)) return;
     const observation: WorkspaceObservation = {
       id: `hint:${workspaceRoot}:${Date.now().toString(36)}`,
       workspaceRoot,
@@ -149,23 +160,31 @@ export function createWorkspaceChangeAuditor(input: {
    * Reconcile the pending hints against the current path set. A hint is
    * confirmed only when reconciliation runs (never at observe time), and only
    * a healthy-or-reconciled window may confirm facts.
+   *
+   * `complete` states whether `currentPaths` is the FULL path set. When it is
+   * not (a bounded enumeration cut the walk short), an absent hint proves
+   * nothing: it stays pending for the next complete reconciliation instead of
+   * being confirmed as a deletion — otherwise a reader of an incomplete set
+   * fabricates "deleted" facts for everything past the budget.
    */
   function reconcile(
     currentPaths: Iterable<string>,
+    complete = true,
   ): ConfirmedWorkspaceChange[] {
     const now = new Set(currentPaths);
     const confirmed: ConfirmedWorkspaceChange[] = [];
+    const deferred: PendingHint[] = [];
     for (const hint of pending.values()) {
-      // A deleted path is gone: confirm the delete directly (no current entry
-      // to compare). A path still present confirms as its coalesced operation;
-      // a path that is absent despite a modified/added hint means it is gone
-      // (a create+delete burst coalesced to the terminal state).
+      const stillPresent = now.has(hint.path);
+      if (hint.operation !== "deleted" && !stillPresent && !complete) {
+        // Absent from an INCOMPLETE set: no fact yet — keep the hint.
+        deferred.push(hint);
+        continue;
+      }
       const operation: WorkspaceOperation =
-        hint.operation === "deleted"
+        hint.operation === "deleted" || !stillPresent
           ? "deleted"
-          : now.has(hint.path)
-            ? hint.operation
-            : "deleted";
+          : hint.operation;
       const origin = input.resolveOrigin?.(hint.path) ?? "unknown";
       const identity = input.resolveIdentity?.(hint.path);
       const correlatedOrigin = identity?.origin ?? origin;
@@ -198,6 +217,7 @@ export function createWorkspaceChangeAuditor(input: {
       confirmed.push(change);
     }
     pending.clear();
+    for (const hint of deferred) pending.set(hint.path, hint);
     return confirmed;
   }
 

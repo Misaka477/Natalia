@@ -234,6 +234,39 @@ test("a dependency change when the objective is about dependencies opens nothing
   expect(findings).toEqual([]);
 });
 
+test("with no objective and no plan there is no reference frame to drift from", () => {
+  // The Windows-report case: a fresh workspace with no goal and no plan
+  // document. An empty objective "does not mention" dependencies, which the
+  // reference rules read as a signal — a finding about nothing. Drift is a
+  // comparison; without a reference nothing may fire.
+  const evaluator = makeEvaluator();
+  const findings = evaluator.evaluate({
+    sessionID: "ses_1",
+    turnID: "t_1",
+    objective: "",
+    currentActivity:
+      "modified:package.json deleted:README.md modified:Cargo.toml",
+    applicableConstraints: [],
+    changes: [
+      { action: "modified", path: "package.json" },
+      { action: "deleted", path: "README.md" },
+      { action: "modified", path: "Cargo.toml" },
+    ],
+    evidenceRefs: [],
+  });
+  expect(findings).toEqual([]);
+  // ...and the behaviour rules still see the same signal once there is one.
+  const behavior = evaluator.evaluateBehavior({
+    sessionID: "ses_1",
+    objective: "",
+    currentActivity: "",
+    applicableConstraints: [],
+    changes: [],
+    evidenceRefs: [],
+  });
+  expect(behavior).toEqual([]);
+});
+
 test("a change outside the objective's named target opens a target_drift advisory", () => {
   const evaluator = makeEvaluator();
   const findings = evaluator.evaluate({

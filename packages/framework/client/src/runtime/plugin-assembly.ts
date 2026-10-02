@@ -14,6 +14,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import type { SkillMetadata } from "@anthelia/runtime-services";
 import { expireSessionConsults } from "@natalia/collaboration";
+import { providerForModel } from "@anthelia/runtime";
 
 export function createPluginAssembly(
   ctx: RuntimeContext,
@@ -102,12 +103,33 @@ export function createPluginAssembly(
     } = ctx.ports;
     return {
       initialize: () => {
-        if (!getProvider() && !options.provider) {
-          const provider = providerFromEnvironment();
-          if (provider) {
-            setProvider(provider);
-            setProviderSource("environment");
-          }
+        if (getProvider() || options.provider) return;
+        const fromEnvironment = providerFromEnvironment();
+        if (fromEnvironment) {
+          setProvider(fromEnvironment);
+          setProviderSource("environment");
+          return;
+        }
+        // The config is the source of truth, so a deployment that configured
+        // its provider in `.natalia/global-config.json` and exported no env
+        // must still get a live provider at boot. Without this the runtime
+        // sits at `model: not-configured` until something else triggers a
+        // config RELOAD (the settings write, or model.select) - and a fresh
+        // serve/CEF launch that never touches either never gets one, which
+        // is every turn dying with a silent stopReason error. This is the
+        // same resolution the reload path (config-reload.ts) performs, run
+        // once here at startup.
+        const tsConfig = ctx.ports.getTsRuntimeConfig?.();
+        const ref =
+          ctx.ports.getSelectedModel?.()?.modelID ?? tsConfig?.defaultModel;
+        if (!ref || !tsConfig) return;
+        const provider = providerForModel(tsConfig, ref, undefined, {
+          log: logOf(ctx.state.serviceDirectory),
+          sessionID: ctx.ports.getActiveExec?.()?.session.id,
+        });
+        if (provider) {
+          setProvider(provider);
+          setProviderSource("ts_config");
         }
       },
       runnerInput: providerRunnerInput,

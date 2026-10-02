@@ -24,6 +24,7 @@ export {
   globWorkspaceFilesBounded,
   grepWorkspaceFilesBounded,
   invalidateWorkspaceFiles,
+  listWorkspaceFilePaths,
   listWorkspaceFiles,
   readWorkspaceFile,
   renameWorkspaceFile,

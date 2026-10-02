@@ -25,7 +25,13 @@ const sha256 = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 
 const roots: string[] = [];
+const stores: ObjectStore[] = [];
 afterAll(() => {
+  // The stores hold OS-level handles (a live pack daemon, the SQLite meta
+  // db) that make their root undeletable on Windows — dispose first, then
+  // remove. POSIX unlinks tolerate the open files, so the dispose is a
+  // no-op safety there.
+  for (const store of stores) store.dispose();
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
 
@@ -59,6 +65,7 @@ async function buildAndCompact(rustMode: boolean): Promise<{
     roots.push(root);
     const storeRoot = join(root, "objects");
     const store = new ObjectStore(storeRoot);
+    stores.push(store);
     // identical creation order in both stores = the same readdir order
     // = the same delta-vs-previous chain
     for (const item of CONTENT)

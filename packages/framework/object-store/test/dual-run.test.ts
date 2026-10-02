@@ -15,6 +15,7 @@ import { ObjectStore } from "../src";
  */
 
 const roots: string[] = [];
+const stores: ObjectStore[] = [];
 // The maintenance WORKER disabled for this comparison: it is a perf
 // shim (the same store on another thread), and its backend is fixed at
 // its spawn — the TS run below would spawn a ts-mode worker and the
@@ -24,6 +25,9 @@ const roots: string[] = [];
   globalThis as unknown as { __NATALIA_OBJECT_STORE_NO_WORKER?: boolean }
 ).__NATALIA_OBJECT_STORE_NO_WORKER = true;
 afterAll(() => {
+  // Dispose the stores first: on Windows an open SQLite meta db or a live
+  // pack daemon holds the temp root open (EBUSY on rm).
+  for (const store of stores) store.dispose();
   for (const root of roots) rm(root, { recursive: true, force: true });
   delete process.env.NATALIA_OBJECT_STORE_BACKEND;
 });
@@ -177,6 +181,7 @@ test("Phase D dual-run: the Rust-mode store answers byte-for-byte what the TS st
   const tsRoot = await mkdtemp(join(tmpdir(), "dualrun-ts-"));
   roots.push(tsRoot);
   const tsStore = new ObjectStore(join(tsRoot, "objects"));
+  stores.push(tsStore);
   const putAnswers: Answer[] = [];
   for (const step of script) putAnswers.push(await run(tsStore, step));
 
@@ -237,6 +242,7 @@ test("Phase D dual-run: the Rust-mode store answers byte-for-byte what the TS st
   const rustRoot = await mkdtemp(join(tmpdir(), "dualrun-rs-"));
   roots.push(rustRoot);
   const rustStore = new ObjectStore(join(rustRoot, "objects"));
+  stores.push(rustStore);
   for (const [index, step] of script.entries()) {
     const answer = await run(rustStore, step);
     // The WHOLE answer compared — including the fsck's orphan/corrupt

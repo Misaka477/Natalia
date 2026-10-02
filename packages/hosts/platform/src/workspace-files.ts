@@ -11,7 +11,13 @@ import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import fuzzysort from "fuzzysort";
 import { RuntimeInvalidParams, RuntimeRefusal } from "@anthelia/contracts";
-import { NATALIA_IGNORE_FILE } from "./natalia-ignore";
+import {
+  DEFAULT_NATALIA_IGNORE_CONTENT,
+  NATALIA_IGNORE_FILE,
+  isSnapshotIgnored,
+  loadNataliaIgnore,
+  parseSnapshotIgnore,
+} from "./natalia-ignore";
 import type {
   RuntimeWorkspaceContent,
   RuntimeWorkspaceFileEntry,
@@ -94,6 +100,54 @@ export async function findWorkspaceFiles(input: {
 
 export function invalidateWorkspaceFiles(workspaceRoot: string) {
   catalogs.delete(resolve(workspaceRoot));
+}
+
+/**
+ * The complete workspace-relative FILE path set, walked with the
+ * `.nataliaignore` rules (the snapshot bulk set: node_modules, dist, target,
+ * *.log …). Unlike the fuzzy-finder catalog above — ignore-free, capped at
+ * 200 results, cached for 1s — this is the set an observer compares "what
+ * exists now" against, so a bounded walk is REPORTED as truncated: a reader
+ * that maps "absent from the set" to "deleted" would otherwise fabricate
+ * deletions for every file past the walk budget.
+ */
+export async function listWorkspaceFilePaths(input: {
+  workspaceRoot: string;
+  maxPaths?: number;
+}): Promise<{ paths: string[]; truncated: boolean }> {
+  const root = await realpath(input.workspaceRoot);
+  const ignore = await loadNataliaIgnore(root);
+  const rules = ignore.exists
+    ? ignore.rules
+    : parseSnapshotIgnore(DEFAULT_NATALIA_IGNORE_CONTENT);
+  const maxPaths = Math.max(1, input.maxPaths ?? 50_000);
+  const paths: string[] = [];
+  const visited = new Set<string>([root]);
+  const stack = [root];
+  while (stack.length > 0) {
+    const directory = stack.pop()!;
+    const children = await readdir(directory, { withFileTypes: true }).catch(
+      () => [],
+    );
+    for (const child of children) {
+      const absolute = resolve(directory, child.name);
+      const real = await realpath(absolute).catch(() => undefined);
+      if (!real || !contains(root, real) || visited.has(real)) continue;
+      const relativePath = relative(root, real).split(sep).join("/");
+      if (!relativePath) continue;
+      if (child.isDirectory()) {
+        if (isSnapshotIgnored(relativePath, true, rules)) continue;
+        visited.add(real);
+        stack.push(real);
+        continue;
+      }
+      if (!child.isFile()) continue;
+      if (isSnapshotIgnored(relativePath, false, rules)) continue;
+      if (paths.length >= maxPaths) return { paths, truncated: true };
+      paths.push(relativePath);
+    }
+  }
+  return { paths, truncated: false };
 }
 
 export async function listWorkspaceFiles(input: {

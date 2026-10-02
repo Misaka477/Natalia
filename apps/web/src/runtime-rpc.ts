@@ -745,6 +745,13 @@ export function createWebRuntimeClient(
         ...(sessionID ? { sessionID } : {}),
       });
     },
+    // The settings panel's 设为默认: writes the config's defaultModel (the
+    // ModelRef object) and reloads. The route table alone is not enough —
+    // without this method on the client the click resolves to undefined and
+    // the button looks wired but does nothing.
+    async setDefaultModel(modelID: string) {
+      return (await call("model.setDefault", { modelID })) as never;
+    },
     async reasoningEffort(sessionID?) {
       return (await call<RuntimeReasoningEffort>(
         "model.reasoning",

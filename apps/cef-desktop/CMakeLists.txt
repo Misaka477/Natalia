@@ -20,19 +20,21 @@ set(CEF_ROOT "${_default_cef_root}" CACHE PATH "CEF SDK root")
 # The distributions lay their artifacts out differently per platform:
 #   Linux:   include/ + lib/libcef_dll_wrapper.a (the IMPORT library) +
 #            bin/libcef.so (the 1.4GB shared object) + bin/*.pak;
-#   Windows: include/ + libcef.lib + libcef_dll_wrapper.lib at the ROOT,
-#            with libcef.dll and the .pak files beside them and
-#            Resources/ + locales/ as directories.
-# The asymmetry is real and easy to get wrong: on Linux `lib/` holds only the
-# wrapper .a while the shared object lives in `bin/`; on Windows everything sits
-# at the root. Assuming symmetry here is a link error about a file that exists
-# under a different name.
+#   Windows: include/ + Release/{libcef.lib, libcef.dll, chrome_elf.dll, …}
+#            + Resources/ + locales/, and NO prebuilt wrapper: the libcef_dll/
+#            sources ship in the distribution and CEF's own cmake integration
+#            builds the libcef_dll_wrapper target from them.
+# The asymmetry is real and easy to get wrong: on Linux `lib/` holds only
+# the wrapper .a while the shared object lives in `bin/`; on Windows the
+# prebuilt binaries sit in `Release/`, not at the distribution root, and the
+# wrapper must be compiled rather than linked. Assuming symmetry here is a
+# link error about a file that exists under a different name.
 if(WIN32)
-  set(CEF_INCLUDE_DIR "${CEF_ROOT}/include")
-  set(CEF_LIB "${CEF_ROOT}/libcef.lib")
-  set(CEF_DLL "${CEF_ROOT}/libcef.dll")
-  set(CEF_WRAPPER_LIB "${CEF_ROOT}/libcef_dll_wrapper.lib")
-  set(CEF_RUNTIME_DIR "${CEF_ROOT}")
+  set(CEF_INCLUDE_DIR "${CEF_ROOT}")
+  set(CEF_LIB "${CEF_ROOT}/Release/libcef.lib")
+  set(CEF_DLL "${CEF_ROOT}/Release/libcef.dll")
+  set(CEF_RUNTIME_DIR "${CEF_ROOT}/Release")
+  set(CEF_RESOURCE_DIR "${CEF_ROOT}/Resources")
 else()
   set(CEF_INCLUDE_DIR "${CEF_ROOT}/include")
   set(CEF_LIB "${CEF_ROOT}/bin/libcef.so")
@@ -51,6 +53,7 @@ set(NATALIA_CEF_SRCS
 if(WIN32)
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_win.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler_win.cc"
   )
 else()
   list(APPEND NATALIA_CEF_SRCS
@@ -60,6 +63,48 @@ else()
 endif()
 
 add_executable(natalia-cef-desktop ${NATALIA_CEF_SRCS})
+
+# Windows has no prebuilt wrapper library: CEF's own cmake integration
+# (find_package(CEF) + add_subdirectory on libcef_dll/) compiles the
+# libcef_dll_wrapper static target from the distribution's sources.
+if(WIN32)
+  list(APPEND CMAKE_MODULE_PATH "${CEF_ROOT}/cmake")
+  find_package(CEF REQUIRED)
+  # CEF's integration clears CMAKE_CXX_FLAGS* and manages everything through
+  # its own variables, so the application target must opt into the same
+  # property set (NDEBUG and the rest) or it compiles with a different
+  # DCHECK_IS_ON than the wrapper — which is a link error, not a warning.
+  # CEF's flag list spells its MSVC requirements (/MP parallel compile, /MT
+  # the static CRT). clang-cl refuses both: /MP is an unused argument it
+  # errors on under /WX, and /MT fights CMake's own -MD (the CRT libcef.dll
+  # was built with). They are filtered here, in the consumer, rather than by
+  # patching the downloaded distribution.
+  foreach(_cef_flag_var
+      CEF_COMPILER_FLAGS CEF_CXX_COMPILER_FLAGS
+      CEF_COMPILER_FLAGS_DEBUG CEF_CXX_COMPILER_FLAGS_DEBUG
+      CEF_COMPILER_FLAGS_RELEASE CEF_CXX_COMPILER_FLAGS_RELEASE)
+    string(REPLACE "/MP" "" ${_cef_flag_var} "${${_cef_flag_var}}")
+    string(REPLACE "/MTd" "" ${_cef_flag_var} "${${_cef_flag_var}}")
+    string(REPLACE "/MT" "" ${_cef_flag_var} "${${_cef_flag_var}}")
+  endforeach()
+  add_subdirectory("${CEF_LIBCEF_DLL_WRAPPER_PATH}" "${CMAKE_BINARY_DIR}/libcef_dll_wrapper")
+  # clang diagnoses two things MSVC does not: the FARPROC cast Windows makes
+  # for every GetProcAddress'd callback (CEF's cef_logging.cc) and partial
+  # aggregate initialization in CEF's own internal header. CEF's flag list
+  # carries /WX, so they are errors here; they are downgraded to warnings on
+  # the wrapper target (CEF's code, not ours).
+  target_compile_options(libcef_dll_wrapper PRIVATE
+    -Wno-error=cast-function-type-mismatch
+    -Wno-error=missing-field-initializers
+    -Wno-error=undefined-var-template)
+  SET_EXECUTABLE_TARGET_PROPERTIES(natalia-cef-desktop)
+  # Our sources include the same CEF headers, so the two clang-vs-MSVC
+  # diagnostics downgraded above apply here as well.
+  target_compile_options(natalia-cef-desktop PRIVATE
+    -Wno-error=cast-function-type-mismatch
+    -Wno-error=missing-field-initializers
+    -Wno-error=undefined-var-template)
+endif()
 
 target_include_directories(natalia-cef-desktop PRIVATE
   "${CEF_INCLUDE_DIR}" "${CEF_ROOT}"
@@ -71,8 +116,11 @@ target_include_directories(natalia-cef-desktop PRIVATE
 # samples add nothing else.
 if(WIN32)
   target_link_libraries(natalia-cef-desktop PRIVATE
-    "${CEF_WRAPPER_LIB}"
+    libcef_dll_wrapper
     "${CEF_LIB}"
+    # libcef.lib delay-loads the whole Windows API surface; link.exe would
+    # add delayimp.lib implicitly, lld-link needs it named.
+    delayimp
   )
   # A GUI-subsystem binary: the entry point is wWinMain, and no console window
   # should appear beside the app.
@@ -96,13 +144,16 @@ set_target_properties(natalia-cef-desktop PROPERTIES
 # Copy the CEF runtime next to the executable. The shape differs per platform:
 #   Linux: everything the runtime needs sits in bin/ (libcef.so + the .pak
 #          files + the snapshot blobs);
-#   Windows: libcef.dll, chrome_elf.dll, the .pak files and the snapshot blobs
-#          sit at the ROOT, and Resources/locales are directories.
+#   Windows: the prebuilt runtime sits in Release/ (libcef.dll, chrome_elf.dll,
+#            the snapshot blobs, the ANGEL/Vulkan helper DLLs), and
+#            Resources/ is a directory beside it.
 # Copying only one shape is how "the app builds and then cannot start" happens.
 if(WIN32)
   add_custom_command(TARGET natalia-cef-desktop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CEF_RUNTIME_DIR}" "$<TARGET_FILE_DIR:natalia-cef-desktop>"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CEF_RESOURCE_DIR}" "$<TARGET_FILE_DIR:natalia-cef-desktop>"
     VERBATIM
   )
 else()
@@ -134,10 +185,22 @@ endif()
 # the product's permission model lives at the tool/approval layer, which
 # the renderer sandbox does not touch.
 target_compile_definitions(natalia-cef-desktop PRIVATE
-  _FILE_OFFSET_BITS=64
   __STDC_CONSTANT_MACROS
   __STDC_FORMAT_MACROS
 )
+if(WIN32)
+  # windows.h's min/max macros otherwise swallow CEF's std::min/std::max
+  # uses (a breakage on any Windows host, clang-cl or not).
+  target_compile_definitions(natalia-cef-desktop PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+  )
+else()
+  # The LFS knob a POSIX build wants; meaningless (and unused) on Windows.
+  target_compile_definitions(natalia-cef-desktop PRIVATE
+    _FILE_OFFSET_BITS=64
+  )
+endif()
 
 # POSIX-only codegen flags. MSVC and clang-cl reject the GCC spellings (and
 # clang-cl's driver would pass them through and fail), so they are applied per

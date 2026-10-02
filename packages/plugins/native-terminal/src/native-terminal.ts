@@ -971,6 +971,12 @@ export class NativeTerminalRegistry {
     id?: string;
     sessionID?: string;
     agentID?: string;
+    /**
+     * A pane started for an embedded surface (the web panel's PTY backend on
+     * Windows, which has no in-process PTY): real in the mux, never attached
+     * to a window. The same shape the background-session derivation produces.
+     */
+    background?: boolean;
   }) {
     // Creating a pane is only ever requested by the model, and it lands in the
     // window the human is attached to.
@@ -981,7 +987,8 @@ export class NativeTerminalRegistry {
     // and a timeline fact says the pane exists, waiting for that action.
     const owningSession = input.sessionID ?? this.activeSession;
     const background =
-      this.activeSession !== undefined && owningSession !== this.activeSession;
+      input.background === true ||
+      (this.activeSession !== undefined && owningSession !== this.activeSession);
     // A restarted mux server numbers panes from scratch, so stale session
     // records can collide with the pane about to be created. Recovery marks
     // them exited first, which also clears the host readiness cache.
@@ -1321,13 +1328,25 @@ export class NativeTerminalRegistry {
   async write(
     id: string,
     data: string,
-    options: { idempotencyKey?: string; sessionID?: string } = {},
+    options: {
+      idempotencyKey?: string;
+      sessionID?: string;
+      /**
+       * Who is typing. The PTY controller's shape: the model's write is
+       * refused on a human-owned pane; the human's write is refused on a
+       * secure-input pane. Without the actor a web panel claimed by its
+       * human could not type at all — the pane would refuse every keystroke
+       * with "input is controlled by a human" while the human holds it.
+       */
+      actor?: "model" | "human";
+    } = {},
   ): Promise<NativeTerminalWriteResult> {
     const session = this.get(id);
     this.assertSessionOwner(session, options.sessionID);
     await this.reconcile();
     this.assertRunning(session);
-    if (session.inputOwner !== "model")
+    const human = options.actor === "human";
+    if (!human && session.inputOwner !== "model")
       throw new Error("terminal input is controlled by a human");
     if (session.secureInput)
       throw new Error("terminal is accepting secure human input");
@@ -1349,6 +1368,14 @@ export class NativeTerminalRegistry {
     const previous = this.modelWrites.get(id) ?? Promise.resolve();
     let cancelled = false;
     const delivery = previous.then(async () => {
+      if (human) {
+        // Keystrokes go to the pane verbatim: the pane's tty is in raw mode
+        // while it runs, and the wezterm host's send-text is the byte path.
+        // No modelInputChunks guard — that is the model's bracketed-paste
+        // discipline, not a human's typing.
+        await this.host.write(session.paneID, data);
+        return;
+      }
       for (const chunk of modelInputChunks(data)) {
         if (session.inputOwner !== "model") {
           cancelled = true;
@@ -1374,8 +1401,9 @@ export class NativeTerminalRegistry {
       return { writtenBytes, delivery: "cancelled" };
     }
     session.revision += 1;
-    session.lastModelWriteAt = Date.now();
-    this.audit(session, "write", "model");
+    if (human) session.lastOutputAt = Date.now();
+    else session.lastModelWriteAt = Date.now();
+    this.audit(session, "write", human ? "human" : "model");
     this.notifyRevision(session.id);
     return { writtenBytes, delivery: "accepted" };
   }

@@ -5,6 +5,7 @@ import { nextContextInstructionsRevision } from "@anthelia/session";
 import { discoverProviderModels, updateConfigAtScope } from "@anthelia/config";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
+import { providerFormatFromDriver } from "@anthelia/runtime";
 type ClientSurfaceOptions = Pick<RealRuntimeClientOptions, "globalConfigPath">;
 type Surface = Pick<
   RuntimeServiceClient,
@@ -93,8 +94,7 @@ export function createSelectionSurface(
         name: agent?.name,
         pending: false,
       });
-      // ADR Phase C: an agent switch is a prompt-level instruction change —
-      // record it as a durable `context.instructions` notice so the UI shows
+      // ADR Phase C: an agent switch is a prompt-level instruction change 鈥?      // record it as a durable `context.instructions` notice so the UI shows
       // it in the interleaved context stream without mutating history.
       if (exec)
         ctx.ports.publishForSession(exec, {
@@ -295,6 +295,15 @@ export function createSelectionSurface(
         name: input.label || input.name,
         driver: input.type,
         enabled: true,
+        // Declare the wire format instead of leaving it to be inferred: the
+        // resolver falls back to a name guess and warns on every boot until
+        // this is written. The vocabulary is the resolver's own
+        // (providerFormatFromDriver), so an existing entry keeps its format.
+        protocol: {
+          ...(current?.protocol ?? {}),
+          format:
+            current?.protocol?.format ?? providerFormatFromDriver(input.type),
+        },
         connection: {
           ...(current?.connection ?? {}),
           baseURL: input.baseURL || current?.connection?.baseURL,

@@ -16,9 +16,12 @@
 //! + `applyDelta` pair (pinned by the GC tests, which run the same
 //! objects through both sides).
 
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
+
+#[cfg(unix)]
 extern "C" {
     fn mmap(
         addr: *mut std::ffi::c_void,
@@ -31,8 +34,26 @@ extern "C" {
     fn munmap(addr: *mut std::ffi::c_void, length: usize) -> i32;
 }
 
-const PROT_READ: i32 = 1;
-const MAP_PRIVATE: i32 = 2;
+#[cfg(windows)]
+extern "system" {
+    fn CreateFileMappingW(
+        file: *mut std::ffi::c_void,
+        attributes: *mut std::ffi::c_void,
+        protect: u32,
+        maximum_size_high: u32,
+        maximum_size_low: u32,
+        name: *const u16,
+    ) -> *mut std::ffi::c_void;
+    fn MapViewOfFile(
+        section: *mut std::ffi::c_void,
+        desired_access: u32,
+        file_offset_high: u32,
+        file_offset_low: u32,
+        number_of_bytes: usize,
+    ) -> *mut std::ffi::c_void;
+    fn UnmapViewOfFile(base: *mut std::ffi::c_void) -> i32;
+    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+}
 
 /// A read-only private mapping of one file; `Drop` unmaps. The bytes are
 /// the file's, faulted in on demand — a pack read pays a page table
@@ -40,6 +61,10 @@ const MAP_PRIVATE: i32 = 2;
 struct Mmap {
     ptr: *mut std::ffi::c_void,
     len: usize,
+    /// The section object the view was carved from; closed on drop
+    /// (POSIX closes with the fd alone, so it is Windows-only).
+    #[cfg(windows)]
+    section: *mut std::ffi::c_void,
 }
 
 impl Mmap {
@@ -49,20 +74,55 @@ impl Mmap {
         if len == 0 {
             return None;
         }
-        let ptr = unsafe {
-            mmap(
-                std::ptr::null_mut(),
+        #[cfg(unix)]
+        {
+            const PROT_READ: i32 = 1;
+            const MAP_PRIVATE: i32 = 2;
+            let ptr = unsafe {
+                mmap(
+                    std::ptr::null_mut(),
+                    len,
+                    PROT_READ,
+                    MAP_PRIVATE,
+                    file.as_raw_fd(),
+                    0,
+                )
+            };
+            if ptr.is_null() || ptr as isize == -1 {
+                return None;
+            }
+            Some(Mmap {
+                ptr,
                 len,
-                PROT_READ,
-                MAP_PRIVATE,
-                file.as_raw_fd(),
-                0,
-            )
-        };
-        if ptr.is_null() || ptr as isize == -1 {
-            return None;
+                #[cfg(windows)]
+                section: std::ptr::null_mut(),
+            })
         }
-        Some(Mmap { ptr, len })
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            const PAGE_READONLY: u32 = 0x02;
+            const FILE_MAP_READ: u32 = 0x04;
+            let section = unsafe {
+                CreateFileMappingW(
+                    file.as_raw_handle(),
+                    std::ptr::null_mut(),
+                    PAGE_READONLY,
+                    0,
+                    0,
+                    std::ptr::null(),
+                )
+            };
+            if section.is_null() {
+                return None;
+            }
+            let ptr = unsafe { MapViewOfFile(section, FILE_MAP_READ, 0, 0, len) };
+            if ptr.is_null() {
+                unsafe { CloseHandle(section) };
+                return None;
+            }
+            Some(Mmap { ptr, len, section })
+        }
     }
 
     fn bytes(&self) -> &[u8] {
@@ -72,8 +132,16 @@ impl Mmap {
 
 impl Drop for Mmap {
     fn drop(&mut self) {
+        #[cfg(unix)]
         unsafe {
             munmap(self.ptr, self.len);
+        }
+        #[cfg(windows)]
+        unsafe {
+            UnmapViewOfFile(self.ptr);
+            if !self.section.is_null() {
+                CloseHandle(self.section);
+            }
         }
     }
 }

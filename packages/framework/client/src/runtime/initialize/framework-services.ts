@@ -73,10 +73,15 @@ import { constitutionInvariants } from "@natalia/governance-ledger";
 import { workLedgerInvariants } from "@natalia/work-ledger";
 import {
   findWorkspaceFiles,
+  listWorkspaceFilePaths,
   migrateLegacyWorkspaceStore,
   operationLogsDir,
   contextVaultDir,
   searchWorkspaceFiles,
+} from "@anthelia/platform";
+import {
+  isSnapshotIgnored,
+  loadNataliaIgnore,
 } from "@anthelia/platform";
 import { createSessionHistoryTool } from "../session-history-tool";
 import { createRinaContextTools } from "../context-tools";
@@ -661,12 +666,16 @@ export async function wireFrameworkServices(
     grants: ["services", "commands"],
   });
   const mutations = createMutationRegistry();
+  // Observation's current path set: a complete, ignore-aware walk — NOT the
+  // fuzzy-finder catalog (ignore-free, 200 results, 1s cache). A bounded set
+  // here turns every hinted path past the bound into a fabricated deletion.
+  const ignoreRules = await loadNataliaIgnore(workspaceRoot);
   const files = createWorkspaceFilesController({
     workspaceRoot,
-    listPaths: async () =>
-      (await findWorkspaceFiles({ workspaceRoot, limit: 1000 }))
-        .filter((entry) => entry.type === "file")
-        .map((entry) => entry.path),
+    listPaths: async () => listWorkspaceFilePaths({ workspaceRoot }),
+    isExcludedPath: (path) =>
+      isSnapshotIgnored(path, false, ignoreRules.rules) ||
+      isSnapshotIgnored(path, true, ignoreRules.rules),
     resolveMutation: (path) => {
       const mutation = mutations.match({ path, operation: "modified" });
       if (!mutation) return undefined;

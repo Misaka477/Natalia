@@ -129,7 +129,13 @@ export function ModelPanel(props: {
           : "已连接",
       models: models.map((entry) => ({
         name: entry.id,
-        default: props.selection?.modelID === entry.id,
+        // The 默认 tag is the CONFIG's default model (what a fresh boot
+        // resolves to), not the session's live selection — the settings face
+        // is about the persistent default, and reading the selection here made
+        // the tag follow every per-session pick.
+        default: props.config?.defaultModel
+          ? `${props.config.defaultModel.provider}/${props.config.defaultModel.model}` === entry.id
+          : false,
       })),
     }));
   };

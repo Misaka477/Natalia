@@ -126,7 +126,7 @@ export function registerTestArtifact(path: string): void {
 }
 
 export async function officialPluginWorkspace(prefix: string) {
-  await assertOfficialPluginDistribution();
+  await pluginDistributionEnsured;
   await mkdir(officialPluginTestWorkspaces, { recursive: true });
   const workspaceRoot = await mkdtemp(
     join(officialPluginTestWorkspaces, basename(prefix)),
@@ -259,23 +259,58 @@ type PluginConfig = {
   packages?: Record<string, unknown>;
 };
 
-async function assertOfficialPluginDistribution() {
-  for (const { directory } of OFFICIAL_PLUGIN_PACKAGES) {
-    const manifest = join(
-      officialPluginDistribution,
-      directory,
-      "natalia.plugin.json",
+// Awaited at module load, before any test body can start: bun runs a file's
+// tests concurrently, so building on first use races them (the lazy version
+// passed 11 of 12 — the one that started before the build finished).
+const pluginDistributionEnsured = ensureOfficialPluginDistribution();
+
+/**
+ * Make sure the official plugin distribution exists, building it if it does not.
+ *
+ * The old version only asserted, and named the WRONG command: `ts:build` does not
+ * produce `natalia.plugin.json` — `refresh:plugin-store` does. Following the
+ * message's advice left the reader with the same failure, which cost real time
+ * this session. Building it here also removes the class entirely: a clean
+ * checkout, or one where an earlier command cleaned `dist/`, no longer fails a
+ * test for a reason that has nothing to do with the test.
+ */
+async function ensureOfficialPluginDistribution(): Promise<void> {
+  const missing = OFFICIAL_PLUGIN_PACKAGES.filter(
+    ({ directory }) =>
+      !existsSync(
+        join(officialPluginDistribution, directory, "natalia.plugin.json"),
+      ),
+  );
+  if (missing.length === 0) return;
+
+  if (missing.length === 0) return;
+
+  // The bundle step alone is not enough: the manifests the tests read come from
+  // the plugin-store refresh.
+  const refresh = Bun.spawnSync(["npm", "run", "build:distribution"], {
+    cwd: resolve(import.meta.dir, "..", "..", "..", ".."),
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  if (refresh.exitCode !== 0)
+    throw new Error(
+      `framework client tests need the official plugin distribution at ` +
+        `${officialPluginDistribution}, and building it failed (missing ` +
+        `${missing.map(({ directory }) => directory).join(", ")}). ` +
+        `Run \`npm run build:distribution\` and re-run the tests.`,
     );
-    try {
-      await readFile(manifest);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT")
-        throw new Error(
-          `framework client tests require prebuilt official plugins at ${officialPluginDistribution}; run ts:build first (missing ${manifest})`,
-        );
-      throw error;
-    }
-  }
+
+  for (const { directory } of missing)
+    if (
+      !existsSync(
+        join(officialPluginDistribution, directory, "natalia.plugin.json"),
+      )
+    )
+      throw new Error(
+        `framework client tests require the official plugin distribution at ` +
+          `${officialPluginDistribution}; ${directory} is still missing after ` +
+          `the build. Run \`npm run build:distribution\` and re-run.`,
+      );
 }
 
 const installPrebuiltPackage: PackageManagerRun = async ({ args }) => {

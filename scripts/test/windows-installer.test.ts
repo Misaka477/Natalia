@@ -8,6 +8,7 @@ import {
   renderInnoScript,
   renderWixFragment,
   scriptDeclaresEntryPoints,
+  planWindowsInstall,
 } from "../windows-installer";
 import { planWindowsInstall } from "../windows-install-plan";
 
@@ -110,4 +111,25 @@ test("a release that is not one is refused before writing anything", async () =>
     threw = String(error);
   }
   expect(threw).toContain("does not look like a release directory");
+});
+
+test("the rendered script's Source paths are release-relative", async () => {
+  // An absolute path bakes the build machine into the script, so the same .iss
+  // cannot be compiled on the Windows host that has the tree. Found by rendering
+  // from a real 91 MB release and reading the output.
+  const release = await fakeWindowsRelease();
+  const plan = await planWindowsInstall({
+    releaseDir: release,
+    icon: "icon.ico",
+  });
+  for (const file of plan.files)
+    expect(file.source, `${file.target} must be relative`).not.toMatch(
+      /^([A-Za-z]:)?[\\/]/u,
+    );
+  const script = renderInnoScript(plan);
+  for (const line of script.split("\n"))
+    if (line.startsWith("Source:")) expect(line).not.toContain(release);
+  // And every file still gets a line, subdirectories included.
+  expect(script).toContain('DestDir: "{app}\\libcef-bin"');
+  expect(script).toContain('DestDir: "{app}\\resources\\plugins"');
 });

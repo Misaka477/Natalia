@@ -48,7 +48,12 @@ export type WindowsInstallOptions = {
 export type InstallerFile = {
   /** The path inside the install root, with `\` separators. */
   target: string;
-  /** The path in the release directory it comes from. */
+  /**
+   * The path an installer's `Source` line uses: RELATIVE to the release
+   * directory. An absolute path bakes the build machine into the script, so the
+   * same .iss cannot be compiled on the Windows host that has the tree — found
+   * by rendering from a real 91 MB release and reading the output.
+   */
   source: string;
   /** Byte length, so the manifest can report a size without re-reading. */
   bytes: number;
@@ -150,8 +155,10 @@ export async function planWindowsInstall(
     // carries the layout the app expects (binary, CEF runtime, resources/).
     const target = entry.split("/").join("\\");
     if (EXCLUDED.has(target)) continue;
-    const source = join(releaseDir, entry);
-    const size = await Bun.file(source).size;
+    // Relative to the release directory, so the rendered script compiles on any
+    // host that has the tree rather than only on the one that built it.
+    const source = entry.split("/").join("\\");
+    const size = await Bun.file(join(releaseDir, entry)).size;
     if (size === undefined) continue;
     bytes += size;
     files.push({ target, source, bytes: size });

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import {
   buildAppImage,
   isPackableRelease,
@@ -66,9 +67,10 @@ test("the entry points at AppRun, and AppRun is executable", async () => {
     id: "natalia",
   });
   const entry = await readDesktopEntry(result.desktopEntry);
-  // `Exec=Natalia` would need the app on PATH; the entry points at the bundle's
-  // own launcher instead.
-  expect(entry["Exec"]).toBe("natalia");
+  // The launcher, not the app's name: `Exec=<app name>` makes the launcher
+  // search PATH for a binary that does not exist there, which is exactly the
+  // "it has a launcher entry but double-clicking does nothing" failure.
+  expect(entry["Exec"]).toBe("AppRun");
   expect(entry["Icon"]).toBe("natalia");
   const mode = (await stat(result.appRun)).mode;
   // The execute bits: the user (7), group (5) and others (5).
@@ -118,6 +120,29 @@ test("a directory that is not a release is refused before anything is written", 
     threw = String(error);
   }
   expect(threw).toContain("does not look like a release directory");
+});
+
+test("the icon set ships under the entry's own name", async () => {
+  // Without an icon the launcher shows its generic unknown-application mark; the
+  // entry names the file, and the sized siblings let the shell pick a bitmap
+  // instead of scaling the one it found.
+  const release = await fakeRelease();
+  const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
+  const icons = await mkdtemp(join(tmpdir(), "natalia-icons-"));
+  await writeFile(join(icons, "icon.png"), "png");
+  for (const size of [16, 48, 256])
+    await writeFile(join(icons, `icon-${size}.png`), `png${size}`);
+  const result = await buildAppImage({
+    releaseDir: release,
+    outDir: out,
+    icon: join(icons, "icon.png"),
+  });
+  const entry = await readDesktopEntry(result.desktopEntry);
+  expect(entry["Icon"]).toBe("natalia");
+  for (const size of [16, 48, 256])
+    expect(existsSync(join(result.appDir, `natalia-${size}.png`))).toBe(true);
+  // The named icon itself is the one the entry resolves to.
+  expect(existsSync(join(result.appDir, "natalia.png"))).toBe(true);
 });
 
 test("the icon ships under the entry's own name", async () => {

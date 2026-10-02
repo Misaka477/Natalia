@@ -32,7 +32,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export type AppImageOptions = {
   /** The release directory (`dist/release/<version>/linux-x64`). */
@@ -121,7 +121,10 @@ export async function buildAppImage(
   // second icon while the app is open.
   const entry = {
     name: appName,
-    exec: id,
+    // AppRun, not the app's own name. `Exec=<name>` makes the launcher search
+    // PATH for a binary of that name; the executable the entry must name is the
+    // bundle's own launcher, which is what the desktop is actually pointed at.
+    exec: "AppRun",
     icon: id,
     terminal: false,
     // ONE main category: `desktop-file-validate` warns that several make the
@@ -167,10 +170,21 @@ exec "$HERE/${CEF_BINARY}" --url="\${NATALIA_CEF_URL:-http://127.0.0.1:5178/}" "
   );
   await chmod(appRunPath, 0o755);
 
+  // The icon. An entry whose Icon names a file with no size suffix is what the
+  // desktop looks up, so the shipped copy carries the entry's own name; the
+  // sized siblings beside it let the shell pick a bitmap instead of scaling the
+  // one it found. Without any of them the app shows the launcher's generic
+  // "unknown application" mark, which is the difference between an installed app
+  // and a file that happens to have a launcher entry.
   let iconPath: string | undefined;
   if (options.icon) {
     iconPath = join(appDir, `${id}.png`);
     await cp(resolve(options.icon), iconPath);
+    for (const size of [16, 24, 32, 48, 64, 128, 256, 512]) {
+      const sibling = join(dirname(resolve(options.icon)), `icon-${size}.png`);
+      if (existsSync(sibling))
+        await cp(sibling, join(appDir, `${id}-${size}.png`));
+    }
   }
 
   // The executables must be executable inside the image.

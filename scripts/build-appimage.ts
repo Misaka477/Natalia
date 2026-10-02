@@ -34,6 +34,7 @@ function versionFromRelease(releaseDir: string): string {
 /** An icon the release (or the repo) can offer, preferring the branded one. */
 function findIcon(): string | undefined {
   const candidates = [
+    join(root, "assets", "icons", "icon.png"),
     join(root, "assets", "icon.png"),
     join(root, "assets", "icons", "icon.png"),
     join(root, "apps", "cef-desktop", "assets", "icon.png"),

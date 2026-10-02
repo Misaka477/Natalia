@@ -223,19 +223,24 @@ pwsh -NoProfile -File scripts\build-cef-windows.ps1
 
 ### 6b. 安装包：各平台的实话
 
-| 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                              |
-| ------- | ------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Linux   | `npm run appimage`        | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖）                                                                    |
-| Windows | `npm run package:windows` | 双击 Setup.exe                | 链条与两路输入（`.iss`/`.wxs`）已就绪并在合成树上渲染验证过；**容器那一锤等你选 MSIX 还是 Inno Setup**，且需一台 Windows 机器编译 |
-| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications   | bundle 与 dmg staging 代码测过，**但没有 macOS release 产物喂它**（见下）；只在合成树上验证过                                     |
+| 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                                                                                                   |
+| ------- | ------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Linux   | `npm run appimage`        | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖）                                                                                                                                         |
+| Windows | `npm run package:windows` | 双击 Setup.exe                | 链条与两路输入（`.iss`/`.wxs`）已就绪并在合成树上渲染验证过；**容器那一锤等你选 MSIX 还是 Inno Setup**，且需一台 Windows 机器编译                                                                      |
+| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications   | 已在**真 darwin release 树**上验证过（`bun --target=bun-darwin-arm64` 交叉编译出的 66MB Mach-O runtime 被打进 bundle，`plistlib` 解析 Info.plist 15 键）；**CEF host 仍是合成占位**——它需在 mac 上构建 |
 
 **每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是合成树渲染；macOS 那行同样只有合成树。三者不是一回事。
 
 **macOS 为什么 defer**：`release:build --all` 只构建 host + windows-x64，因为没有
 macOS 的终端构建（`build-wezterm-*.ts` 只有 ubuntu 和 windows 两版）。一个交互终端
 跑不起来的 release 是带校验和的谎言，所以不做。`appbundle`/dmg staging 的代码写好并
-测过，但**没有 macOS release 产物可以喂它**——`stageDesktopHost` 里那个 `.app` 分支
-因此是不可达的，这点写在该函数的注释里，避免下一个人误以为它被覆盖了。
+测过，`stageDesktopHost` 里那个 `.app` 分支因此在 `--all` 下不可达（这点写在该函数的注
+释里，避免下一个人误以为它被覆盖了）。
+
+不过 runtime 那半边**可以**交叉编译：`bun build --compile --target=bun-darwin-arm64`
+在本机产出了可用的 Mach-O arm64 二进制，`stageWebShell`/`appbundle` 也已在这样的真树上
+验证过。所以 macOS release 缺的**只是** CEF host 和 wezterm natives——这两个必须在 mac
+上构建。哪天真要出 macOS 分发，补的是这两个平台构建，不是打包链。
 
 它做三件事：拉同版本 Windows CEF 分发（`scripts/fetch-cef-windows.ts`，
 版本从 `.cef-test/include/cef_version.h` 读，**不一致就报错**而不是链到

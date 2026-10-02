@@ -132,3 +132,38 @@ test("the rendered script's Source paths are release-relative", async () => {
   expect(script).toContain('DestDir: "{app}\\libcef-bin"');
   expect(script).toContain('DestDir: "{app}\\resources\\plugins"');
 });
+
+test("the uninstaller offers to delete the data the app actually writes", async () => {
+  const release = await fakeWindowsRelease();
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir: await mkdtemp(join(tmpdir(), "win-uninst-")),
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  const script = await Bun.file(result.iss!).text();
+
+  // The uninstall path is offered, as ASKS rather than default: a normal
+  // uninstall must not silently take the user's history with it.
+  expect(script).toContain("CreateInputOptionPage");
+  expect(script).toContain("usPostUninstall");
+  expect(script).toContain("DelTree");
+
+  // The two places the product writes. store-paths.ts computes
+  // `homedir()/.natalia`, which on Windows is %USERPROFILE%\.natalia — NOT the
+  // usual %APPDATA%. Guessing the conventional directory here deletes nothing at
+  // all, which is the worst outcome for a feature whose purpose is honesty.
+  expect(script).toContain("{userprofile}\\.natalia");
+  expect(script).toContain("{userprofile}\\.config\\natalia");
+  expect(script).not.toContain("{userappdata}");
+  expect(script).not.toContain("{userprofile}.natalia");
+  // The label the user reads must name the same path the code deletes.
+  expect(script).toContain("DataPage.Add('%USERPROFILE%\\.natalia");
+
+  // A delete that reports nothing is indistinguishable from one that did nothing.
+  const logs = script.match(/Log\('/gu) ?? [];
+  expect(logs.length).toBeGreaterThanOrEqual(2);
+  // And a lock failure must surface, not vanish.
+  expect(script).toContain("SuppressibleMsgBox");
+});

@@ -424,7 +424,23 @@ export async function installPluginSdkLinks(root: string) {
  * unix-style path and mangles the drive letter.
  */
 export function pluginSdkImportPath(): string {
+  // Relative to THIS FILE, not to the process's cwd: `bun test` invoked from a
+  // package directory (as `npm --workspace @natalia/client run test` does, and as
+  // an editor's test runner does) sets cwd to that package, so an
+  // `import.meta.dir`-independent path resolved to
+  // packages/framework/client/packages/core/plugin/... — which does not exist.
+  // Three UI-host tests failed for that reason and nothing else; they were red
+  // on a clean tree.
   return pathToFileURL(
-    join(process.cwd(), "packages", "core", "plugin", "src", "index.ts"),
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "core",
+      "plugin",
+      "src",
+      "index.ts",
+    ),
   ).href;
 }

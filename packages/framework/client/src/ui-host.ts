@@ -85,6 +85,17 @@ export async function createUiAdapterHost(
       const users = input.pluginStoreRoot
         ? await (input.discover ?? discoverDesiredPluginEntries)({
             pluginStoreRoot: input.pluginStoreRoot,
+            // The workspace's own plugin paths, forwarded.
+            //
+            // This call used to pass only the store, so a UI adapter plugin the
+            // user wrote in their workspace — `plugins.paths` pointing at a
+            // manifest with a `ui` entry — was invisible to the UI host even
+            // though the process-plugin controller discovers it. The same two
+            // fields the controller passes are passed here; omitting them made
+            // `plugins.paths` work for tools and services and silently not work
+            // for panels.
+            paths: plugins.paths,
+            workspaceRoot: input.workspaceRoot,
             packages: plugins.packages,
             enabled: plugins.enabled,
             declaredIDs: (input.extraEntries ?? []).map((entry) => entry.id),

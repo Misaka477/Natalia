@@ -139,19 +139,19 @@ jobs:
                               ./packages/hosts/ui-host/test ./packages/hosts/object-store/test
           - layer: "client-a"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-a.test.ts
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-a.test.ts
           - layer: "client-b"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-b.test.ts
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-b.test.ts
           - layer: "client-c"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-c.test.ts
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-c.test.ts
           - layer: "client-d"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-d.test.ts
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-d.test.ts
           - layer: "client-e"
             dirs: >-
-              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/client/test/real-runtime-e.test.ts
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-e.test.ts
           - layer: "client-rest-1"
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 \

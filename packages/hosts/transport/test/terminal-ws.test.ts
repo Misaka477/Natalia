@@ -130,7 +130,10 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
         resolve();
     };
   });
+  // The pane's screen comes back BEFORE the live stream continues, so a
+  // reattach does not start blank.
   expect(messages).toEqual([
+    { type: "restore", id: "term_web", text: "prompt$ " },
     { type: "output", data: "live\n" },
     expect.objectContaining({ type: "ready", id: "term_web" }),
   ]);
@@ -272,6 +275,98 @@ test("HTTP terminal websocket refuses a terminal owned by another session", asyn
       message: "terminal term_a belongs to session ses_a",
     },
   ]);
+  ws.close();
+  server.stop(true);
+});
+
+test("a failed screen replay does not cost the pane its live stream", async () => {
+  // The replay is a convenience; the live output is the pane. A controller that
+  // cannot serialise its buffer (a host without the reader, a pane already
+  // gone) must degrade to "starts blank" rather than "never connects".
+  const sessions: RuntimeNativeTerminalSession[] = [];
+  const seen: string[] = [];
+  const server = createRuntimeHttpServer({
+    client: {
+      start() {},
+      async submit() {
+        return {
+          type: "turn.submitted",
+          id: "t",
+          text: "",
+          byteLength: 0,
+          lineCount: 1,
+          sha256: "0",
+        };
+      },
+      async cancel() {},
+      snapshot() {
+        return { type: "diagnostic", level: "info", message: "stub" };
+      },
+      diagnostic() {},
+      lastSubmission() {
+        return undefined;
+      },
+      async respondApproval() {
+        return { accepted: true };
+      },
+      async respondQuestion() {
+        return { accepted: true };
+      },
+      async nativeTerminalList() {
+        return sessions;
+      },
+      async nativeTerminalStart(input) {
+        const session: RuntimeNativeTerminalSession = {
+          id: input.id ?? "term_replay",
+          host: "pty",
+          paneID: 1,
+          windowID: 0,
+          muxWindowID: 0,
+          tabID: 0,
+          command: input.command,
+          cwd: input.cwd ?? "",
+          status: "running",
+          inputOwner: "model",
+          geometryOwner: "human",
+          secureInput: false,
+          rows: 24,
+          cols: 80,
+          startedAt: new Date().toISOString(),
+          attached: true,
+          sessionID: input.sessionID,
+        };
+        sessions.push(session);
+        return session;
+      },
+      async nativeTerminalRead() {
+        throw new Error("buffer serialiser unavailable");
+      },
+      async nativeTerminalWrite() {
+        return { id: "x", writtenBytes: 0, delivery: "accepted" as const };
+      },
+      subscribeTerminalOutput(_id, listener) {
+        listener("still streaming\n");
+        return () => undefined;
+      },
+    },
+    terminalWrite: true,
+  });
+  const ws = new WebSocket(
+    `${server.url.replace("http", "ws")}/terminal/ses_r/term_replay`,
+  );
+  await new Promise<void>((resolve, reject) => {
+    ws.onopen = () => resolve();
+    ws.onerror = () => reject(new Error("ws failed"));
+  });
+  await new Promise<void>((resolve) => {
+    ws.onmessage = (event) => {
+      seen.push(String(event.data));
+      if (String(event.data).includes('"ready"')) resolve();
+    };
+  });
+  // The failure is reported, and the live output still arrives.
+  expect(seen.some((raw) => raw.includes("screen replay failed"))).toBe(true);
+  expect(seen.some((raw) => raw.includes("still streaming"))).toBe(true);
   ws.close();
   server.stop(true);
 });

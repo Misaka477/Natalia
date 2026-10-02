@@ -110,6 +110,27 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
         if (typeof client.nativeTerminalClaimHumanInput === "function") {
           await client.nativeTerminalClaimHumanInput(session.id, sessionID);
         }
+        // Replay the pane's current screen before any live output. This is the
+        // equivalent of VSCode's process reconnection: a reconnected terminal
+        // gets the serialized buffer first, then the stream continues. Without
+        // it a pane that already has history (a reattach, a panel reopen, a
+        // browser reload) starts blank and the human's scrollback diverges from
+        // the model's, which can read the same pane via `read`.
+        try {
+          const snapshot = await client.nativeTerminalRead?.(
+            session.id,
+            sessionID,
+          );
+          if (snapshot?.text)
+            send(ws, { type: "restore", id: session.id, text: snapshot.text });
+        } catch (error) {
+          // A failed replay must not cost the pane its live stream: the socket
+          // stays open and new output still arrives.
+          send(ws, {
+            type: "error",
+            message: `screen replay failed: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
         if (typeof client.subscribeTerminalOutput === "function") {
           ws.data.unsubscribe = client.subscribeTerminalOutput(
             session.id,

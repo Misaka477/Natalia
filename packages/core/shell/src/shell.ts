@@ -45,6 +45,25 @@ export abstract class ShellExecutor {
   abstract resolve(request: ShellExecRequest): ShellExecSpec;
 
   /**
+   * The POSIX launcher script for a detached, output-redirected process.
+   *
+   * Shell-specific by definition — `setsid` and `$!` are bash's, and a pwsh twin
+   * would have neither — so it is the executor's business rather than shared.
+   * Callers used to hand-build this string, which hardcoded bash quoting at the
+   * call site; the platform layer already owns the Windows branch (it detaches
+   * natively and returns a real Windows pid, because an MSYS `$!` is in a
+   * different namespace), so only the POSIX half is moving.
+   */
+  detachedPosixScript(input: { command: string; outputPath: string }): string {
+    // A shell that cannot express this refuses rather than guessing: silently
+    // producing a script that does not detach is worse than a caller-visible
+    // failure.
+    throw new Error(
+      `${this.constructor.name} cannot build a detached POSIX launcher script`,
+    );
+  }
+
+  /**
    * Run to completion with the timeout, abort and confinement applied.
    *
    * Nonzero exits and timeouts RESOLVE with a descriptive result rather than

@@ -20,11 +20,8 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  detachedShellPrefix,
-  shellQuote,
-  startDetachedProcess,
-} from "@anthelia/platform";
+import { detachedShellPrefix, startDetachedProcess } from "@anthelia/platform";
+import { BashLocalExecutor } from "@anthelia/shell";
 import {
   processFingerprint,
   readOptionalFile,
@@ -91,6 +88,10 @@ export function settlementReasonFor(
   if (exitCode !== undefined && exitCode !== 0) return "failed";
   return "exited";
 }
+
+// The shell that owns the POSIX launcher spelling. It is stateless, so one per
+// process; a second shell would be a different CLASS here, not an argument.
+const shell = new BashLocalExecutor();
 
 export class ManagedProcessRegistry {
   readonly observer: ManagedProcessObserver;
@@ -228,7 +229,15 @@ export class ManagedProcessRegistry {
     const outputPath = resolve(processDir, `${processID}.log`);
     const { pid } = await startDetachedProcess({
       command,
-      posixScript: `${detachedShellPrefix()}bash -c ${shellQuote(command)} > ${shellQuote(outputPath)} 2>&1 & echo $!`,
+      // The shell owns this spelling now. This caller is the one that wants
+      // `setsid` (a process group a later negative-pid signal can address), which
+      // is a prefix it passes rather than something the seam hardcodes — the
+      // Windows branch of startDetachedProcess ignores it entirely, because an
+      // MSYS `$!` is in a different pid namespace from a Windows one.
+      posixScript: `${detachedShellPrefix()}${shell.detachedPosixScript({
+        command,
+        outputPath,
+      })}`,
       cwd: context.workspaceRoot,
       outputPath,
       env: safeToolEnv(context.settings?.envAllowlist),

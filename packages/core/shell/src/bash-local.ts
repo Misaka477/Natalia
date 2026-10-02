@@ -10,7 +10,11 @@
  * It is behaviour-preserving by construction: the argv this produces is the argv
  * `isolatedShellCommand` produced before the seam existed.
  */
-import { isolatedShellCommand } from "@anthelia/platform";
+import {
+  isolatedShellCommand,
+  profileShellCommand,
+  shellQuote,
+} from "@anthelia/platform";
 
 import { ShellExecutor } from "./shell";
 import type { ShellExecRequest, ShellExecSpec } from "./types";
@@ -24,9 +28,14 @@ function clampLocal(timeoutMs: number | undefined): number {
 
 export class BashLocalExecutor extends ShellExecutor {
   resolve(request: ShellExecRequest): ShellExecSpec {
-    // `--noprofile --norc -c` is the isolated invocation: a managed session must
-    // not inherit the user's profile side effects.
-    const shell = isolatedShellCommand(request.command);
+    // Two spellings, by request rather than by class: the shell tool wants the
+    // isolated one (a managed session must not inherit profile side effects),
+    // and the skill and terminal callers want the profile-reading one.
+    const shell = request.loginShell
+      ? profileShellCommand(request.command, {
+          posixShell: request.shellExecutable,
+        })
+      : isolatedShellCommand(request.command);
     return {
       command: shell.executable,
       args: shell.args,
@@ -34,6 +43,22 @@ export class BashLocalExecutor extends ShellExecutor {
       timeoutMs: clampLocal(request.timeoutMs),
       stdin: request.stdin,
     };
+  }
+
+  /**
+   * `bash -c <command> > <log> 2>&1 & echo $!` — the exact string the two
+   * background call sites hand-built at their call sites before the seam. No
+   * `setsid` here: the caller that wants it passes the prefix, which is why the
+   * process-tools spelling has `detachedShellPrefix()` in front and this one does
+   * not.
+   */
+  override detachedPosixScript(input: {
+    command: string;
+    outputPath: string;
+  }): string {
+    return `bash -c ${shellQuote(input.command)} > ${shellQuote(
+      input.outputPath,
+    )} 2>&1 & echo $!`;
   }
 }
 

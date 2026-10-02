@@ -11,6 +11,7 @@
     "@anthelia/contracts": "workspace:*",
     "@anthelia/platform": "workspace:*",
     "@anthelia/plugin": "workspace:*",
+    "@anthelia/shell": "workspace:*",
     "@anthelia/tools": "workspace:*",
     "@natalia/collaboration": "workspace:*"
   }

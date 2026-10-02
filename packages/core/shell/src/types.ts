@@ -24,6 +24,22 @@ export type ShellExecRequest = {
   signal?: AbortSignal | undefined;
   /** Bytes to write to stdin before closing it. */
   stdin?: string | undefined;
+  /**
+   * The PROFILE-READING invocation (`bash -lc`) rather than the isolated one
+   * (`--noprofile --norc -c`). Two call sites deliberately want the user's
+   * profile; the shell tool deliberately does not. It is a request field so the
+   * choice is data, not a second executor class.
+   */
+  loginShell?: boolean | undefined;
+  /**
+   * A caller-named shell executable, honoured when present.
+   *
+   * A valve, and a temporary one: two call sites currently choose their own
+   * (`$SHELL`, `/bin/sh`). Keeping it here preserves their behaviour exactly
+   * while the shell choice moves above the seam; it disappears when those sites
+   * name an executor instead.
+   */
+  shellExecutable?: string | undefined;
 };
 
 /** A resolved request: everything needed to spawn, and nothing shell-shaped. */

@@ -13,6 +13,10 @@ import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { executableName, isWindows } from "@anthelia/platform";
 import { selectExecutor } from "@anthelia/shell";
+import {
+  interactiveShellArgv,
+  withShellIntegration,
+} from "./shell-integration-argv";
 
 export {
   NATIVE_INPUT_BROKER_VERSION,
@@ -196,13 +200,21 @@ export function nativeTerminalPaneCommand(
   // but the spelling now belongs to the shell rather than being built here.
   // `/bin/sh`, not bash: the pane command is derived for the workspace's own
   // shell, and the seam carries that through its `shellExecutable` valve.
+  //
+  // A pane whose command IS a shell is an interactive shell, and gets that shell
+  // directly — not `/bin/sh -lc <shell>`. The `-lc` wrapper was the old contract
+  // for every command, and it means a bash pane would be dash running bash,
+  // carrying no integration and so no command-level read. Detecting the shell
+  // here keeps the wrapper for real commands and drops it for a real shell.
+  const integrated = interactiveShellArgv(command, os);
+  if (integrated) return integrated;
   const spec = shell.resolve({
     command,
     loginShell: true,
     os,
     shellExecutable: "/bin/sh",
   });
-  return [spec.command, ...spec.args];
+  return withShellIntegration([spec.command, ...spec.args]);
 }
 
 export function createWezTermHost(

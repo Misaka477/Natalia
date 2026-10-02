@@ -1,1 +1,0 @@
-export { createFileEditorPlugin } from "./plugin";

@@ -1,1 +1,0 @@
-export { createSkillsSettingsUiPlugin } from "./plugin";

@@ -1,9 +1,0 @@
-{
-  "schema": "natalia.composition-profile/1",
-  "rows": [
-    {
-      "id": "anthelia.sandbox",
-      "config": { "mode": "workspace-write" }
-    }
-  ]
-}

@@ -59,6 +59,17 @@ if (process.env.NATALIA_HOME === undefined)
 if (process.env.NATALIA_STORE_HOME === undefined)
   process.env.NATALIA_STORE_HOME = process.env.NATALIA_HOME;
 
+// The workspace registry. This one already had a variable —
+// `workspaceRegistryPath` reads NATALIA_WORKSPACES_FILE before falling back to
+// `~/.config/natalia/workspaces.json` — so no product change was needed, only the
+// preload had not been setting it. Without it every test process shared one real
+// registry file and could read another test's workspaces.
+if (process.env.NATALIA_WORKSPACES_FILE === undefined)
+  process.env.NATALIA_WORKSPACES_FILE = join(
+    process.env.NATALIA_HOME,
+    "workspaces.json",
+  );
+
 // The preload's own state root, so a test can assert the isolation holds rather
 // than trusting that an env var happens to be read.
 export const testStateHome = process.env.NATALIA_HOME!;

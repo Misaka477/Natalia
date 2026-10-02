@@ -26,6 +26,21 @@ namespace {
 // closing the window exits the process and the launcher's trap releases the
 // runtime with it. The policy's wording lives in window-policy.ts, mirror with
 // the tests that pin it.
+//
+// This delegate is the CROSS-PLATFORM one (CefWindowDelegate), so all three
+// platforms share this decision. The per-platform residue, and why each is not
+// here:
+//
+//   Linux/X11   nothing further: refusing CanClose keeps the browser alive.
+//   Windows     nothing further: refusing CanClose keeps the process; the
+//               launcher's Job Object only fires once the process really ends.
+//   macOS       MORE IS REQUIRED AND NOT YET DONE. Cocoa's
+//               `applicationShouldTerminateAfterLastWindowClosed` defaults to
+//               true, so closing the LAST window ends the process even when
+//               CanClose says no. Intercepting it means an NSApplicationDelegate
+//               override (Objective-C++), which needs a macOS toolchain to build
+//               and verify. Until that exists, the minimise mode is honest on
+//               macOS only while SOME window remains open.
 bool MinimiseOnClose() {
   const char* raw = std::getenv("NATALIA_MINIMISE_ON_CLOSE");
   if (raw == nullptr) return false;

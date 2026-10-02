@@ -1,6 +1,15 @@
 /**
  * The window's close policy.
  *
+ * The C++ side (simple_app.cc) reads the same variable through
+ * `MinimiseOnClose()`, in the one CROSS-PLATFORM delegate, so the three hosts
+ * share this decision. macOS carries one piece of residue that is NOT shared and
+ * NOT yet done: Cocoa's `applicationShouldTerminateAfterLastWindowClosed`
+ * defaults to true, so closing the LAST window ends the process even when the
+ * close is refused. Until an NSApplicationDelegate override exists (which needs
+ * a macOS toolchain to build and verify), the minimise mode is honest on macOS
+ * only while some window stays open.
+ *
  * Closing a window means two different things to two different users, and an
  * application that guesses wrong is unusable either way:
  *

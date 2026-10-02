@@ -111,6 +111,15 @@ async function stageWebShell(outDir: string): Promise<void> {
   await cp(built, target, { recursive: true });
 }
 
+/** The command that produces the host for a given release platform. */
+function hostBuildCommand(platformDir: string): string {
+  if (platformDir.startsWith("windows"))
+    return "npm run desktop:cef:build:windows (on Windows)";
+  if (platformDir.startsWith("darwin"))
+    return "npm run desktop:cef:build (on macOS)";
+  return "npm run desktop:cef:build";
+}
+
 /**
  * Assemble the CEF window host into the release tree (Linux and Windows; macOS is
  * deferred — see the note below).
@@ -155,12 +164,13 @@ async function stageDesktopHost(
   }
   if (!(await Bun.file(source).exists()))
     throw new Error(
-      `${platformDir}: the desktop host is not built — run \`npm run desktop:cef:build\` ` +
-        `(or scripts/build-cef-windows.ps1 on Windows) before packaging. ` +
-        `Its output lives in a gitignored build directory, so a clean checkout ` +
-        `must rebuild it; this step deliberately does NOT build it, because a ` +
-        `release whose host was silently compiled here would hide that the host ` +
-        `build itself is a separate, platform-specific step.`,
+      `${platformDir}: the desktop host is not built — run \`${hostBuildCommand(platformDir)}\` ` +
+        `before packaging. Its output lives in a gitignored build directory, so a ` +
+        `clean checkout must rebuild it; this step deliberately does NOT build it, ` +
+        `because a release whose host was silently compiled here would hide that ` +
+        `the host build itself is a separate, platform-specific step (and on this ` +
+        `host a Windows host cannot be built at all — that needs a Windows machine, ` +
+        `which is why the command names the platform rather than assuming it).`,
     );
   await cp(source, join(outDir, `natalia-cef-desktop${suffix}`));
   // The CEF runtime it loads, which the host build already assembled beside

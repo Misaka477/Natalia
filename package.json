@@ -51,6 +51,8 @@
     "desktop:cef:build": "npm --workspace @natalia/cef-desktop run build",
     "desktop:cef:build:windows": "pwsh -NoProfile -File scripts/build-cef-windows.ps1",
     "desktop:cef:fetch:windows": "bun scripts/fetch-cef-windows.ts",
+    "package:windows": "npm run desktop:cef:build:windows && npm run build:distribution && npm run build:web && npm run release:build && npm run windows:installer-inputs",
+    "windows:installer-inputs": "bun scripts/build-windows-installer.ts",
     "guard:test-workspaces": "bun run packages/tooling/testing/bin/test-workspace-hygiene-guard.ts",
     "guard:events": "bun run packages/tooling/testing/bin/event-fallback-guard.ts",
     "guard:console": "bun run packages/tooling/testing/bin/console-guard.ts",

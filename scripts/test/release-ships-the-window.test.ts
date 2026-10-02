@@ -92,3 +92,35 @@ test("the packaging chain builds its own prerequisites", async () => {
   ];
   expect(order).toEqual([...order].sort((a, b) => a - b));
 });
+
+test("the Windows chain builds its prerequisites too", async () => {
+  // Linux's chain was assuming a gitignored CEF build directory existed; the
+  // Windows one would have made the same mistake, so it names all four
+  // prerequisites in dependency order before reaching the renderer.
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const chain = pkg.scripts["package:windows"]!;
+  for (const step of [
+    "desktop:cef:build:windows",
+    "build:distribution",
+    "build:web",
+    "release:build",
+    "windows:installer-inputs",
+  ])
+    expect(chain, `missing ${step}`).toContain(step);
+  // And the host build it names is the WINDOWS one: on this host a Windows host
+  // cannot be built at all, which is why the command names the platform.
+  expect(pkg.scripts["desktop:cef:build:windows"]).toContain(
+    "build-cef-windows.ps1",
+  );
+});
+
+test("a cross-platform release names the host build ITS platform needs", () => {
+  // The error used to say "run npm run desktop:cef:build" for every target —
+  // which on a Windows release is the Linux build, and cannot ever satisfy it.
+  const source = script();
+  expect(source).toContain("function hostBuildCommand(");
+  expect(source).toContain("desktop:cef:build:windows (on Windows)");
+  expect(source).toContain("desktop:cef:build (on macOS)");
+});

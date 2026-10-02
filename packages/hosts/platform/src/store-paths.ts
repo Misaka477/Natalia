@@ -48,28 +48,27 @@ export function workspaceStoreID(workspaceRoot: string): string {
 }
 
 /**
- * The root the session store hangs off, before `<root>/stores/<id>`.
+ * `<home>/.natalia/stores/<id>` — the store root, outside the workspace.
  *
- * `NATALIA_STORE_HOME` relocates it explicitly, which is what tests need: a test
- * process that leaves the store in the real home writes to the operator's data
- * and cannot be isolated, and `bunfig.toml`'s preload sets this alongside
- * `NATALIA_HOME` for that reason.
+ * An explicit `home` keeps its long-standing meaning: it is the USER home, and
+ * `.natalia/stores` is appended to it. That is what `store-paths.test.ts` pins
+ * and what every other entry point passes, so it must not change.
  *
- * A SEPARATE variable rather than reusing `NATALIA_HOME`, even though install.sh's
- * rule makes that the state root: reusing it would silently move an existing
- * install's session store the first time the variable happened to be set for some
- * other purpose. An opt-in relocation gets its own switch.
+ * When no home is given, `NATALIA_STORE_HOME` relocates the store. It IS the state
+ * root, so no extra `.natalia` segment is added — unlike `home`. That asymmetry is
+ * the reason this is a separate switch from NATALIA_HOME: reusing that one would
+ * have made an already-set variable silently move an existing install's store.
  */
-function stateRoot(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.NATALIA_STORE_HOME || undefined;
-}
-
-/** `~/.natalia/stores/<id>` — the store root, outside the workspace. */
 export function workspaceStoreRoot(
   workspaceRoot: string,
-  home: string = stateRoot() ?? join(homedir(), ".natalia"),
+  home?: string,
 ): string {
-  return join(home, "stores", workspaceStoreID(workspaceRoot));
+  if (home !== undefined)
+    return join(home, ".natalia", "stores", workspaceStoreID(workspaceRoot));
+  const relocated = process.env.NATALIA_STORE_HOME;
+  if (relocated)
+    return join(relocated, "stores", workspaceStoreID(workspaceRoot));
+  return join(homedir(), ".natalia", "stores", workspaceStoreID(workspaceRoot));
 }
 
 /** The shared content-addressed object library for a workspace's store. */

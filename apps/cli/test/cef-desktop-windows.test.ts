@@ -24,19 +24,27 @@ test("the build selects a per-platform CEF SDK root and artifact names", () => {
   // A single SDK root is how a Windows build links Linux binaries.
   for (const root0 of [".cef-windows", ".cef-test", ".cef-macos"])
     expect(cmake).toContain(root0);
-  expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/libcef.lib")');
+  // CEF 152's Windows distribution puts the prebuilt binaries in `Release/`,
+  // not at the distribution root, and ships NO prebuilt wrapper — the
+  // libcef_dll/ sources come with it and CEF's cmake integration builds the
+  // wrapper target. Both were measured on a real Windows build (the batch that
+  // produced WINDOWS-DIST-TEST-REPORT.zh-CN.md), so they replace the earlier
+  // guess of a root-level libcef.lib plus a prebuilt wrapper .lib.
+  expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/Release/libcef.lib")');
+  expect(cmake).toContain('set(CEF_DLL "${CEF_ROOT}/Release/libcef.dll")');
+  expect(cmake).toContain('set(CEF_RESOURCE_DIR "${CEF_ROOT}/Resources")');
+  expect(cmake).not.toContain('set(CEF_LIB "${CEF_ROOT}/libcef.lib")');
+  expect(cmake).not.toContain(
+    'set(CEF_WRAPPER_LIB "${CEF_ROOT}/libcef_dll_wrapper.lib")',
+  );
   // Linux's libcef.so is the 1.4GB shared object in bin/, and lib/ holds ONLY
   // the import wrapper. The symmetry-with-Windows assumption ("lib/libcef.so")
   // was written once and the real build caught it: three objects compiled, then
   // the link failed naming a file that exists under a different name.
   expect(cmake).toContain('set(CEF_LIB "${CEF_ROOT}/bin/libcef.so")');
   expect(cmake).not.toContain('set(CEF_LIB "${CEF_ROOT}/lib/libcef.so")');
-  // The wrapper's location is the asymmetry's other half.
   expect(cmake).toContain(
     'set(CEF_WRAPPER_LIB "${CEF_ROOT}/lib/libcef_dll_wrapper.a")',
-  );
-  expect(cmake).toContain(
-    'set(CEF_WRAPPER_LIB "${CEF_ROOT}/libcef_dll_wrapper.lib")',
   );
   // POSIX-only system libraries must not reach the Windows link line.
   const winLink = cmake.slice(
@@ -116,7 +124,10 @@ test("the native build chain skips only wezterm, and says so", () => {
   expect(pkg.scripts["diff:build-wasm"]).toContain("build-ast-packs.ts");
   for (const chain of ["build:windows", "build:distribution:native"]) {
     const script = pkg.scripts[chain]!;
-    expect(script).toContain("native:all");
+    // The Windows chain uses the platform-aware native step, not the Linux
+    // one — the merge kept the PR's side, which is correct: a Windows release
+    // must not build the Linux confinement backend.
+    expect(script).toContain("native:windows");
     // ts:build in a full chain must run WITHOUT the skip: that is what stages
     // the wezterm executables into the plugin distribution.
     expect(script).not.toContain("SKIP_NATIVE");

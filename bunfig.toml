@@ -4,3 +4,18 @@
 # "devref/deepseek-harness/packages/core/tools/tests/". Keep the reference
 # project out of this repo's test runs.
 pathIgnorePatterns = ["devref/**"]
+
+# Every test process gets its own state root.
+#
+# Without this, a test that constructs a real runtime client writes to the
+# operator's real `~/.natalia`: the vault, the operation log, the session store.
+# Measured consequence: `generation-tools.test.ts` fails deterministically with
+# `SQLiteError: attempt to write a readonly database` on any host whose home is
+# read-only, and all 40 client-test files wrote to the same real directory with no
+# isolation between them or from the operator's own data.
+#
+# NATALIA_HOME redirects the vault and the operation log. The session store goes
+# through `workspaceStoreRoot`'s `home` parameter instead, which does not read it —
+# that path stays workspace-derived and remains a separate gap, recorded in the
+# preload's own comment rather than papered over here.
+preload = ["./packages/tooling/testing/test/preload.ts"]

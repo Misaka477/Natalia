@@ -23,7 +23,11 @@ async function fakeRelease(extra: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "natalia-release-"));
   await mkdir(join(root, "libcef-bin"), { recursive: true });
   await mkdir(join(root, "resources"), { recursive: true });
-  await writeFile(join(root, "natalia-cef-desktop"), "cef\n");
+  // Self-identifying, so a test can tell "the host ran" from "the shell could not find it".
+  await writeFile(
+    join(root, "natalia-cef-desktop"),
+    "#!/bin/sh\necho HOST_LAUNCHED\n",
+  );
   await writeFile(join(root, "natalia"), "runtime\n");
   await writeFile(join(root, "libcef-bin", "libcef.so"), "lib\n");
   await writeFile(join(root, "libcef-bin", "libEGL.so"), "lib\n");
@@ -182,3 +186,84 @@ test("the generated entry passes desktop-file-validate clean", async () => {
   const output = `${run.stdout.toString()}${run.stderr.toString()}`;
   expect(output.trim()).toBe("");
 });
+
+test("AppRun hands off to a running instance instead of starting a copy", async () => {
+  // The generated launcher is the app's only product use of the single-instance
+  // lock, and the branch that matters is the one a user hits by clicking the icon
+  // twice. Three outcomes, all measured by running the generated script:
+  //   a live listener  -> ask it to show, exit 0 (no second copy)
+  //   a stale socket with a LIVE pid    -> defer, exit 0 (the app is starting)
+  //   a stale socket with a dead pid    -> take the lock over (a crash recovers)
+  const release = await fakeRelease();
+  const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
+  await withAppRun(release, out, async ({ run, stateDir }) => {
+    // 1. A listener that answers.
+    const answering = Bun.spawn(
+      [
+        "socat",
+        `UNIX-LISTEN:${stateDir}/natalia.instance.sock,fork`,
+        'SYSTEM:echo {"ok":true}',
+      ],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+    await Bun.sleep(300);
+    // Connecting IS the signal now: the app is there, so this launch exits
+    // without starting a copy. Empty output, exit 0.
+    expect(run()).toBe("");
+    answering.kill();
+
+    // 2. A socket file with NO listener (what a starting app has before its
+    //    listener is up, or one that died without cleaning up), plus a live pid.
+    //    socat removes its socket on exit, so this state is created by hand.
+    const keep = Bun.spawn(["sleep", "30"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await writeFile(join(stateDir, "natalia.instance.pid"), `${keep.pid}\n`);
+    const orphanSocket = join(stateDir, "natalia.instance.sock");
+    const bound = Bun.spawn(
+      ["socat", `UNIX-LISTEN:${orphanSocket},fork`, "SYSTEM:true"],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+    await Bun.sleep(300);
+    bound.kill(9);
+    await Bun.sleep(100);
+    // The file survives a SIGKILL, and nothing is listening on it.
+    expect(existsSync(orphanSocket)).toBe(true);
+    expect(run()).toContain("deferring to it");
+    keep.kill();
+
+    // 3. The same orphan socket, with a DEAD pid: the lock is taken over.
+    await writeFile(join(stateDir, "natalia.instance.pid"), "999999\n");
+    const third = await run({
+      NATALIA_INSTANCE_SOCK: `${stateDir}/answer.sock`,
+    });
+    expect(third).toContain("HOST_LAUNCHED");
+  });
+});
+
+/** Renders an AppDir, then runs its AppRun with a private state dir. */
+async function withAppRun(
+  release: string,
+  out: string,
+  body: (
+    run: (env?: Record<string, string>) => Promise<string>,
+  ) => Promise<void>,
+): Promise<void> {
+  const result = await buildAppImage({ releaseDir: release, outDir: out });
+  const stateDir = await mkdtemp(join(tmpdir(), "natalia-apprun-state-"));
+  const run = (env: Record<string, string> = {}) => {
+    const proc = Bun.spawnSync([result.appRun], {
+      env: {
+        ...process.env,
+        NATALIA_STATE_DIR: stateDir,
+        NATALIA_CEF_URL: "http://127.0.0.1:1/",
+        ...env,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    return `${proc.stdout.toString()}${proc.stderr.toString()}`;
+  };
+  await body({ run, stateDir });
+}

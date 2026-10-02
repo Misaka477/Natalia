@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   BashLocalExecutor,
+  PwshLocalExecutor,
   ShellExecutor,
   clampTimeout,
   type ShellExecRequest,
@@ -151,4 +152,42 @@ test("a second shell inherits every policy without touching the seam", async () 
   expect(run.outcome).toBe("exited");
   expect(run.exitCode).toBe(2);
   expect(run.stdout).toContain("pwsh-shaped");
+});
+
+test("the caller's environment reaches the child, and an executor's overrides do not replace it", async () => {
+  const bash = new BashLocalExecutor();
+  // A variable only the caller set, and one the executor adds: both must reach
+  // the child, and the caller's must survive word-for-word. This is the property
+  // that was silently absent for two commits — the shell tool's env allowlist was
+  // dropped when the seam was introduced, so `bash` inherited the runtime's whole
+  // environment, and no test named it until the pwsh overrides forced the shape.
+  // Through resolve, which is where an executor applies its environment — the
+  // same path the shell tool takes. Passing it to `run` instead leaves the spec
+  // without one, because the spawn reads the spec.
+  const run = await bash.run(
+    bash.resolve({
+      command: "echo $NATALIA_PROBE_VAR",
+      env: { NATALIA_PROBE_VAR: "from-the-caller", PATH: process.env.PATH },
+    }),
+  );
+  expect(run.stdout.trim()).toBe("from-the-caller");
+
+  // And the reverse: an executor that adds defaults must not clobber a value the
+  // caller set deliberately. resolve is where defaults are applied, so this is
+  // where the precedence is decided.
+  const pwsh = new PwshLocalExecutor();
+  const spec = pwsh.resolve({
+    command: "x",
+    env: { NO_COLOR: "0", PATH: process.env.PATH },
+  });
+  expect(spec.env?.NO_COLOR).toBe("0");
+  expect(spec.env?.PAGER).toBe("cat");
+});
+
+test("a caller that passes no environment inherits, exactly as before", async () => {
+  const bash = new BashLocalExecutor();
+  const run = await bash.run(bash.resolve({ command: "echo $HOME" }));
+  // Inherited, not replaced with an empty object: spawn(env=undefined) is what
+  // the pre-seam code did by not passing env at all.
+  expect(run.stdout.trim()).toBe(String(process.env.HOME));
 });

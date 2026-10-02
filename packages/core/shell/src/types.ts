@@ -25,6 +25,14 @@ export type ShellExecRequest = {
   /** Bytes to write to stdin before closing it. */
   stdin?: string | undefined;
   /**
+   * The environment the child runs with, already sanitised by the caller.
+   *
+   * A caller's ALLOWLIST is policy and stays above the seam; this carries its
+   * result. Absent means inherit, which is what a caller that has already
+   * narrowed things wants and what the seam must not second-guess.
+   */
+  env?: Record<string, string | undefined> | undefined;
+  /**
    * The PROFILE-READING invocation (`bash -lc`) rather than the isolated one
    * (`--noprofile --norc -c`). Two call sites deliberately want the user's
    * profile; the shell tool deliberately does not. It is a request field so the

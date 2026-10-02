@@ -43,6 +43,7 @@ export class BashLocalExecutor extends ShellExecutor {
       cwd: request.workdir ?? process.cwd(),
       timeoutMs: clampLocal(request.timeoutMs),
       stdin: request.stdin,
+      env: request.env,
     };
   }
 

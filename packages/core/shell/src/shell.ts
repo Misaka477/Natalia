@@ -236,6 +236,11 @@ export abstract class ShellExecutor {
         cwd: spec.cwd,
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],
+        // The SPEC, not the request: `resolve` is where an executor applies its
+        // defaults (pwsh's NO_COLOR and PAGER) ON TOP of the caller's
+        // environment, so a caller's value still wins per-key. Reading
+        // `request.env` here instead discarded every executor default whenever a
+        // caller passed anything — the pwsh overrides would never have applied.
         env: spec.env,
       }),
     };

@@ -8,6 +8,12 @@
 export { ShellExecutor } from "./shell";
 export { BashLocalExecutor } from "./bash-local";
 export {
+  PwshLocalExecutor,
+  ENCODING_PREAMBLE,
+  ENV_OVERRIDES,
+} from "./pwsh-local";
+export { candidatePwshPaths, resolvePwshPath } from "./pwsh-resolve";
+export {
   DEFAULT_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
   WRAPPER_FAILURE_SIGNATURE,

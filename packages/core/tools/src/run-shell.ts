@@ -1,5 +1,6 @@
 import { BashLocalExecutor, clampTimeout } from "@anthelia/shell";
 import type { ToolExecutionContext } from "./types";
+import { safeToolEnv } from "./child-process";
 
 /** The confinement wrapper's refusal prefix (its own stderr dialect). */
 const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
@@ -32,6 +33,11 @@ export async function runShell(
     confinement: context.confinement,
     workspaceRoot: context.workspaceRoot,
     signal: context.signal,
+    // The allowlist is policy and stays here; the seam carries its result. This
+    // is what stops a command from reading the runtime's whole environment, and
+    // it was missing between the seam's introduction and now — typecheck found it
+    // as an unused type, and nothing else would have.
+    env: safeToolEnv(context.settings?.envAllowlist),
   });
   const run = await shell.run(spec, {
     command,

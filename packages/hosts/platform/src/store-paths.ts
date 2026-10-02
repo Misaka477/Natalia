@@ -47,12 +47,29 @@ export function workspaceStoreID(workspaceRoot: string): string {
     .digest("hex");
 }
 
+/**
+ * The root the session store hangs off, before `<root>/stores/<id>`.
+ *
+ * `NATALIA_STORE_HOME` relocates it explicitly, which is what tests need: a test
+ * process that leaves the store in the real home writes to the operator's data
+ * and cannot be isolated, and `bunfig.toml`'s preload sets this alongside
+ * `NATALIA_HOME` for that reason.
+ *
+ * A SEPARATE variable rather than reusing `NATALIA_HOME`, even though install.sh's
+ * rule makes that the state root: reusing it would silently move an existing
+ * install's session store the first time the variable happened to be set for some
+ * other purpose. An opt-in relocation gets its own switch.
+ */
+function stateRoot(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.NATALIA_STORE_HOME || undefined;
+}
+
 /** `~/.natalia/stores/<id>` — the store root, outside the workspace. */
 export function workspaceStoreRoot(
   workspaceRoot: string,
-  home: string = homedir(),
+  home: string = stateRoot() ?? join(homedir(), ".natalia"),
 ): string {
-  return join(home, ".natalia", "stores", workspaceStoreID(workspaceRoot));
+  return join(home, "stores", workspaceStoreID(workspaceRoot));
 }
 
 /** The shared content-addressed object library for a workspace's store. */

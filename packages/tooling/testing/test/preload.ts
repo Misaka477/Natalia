@@ -52,6 +52,13 @@ import { join } from "node:path";
 if (process.env.NATALIA_HOME === undefined)
   process.env.NATALIA_HOME = mkdtempSync(join(tmpdir(), "natalia-test-home-"));
 
+// The session store's own relocation switch. NATALIA_HOME deliberately does not
+// cover it (see stateRoot's note in store-paths.ts): reusing it would move an
+// existing install's store, so the test-only switch is separate and defaults to
+// the real home.
+if (process.env.NATALIA_STORE_HOME === undefined)
+  process.env.NATALIA_STORE_HOME = process.env.NATALIA_HOME;
+
 // The preload's own state root, so a test can assert the isolation holds rather
 // than trusting that an env var happens to be read.
 export const testStateHome = process.env.NATALIA_HOME!;

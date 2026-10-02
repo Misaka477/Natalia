@@ -109,6 +109,14 @@
         "@anthelia/tools": "workspace:*",
       },
     },
+    "packages/core/shell": {
+      "name": "@anthelia/shell",
+      "version": "0.0.0-m13",
+      "dependencies": {
+        "@anthelia/confinement": "workspace:*",
+        "@anthelia/platform": "workspace:*",
+      },
+    },
     "packages/core/tools": {
       "name": "@anthelia/tools",
       "version": "0.0.0-m13",
@@ -116,6 +124,7 @@
         "@anthelia/confinement": "workspace:*",
         "@anthelia/contracts": "workspace:*",
         "@anthelia/platform": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@vscode/tree-sitter-wasm": "0.3.1",
         "web-tree-sitter": "0.25.10",
       },
@@ -697,6 +706,7 @@
         "@anthelia/contracts": "workspace:*",
         "@anthelia/platform": "workspace:*",
         "@anthelia/plugin": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@anthelia/tools": "workspace:*",
         "@natalia/collaboration": "workspace:*",
       },
@@ -845,6 +855,7 @@
       },
       "devDependencies": {
         "@natalia/client": "workspace:*",
+        "@natalia/testing": "workspace:*",
         "@natalia/transport": "workspace:*",
         "@natalia/view-store": "workspace:*",
       },
@@ -853,9 +864,11 @@
       "name": "@natalia/testing",
       "version": "0.0.0-m13",
       "dependencies": {
+        "@anthelia/plugin": "workspace:*",
         "@anthelia/sandbox": "workspace:*",
         "@anthelia/session": "workspace:*",
         "@natalia/engineering-intelligence": "workspace:*",
+        "@natalia/installer": "workspace:*",
         "@natalia/plugin-native-terminal": "workspace:*",
       },
     },
@@ -914,6 +927,8 @@
     "@anthelia/session": ["@anthelia/session@workspace:packages/framework/session"],
 
     "@anthelia/session-store": ["@anthelia/session-store@workspace:packages/framework/session-store"],
+
+    "@anthelia/shell": ["@anthelia/shell@workspace:packages/core/shell"],
 
     "@anthelia/subagents": ["@anthelia/subagents@workspace:packages/framework/subagents"],
 

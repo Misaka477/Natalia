@@ -14,6 +14,13 @@ export {
 } from "./pwsh-local";
 export { candidatePwshPaths, resolvePwshPath } from "./pwsh-resolve";
 export {
+  executorFor,
+  platformShell,
+  resolveShellName,
+  selectExecutor,
+  type ShellName,
+} from "./select";
+export {
   DEFAULT_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
   WRAPPER_FAILURE_SIGNATURE,

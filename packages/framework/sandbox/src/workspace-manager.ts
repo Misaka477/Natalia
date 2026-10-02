@@ -17,12 +17,12 @@ import type {
   SandboxStatus,
 } from "@anthelia/contracts";
 import { forceRemove, startDetachedProcess } from "@anthelia/platform";
-import { BashLocalExecutor } from "@anthelia/shell";
+import { selectExecutor } from "@anthelia/shell";
 
 // The shell that owns both spellings this file needs: the profile-reading argv
 // for a foreground execute, and the detached POSIX launcher for a background
 // one. One per module; it is stateless.
-const shell = new BashLocalExecutor();
+const shell = selectExecutor();
 
 export type IsolationLevel = "workspace" | "container" | "vm";
 

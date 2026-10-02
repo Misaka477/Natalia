@@ -1,4 +1,4 @@
-import { BashLocalExecutor, clampTimeout } from "@anthelia/shell";
+import { clampTimeout, selectExecutor } from "@anthelia/shell";
 import type { ToolExecutionContext } from "./types";
 import { safeToolEnv } from "./child-process";
 
@@ -19,7 +19,7 @@ const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
  * and lives above the seam. Adding PowerShell is a new executor, not an edit
  * here.
  */
-const shell = new BashLocalExecutor();
+const shell = selectExecutor();
 
 export async function runShell(
   command: string,

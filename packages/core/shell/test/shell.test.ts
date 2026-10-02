@@ -8,6 +8,9 @@ import {
   PwshLocalExecutor,
   ShellExecutor,
   clampTimeout,
+  platformShell,
+  resolveShellName,
+  selectExecutor,
   type ShellExecRequest,
   type ShellExecSpec,
 } from "@anthelia/shell";
@@ -190,4 +193,43 @@ test("a caller that passes no environment inherits, exactly as before", async ()
   // Inherited, not replaced with an empty object: spawn(env=undefined) is what
   // the pre-seam code did by not passing env at all.
   expect(run.stdout.trim()).toBe(String(process.env.HOME));
+});
+
+test("the platform mirror: pwsh on win32, bash elsewhere", () => {
+  // The mirror dsh expresses as inverted enablement rows. It is written and
+  // tested here even though it is not the default, so the flip is one line and
+  // both sides are already pinned.
+  expect(platformShell("win32")).toBe("pwsh");
+  expect(platformShell("linux")).toBe("bash");
+  expect(platformShell("darwin")).toBe("bash");
+});
+
+test("an explicit shell name wins, and an unknown one falls back to bash", () => {
+  // A typo must not select PowerShell by accident: the shell that has always run
+  // is the safe reading of a request nothing understands.
+  expect(resolveShellName("pwsh", "win32")).toBe("pwsh");
+  expect(resolveShellName("bash", "win32")).toBe("bash");
+  expect(resolveShellName("auto", "win32")).toBe("pwsh");
+  expect(resolveShellName("auto", "linux")).toBe("bash");
+  expect(resolveShellName(undefined, "win32")).toBe("bash");
+  expect(resolveShellName("", "win32")).toBe("bash");
+  expect(resolveShellName("powershel", "win32")).toBe("bash");
+  expect(resolveShellName("zsh", "win32")).toBe("bash");
+});
+
+test("the default is bash on every platform, so enabling the mirror changes nothing", () => {
+  // THE behaviour-preserving property of this step: with no opt-in, a Windows host
+  // runs bash exactly as it did before the mirror existed.
+  expect(selectExecutor({}, "win32")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor({}, "linux")).toBeInstanceOf(BashLocalExecutor);
+  // And the opt-in reaches pwsh on Windows and bash elsewhere.
+  expect(selectExecutor({ NATALIA_SHELL: "pwsh" }, "win32")).toBeInstanceOf(
+    PwshLocalExecutor,
+  );
+  expect(selectExecutor({ NATALIA_SHELL: "auto" }, "win32")).toBeInstanceOf(
+    PwshLocalExecutor,
+  );
+  expect(selectExecutor({ NATALIA_SHELL: "auto" }, "linux")).toBeInstanceOf(
+    BashLocalExecutor,
+  );
 });

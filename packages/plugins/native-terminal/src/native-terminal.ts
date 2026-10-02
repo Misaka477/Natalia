@@ -12,7 +12,7 @@ import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { executableName, isWindows } from "@anthelia/platform";
-import { BashLocalExecutor } from "@anthelia/shell";
+import { selectExecutor } from "@anthelia/shell";
 
 export {
   NATIVE_INPUT_BROKER_VERSION,
@@ -186,7 +186,7 @@ const WINDOWS_MUX_READY_TIMEOUT_MS = 120_000;
  * host. Windows resolves this to the Git for Windows bash.
  */
 // The shell that owns the pane command's spelling. Stateless, so one per module.
-const shell = new BashLocalExecutor();
+const shell = selectExecutor();
 
 export function nativeTerminalPaneCommand(
   command: string,

@@ -17,7 +17,7 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { BashLocalExecutor } from "@anthelia/shell";
+import { selectExecutor } from "@anthelia/shell";
 import type { RuntimeTool, ToolExecutionContext } from "@anthelia/tools";
 import type {
   SkillMetadata,
@@ -397,7 +397,7 @@ export function createSkillLoadTool(options: {
 }
 
 // The shell that owns the script's invocation. Stateless, so one per module.
-const shell = new BashLocalExecutor();
+const shell = selectExecutor();
 
 export async function runSkillScript(
   skill: Skill,

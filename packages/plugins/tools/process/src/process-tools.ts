@@ -21,7 +21,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { detachedShellPrefix, startDetachedProcess } from "@anthelia/platform";
-import { BashLocalExecutor } from "@anthelia/shell";
+import { selectExecutor } from "@anthelia/shell";
 import {
   processFingerprint,
   readOptionalFile,
@@ -91,7 +91,7 @@ export function settlementReasonFor(
 
 // The shell that owns the POSIX launcher spelling. It is stateless, so one per
 // process; a second shell would be a different CLASS here, not an argument.
-const shell = new BashLocalExecutor();
+const shell = selectExecutor();
 
 export class ManagedProcessRegistry {
   readonly observer: ManagedProcessObserver;

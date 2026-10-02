@@ -46,6 +46,13 @@ const TERMINATORS = "(?:\\u0007|\\x1b\\\\)";
  * Group 1 is the lifecycle letter and group 2 its exit code; group 3 is the
  * command line. Exactly one of the two families is present per match, which is
  * what makes the dispatch below total.
+ *
+ * Group 3 takes everything after `E;` and does not split the sequence's optional
+ * third field (a nonce). Our injector escapes `;` to `\x3b` before emitting, so a
+ * sequence from it never carries a raw semicolon; the nonce is still not split
+ * out, because we never generate one and a foreign script that emits one
+ * unescaped could make a raw semicolon mean either a separator or part of the
+ * command. Carrying it is the failure that cannot mislead.
  */
 const MARKER_RE = new RegExp(
   `\\x1b\\](?:133;([A-D])(?:;([^\\u0007\\x1b]*))?|633;E;([^\\u0007\\x1b]*))${TERMINATORS}`,

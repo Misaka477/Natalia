@@ -16,8 +16,27 @@ import { join } from "node:path";
  * The A/B that found it: the pre-fix binary, same spec, same wine, times out. The
  * post-fix binary answers pid, output and exit.
  *
+ * WHAT WINE CAN AND CANNOT SHOW, measured this session and worth knowing before
+ * anyone extends this file:
+ *   verified here  the spec handshake, the `{pid}` line, real screen bytes from a
+ *                  child passed in the spec's args, and the exit frame after the
+ *                  child exits on its own.
+ *   NOT verified   the input path and the resize path. wine's ConPTY implements
+ *                  the output side but its input side is unreliable — typed
+ *                  "echo X\r\n" advanced the prompt once and not at all the next
+ *                  time, and never echoed the text, across waits up to 15s. Three
+ *                  tests covering input, kill and resize were written and then
+ *                  REMOVED for that reason: they would fail for environmental
+ *                  causes on any machine that has wine, which is worse than not
+ *                  having them. `ResizePseudoConsole` also returns E_NOTIMPL here,
+ *                  which is why P23's viewport fix still needs a real Windows run.
+ *
  * It skips where the toolchain is absent rather than failing, because a machine
  * without mingw or wine is not a broken machine.
+ *
+ * One environment lesson that cost an hour: a FRESH wine prefix cannot launch
+ * anything yet — wine spends its first seconds populating it, and a child started
+ * in that window never runs. `wineboot --init` brings it up; see prepare().
  */
 
 const repoRoot = join(import.meta.dir, "..", "..", "..", "..");
@@ -84,22 +103,7 @@ test.skipIf(!canRun)(
       // (the isolated case passed only because an earlier manual run had already
       // built a prefix). Bring it up explicitly and wait, so the bridge starts a
       // real shell rather than racing initialisation.
-      const boot = Bun.spawnSync([wine!, "wineboot", "--init"], {
-        cwd: work,
-        env: { ...process.env, WINEPREFIX: prefix, WINEDEBUG: "-all" },
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-      if (boot.exitCode === 0) {
-        const init = Bun.spawnSync([wine!, "cmd", "/c", "exit 0"], {
-          cwd: work,
-          env: { ...process.env, WINEPREFIX: prefix, WINEDEBUG: "-all" },
-          stdout: "ignore",
-          stderr: "ignore",
-        });
-        void init;
-      }
-
+      preparePrefix(work, prefix);
       const spec = {
         file: "cmd.exe",
         args: ["/c", "echo CONPTY_E2E_OK"],
@@ -188,6 +192,40 @@ test("the control loop is woken by the child exiting, not only by stdin", () => 
   expect(source).toContain("popControlLine");
 });
 
+/**
+ * Bring a wine prefix up before anything is started in it.
+ *
+ * A FRESH prefix cannot launch anything: wine spends its first seconds populating
+ * it, and a child started during that window never runs — the bridge appears to
+ * start, produces nothing, and the test times out. The isolated case passed only
+ * because an earlier manual run had already built a prefix, which is exactly the
+ * kind of accident that makes a test untrustworthy.
+ */
+function preparePrefix(work: string, prefix: string) {
+  Bun.spawnSync(["wine", "wineboot", "--init"], {
+    cwd: work,
+    env: { ...process.env, WINEPREFIX: prefix, WINEDEBUG: "-all" },
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  // And prove it works before the test relies on it: a no-op command launched in
+  // the same way the bridge will be.
+  Bun.spawnSync(["wine", "cmd", "/c", "exit 0"], {
+    cwd: work,
+    env: { ...process.env, WINEPREFIX: prefix, WINEDEBUG: "-all" },
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+}
+
 function readFileSyncOrEmpty(path: string): string {
   return existsSync(path) ? require("node:fs").readFileSync(path, "utf8") : "";
 }
+
+/**
+ * One bridge process driven over its real protocol, so the control messages can
+ * be exercised as the host sends them rather than as they are read.
+ *
+ * Returns a small handle rather than inheriting anything: the point is that each
+ * test drives a fresh process exactly as the controller does.
+ */

@@ -623,6 +623,29 @@ export interface TerminalController {
     sessionID?: string,
   ): Promise<RuntimeNativeTerminalSession>;
   snapshot(id: string): ReturnType<TerminalToolService["snapshot"]>;
+  /**
+   * The command-level read: the pane's last command and what it produced.
+   *
+   * The output is a projection of the screen bounded by the command's
+   * shell-integration markers, not a second capture, so it cannot disagree with
+   * what the human sees. `output` is absent until a command has finished — a pane
+   * whose shell emits no markers never has a command to name, and says so rather
+   * than inventing one out of the screen.
+   *
+   * OPTIONAL because not every terminal backend can answer it. The pty-backed
+   * controller reads the markers out of its own stream; the mux facade drives a
+   * pane in another process whose command lifecycle it does not see. An
+   * implementation that cannot read it leaves the member off rather than
+   * returning a fabricated record, and a caller must treat absence as "this pane
+   * cannot tell you", which is the truth.
+   */
+  lastCommand?(id: string): {
+    commandLine: string | undefined;
+    exitCode: number | undefined;
+    atPrompt: boolean;
+    output: string | undefined;
+    revision: number;
+  };
   observe(
     id: string,
     afterRevision: number,

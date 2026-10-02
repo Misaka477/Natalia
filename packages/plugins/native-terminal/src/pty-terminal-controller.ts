@@ -117,6 +117,16 @@ type PtySession = {
    * so it is true at any moment without a second capture of anything.
    */
   commandState: CommandState;
+  /**
+   * The pane's full text when the current command's output began.
+   *
+   * The WHOLE text, not a scrollback depth: a pane that has not scrolled yet
+   * still shows the previous command's output on its grid, so slicing the
+   * scrollback from a depth would hand that output over as this command's.
+   */
+  outputBaseLines?: readonly string[];
+  /** The last finished command's output, as a slice of the screen. */
+  lastCommandOutput?: string;
   /** The last emitted frame's text (the diff base for scroll notices). */
   lastFrameText?: string;
   /** The scrollback depth at the last emitted frame. */
@@ -815,21 +825,95 @@ export function createPtyTerminalController(
     session.lastActivityAt = Date.now();
   }
 
+  /**
+   * The command's output, as a projection of the screen.
+   *
+   * Everything the screen scrolled past since the command started, then what is on
+   * screen now. No second buffer, so this cannot drift from what the human sees:
+   * it IS what the human sees, bounded by the command's markers.
+   */
+  /** The pane's whole text: scrollback then the live grid. */
+  function paneText(session: PtySession): string[] {
+    const grid = renderScreen(session.screen).map((row) => row.trimEnd());
+    while (grid.length && grid[grid.length - 1] === "") grid.pop();
+    return [...session.screen.scrollback, ...grid];
+  }
+
+  function commandOutputText(session: PtySession): string {
+    const current = paneText(session);
+    const base = session.outputBaseLines;
+    // The lines the pane gained since the command started. Append-only is the
+    // normal case — a command writes, the terminal scrolls — and the prefix check
+    // makes it exact.
+    if (
+      base &&
+      base.length <= current.length &&
+      base.every((line, i) => current[i] === line)
+    )
+      return current.slice(base.length).join("\n").replace(/\s+$/, "");
+    // A command that REPAINTED (a progress bar, a full-screen app) breaks the
+    // prefix property. Hand over the whole pane rather than a guessed slice: more
+    // than asked for is recoverable, a slice that silently omits output is not.
+    return current.join("\n").replace(/\s+$/, "");
+  }
+
+  /**
+   * The command-level read by pane id, carrying the same ownership assertion every
+   * other read on a pane does: one agent must not read another's terminal.
+   */
+  function lastCommand(id: string) {
+    const session = get(id);
+    assertReadable(session);
+    return {
+      commandLine: session.commandState.commandLine,
+      exitCode: session.commandState.exitCode,
+      atPrompt: session.commandState.atPrompt,
+      output: session.lastCommandOutput,
+      revision: session.revision,
+    };
+  }
+
   function appendOutput(session: PtySession, chunk: string) {
     if (!chunk) return;
     session.output = trimOutput(session.output + chunk);
+    //
+    // THE BASELINE IS TAKEN BEFORE THE SCREEN, and that order is the whole point.
+    //
+    // The screen takes this entire chunk, so by the time a marker is walked the
+    // bytes that followed it in the same chunk are already on screen: a baseline
+    // captured then already contains the command's own output and the slice comes
+    // back empty. Reading the markers first, and snapshotting when a chunk carries
+    // `C`, fixes it. A fast command whose `C` and `D` arrive together is handled by
+    // the same rule — the baseline is the pane as it was BEFORE that chunk, so
+    // everything gained since is its output.
+    //
+    // Walking the markers rather than diffing the state around the fold: a real
+    // shell delivers a whole command cycle in one chunk, so `outputFrom` is set
+    // and cleared inside a single fold and a before/after comparison sees nothing.
+    //
+    // One input, two surfaces: the screen is what a terminal shows, the command
+    // state is what it means. They cannot disagree because neither re-reads the
+    // stream independently.
+    const markers = parseShellMarkers(chunk);
+    if (markers.some((marker) => marker.kind === "command-executed"))
+      session.outputBaseLines = paneText(session);
     // The render layer: the same bytes the raw buffer keeps, applied to
     // the virtual screen — the model's view is now the pane's rendered
     // screen, not the stream.
     applyTerminalOutput(session.screen, chunk);
     session.revision += 1;
-    // The command-level read, folded from the SAME chunk the screen just took.
-    // One input, two surfaces: the screen is what a terminal shows, the command
-    // state is what it means. They cannot disagree because neither re-reads the
-    // stream independently.
+    for (const marker of markers) {
+      if (marker.kind !== "command-finished") continue;
+      // `D`: the command finished, and PROMPT_COMMAND runs BEFORE the next prompt
+      // is drawn. So the screen right now holds exactly this command's output and
+      // nothing that follows it, which is what makes the projection exact rather
+      // than approximate.
+      session.lastCommandOutput = commandOutputText(session);
+      session.outputBaseLines = undefined;
+    }
     session.commandState = foldShellMarkers(
       session.commandState,
-      parseShellMarkers(chunk),
+      markers,
       session.revision,
     );
     session.lastOutputAt = Date.now();
@@ -1493,6 +1577,7 @@ export function createPtyTerminalController(
     start,
     write,
     resize,
+    lastCommand,
     snapshot,
     observe,
     session,

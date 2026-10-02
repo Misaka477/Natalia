@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/goal-runtime",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/session": "workspace:*",
+    "@anthelia/session-store": "workspace:*",
+    "@anthelia/substrate": "workspace:*",
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/operation-log": "workspace:*",
+    "@natalia/goal": "workspace:*"
+  }
+}

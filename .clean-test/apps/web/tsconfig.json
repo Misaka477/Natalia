@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../.."
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../packages/hosts/ui-host"
+    },
+    {
+      "path": "../../packages/plugins/ui/web"
+    },
+    {
+      "path": "../../packages/core/contracts"
+    },
+    {
+      "path": "../../packages/hosts/transport"
+    },
+    {
+      "path": "../../packages/plugins/mcp"
+    },
+    {
+      "path": "../../packages/plugins/skills"
+    }
+  ]
+}

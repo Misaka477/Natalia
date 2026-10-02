@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/plugin-local-tools",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthelia/config": "workspace:*"
+  }
+}

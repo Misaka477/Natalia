@@ -1,0 +1,18 @@
+[Unit]
+Description=Natalia unattended engineering task
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/natalia/unattended.env
+WorkingDirectory=/opt/natalia-cli
+ExecStart=/bin/sh -c 'exec /opt/natalia-cli/deploy/run-unattended.sh run --permission unattended_read "$NATALIA_UNATTENDED_PROMPT"'
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/natalia-workspace/.natalia
+
+# The container must remain the egress boundary for shell/native-terminal
+# commands. NATALIA_EGRESS_NETWORK names a pre-provisioned ACL network.

@@ -121,8 +121,18 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             session.id,
             sessionID,
           );
-          if (snapshot?.text)
-            send(ws, { type: "restore", id: session.id, text: snapshot.text });
+          // Sent UNCONDITIONALLY, empty text included. The client's restore
+          // handler clears the screen before writing, so an absent restore leaves
+          // whatever the previous connection had on screen — the old session's
+          // content presented as this one's. An empty pane is exactly the case
+          // where that matters most (a shell that just started, or one that
+          // exited and was respawned), and it is the case a `if (text)` guard
+          // silently skips.
+          send(ws, {
+            type: "restore",
+            id: session.id,
+            text: snapshot?.text ?? "",
+          });
         } catch (error) {
           // A failed replay must not cost the pane its live stream: the socket
           // stays open and new output still arrives.

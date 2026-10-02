@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Natalia nightly code quality review
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00
+Persistent=true
+Unit=natalia-task-code-quality.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,1 @@
+export { createMcpSettingsUiPlugin } from "./plugin";

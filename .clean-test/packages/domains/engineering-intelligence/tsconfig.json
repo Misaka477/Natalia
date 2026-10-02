@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../framework/session"
+    },
+    {
+      "path": "../../framework/session-store"
+    },
+    {
+      "path": "../../framework/substrate"
+    },
+    {
+      "path": "../../domains/collab"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../domains/governance-ledger"
+    },
+    {
+      "path": "../../hosts/platform"
+    },
+    {
+      "path": "../../core/runtime-services"
+    },
+    {
+      "path": "../../domains/work-ledger"
+    }
+  ]
+}

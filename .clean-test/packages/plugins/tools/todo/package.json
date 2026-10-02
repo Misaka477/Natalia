@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/plugin-tool-todo",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui/plugin.tsx"
+  },
+  "dependencies": {
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@natalia/ui-host": "workspace:*",
+    "@natalia/view-store": "workspace:*",
+    "solid-js": "1.9.12"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/testing",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/sandbox": "workspace:*",
+    "@anthelia/session": "workspace:*",
+    "@natalia/engineering-intelligence": "workspace:*",
+    "@natalia/plugin-native-terminal": "workspace:*",
+    "@natalia/installer": "workspace:*",
+    "@anthelia/plugin": "workspace:*"
+  }
+}

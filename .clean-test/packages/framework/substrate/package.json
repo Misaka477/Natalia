@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@anthelia/substrate",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/agent": "workspace:*",
+    "@anthelia/checkpoint": "workspace:*",
+    "@anthelia/provider-model": "workspace:*",
+    "@anthelia/session": "workspace:*",
+    "@anthelia/session-store": "workspace:*",
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/turn-orchestration": "workspace:*",
+    "@anthelia/workspace": "workspace:*",
+    "@anthelia/capability": "workspace:*",
+    "@anthelia/config": "workspace:*",
+    "@natalia/context-ledger": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/operation-log": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@anthelia/runtime": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/runtime-status": "workspace:*"
+  }
+}

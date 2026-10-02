@@ -370,3 +370,102 @@ test("a failed screen replay does not cost the pane its live stream", async () =
   ws.close();
   server.stop(true);
 });
+
+test("an empty pane reconnects to an empty screen, not to the last session's", async () => {
+  // The reattach hazard that survives "the replay is sent": the server only sends
+  // a restore when the pane HAS text, so a genuinely empty pane (a shell that just
+  // started, or one that exited and was respawned) gets no restore at all — and
+  // the client never clears. Whatever the previous connection left on screen stays
+  // there, which is the old session's content presented as this one's.
+  //
+  // The client's two restore handlers both do `term.clear()` before writing, so
+  // the fix is on the sender: it must clear unconditionally and let the empty
+  // text be empty.
+  const server = createRuntimeHttpServer({
+    client: {
+      start() {},
+      async submit() {
+        return {
+          type: "turn.submitted",
+          id: "t",
+          text: "",
+          byteLength: 0,
+          lineCount: 1,
+          sha256: "0",
+        };
+      },
+      async cancel() {},
+      snapshot() {
+        return { type: "diagnostic", level: "info", message: "stub" };
+      },
+      diagnostic() {},
+      lastSubmission() {
+        return undefined;
+      },
+      async respondApproval() {
+        return { accepted: true };
+      },
+      async respondQuestion() {
+        return { accepted: true };
+      },
+      async nativeTerminalList() {
+        return [];
+      },
+      async nativeTerminalStart(input) {
+        return {
+          id: input.id ?? "term_empty",
+          host: "pty",
+          paneID: 1,
+          windowID: 0,
+          muxWindowID: 0,
+          tabID: 0,
+          command: input.command,
+          cwd: "",
+          status: "running",
+          inputOwner: "model",
+          geometryOwner: "human",
+          secureInput: false,
+          rows: 24,
+          cols: 80,
+          startedAt: new Date().toISOString(),
+          attached: true,
+          sessionID: input.sessionID,
+        } as RuntimeNativeTerminalSession;
+      },
+      async nativeTerminalRead() {
+        // The pane is genuinely empty.
+        return { id: "term_empty", text: "" };
+      },
+      async nativeTerminalWrite() {
+        return { id: "x", writtenBytes: 0, delivery: "accepted" as const };
+      },
+      subscribeTerminalOutput() {
+        return () => undefined;
+      },
+    },
+    terminalWrite: true,
+  });
+  const ws = new WebSocket(
+    `${server.url.replace("http", "ws")}/terminal/ses_empty/term_empty`,
+  );
+  const messages: Array<Record<string, unknown>> = [];
+  await new Promise<void>((resolve, reject) => {
+    ws.onopen = () => resolve();
+    ws.onerror = () => reject(new Error("ws failed"));
+  });
+  await new Promise<void>((resolve) => {
+    ws.onmessage = (event) => {
+      messages.push(JSON.parse(String(event.data)));
+      if (messages.some((m) => m["type"] === "ready")) resolve();
+    };
+  });
+  // The FIRST message must be the replay, and it must be sent even though the
+  // text is empty: an absent restore leaves the previous session on screen.
+  expect(messages[0]).toEqual({
+    type: "restore",
+    id: "term_empty",
+    text: "",
+  });
+  ws.close();
+  server.stop(true);
+});

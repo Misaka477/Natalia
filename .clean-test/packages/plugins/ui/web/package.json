@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/plugin-web-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/diff-wasm": "workspace:*",
+    "@anthelia/diff": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@natalia/ui-host": "workspace:*",
+    "@natalia/ui-kit": "workspace:*",
+    "@natalia/ui-model": "workspace:*",
+    "@natalia/governance-ledger": "workspace:*",
+    "@natalia/view-store": "workspace:*",
+    "@vscode/tree-sitter-wasm": "*",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/addon-web-links": "0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "5.5.0",
+    "marked": "17.0.1",
+    "solid-js": "1.9.12",
+    "web-tree-sitter": "*"
+  },
+  "devDependencies": {
+    "@tanstack/solid-virtual": "3.13.37"
+  }
+}

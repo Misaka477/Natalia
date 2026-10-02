@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../domains/goal"
+    },
+    {
+      "path": "../../framework/operation-log"
+    },
+    {
+      "path": "../../framework/session"
+    },
+    {
+      "path": "../../framework/session-store"
+    },
+    {
+      "path": "../../framework/substrate"
+    }
+  ]
+}

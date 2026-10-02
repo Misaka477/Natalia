@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-search",
+  "version": "1.0.0",
+  "name": "Search Tools",
+  "description": "Finding files by name and content in the workspace.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

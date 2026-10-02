@@ -1,0 +1,14 @@
+[package]
+name = "natalia-diff-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+imara-diff = "0.2.0"
+
+[dependencies.memchr]
+version = "=2.8.1"

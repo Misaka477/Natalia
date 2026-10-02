@@ -1,0 +1,1 @@
+export { createFileEditorPlugin } from "./plugin";

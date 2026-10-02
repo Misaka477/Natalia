@@ -1,0 +1,27 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-mcp",
+  "version": "1.0.0",
+  "name": "MCP Server",
+  "description": "Native MCP connections and their tools.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": ["mcp.service"],
+  "requires": ["mcp.input"],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools", "services"],
+  "ui": {
+    "entry": "src/ui/plugin.tsx",
+    "panels": [
+      {
+        "id": "mcp-settings",
+        "title": "MCP",
+        "region": "settings",
+        "group": "扩展"
+      }
+    ]
+  }
+}

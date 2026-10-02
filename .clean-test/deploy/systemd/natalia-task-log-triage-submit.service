@@ -1,0 +1,20 @@
+[Unit]
+Description=Natalia nightly log triage, delivered to the resident executor
+# Delivery needs the executor, and a failed start must not be reported as a
+# successful triage run.
+Requires=natalia-daemon.service
+After=natalia-daemon.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/natalia/unattended.env
+WorkingDirectory=/srv/natalia-workspace
+# The submitting client prints what the controller emitted inside the executor
+# and exits with the outcome it returned, so journald and the exit status look
+# exactly like the one-shot form in natalia-task-log-triage.service.
+ExecStart=/opt/natalia-cli/bin/natalia-ts task submit .natalia/tasks/nightly-log-triage.yaml --json
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/natalia-workspace/.natalia

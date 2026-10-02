@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/plugin-team",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/tools": "workspace:*",
+    "@natalia/collaboration": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthelia/subagents": "workspace:*",
+    "@natalia/testing": "workspace:*"
+  }
+}

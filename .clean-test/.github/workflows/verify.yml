@@ -1,0 +1,372 @@
+name: verify
+
+# The gates in `npm run verify` already existed and already worked. What they
+# did not have was anything that ran them, so they only ran when someone
+# remembered — and the failures they were built to catch sat undetected for a
+# long stretch: a typecheck break survived ten rounds of work, the import guard
+# had never been run at all, and the format gate reported 86 files for long
+# enough that nobody read its output. A gate that nothing enforces is advice.
+#
+# What a fresh checkout must do BEFORE the tests — the artifacts are never
+# committed, the repo ships sources: the client suite reads the official
+# plugin distribution at `dist/ts/plugins` (`build:distribution`, ts-build's
+# distribution mode), and the AST face needs the tree-sitter wasm packs
+# (`diff:build-wasm`, 46 languages) — a fresh clone without them parses
+# nothing and the AST tests fail silently. The shell tools fail CLOSED
+# without the confinement backend, so the workflow builds that pure-Rust
+# binary before verifying too.
+#
+# The gates are SEPARATE STEPS, not one command: the runs on this repo keep
+# getting cancelled around the three-minute mark (not by a newer push — a
+# re-run with nothing to supersede it is cancelled the same way; either the
+# platform or something with repo access cancels them). With one long step, a
+# cancel hides which gate was red; with per-gate steps every gate that
+# finished reports itself, and the red one is named.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # Allowed to be dispatched by hand so a branch can be checked without pushing
+  # another commit onto it.
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref: the older result can
+# no longer be acted on, and the suite is long enough that it would otherwise
+# queue behind itself.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The artifacts: everything the test jobs need, built once. The gates
+  # that need nothing but the tree (format, typecheck) run here too.
+  artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,wasm32-wasip1
+      - name: Install the WASI SDK (the AST grammars' C toolchain)
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/wasi-sdk/bin/clang ]; then
+            sudo mkdir -p /opt
+            curl -fsSL --retry 3 \
+              https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz \
+              | sudo tar -xz -C /opt
+            sudo mv /opt/wasi-sdk-34.0-x86_64-linux /opt/wasi-sdk
+          fi
+          /opt/wasi-sdk/bin/clang --version
+      - name: Build the confinement backend
+        run: >
+          cargo build --release
+          --manifest-path packages/hosts/confinement/native/Cargo.toml
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Format
+        run: npm run format
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build the plugin distribution
+        run: npm run build:distribution
+      - name: Cache the AST wasm packs
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/framework/diff-wasm/ast
+            packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
+          key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
+      - name: Build the AST wasm packs
+        run: npm run diff:build-wasm
+      # The test jobs use the SAME distribution the gates just proved —
+      # rebuilding it per job costs each of them a minute of the window the
+      # platform's shutdown signal runs in, and the platform kills whatever
+      # it catches still running. It travels as a run artifact instead.
+      - name: Upload the built distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-distribution
+          path: |
+            dist/ts
+            packages/framework/diff-wasm/ast
+          retention-days: 1
+          if-no-files-found: error
+
+  # The suite, by layer, IN PARALLEL. Each job is a few minutes, so the
+  # external shutdown signal (whatever sends it — see the header) can
+  # only touch a job in flight, never a whole serial run; and the layers
+  # run concurrently, so the wall clock is the heaviest layer, not the
+  # sum of them.
+  test:
+    needs: artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - layer: "core-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/core/contracts/test \
+                              ./packages/core/runtime-services/test ./packages/core/composition/test \
+                              ./packages/core/capability/test ./packages/core/tools/test
+          - layer: "core-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/tooling/testing/test \
+                              ./packages/tooling/installer/test ./packages/tooling/sdk/test \
+                              ./packages/core/plugin/test
+          - layer: "substrate-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \
+                              ./packages/hosts/config/test ./packages/hosts/confinement/test \
+                              ./packages/framework/session/test ./packages/framework/substrate/test
+          - layer: "substrate-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/session-store/test \
+                              ./packages/hosts/ui-model/test ./packages/hosts/view-store/test \
+                              ./packages/hosts/ui-host/test ./packages/hosts/object-store/test
+          - layer: "client-a"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-a.test.ts
+          - layer: "client-b"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-b.test.ts
+          - layer: "client-c"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-c.test.ts
+          - layer: "client-d"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-d.test.ts
+          - layer: "client-e"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 180000 ./packages/framework/client/test/real-runtime-e.test.ts
+          - layer: "client-rest-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 \
+                              packages/framework/client/test/ast-move-face.test.ts \
+                              packages/framework/client/test/capability-settings.test.ts \
+                              packages/framework/client/test/chat-attachments.test.ts \
+                              packages/framework/client/test/chat-compaction-streams.test.ts \
+                              packages/framework/client/test/chat-stream-models.test.ts \
+                              packages/framework/client/test/checkpoint-display.test.ts \
+                              packages/framework/client/test/composition-profile-e2e.test.ts \
+                              packages/framework/client/test/config-reload-rollback.test.ts \
+                              packages/framework/client/test/confinement-profile.test.ts \
+                              packages/framework/client/test/confinement-statement-e2e.test.ts \
+                              packages/framework/client/test/constitution-rule-gate-e2e.test.ts \
+                              packages/framework/client/test/context-budget.test.ts \
+                              packages/framework/client/test/context-tools.test.ts \
+                              packages/framework/client/test/contract-constitution-e2e.test.ts \
+                              packages/framework/client/test/default-tools.test.ts \
+                              packages/framework/client/test/detour-e2e.test.ts \
+                              packages/framework/client/test/diagnostics-query.test.ts \
+                              packages/framework/client/test/drain-for-update.test.ts \
+                              packages/framework/client/test/drift-auto-correct-e2e.test.ts \
+                              packages/framework/client/test/drift-reopen-e2e.test.ts \
+                              packages/framework/client/test/drift-trigger.test.ts \
+                              packages/framework/client/test/event-sink-infrastructure-error.test.ts \
+                              packages/framework/client/test/evidence-artifact-ref-e2e.test.ts \
+                              packages/framework/client/test/fact-downgrade-e2e.test.ts \
+                              packages/framework/client/test/feedback-e2e.test.ts \
+                              packages/framework/client/test/fixture.test.ts \
+                              packages/framework/client/test/generation-inputs.test.ts \
+                              packages/framework/client/test/generation-tools.test.ts \
+                              packages/framework/client/test/goal-completion-gate.test.ts \
+                              packages/framework/client/test/goal-fact-equivalence.test.ts \
+                              packages/framework/client/test/goal-question-narration.test.ts \
+                              packages/framework/client/test/goal-status-attach.test.ts \
+                              packages/framework/client/test/governance-e2e.test.ts \
+                              packages/framework/client/test/human-validation-e2e.test.ts \
+                              packages/framework/client/test/intelligence-pure-writes.test.ts \
+                              packages/framework/client/test/mailbox-status-window.test.ts \
+                              packages/framework/client/test/model-ref-key.test.ts \
+                              packages/framework/client/test/multi-session-parallel.test.ts \
+                              packages/framework/client/test/nia-shell-policy.test.ts \
+                              packages/framework/client/test/nia-shell-tools.test.ts \
+                              packages/framework/client/test/object-store-backend.test.ts \
+                              packages/framework/client/test/operation-log-runtime.test.ts \
+                              packages/framework/client/test/operation-records.test.ts \
+                              packages/framework/client/test/p2-acceptance.test.ts \
+                              packages/framework/client/test/performance-trace.test.ts \
+                              packages/framework/client/test/permission-settings.test.ts \
+                              packages/framework/client/test/plan-active-session.test.ts \
+                              packages/framework/client/test/plan-contract.test.ts
+          - layer: "client-rest-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 \
+                              packages/framework/client/test/plan-doc-createdby.test.ts \
+                              packages/framework/client/test/plan-pause-e2e.test.ts \
+                              packages/framework/client/test/plan-tasks-e2e.test.ts \
+                              packages/framework/client/test/plugin-lifecycle-symmetry.test.ts \
+                              packages/framework/client/test/plugin-runtime.test.ts \
+                              packages/framework/client/test/plugin-workspace-resources.test.ts \
+                              packages/framework/client/test/plugins-controller.test.ts \
+                              packages/framework/client/test/process-settled-notices.test.ts \
+                              packages/framework/client/test/projection-contributions.test.ts \
+                              packages/framework/client/test/provider-management.test.ts \
+                              packages/framework/client/test/read-cache.test.ts \
+                              packages/framework/client/test/repeat-guard.test.ts \
+                              packages/framework/client/test/repository-refs.test.ts \
+                              packages/framework/client/test/response-cache-profile.test.ts \
+                              packages/framework/client/test/response-cache-surface.test.ts \
+                              packages/framework/client/test/self-review-e2e.test.ts \
+                              packages/framework/client/test/session-attach-context.test.ts \
+                              packages/framework/client/test/session-event-retention.test.ts \
+                              packages/framework/client/test/session-event-window-scan.test.ts \
+                              packages/framework/client/test/session-facts-complete.test.ts \
+                              packages/framework/client/test/session-facts.test.ts \
+                              packages/framework/client/test/session-full-events.test.ts \
+                              packages/framework/client/test/session-history-tool.test.ts \
+                              packages/framework/client/test/session-intelligence.test.ts \
+                              packages/framework/client/test/session-store-controller.test.ts \
+                              packages/framework/client/test/session-title.test.ts \
+                              packages/framework/client/test/skills-plugin.test.ts \
+                              packages/framework/client/test/subagent-fork-seed.test.ts \
+                              packages/framework/client/test/subagent-result-gate.test.ts \
+                              packages/framework/client/test/subagent-settled-notice.test.ts \
+                              packages/framework/client/test/subagent-steer.test.ts \
+                              packages/framework/client/test/three-stream-isolation.test.ts \
+                              packages/framework/client/test/tool-catalogue.test.ts \
+                              packages/framework/client/test/tool-family-capabilities.test.ts \
+                              packages/framework/client/test/tool-policy-derivation.test.ts \
+                              packages/framework/client/test/tool-policy.test.ts \
+                              packages/framework/client/test/ui-host.test.ts \
+                              packages/framework/client/test/verification-nia.test.ts \
+                              packages/framework/client/test/verification-smoke.test.ts \
+                              packages/framework/client/test/work-graph.test.ts \
+                              packages/framework/client/test/worker.test.ts \
+                              packages/framework/client/test/workgraph-integrity-e2e.test.ts \
+                              packages/framework/client/test/workgraph-query-e2e.test.ts \
+                              packages/framework/client/test/workgraph-rpc-recovery.test.ts \
+                              packages/framework/client/test/workspace-ast-move.test.ts \
+                              packages/framework/client/test/workspace-git-diff.test.ts \
+                              packages/framework/client/test/workspace-runtime-client.test.ts
+          - layer: "mechanisms-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/rina/test \
+                              ./packages/framework/operation-log/test \
+                              ./packages/framework/runtime-diagnostics/test ./packages/framework/runtime/test \
+                              ./packages/framework/retry/test ./packages/framework/runtime-config/test \
+                              ./packages/framework/runtime-status/test \
+                              ./packages/framework/turn-orchestration/test \
+                              ./packages/framework/provider-model/test
+          - layer: "mechanisms-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/framework/agent-prompts/test \
+                              ./packages/framework/collaboration/test ./packages/framework/workspace/test \
+                              ./packages/framework/checkpoint/test ./packages/framework/attachments/test \
+                              ./packages/framework/compaction/test ./packages/framework/sandbox/test \
+                              ./packages/framework/diff-wasm/test
+          - layer: "domains-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
+                              ./packages/domains/goal-runtime/test \
+                              ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test
+          - layer: "domains-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/domains/work-ledger/test \
+                              ./packages/domains/governance-ledger/test \
+                              ./packages/domains/context-ledger/test
+          - layer: "plugins-1"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
+                              ./packages/plugins/team/test ./packages/framework/tool-policy/test \
+                              ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
+                              ./packages/plugins/skills/test ./packages/hosts/transport/test \
+                              ./packages/plugins/mcp/test ./packages/framework/subagents/test \
+                              ./packages/framework/agent/test ./packages/plugins/tools/ask/test
+          - layer: "plugins-2"
+            dirs: >-
+              bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/tools/fs-read/test \
+                              ./packages/plugins/tools/fs-write/test ./packages/plugins/tools/search/test \
+                              ./packages/plugins/tools/shell/test ./packages/plugins/tools/todo/test \
+                              ./packages/plugins/tools/web/test ./packages/plugins/tools/process/test \
+                              ./packages/plugins/ui/web/test packages/plugins/ui/pending/test \
+                              ./packages/plugins/ui/kit/test
+          - layer: "cli"
+            dirs: >-
+              npm run docs:check && npm --workspace @natalia/cli run test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,wasm32-wasip1
+      - name: Install the WASI SDK (the AST grammars' C toolchain)
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/wasi-sdk/bin/clang ]; then
+            sudo mkdir -p /opt
+            curl -fsSL --retry 3 \
+              https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz \
+              | sudo tar -xz -C /opt
+            sudo mv /opt/wasi-sdk-34.0-x86_64-linux /opt/wasi-sdk
+          fi
+          /opt/wasi-sdk/bin/clang --version
+      # The matrix jobs are fresh runners: the confinement backend (the
+      # shell tools fail CLOSED without it, so the shell tests fail
+      # without it) and the AST packs are built or restored per job, not
+      # shared from the artifacts job.
+      - name: Build the confinement backend
+        run: >
+          cargo build --release
+          --manifest-path packages/hosts/confinement/native/Cargo.toml
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Fetch the built distribution from the artifacts job
+        uses: actions/download-artifact@v4
+        with:
+          name: built-distribution
+          # Two upload paths make the artifact's least common ancestor the
+          # REPO ROOT, so the artifact preserves full paths — the download
+          # target is the workspace root.
+          path: .
+      - name: Cache the AST wasm packs (the fallback when the artifact lacks them)
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/framework/diff-wasm/ast
+            packages/framework/diff-wasm/src/natalia_diff_wasm.wasm
+          key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
+      - name: Build the AST wasm packs (only what the artifact/ cache did not carry)
+        run: npm run diff:build-wasm
+      - name: Test (${{ matrix.layer }})
+        run: ${{ matrix.dirs }}
+
+  guards:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Guards
+        run: >
+          npm run guard:imports && npm run guard:contract && npm run guard:deps
+          && npm run guard:suppressions && npm run guard:tests
+          && npm run guard:events && npm run guard:console
+          && npm run guard:test-workspaces

@@ -160,39 +160,6 @@ export function WebTerminal(props: WebTerminalProps) {
     reconnectTimer = setTimeout(connect, 1500);
   }
 
-  function handleServerMessage(message: ServerMessage) {
-    if (closed) return;
-    if (message.type === "restore") {
-      term?.clear();
-      if (message.text) term?.write(message.text);
-    }
-    if (message.type === "output") {
-      if (lastInputSentAt !== undefined && !lastEchoLogged) {
-        lastEchoLogged = true;
-        console.warn(
-          `[terminal] echo delay ${(performance.now() - lastInputSentAt).toFixed(1)}ms`,
-        );
-        lastInputSentAt = undefined;
-      }
-      term?.write(message.data);
-    }
-    if (message.type === "error") {
-      if (message.message === lastError) return;
-      lastError = message.message;
-      term?.writeln(`\r\n[${message.message}]`);
-      if (message.fatal) fatal = true;
-    }
-    if (message.type === "exit") term?.writeln("\r\n[terminated]");
-    if (message.type === "ready") {
-      lastError = undefined;
-      if (term && fit) {
-        fitSafely();
-        const { rows, cols } = clampResize(term.rows, term.cols);
-        if (validResize(rows, cols)) sendResize(rows, cols, "ready");
-      }
-    }
-  }
-
   function connect() {
     if (
       closed ||

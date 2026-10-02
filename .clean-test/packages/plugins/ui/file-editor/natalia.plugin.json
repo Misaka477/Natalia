@@ -1,0 +1,26 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-file-editor",
+  "version": "1.0.0",
+  "name": "File Editor",
+  "description": "File tree and CodeMirror editor.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": [],
+  "ui": {
+    "entry": "src/ui/plugin.tsx",
+    "panels": [
+      {
+        "id": "files",
+        "title": "文件",
+        "region": "side"
+      }
+    ]
+  }
+}

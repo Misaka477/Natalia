@@ -1,0 +1,48 @@
+schema_version = "1.3"
+artifacts = ["/logs/artifacts/model.patch"]
+[task]
+name = "source_a/typed-variable-bindings"
+description = ""
+authors = []
+keywords = []
+[metadata]
+ext_id = "ext-example-0001"
+task_id = "typed-variable-bindings"
+display_title = "Add typed variable bindings"
+display_description = "Add typed `var` declarations and enforce declared type constraints on assignment when the option is enabled."
+original_title = "Typed variable bindings"
+category = "feature_request"
+language = "go"
+repository_url = "https://example.invalid/repository"
+base_commit_hash = "0000000000000000000000000000000000000000"
+[verifier]
+network_mode = "no-network"
+environment_mode = "separate"
+timeout_sec = 1800.0
+
+[verifier.env]
+[verifier.environment]
+build_timeout_sec = 1800.0
+cpus = 2
+memory_mb = 8192
+storage_mb = 20480
+
+[[verifier.collect]]
+command = "cd /app && mkdir -p /logs/artifacts && git config --global --add safe.directory /app && git diff --binary 0000000000000000000000000000000000000000 HEAD > /logs/artifacts/model.patch"
+timeout_sec = 300.0
+
+[agent]
+network_mode = "no-network"
+timeout_sec = 5400.0
+[environment]
+build_timeout_sec = 1800.0
+docker_image = "example/base:1"
+os = "linux"
+cpus = 2
+memory_mb = 8192
+storage_mb = 20480
+gpus = 0
+mcp_servers = []
+
+[environment.env]
+[solution.env]

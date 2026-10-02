@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-ui-example",
+  "version": "1.0.0",
+  "name": "Example UI",
+  "description": "Minimal line-oriented UI adapter example.",
+  "entry": "src/index.ts",
+  "scope": "process",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["adapters"]
+}

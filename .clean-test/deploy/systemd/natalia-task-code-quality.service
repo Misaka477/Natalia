@@ -1,0 +1,15 @@
+[Unit]
+Description=Natalia nightly code quality review
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/natalia/unattended.env
+WorkingDirectory=/opt/natalia-cli
+ExecStart=/bin/sh -c 'exec /opt/natalia-cli/deploy/run-unattended.sh task run .natalia/tasks/nightly-code-quality.yaml --json'
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/natalia-workspace/.natalia

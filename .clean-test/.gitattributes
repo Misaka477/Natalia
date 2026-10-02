@@ -1,0 +1,3 @@
+# Preserve the pinned upstream WezTerm source byte-for-byte. Its historical
+# whitespace must not be reformatted as part of Natalia's small fork patch.
+packages/plugins/native-terminal/wezterm/** -whitespace conflict-marker-size=80

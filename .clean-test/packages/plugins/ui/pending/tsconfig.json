@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../../..",
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js"
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../../core/contracts"
+    },
+    {
+      "path": "../../../core/plugin"
+    },
+    {
+      "path": "../../../hosts/ui-host"
+    },
+    {
+      "path": "../../../hosts/ui-model"
+    },
+    {
+      "path": "../kit"
+    }
+  ]
+}

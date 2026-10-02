@@ -18,6 +18,10 @@
 #if defined(OS_WIN)
 #include "simple_tray_win.h"
 #include <shellapi.h>
+#elif defined(NATALIA_HAVE_APPINDICATOR)
+// The tray is a detected system package, not a requirement: this ifdef is how
+// the same source builds on a machine without it.
+#include "simple_tray_linux.h"
 #endif
 
 namespace {
@@ -83,9 +87,9 @@ class SimpleWindowDelegate : public CefWindowDelegate {
 
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
     window_ = nullptr;
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(NATALIA_HAVE_APPINDICATOR)
     // The icon must go before the shell forgets the window, or a ghost lingers
-    // in the tray after the process exits.
+    // in the panel after the process exits.
     delete tray_;
     tray_ = nullptr;
 #endif
@@ -102,6 +106,8 @@ class SimpleWindowDelegate : public CefWindowDelegate {
       minimised_ = true;
 #if defined(OS_WIN)
       EnsureTray(window);
+#elif defined(NATALIA_HAVE_APPINDICATOR)
+      EnsureTray();
 #endif
       return false;
     }
@@ -162,13 +168,32 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   }
 #endif
 
+#if defined(NATALIA_HAVE_APPINDICATOR)
+  void EnsureTray() {
+    if (tray_) return;
+    tray_ = natalia::TrayIcon::Create(
+        "Natalia",
+        natalia::TrayCallbacks{
+            [this]() {
+              if (window_) {
+                window_->Show();
+                minimised_ = false;
+              }
+            },
+            [this]() { if (window_) window_->Close(); },
+        });
+  }
+#endif
+
  private:
   CefRefPtr<CefBrowserView> browser_view_;
   CefRefPtr<CefWindow> window_;
   const cef_runtime_style_t runtime_style_;
   const cef_show_state_t initial_show_state_;
   bool minimised_ = false;
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(NATALIA_HAVE_APPINDICATOR)
+  // Windows and Linux call the same two-function class by the same name through
+  // deliberately identical headers; nothing here needs to know which one it is.
   natalia::TrayIcon* tray_ = nullptr;
 #endif
 

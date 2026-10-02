@@ -50,23 +50,68 @@ set(NATALIA_CEF_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_app.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler.cc"
 )
+# Without this the tray detection below has no pkg_check_modules to call: it is
+# not a built-in, it comes from CMake's own FindPkgConfig module.
+find_package(PkgConfig REQUIRED)
+
+# The target is created BEFORE the tray detection because the detection calls
+# target_include_directories/target_link_libraries/target_compile_definitions on
+# it, and CMake requires the target to exist at that point. The source list is
+# still being appended to below, which add_executable accepts.
+add_executable(natalia-cef-desktop)
+
+# The per-platform sources. Globbing `src/*.cc` would put BOTH entry points in
+# one binary (two `main`-family symbols) and would compile the X11 files on
+# Windows, so the selection is explicit rather than a glob.
 if(WIN32)
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_win.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler_win.cc"
-    # The notification-area icon (Shell_NotifyIcon on a private message-only
-    # window). It links shell32, which every Windows target carries.
+    # Shell_NotifyIcon on a private message-only window; links shell32, which
+    # every Windows target carries.
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
   target_link_libraries(natalia-cef-desktop PRIVATE shell32)
 else()
+# The tray. Both platforms get one, and the difference is a dependency's
+# availability rather than a design choice:
+#   Windows  Shell_NotifyIcon — Win32, always present, so it is unconditional.
+#   Linux    libappindicator — a SYSTEM package, so a machine without it must
+#            still build. Both spellings are detected (the original and the
+#            maintained Ayatana fork, whose API is identical) and the file is
+#            compiled out when neither is found, so the link never fails.
+set(NATALIA_HAVE_APPINDICATOR OFF)
+# Both spellings are detected, each TOGETHER with gtk+-3.0: the library's own
+# .pc Requires it, and glib's headers arrive through that chain, so checking the
+# tray module alone leaves gdkconfig.h unable to find glib.h at compile time.
+# Found either, or neither — never a failed link.
+set(_AI_CANDIDATES "appindicator3-0.1;ayatana-appindicator3-0.1")
+foreach(_pkg ${_AI_CANDIDATES})
+  pkg_check_modules(_AI ${_pkg} gtk+-3.0)
+  if(_AI_FOUND)
+    set(NATALIA_HAVE_APPINDICATOR ON)
+    if(${_pkg} STREQUAL ayatana-appindicator3-0.1)
+      set(NATALIA_AYATANA_APPINDICATOR ON)
+    endif()
+    list(APPEND NATALIA_CEF_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_linux.cc")
+    target_include_directories(natalia-cef-desktop SYSTEM PRIVATE ${_AI_INCLUDE_DIRS})
+    target_link_libraries(natalia-cef-desktop PRIVATE ${_AI_LIBRARIES})
+    target_link_directories(natalia-cef-desktop PRIVATE ${_AI_LIBRARY_DIRS})
+    target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_HAVE_APPINDICATOR)
+    if(NATALIA_AYATANA_APPINDICATOR)
+      target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_AYATANA_APPINDICATOR)
+    endif()
+    break()
+  endif()
+endforeach()
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_linux.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler_linux.cc"
   )
 endif()
 
-add_executable(natalia-cef-desktop ${NATALIA_CEF_SRCS})
+# The sources, finished by the tray detection above.
+target_sources(natalia-cef-desktop PRIVATE ${NATALIA_CEF_SRCS})
 
 # Windows has no prebuilt wrapper library: CEF's own cmake integration
 # (find_package(CEF) + add_subdirectory on libcef_dll/) compiles the

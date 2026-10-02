@@ -221,6 +221,23 @@ Windows 从零开始：
 pwsh -NoProfile -File scripts\build-cef-windows.ps1
 ```
 
+**桌面宿主的两条宿主要求（都是实测出来的，不是惯例）**：
+
+Linux 侧编译宿主时需要**系统工具链**和**干净的 pkg-config 路径**：
+
+```bash
+CC=/usr/bin/gcc CXX=/usr/bin/g++ \
+PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/share/pkgconfig \
+  npm run desktop:cef:build
+```
+
+两条各有其原因，都不是想当然：
+
+- `CXX`：PATH 里第一个 g++ 若是 conda 的，它的库搜索路径里没有系统的 GTK/CEF，链接期报找不到本已存在的 `.so`；
+- `PKG_CONFIG_PATH`：conda 的 `glib-2.0.pc` 会排在系统之前，于是 `gdkconfig.h` 去找一个版本不对的 `glib.h`——报错是 `fatal error: glib.h: 没有那个文件或目录`，而 `/usr/include/glib-2.0/glib.h` 明明在。托盘探测的 `gtk+-3.0` 依赖链就是从这里断的。
+
+这两条不影响 Windows 构建。
+
 ### 6b. 安装包：各平台的实话
 
 | 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                                                                                                   |

@@ -253,3 +253,51 @@ test("the tray is Windows-only, self-contained Shell_NotifyIcon, and dies with t
     "simple_tray_win.cc",
   );
 });
+
+test("the Linux tray is a detected system package, never a hard link", () => {
+  const cmake = readFileSync(
+    new URL("../../cef-desktop/CMakeLists.txt", import.meta.url),
+    "utf8",
+  );
+  const linuxTray = readFileSync(
+    new URL("../../cef-desktop/src/simple_tray_linux.cc", import.meta.url),
+    "utf8",
+  );
+
+  // A machine without the library must still build. That is the whole difference
+  // from Windows, where Shell_NotifyIcon is always present: here the source is
+  // compiled OUT when nothing is found, so there is no third state where the
+  // link fails.
+  expect(cmake).toContain("pkg_check_modules");
+  expect(cmake).toContain("FindPkgConfig");
+  // Both spellings must be in the SEARCH LIST, not merely named somewhere in the
+  // file. Removing the Ayatana fork from the candidates while leaving it in the
+  // STREQUAL comparison was a live mutation that the first version of this pin
+  // did not catch — it only asserted the string appeared.
+  const candidates = cmake.match(/set\(_AI_CANDIDATES\s+"([^"]+)"\)/u)![1]!;
+  expect(candidates.split(";")).toEqual([
+    "appindicator3-0.1",
+    "ayatana-appindicator3-0.1",
+  ]);
+  expect(cmake).toContain("STREQUAL ayatana-appindicator3-0.1");
+
+  // The tray module is checked TOGETHER with gtk+-3.0. Its own .pc Requires it,
+  // and glib's headers arrive through that chain — checking the tray alone left
+  // gdkconfig.h unable to find glib.h, which is how this was learned.
+  expect(cmake).toMatch(
+    /pkg_check_modules\(\s*_AI\s+\$\{_pkg\}\s+gtk\+-3\.0\s*\)/u,
+  );
+
+  // The define has to reach the COMPILER, not just CMake: setting the variable
+  // alone compiled the file with the ifdef false and the tray silently absent.
+  expect(cmake).toContain(
+    "target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_HAVE_APPINDICATOR",
+  );
+
+  // The whole implementation is behind one ifdef, so the rest of the binary does
+  // not know whether a tray exists.
+  expect(linuxTray).toContain("#if defined(NATALIA_HAVE_APPINDICATOR)");
+  expect(linuxTray).toContain("gtk_init_check");
+  // PASSIVE, not simply going away: that is what removes the item from the panel.
+  expect(linuxTray).toContain("APP_INDICATOR_STATUS_PASSIVE");
+});

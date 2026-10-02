@@ -453,6 +453,7 @@
         "@anthelia/diff-wasm": "workspace:*",
         "@anthelia/object-store": "workspace:*",
         "@anthelia/platform": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@anthelia/tools": "workspace:*",
       },
     },

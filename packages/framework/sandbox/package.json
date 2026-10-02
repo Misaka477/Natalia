@@ -9,10 +9,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@anthelia/tools": "workspace:*",
     "@anthelia/contracts": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
     "@anthelia/object-store": "workspace:*",
-    "@anthelia/platform": "workspace:*"
+    "@anthelia/platform": "workspace:*",
+    "@anthelia/shell": "workspace:*",
+    "@anthelia/tools": "workspace:*"
   }
 }

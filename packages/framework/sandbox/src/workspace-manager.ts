@@ -16,12 +16,13 @@ import type {
   SandboxDiffKind,
   SandboxStatus,
 } from "@anthelia/contracts";
-import {
-  forceRemove,
-  profileShellCommand,
-  shellQuote,
-  startDetachedProcess,
-} from "@anthelia/platform";
+import { forceRemove, startDetachedProcess } from "@anthelia/platform";
+import { BashLocalExecutor } from "@anthelia/shell";
+
+// The shell that owns both spellings this file needs: the profile-reading argv
+// for a foreground execute, and the detached POSIX launcher for a background
+// one. One per module; it is stateless.
+const shell = new BashLocalExecutor();
 
 export type IsolationLevel = "workspace" | "container" | "vm";
 
@@ -151,8 +152,10 @@ export class WorkspaceSandboxManager
     options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv } = {},
   ) {
     const manifest = this.mustGet(id);
-    const shell = profileShellCommand(command);
-    const process = Bun.spawn([shell.executable, ...shell.args], {
+    // The profile-reading invocation, which is what this call site has always
+    // used: a sandboxed workspace executes with the user's shell profile.
+    const spec = shell.resolve({ command, loginShell: true });
+    const process = Bun.spawn([spec.command, ...spec.args], {
       cwd: manifest.root,
       stdin: "ignore",
       stdout: "pipe",
@@ -186,7 +189,10 @@ export class WorkspaceSandboxManager
     await mkdir(dirname(outputPath), { recursive: true, mode: 0o700 });
     const { pid } = await startDetachedProcess({
       command,
-      posixScript: `bash -c ${shellQuote(command)} > ${shellQuote(outputPath)} 2>&1 & echo $!`,
+      // Byte-identical to the string that used to be built here; the spelling
+      // belongs to the shell now. No `setsid` prefix: this call site does not
+      // want a process group.
+      posixScript: shell.detachedPosixScript({ command, outputPath }),
       cwd: manifest.root,
       outputPath,
       env: this.environment(manifest.envAllowlist),

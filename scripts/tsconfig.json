@@ -18,6 +18,9 @@
     },
     {
       "path": "../apps/cli"
+    },
+    {
+      "path": "../packages/core/shell"
     }
   ]
 }

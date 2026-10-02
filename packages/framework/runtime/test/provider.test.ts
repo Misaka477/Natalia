@@ -3354,3 +3354,59 @@ test("Anthropic cached prefix grows monotonically across turns", async () => {
   expect(marked(requests[2]!)).toBe(1);
   expect(marked(requests[2]!)).toBeLessThan(requests[2]!.length);
 });
+
+test("a tool result whose pairing id is missing cannot leave a dangling tool call", () => {
+  // The OpenAI-compatible gateway rejects a `role: "tool"` message that no
+  // assistant `toolCalls` entry precedes, and a `toolCalls` entry whose result
+  // never arrives. A durable entry can lose its pairID (an older journal, a
+  // partial write), so the rebuild must drop BOTH halves of the pair rather
+  // than emit either alone.
+  const messages = contextEntriesToProviderMessages([
+    {
+      id: "call_1",
+      role: "tool_call",
+      content: 'read_file {"path":"hello.txt"}',
+      pairID: "call_1",
+    },
+    {
+      id: "result_1",
+      role: "tool_result",
+      content: "hello",
+      pairID: undefined,
+    },
+    {
+      id: "result_2",
+      role: "tool_result",
+      content: "no pair key at all",
+    },
+  ]);
+  // The unpaired call and the unpaired results both vanish: the turn rebuilds
+  // as plain text, which the gateway accepts.
+  expect(messages).toEqual([]);
+});
+
+test("a tool call repeated in the durable log is emitted once", () => {
+  // A provider can echo the same call id twice (a resumed step, a replayed
+  // page). Two assistant entries carrying the same id, or two results for one
+  // call, are both rejected.
+  const messages = contextEntriesToProviderMessages([
+    {
+      id: "call_1",
+      role: "tool_call",
+      content: 'read_file {"path":"a.txt"}',
+      pairID: "dup",
+    },
+    {
+      id: "call_2",
+      role: "tool_call",
+      content: 'read_file {"path":"a.txt"}',
+      pairID: "dup",
+    },
+    { id: "r1", role: "tool_result", content: "a", pairID: "dup" },
+    { id: "r2", role: "tool_result", content: "a again", pairID: "dup" },
+  ]);
+  const calls = messages.flatMap((message) => message.toolCalls ?? []);
+  expect(calls.map((call) => call.id)).toEqual(["dup"]);
+  const results = messages.filter((message) => message.role === "tool");
+  expect(results).toHaveLength(1);
+});

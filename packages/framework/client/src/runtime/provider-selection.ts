@@ -234,17 +234,24 @@ export function createProviderSelection(
     const model = exec?.selectedModel;
     const ref = modelRefKeyForSelection(agent, model);
     const tsRuntimeConfig = getTsRuntimeConfig();
-    return (
-      (ref && tsRuntimeConfig
+    const resolved =
+      ref && tsRuntimeConfig
         ? resolveEffectiveModel(tsRuntimeConfig, ref)?.capabilities
-        : undefined) ?? {
-        toolCall: true,
-        reasoning: true,
-        thinking: true,
-        imageInput: false,
-        videoInput: false,
-      }
-    );
+        : undefined;
+    if (resolved) return resolved;
+    // The chat streams ask the ADAPTER here (`chatModelCapabilities`), which is
+    // the honest source: a provider that declares imageInput supports images
+    // regardless of what the catalog said. Hard-coding `false` instead dropped
+    // every image the main channel was handed whenever the model was not
+    // resolvable — the user got an `[Attached image/png: …]` marker instead of
+    // the picture, with no diagnostic explaining why.
+    return {
+      toolCall: true,
+      reasoning: true,
+      thinking: true,
+      imageInput: exec?.provider?.imageInput === true,
+      videoInput: exec?.provider?.videoInput === true,
+    };
   }
 
   function mediaTypeForImage(

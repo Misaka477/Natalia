@@ -844,3 +844,62 @@ test("a pane read after a resize still returns the frame it had", async () => {
   expect(after.text).toContain("answer");
   await controller.close();
 });
+
+test("a pane's line addressing is stable across a resize", async () => {
+  // The second reader's other case. `read`/`search` address the pane as ONE
+  // virtual document — scrollback first, then the visible screen — and the model
+  // pages it by absolute line. A resize changes the visible screen's height, so
+  // if the document's composition shifts, line 37 stops meaning the line the
+  // model already saw: a search that returns a match "at line 37" points
+  // somewhere else afterwards, and a cursor-based continuation would skip or
+  // re-read real content. The scrollback is the durable part; the addressing
+  // over it must not drift.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-addressing-"));
+  const { factory } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const started = await controller.start({ command: "cat", cwd: root });
+  // Enough lines to push some into the scrollback, so the document has both halves.
+  for (let index = 0; index < 40; index += 1) {
+    await controller.write(started.id, `row-${index}\r\n`);
+    await Bun.sleep(1);
+  }
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if ((await controller.read(started.id)).text.includes("row-39")) break;
+    await Bun.sleep(10);
+  }
+  // A line in the SCROLLBACK half — the part a resize must not move.
+  const scrollbackLine = async () => {
+    const all = await controller.read(started.id, {
+      startLine: 0,
+      endLine: 0,
+    });
+    return all.text;
+  };
+  const before = await scrollbackLine();
+
+  await controller.resize(started.id, 60, 240, "human");
+
+  const after = await scrollbackLine();
+  // The same absolute line still holds the same content.
+  expect(after).toBe(before);
+
+  // Now the sharper case: a NEGATIVE address counts from the end of the document,
+  // and the document's end is the visible screen. Resizing makes the screen
+  // taller, so a fixed negative address moves FURTHER BACK into the scrollback
+  // after a resize — the model's own continuation would silently re-read older
+  // material. This is the honest measurement of what a resize does to a cursor.
+  const tailAt = async () =>
+    (await controller.read(started.id, { startLine: -1, endLine: -1 })).text;
+  const tailBefore = await tailAt();
+  await controller.resize(started.id, 80, 240, "human");
+  const tailAfter = await tailAt();
+  // Whatever the pane's contents, the LAST line of the document is the cursor's
+  // line, and the cursor line survives a resize: it is the app's own state.
+  expect(tailAfter).toBe(tailBefore);
+  // Not a tautology: the document's tail really had a line to keep. An empty
+  // string would make the equality above pass without asserting anything.
+  expect(tailBefore.length).toBeGreaterThan(0);
+  await controller.close();
+});

@@ -684,13 +684,17 @@ test("resize carries the pane's geometry into the screen the model reads", async
   expect(after.cols).toBe(240);
   // The scrollback is the durable part, and it survives the resize.
   expect(after.text).toContain("scroll-0");
-  // The rendered screen — the model's window, the pane's size — is re-blanked
-  // (the app redraws for the new geometry), so the window is empty and its size
-  // is the pane's, not the spawn-time default.
+  // The rendered screen — the model's window, the pane's size — reports the
+  // pane's new size, not the spawn-time default. Its TEXT is the frame the resize
+  // archived, because snapshot is a model-facing surface (its tool says “use
+  // this to check where you are”) and must agree with read; it was pinned as
+  // blank back when nothing archived the frame, which was the bug the later fix
+  // removed. The human's window really is repainting — that is xterm.js's
+  // business, not this surface's.
   const window = await controller.snapshot(started.id);
   expect(window.rows).toBe(60);
   expect(window.cols).toBe(240);
-  expect(window.text).toBe("");
+  expect(window.text).toContain("scroll-");
   await controller.close();
 });
 
@@ -901,5 +905,41 @@ test("a pane's line addressing is stable across a resize", async () => {
   // Not a tautology: the document's tail really had a line to keep. An empty
   // string would make the equality above pass without asserting anything.
   expect(tailBefore.length).toBeGreaterThan(0);
+  await controller.close();
+});
+
+test("observe is the model's waiting face, and it agrees with read across a resize", async () => {
+  // The third reader's case. `read` (what the model asks for) and `observe` (what
+  // it waits on) both render the pane; `read` also consults the frame a resize
+  // archived, so the two can disagree exactly in the window where the grid is
+  // blank — the model's own wait would report "nothing here" while its read
+  // reports the frame it just had. `snapshot` is the HUMAN's face and stays
+  // honestly blank (the human's window is blank).
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-observe-"));
+  const { factory } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const started = await controller.start({ command: "cat", cwd: root });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if ((await controller.read(started.id)).text.includes("answer")) break;
+    await controller.write(started.id, "answer\r\n");
+    await Bun.sleep(10);
+  }
+  expect(
+    (await controller.observe(started.id, 0, { timeoutMs: 50 })).text,
+  ).toContain("answer");
+
+  await controller.resize(started.id, 60, 240, "human");
+
+  // The two model-facing surfaces must agree: observe must not be the one that
+  // lost the frame.
+  const observed = await controller.observe(started.id, 0, { timeoutMs: 50 });
+  const read = await controller.read(started.id);
+  expect(observed.text).toBe(read.text);
+  expect(observed.text).toContain("answer");
+  // And snapshot — whose tool description tells the model to use it "to check
+  // where you are" — is a MODEL face too, so it agrees as well.
+  expect((await controller.snapshot(started.id)).text).toContain("answer");
   await controller.close();
 });

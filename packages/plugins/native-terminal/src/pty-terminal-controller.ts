@@ -1027,13 +1027,32 @@ export function createPtyTerminalController(
     return publicSession(session);
   }
 
+  /**
+   * What a MODEL-facing surface renders.
+   *
+   * The human's `snapshot` says `renderScreenText` because that is the truth about
+   * the human's window. But `read` consults the frame a resize archived, so a
+   * model-facing surface that rendered the raw screen would DISAGREE with the
+   * model's own read in exactly the window where the grid is blank — observe would
+   * report "nothing here" while read reports the frame it just had. Both
+   * model-facing surfaces share this helper so that cannot happen.
+   */
+  function modelFacingText(session: { screen: TerminalScreen }): string {
+    const live = renderScreenText(session.screen);
+    const blank = session.screen.grid.every((row) =>
+      row.every((cell) => cell.char.trim().length === 0),
+    );
+    const archived = session.screen.previousFrame?.lines;
+    return blank && archived?.length ? archived.join("\n") : live;
+  }
+
   async function snapshot(id: string) {
     const session = get(id);
     assertReadable(session);
     return {
-      // The rendered screen, like read: every read surface the model
-      // touches shows the pane, not the stream.
-      text: renderScreenText(session.screen),
+      // The pane, as the model sees it — the archived frame while the grid is
+      // blank, exactly like read.
+      text: modelFacingText(session),
       cursorX: session.screen.cursorX,
       cursorY: session.screen.cursorY,
       rows: session.rows,
@@ -1069,7 +1088,7 @@ export function createPtyTerminalController(
           changed: session.revision > afterRevision,
           reason: "exited" as const,
         };
-      const text = renderScreenText(session.screen);
+      const text = modelFacingText(session);
       if (session.revision > afterRevision)
         return {
           session: { revision: session.revision },

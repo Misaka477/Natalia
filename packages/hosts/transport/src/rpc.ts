@@ -208,6 +208,10 @@ export const RPC_ROUTE_MEMBERS = {
   "session.restore": "sessionRestore",
   "session.export": "sessionExport",
   "session.attach": "sessionAttach",
+  // The explicit exit path. A route row makes it exist; without one the route
+  // table answers -32601 before any dispatch runs, which is also what keeps
+  // this surface honest — a method nobody registered does not quietly appear.
+  "session.shutdown": "shutdown",
   "mcp.catalog": "mcpCatalog",
   "mcp.prompt": "getMcpPrompt",
   "mcp.resource": "readMcpResource",
@@ -402,6 +406,8 @@ export const RPC_WRITE_METHODS: ReadonlySet<string> = new Set([
   "resume",
   "agent.select",
   "model.select",
+  // Ends the process, so it is a write for a read-only credential.
+  "session.shutdown",
   "model.setDefault",
   "model.reasoning.set",
   "config.reload",
@@ -1985,6 +1991,28 @@ export async function handleRPCMessage(
           optionalStringParam(body.params, "sessionID"),
         ),
       };
+    }
+    // The explicit exit path. A window that hides on close (the minimise policy)
+    // leaves the runtime alive, so SOMETHING has to be able to end it: without
+    // this the only way out is a signal or a task manager, which is the trap the
+    // minimise mode exists to avoid. Idempotent, so a double click answers once
+    // and then reports success.
+    if (body.method === "session.shutdown") {
+      const result = {
+        jsonrpc: "2.0" as const,
+        id: body.id ?? null,
+        result: { shuttingDown: true },
+      };
+      // On the RuntimeClient, not an option bag: the CLI host owns the graceful
+      // close (its idempotent `close()`), and this is the transport asking it to
+      // run — no new plumbing through the host.
+      // A host without the surface must not be answered as if it shut down:
+      // `notSupported` names the member so the availability report can tell
+      // "this deployment cannot" from "done".
+      if (typeof client.shutdown !== "function")
+        throw new RuntimeNotSupported("shutdown");
+      void client.shutdown();
+      return result;
     }
     if (body.method === "nativeTerminal.stop") {
       optionsGuard(client, "nativeTerminalStop");

@@ -822,6 +822,11 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "ok",
     note: "edit the current goal (objective/round cap/plan) from the status bar; refusal is expressed by ok:false plus a message",
   },
+  shutdown: {
+    refusal: "value",
+    expressedBy: "shuttingDown",
+    note: "answers {shuttingDown:true} before the process goes away, so the caller can tell the user it worked; a runtime without a shutdown surface (an embedded host) omits the member and the transport reports the method as unknown rather than pretending",
+  },
   drainForUpdate: {
     refusal: "error",
     note: "times out with an error naming how many turns were still active — there is no value form (nothing partial to report); the wait itself is the result",

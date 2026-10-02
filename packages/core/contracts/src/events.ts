@@ -3226,6 +3226,14 @@ export type RuntimeClient = {
    */
   feedback?(input: FeedbackInput): Promise<FeedbackResult>;
   /**
+   * End the process gracefully. A window that hides on close (the minimise
+   * policy) leaves the runtime alive, so SOMETHING has to be able to stop it —
+   * otherwise the only way out is a signal or a task manager, which is the trap
+   * minimise mode exists to avoid. Idempotent, and answers before the process
+   * actually goes away so the caller can tell the user it worked.
+   */
+  shutdown?(): void | Promise<void>;
+  /**
    * D3b step 1 — wait until NO execution has an active turn (the plan's
    * 排空在途: in-flight turns finish; admitted-but-unstarted inputs are
    * durable by construction — the inbox survives restarts, so only

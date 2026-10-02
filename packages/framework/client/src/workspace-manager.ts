@@ -265,6 +265,11 @@ export type WorkspaceManager = {
     settings: WorkspaceToolSettings,
   ): Promise<WorkspaceToolSettings>;
   dispose(): Promise<void>;
+  /**
+   * End the process gracefully. Optional like the rest of the additive surface:
+   * the stable required members do not move for it.
+   */
+  shutdown?(): Promise<void> | void;
 };
 
 /**
@@ -682,6 +687,13 @@ export function createWorkspaceManager(
       for (const ws of runtimes.values()) await ws.client.dispose?.();
       runtimes.clear();
       activeWorkspaceID = undefined;
+    },
+    // The runtime's exit path over RPC (`session.shutdown`). A window that hides
+    // on close leaves this process alive, so something has to be able to end it
+    // that is not a signal or a task manager. Reuses the manager's own graceful
+    // teardown; the process then ends through whatever lifecycle the host owns.
+    async shutdown() {
+      await this.dispose();
     },
   };
 }

@@ -118,12 +118,48 @@ bool popControlLine(std::string *out) {
 
 // A JSON string value for a key: `"key":"value"` with backslash escapes.
 // Minimal on purpose - the spec is produced by our own code.
+/**
+ * Advance past JSON whitespace.
+ *
+ * Both extractors used to require `"key":` with nothing between the colon and the
+ * value, so a spec that was pretty-printed or simply spaced — `{"file": "cmd"}`
+ * rather than `{"file":"cmd"}` — was reported as "spec has no file", which names
+ * the wrong problem entirely. The host happens to send the compact form (that is
+ * what JSON.stringify produces without indentation), so this never bit the
+ * product; it cost an hour of debugging under wine, where the natural way to
+ * write a spec by hand is the spaced one.
+ */
+size_t skipJsonSpace(const std::string &json, size_t at) {
+  while (at < json.size() &&
+         (json[at] == ' ' || json[at] == '\t' || json[at] == '\n' ||
+          json[at] == '\r'))
+    at += 1;
+  return at;
+}
+
+/** Find `"key"` followed by optional space, a colon, and optional space. */
+bool findJsonValue(const std::string &json, const char *key, size_t *at) {
+  const std::string needle = std::string("\"") + key + "\"";
+  size_t scan = 0;
+  for (;;) {
+    scan = json.find(needle, scan);
+    if (scan == std::string::npos) return false;
+    scan += needle.size();
+    scan = skipJsonSpace(json, scan);
+    if (scan < json.size() && json[scan] == ':') {
+      *at = skipJsonSpace(json, scan + 1);
+      return true;
+    }
+  }
+}
+
 bool extractString(const std::string &json, const char *key,
                    std::string *out) {
-  const std::string needle = std::string("\"") + key + "\":\"";
-  size_t at = json.find(needle);
-  if (at == std::string::npos) return false;
-  at += needle.size();
+  size_t at = 0;
+  if (!findJsonValue(json, key, &at)) return false;
+  // A string value must open with a quote; anything else is not this key.
+  if (at >= json.size() || json[at] != '"') return false;
+  at += 1;
   std::string value;
   while (at < json.size()) {
     const char c = json[at++];
@@ -166,10 +202,8 @@ bool extractString(const std::string &json, const char *key,
 }
 
 int extractNumber(const std::string &json, const char *key, int fallback) {
-  const std::string needle = std::string("\"") + key + "\":";
-  size_t at = json.find(needle);
-  if (at == std::string::npos) return fallback;
-  at += needle.size();
+  size_t at = 0;
+  if (!findJsonValue(json, key, &at)) return fallback;
   return atoi(json.c_str() + at);
 }
 
@@ -226,10 +260,14 @@ int main() {
 
   // The command line: the executable followed by its JSON-escaped args.
   std::wstring commandLine = quote(widen(file));
-  const std::string argsKey = "\"args\":[";
-  size_t argsAt = spec.find(argsKey);
-  if (argsAt != std::string::npos) {
-    argsAt += argsKey.size();
+  // The array's own opener is found through the same whitespace-tolerant lookup,
+  // so `"args": [` behaves like `"args":[`. Doing this by raw substring search
+  // was the third instance of the same assumption — the spaced spec parsed its
+  // `file`, then silently dropped every argument and started a bare shell.
+  size_t argsAt = 0;
+  if (findJsonValue(spec, "args", &argsAt) &&
+      argsAt < spec.size() && spec[argsAt] == '[') {
+    argsAt += 1;
     const std::string argsBlock = spec.substr(argsAt, spec.find(']', argsAt) - argsAt);
     size_t cursor = 0;
     while (cursor < argsBlock.size()) {

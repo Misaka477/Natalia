@@ -201,6 +201,29 @@ test("the control loop is woken by the child exiting, not only by stdin", () => 
  * because an earlier manual run had already built a prefix, which is exactly the
  * kind of accident that makes a test untrustworthy.
  */
+/** Compile (and link) the bridge into `work`, returning the exe path. */
+async function compileBridge(work: string): Promise<string> {
+  const object = join(work, "bridge.o");
+  const exe = join(work, "bridge.exe");
+  const build = Bun.spawnSync([compiler!, "-c", bridgeSource, "-o", object], {
+    env: { ...process.env, CCACHE_DISABLE: "1" },
+    stderr: "pipe",
+  });
+  if (build.exitCode !== 0)
+    throw new Error(
+      `the ConPTY bridge no longer compiles:\n${build.stderr.toString()}`,
+    );
+  const link = Bun.spawnSync([compiler!, object, "-o", exe, "-static"], {
+    env: { ...process.env, CCACHE_DISABLE: "1" },
+    stderr: "pipe",
+  });
+  if (link.exitCode !== 0)
+    throw new Error(
+      `the ConPTY bridge no longer links:\n${link.stderr.toString()}`,
+    );
+  return exe;
+}
+
 function preparePrefix(work: string, prefix: string) {
   Bun.spawnSync(["wine", "wineboot", "--init"], {
     cwd: work,
@@ -229,3 +252,66 @@ function readFileSyncOrEmpty(path: string): string {
  * Returns a small handle rather than inheriting anything: the point is that each
  * test drives a fresh process exactly as the controller does.
  */
+
+test.skipIf(!canRun)(
+  "a pretty-printed spec is parsed as well as the compact one",
+  async () => {
+    const work = await mkdtemp(join(tmpdir(), "conpty-spec-"));
+    try {
+      preparePrefix(work, join(work, "wine"));
+      // The host sends the compact form (JSON.stringify without indentation), so
+      // the parser's whitespace intolerance never bit the product. It cost an
+      // hour of debugging under wine, where a hand-written spec is spaced by
+      // default and the bridge answered "spec has no file" — which names the
+      // wrong problem. Three places assumed `"key":` with nothing after the
+      // colon: extractString, extractNumber, and the args array's opener.
+      for (const [name, spec] of [
+        [
+          "compact",
+          '{"file":"cmd.exe","args":["/c","echo SPEC_COMPACT_OK"],"cwd":".","cols":80,"rows":25,"env":{}}',
+        ],
+        [
+          "spaced",
+          '{ "file": "cmd.exe", "args": [ "/c", "echo SPEC_SPACED_OK" ], "cwd": ".", "cols": 80, "rows": 25, "env": {} }',
+        ],
+      ] as const) {
+        const exe = await compileBridge(work);
+        let seen = "";
+        const bridge = Bun.spawn(["wine", exe], {
+          cwd: work,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          env: {
+            ...process.env,
+            WINEPREFIX: join(work, "wine"),
+            WINEDEBUG: "-all",
+          },
+        });
+        const decoder = new TextDecoder();
+        void (async () => {
+          const reader = bridge.stdout.getReader();
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            seen += decoder.decode(value);
+          }
+        })();
+        bridge.stdin.write(`${spec}\n`);
+        await bridge.stdin.flush();
+        const deadline = Date.now() + 40_000;
+        while (Date.now() < deadline && !seen.includes("SPEC_"))
+          await Bun.sleep(500);
+        bridge.kill();
+        expect(seen, `${name} spec: the child's output must arrive`).toContain(
+          name === "compact" ? "SPEC_COMPACT_OK" : "SPEC_SPACED_OK",
+        );
+        // Both must also handshake, which is what "no file" would have meant.
+        expect(seen).toContain('"pid"');
+      }
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  },
+  120_000,
+);

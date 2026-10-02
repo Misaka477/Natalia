@@ -176,6 +176,21 @@ test("the capability travels with every not-supported member, so a consumer can 
   }
 });
 
+test("the external-benchmark route's fallback is unreachable without the member", async () => {
+  // The route's handler carries `{joined:false, reason:"no_eval_dir"}` as if it
+  // could advise a caller, but optionsGuard answers first: a runtime without
+  // `externalBenchmark` gets not-supported, not advice. Pinned because the
+  // fallback's existence reads like coverage and is not — and because a future
+  // implementation that makes it reachable SHOULD fail here and be noticed.
+  const { error } = await fail("eval.external_benchmark");
+  expect(error.code).toBe(RUNTIME_RPC_ERROR_CODES.notSupported);
+  expect(error.data).toEqual({
+    kind: "notSupported",
+    member: "externalBenchmark",
+    capability: "intelligence",
+  });
+});
+
 test("bad arguments are invalid params, and only bad arguments are", async () => {
   const withRead: Partial<RuntimeClient> = {
     async workspaceRead() {

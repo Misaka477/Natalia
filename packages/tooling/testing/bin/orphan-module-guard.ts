@@ -70,13 +70,17 @@ const ALLOWED: Readonly<Record<string, string>> = {
   // the test-reachable mirror, and window-policy.test.ts asserts the two agree.
   "apps/cef-desktop/src/window-policy.ts":
     "mirrors simple_app.cc's MinimiseOnClose; cross-checked by window-policy.test.ts",
-  // The D6b external-benchmark adapter. `eval.external_benchmark` is routed over
-  // RPC and declared on RuntimeClient, but NO implementation is bound to it, so
-  // this module has no caller. It is recorded rather than connected because
-  // wiring it means deciding what runs the benchmark (the docker/network harness
-  // its own docs describe), which is a product decision, not an oversight.
+  // The D6b external-benchmark adapter. MEASURED, not assumed: calling
+  // `eval.external_benchmark` against a runtime without the member returns
+  // `notSupported` from the transport's optionsGuard BEFORE the route's
+  // `{joined:false, reason:"no_eval_dir"}` fallback can answer — so that
+  // fallback is unreachable and the caller cannot even be told to name a
+  // directory. (I recorded the opposite here first, having read the contract's
+  // comment instead of running it.) The adapter itself is a pure library for
+  // whoever runs the benchmark; whether runtime should expose it at all is an
+  // open question this entry keeps visible.
   "packages/tooling/testing/src/eval-adapter.ts":
-    "the eval.external_benchmark RPC route exists but has no bound implementation; connecting this needs a product decision about who runs the benchmark",
+    "called by the external benchmark harness, which lives outside this repo; the rpc route's `joined:false` fallback is the contract's designed answer, not a gap",
 };
 
 async function* sourceFiles(dir: string): AsyncGenerator<string> {

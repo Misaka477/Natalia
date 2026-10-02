@@ -39,6 +39,24 @@ export type TerminalScreen = {
   scrollback: string[];
   /** The alternate screen is active (DEC mode 1049) — full-screen apps. */
   altScreen: boolean;
+  /**
+   * The last frame before a resize, archived because the two readers of this
+   * screen need different things from a resize.
+   *
+   * The HUMAN reader is xterm.js, and the applications inside the pane redraw
+   * for the new geometry — so re-flowing the old cells would corrupt what they
+   * draw next (that is what the existing resize test pins). The MODEL reader is
+   * `read()`, and nothing redraws for it: after a resize it would see an empty
+   * grid and lose the answer it was looking for, which is a bug only a second
+   * reader can have. So the frame is archived here, and `read` prefers the live
+   * grid and falls back to this one when the grid is blank.
+   */
+  previousFrame?: {
+    rows: number;
+    cols: number;
+    lines: string[];
+    at: number;
+  };
 };
 
 export type TerminalScreenOptions = {
@@ -91,6 +109,15 @@ export function resizeTerminalScreen(
   const nextRows = Math.max(1, Math.floor(rows));
   const nextCols = Math.max(1, Math.floor(cols));
   if (nextRows === screen.rows && nextCols === screen.cols) return screen;
+  // Archive the frame the model may still be reading. Only when it has content:
+  // an already-blank frame is not worth keeping, and this runs on every resize.
+  if (renderScreen(screen).some((line) => line.trim().length > 0))
+    screen.previousFrame = {
+      rows: screen.rows,
+      cols: screen.cols,
+      lines: renderScreen(screen),
+      at: Date.now(),
+    };
   screen.rows = nextRows;
   screen.cols = nextCols;
   screen.grid = blankGrid(nextRows, nextCols);

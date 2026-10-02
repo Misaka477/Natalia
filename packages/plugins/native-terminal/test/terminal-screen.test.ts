@@ -164,3 +164,42 @@ test("resizeTerminalScreen is a no-op for the geometry it already has", () => {
   expect(screen.grid).toBe(grid);
   expect(renderScreenText(screen)).toBe("keep me");
 });
+
+test("a resize preserves the frame the model reader is about to lose", () => {
+  // The two readers of this screen need different things from a resize.
+  // xterm.js (the human) is fine: the applications redraw for the new geometry.
+  // `read()` (the model) is not fine: nothing redraws for it, so after a resize
+  // it would see an empty grid and lose the output it was looking for — a bug
+  // only a second reader can have. The frame survives in `previousFrame`.
+  const screen = createTerminalScreen({ rows: 24, cols: 80 });
+  applyTerminalOutput(screen, "$ npm run build\r\nbuild ok\r\n$ ");
+  expect(renderScreenText(screen)).toContain("build ok");
+
+  resizeTerminalScreen(screen, 50, 200);
+
+  // The live grid is re-blanked (the app repaints it), but the frame is archived.
+  expect(renderScreenText(screen)).toBe("");
+  expect(screen.previousFrame).toBeDefined();
+  expect(screen.previousFrame!.lines.join("\n")).toContain("build ok");
+  expect(screen.previousFrame!.rows).toBe(24);
+  expect(screen.previousFrame!.cols).toBe(80);
+});
+
+test("an already-blank screen is not worth archiving", () => {
+  // This runs on every resize; keeping an empty frame would make the model's
+  // fallback silent forever instead of honest.
+  const screen = createTerminalScreen({ rows: 24, cols: 80 });
+  resizeTerminalScreen(screen, 50, 200);
+  expect(screen.previousFrame).toBeUndefined();
+});
+
+test("a later frame replaces an earlier one", () => {
+  const screen = createTerminalScreen({ rows: 24, cols: 80 });
+  applyTerminalOutput(screen, "first frame");
+  resizeTerminalScreen(screen, 30, 100);
+  expect(screen.previousFrame!.lines.join("\n")).toContain("first frame");
+  resizeTerminalScreen(screen, 40, 120);
+  // Not archived again: the grid has been blank since the first resize, so the
+  // older frame is still the useful one and must not be dropped.
+  expect(screen.previousFrame!.lines.join("\n")).toContain("first frame");
+});

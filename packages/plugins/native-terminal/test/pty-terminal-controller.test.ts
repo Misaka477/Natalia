@@ -814,3 +814,33 @@ test("a terminal spawns at a grid a TUI can render, and honours a caller's size"
   await instrumented.close();
   await controller.close();
 });
+
+test("a pane read after a resize still returns the frame it had", async () => {
+  // The second reader's case. xterm.js (the human) repaints after a resize; the
+  // model's `read` has nobody to repaint for it, so a re-blanked grid would hand
+  // it nothing while the human's window still shows the output.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-reread-"));
+  const { factory } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const started = await controller.start({ command: "cat", cwd: root });
+  // Enough content to be worth archiving, and short enough to sit on the visible
+  // screen rather than only in the scrollback.
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const now = await controller.read(started.id);
+    if (now.text.includes("answer")) break;
+    await controller.write(started.id, "answer\r\n");
+    await Bun.sleep(10);
+  }
+  expect((await controller.read(started.id)).text).toContain("answer");
+
+  // The human widens the pane. The applications repaint; the grid is re-blanked
+  // until they do — that much is the existing behaviour and the existing test.
+  await controller.resize(started.id, 60, 240, "human");
+  const after = await controller.read(started.id);
+  // The model must not be handed an empty read while the frame is still the
+  // best answer available.
+  expect(after.text).toContain("answer");
+  await controller.close();
+});

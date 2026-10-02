@@ -704,7 +704,17 @@ export function createPtyTerminalController(
     // pane, not just the viewport. Before this, the rendered read dropped
     // startLine/endLine and the scrollback was unreachable — the history
     // existed and nothing could read it.
+    // The pane's virtual document: the archived frame (if a resize just wiped
+    // the grid and the applications have not repainted yet), then the scrollback,
+    // then the visible screen. The model reads this while the human watches
+    // xterm.js, and a resize that leaves a blank grid would hand the model
+    // nothing — so the last frame it had is offered instead of nothing.
+    const archived = session.screen.previousFrame?.lines;
+    const blank = renderScreen(session.screen).every(
+      (line) => line.trim().length === 0,
+    );
     const document = [
+      ...(blank && archived ? archived : []),
       ...session.screen.scrollback,
       ...renderScreen(session.screen),
     ];

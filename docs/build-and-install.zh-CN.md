@@ -221,6 +221,20 @@ Windows 从零开始：
 pwsh -NoProfile -File scripts\build-cef-windows.ps1
 ```
 
+### 6b. 安装包：各平台的实话
+
+| 平台    | 装包脚本                       | 用户要做什么                  | 状态                                                           |
+| ------- | ------------------------------ | ----------------------------- | -------------------------------------------------------------- |
+| Linux   | `npm run appimage`             | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖） |
+| Windows | `npm run build:windows` + 容器 | 双击 Setup.exe                | 清单早已就绪，**容器那一锤等你选 MSIX 还是 Inno Setup**        |
+| macOS   | `npm run appbundle`            | 把 `.app` 拖到 Applications   | **被有意 defer，不是忘了**，原因见下                           |
+
+**macOS 为什么 defer**：`release:build --all` 只构建 host + windows-x64，因为没有
+macOS 的终端构建（`build-wezterm-*.ts` 只有 ubuntu 和 windows 两版）。一个交互终端
+跑不起来的 release 是带校验和的谎言，所以不做。`appbundle`/dmg staging 的代码写好并
+测过，但**没有 macOS release 产物可以喂它**——`stageDesktopHost` 里那个 `.app` 分支
+因此是不可达的，这点写在该函数的注释里，避免下一个人误以为它被覆盖了。
+
 它做三件事：拉同版本 Windows CEF 分发（`scripts/fetch-cef-windows.ts`，
 版本从 `.cef-test/include/cef_version.h` 读，**不一致就报错**而不是链到
 奇奇怪怪的符号错误）→ 用 clang-cl/Ninja 或 MSVC 构建 → 校验 CEF 运行时

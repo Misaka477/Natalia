@@ -650,7 +650,11 @@ test("a completion wakes Nia; a status write alone wakes nobody (the cut)", asyn
   } finally {
     await client.dispose?.();
   }
-}, 20_000);
+  // A real integration wait (a completion has to drive Nia's wake through the
+  // whole runtime). CI builds wasm packs and installs a toolchain in the same
+  // job, and the 20s this used to carry failed there twice in a row while
+  // passing locally at 1s. A hang still fails; only the wall moves.
+}, 90_000);
 
 test("main, Navi, and Nia publish thinking in their independent namespaces", async () => {
   const requests: ChatRequest[] = [];

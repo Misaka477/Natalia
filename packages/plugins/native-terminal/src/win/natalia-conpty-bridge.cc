@@ -61,6 +61,61 @@ std::string readLineFromStdin() {
   return line;
 }
 
+/**
+ * The control-input queue, fed by a reader thread.
+ *
+ * A blocking ReadFile on stdin cannot ALSO notice the child exiting, and a child
+ * that exits on its own — `cmd /c echo`, any short-lived command — used to leave
+ * this bridge blocked in the read with its pane "running" forever and no exit
+ * frame. The POSIX bridge emits its frame from its read loop when the master
+ * closes; this is the same obligation, met by waiting on BOTH handles instead of
+ * only the one.
+ *
+ * The reader owns the blocking read. The main loop owns the waiting, and is woken
+ * by "a line arrived" OR "the child is gone".
+ */
+std::vector<std::string> g_lineQueue;
+CRITICAL_SECTION g_queueLock;
+HANDLE g_lineArrived = nullptr;
+volatile bool g_stdinClosed = false;
+
+DWORD WINAPI pumpControlInput(LPVOID) {
+  for (;;) {
+    const std::string line = readLineFromStdin();
+    EnterCriticalSection(&g_queueLock);
+    if (line.empty()) {
+      // EOF: nothing more will ever arrive. Wake the loop so it can finish.
+      g_stdinClosed = true;
+      LeaveCriticalSection(&g_queueLock);
+      SetEvent(g_lineArrived);
+      return 0;
+    }
+    g_lineQueue.push_back(line);
+    LeaveCriticalSection(&g_queueLock);
+    SetEvent(g_lineArrived);
+  }
+  return 0;
+}
+
+/** Take the next queued line, if there is one. Keeps the event set while more remain. */
+bool popControlLine(std::string *out) {
+  EnterCriticalSection(&g_queueLock);
+  if (g_lineQueue.empty()) {
+    LeaveCriticalSection(&g_queueLock);
+    ResetEvent(g_lineArrived);
+    return false;
+  }
+  *out = g_lineQueue.front();
+  g_lineQueue.erase(g_lineQueue.begin());
+  const bool more = !g_lineQueue.empty();
+  LeaveCriticalSection(&g_queueLock);
+  if (more)
+    SetEvent(g_lineArrived);
+  else
+    ResetEvent(g_lineArrived);
+  return true;
+}
+
 // A JSON string value for a key: `"key":"value"` with backslash escapes.
 // Minimal on purpose - the spec is produced by our own code.
 bool extractString(const std::string &json, const char *key,
@@ -301,10 +356,32 @@ int main() {
 
   const HANDLE outputPump = CreateThread(nullptr, 0, pumpConsoleOutput, nullptr, 0, nullptr);
 
-  // The control loop: JSON lines from the host, exactly the POSIX bridge's.
+  // The control loop: JSON lines from the host, exactly the POSIX bridge's —
+  // but read on a thread, so the loop can also be woken by the CHILD exiting.
+  // Without that, `cmd /c echo` (any short-lived command) left the bridge blocked
+  // on stdin with its pane "running" and no exit frame.
+  g_lineArrived = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+  InitializeCriticalSection(&g_queueLock);
+  const HANDLE controlReader =
+      CreateThread(nullptr, 0, pumpControlInput, nullptr, 0, nullptr);
+
   for (;;) {
-    const std::string line = readLineFromStdin();
-    if (line.empty()) continue;
+    std::string line;
+    if (!popControlLine(&line)) {
+      // Nothing queued: wait for a line to arrive OR the child to exit. Either
+      // one is news, and before the reader thread existed only the first could
+      // ever wake this.
+      const HANDLE waitFor[] = {g_lineArrived, g_childProcess};
+      const DWORD which = WaitForMultipleObjects(2, waitFor, FALSE, INFINITE);
+      if (which == WAIT_OBJECT_0 + 1) break; // the child is gone
+      if (which != WAIT_OBJECT_0) break;     // an error: nothing left to wait for
+      if (!popControlLine(&line)) {
+        // Woken with an empty queue: either a spurious wake, or EOF (the host
+        // closed stdin). Exit only when there is truly nothing left to do.
+        if (g_stdinClosed) break;
+        continue;
+      }
+    }
     std::string type;
     extractString(line, "type", &type);
     if (type == "input") {
@@ -331,6 +408,7 @@ int main() {
       break;
     }
   }
+  if (controlReader) CloseHandle(controlReader);
 
   WaitForSingleObject(g_childProcess, INFINITE);
   DWORD exitCode = 0;

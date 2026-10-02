@@ -15,6 +15,11 @@
 
 #include <cstdlib>
 
+#if defined(OS_WIN)
+#include "simple_tray_win.h"
+#include <shellapi.h>
+#endif
+
 namespace {
 
 // The close policy, read once per window so a torn-down environment cannot
@@ -69,6 +74,7 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   void OnWindowCreated(CefRefPtr<CefWindow> window) override {
     // Add the browser view and show the window.
     window->AddChildView(browser_view_);
+    window_ = window;
 
     if (initial_show_state_ != CEF_SHOW_STATE_HIDDEN) {
       window->Show();
@@ -76,6 +82,13 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   }
 
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
+    window_ = nullptr;
+#if defined(OS_WIN)
+    // The icon must go before the shell forgets the window, or a ghost lingers
+    // in the tray after the process exits.
+    delete tray_;
+    tray_ = nullptr;
+#endif
     browser_view_ = nullptr;
   }
 
@@ -87,6 +100,9 @@ class SimpleWindowDelegate : public CefWindowDelegate {
       // tearing the browser down behind us.
       window->Hide();
       minimised_ = true;
+#if defined(OS_WIN)
+      EnsureTray(window);
+#endif
       return false;
     }
     // Allow the window to close if the browser says it's OK.
@@ -119,11 +135,42 @@ class SimpleWindowDelegate : public CefWindowDelegate {
     return runtime_style_;
   }
 
+#if defined(OS_WIN)
+  // The tray exists ONLY while the window is hidden: a visible window plus a
+  // tray icon is a second way to do the same thing, and the icon's whole purpose
+  // is to be the way back into a window the user cannot see.
+  void EnsureTray(CefRefPtr<CefWindow> window) {
+    if (tray_) return;
+    CefWindowHandle native = window->GetWindowHandle();
+    HICON icon = reinterpret_cast<HICON>(::GetClassLongPtrW(native, GCLP_HICON));
+    tray_ = natalia::TrayIcon::Create(
+        icon, L"Natalia",
+        natalia::TrayCallbacks{
+            [this]() {
+              if (window_) {
+                window_->Show();
+                minimised_ = false;
+              }
+            },
+            [this]() {
+              // The user's explicit exit: the browser closes for real, which
+              // ends the message loop and so the process. This is deliberately
+              // NOT CanClose — that path would hide again.
+              if (window_) window_->Close();
+            },
+        });
+  }
+#endif
+
  private:
   CefRefPtr<CefBrowserView> browser_view_;
+  CefRefPtr<CefWindow> window_;
   const cef_runtime_style_t runtime_style_;
   const cef_show_state_t initial_show_state_;
   bool minimised_ = false;
+#if defined(OS_WIN)
+  natalia::TrayIcon* tray_ = nullptr;
+#endif
 
   IMPLEMENT_REFCOUNTING(SimpleWindowDelegate);
 };

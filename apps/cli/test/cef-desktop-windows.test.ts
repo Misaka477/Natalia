@@ -198,3 +198,58 @@ test("ts-build reads the wezterm executables from the fork's release dir", () =>
   // And the skip is explicit, not an accident of a missing file.
   expect(source).toContain("NATALIA_BUILD_SKIP_NATIVE");
 });
+
+test("the tray is Windows-only, self-contained Shell_NotifyIcon, and dies with the window", () => {
+  const tray = readFileSync(
+    new URL("../../cef-desktop/src/simple_tray_win.cc", import.meta.url),
+    "utf8",
+  );
+  const app = readFileSync(
+    new URL("../../cef-desktop/src/simple_app.cc", import.meta.url),
+    "utf8",
+  );
+  const cmake = readFileSync(
+    new URL("../../cef-desktop/CMakeLists.txt", import.meta.url),
+    "utf8",
+  );
+
+  // Pure Win32. A third-party tray library is the one thing that cannot happen
+  // here: it is the reason the Linux tray is blocked on a system package.
+  expect(tray).toContain("Shell_NotifyIconW");
+  expect(tray).not.toMatch(/#include\s+<(ayatana|gtk|wx|qt)/iu);
+
+  // The icon's callback goes to a message-only window, NOT a subclass of the
+  // browser's — CEF's views framework owns that window's procedure.
+  expect(tray).toContain("HWND_MESSAGE");
+  expect(tray).toContain("kWindowClassName");
+  // A class nobody registers is a CreateWindowExW that fails silently.
+  expect(tray).toContain("RegisterClassExW");
+  // Explorer restarting drops the icon; the documented fix is re-adding.
+  expect(tray).toContain("kTaskbarCreatedMessage");
+
+  // The menu carries both actions: back in, and back out.
+  expect(tray).toContain("kCommandShow");
+  expect(tray).toContain("kCommandQuit");
+  expect(tray).toContain("SetForegroundWindow");
+
+  // The icon is created only while the window is HIDDEN. A visible window plus a
+  // tray icon is a second way to do the same thing.
+  expect(app).toContain("EnsureTray");
+  expect(app).toContain("window_ = window;");
+  // And it is destroyed before the shell forgets the window, or a ghost lingers
+  // in the tray after the process exits.
+  expect(app).toContain("delete tray_;");
+
+  // Only the Windows target compiles it, and links the shell library it calls.
+  // The source-list block, not the CEF-root block that also begins with
+  // `if(WIN32)` — slicing the first match would test the wrong thing.
+  const listWin = cmake.indexOf("list(APPEND NATALIA_CEF_SRCS");
+  expect(cmake.slice(listWin, cmake.indexOf("else()", listWin))).toContain(
+    "simple_tray_win.cc",
+  );
+  expect(cmake).toContain("shell32");
+  // Linux's source list must NOT gain it.
+  expect(cmake.slice(cmake.indexOf("else()", listWin))).not.toContain(
+    "simple_tray_win.cc",
+  );
+});

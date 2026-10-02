@@ -54,7 +54,11 @@ if(WIN32)
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_win.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler_win.cc"
+    # The notification-area icon (Shell_NotifyIcon on a private message-only
+    # window). It links shell32, which every Windows target carries.
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
+  target_link_libraries(natalia-cef-desktop PRIVATE shell32)
 else()
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_linux.cc"

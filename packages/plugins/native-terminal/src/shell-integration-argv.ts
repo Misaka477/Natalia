@@ -16,10 +16,20 @@
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 
-/** The integration script bundled with this package, by shell basename. */
+/**
+ * The integration script bundled with this package, by shell basename.
+ *
+ * The NAME is the map's value; the PATH is derived, because a pane's `--rcfile`
+ * must be absolute. A pane spawns in the operator's workspace, and a relative
+ * script name would resolve there — not next to the plugin that ships it — so the
+ * integration would silently not load and the pane would just have no markers.
+ */
 const SCRIPTS: Record<string, string> = {
   bash: "shell-integration-bash.sh",
 };
+
+/** The directory this module lives in: where the bundled scripts are. */
+const BUNDLED = import.meta.dir;
 
 /**
  * The argv that starts a shell with its integration script loaded.
@@ -32,7 +42,10 @@ export function integratedShellArgv(shellPath: string): string[] | undefined {
   const name = basename(shellPath).replace(/\.(exe|cmd|bat)$/i, "");
   const script = SCRIPTS[name];
   if (!script) return undefined;
-  return [shellPath, "--rcfile", script];
+  // No `-i`: bash rejects the combination outright (`--: invalid option`), which
+  // is the loud kind of failure — measured directly. A pane's stdin is a pty, and
+  // bash reads `--rcfile` for that case.
+  return [shellPath, "--rcfile", join(BUNDLED, script)];
 }
 
 /**

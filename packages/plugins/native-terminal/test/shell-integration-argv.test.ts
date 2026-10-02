@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { basename } from "node:path";
 import { nativeTerminalPaneCommand } from "../src/native-terminal";
 import {
   integratedShellArgv,
@@ -15,21 +16,23 @@ import {
  */
 
 describe("withShellIntegration", () => {
-  test("an interactive bash arrives with the rcfile", () => {
+  test("an interactive bash arrives with an ABSOLUTE rcfile path", () => {
+    // Absolute, because a pane spawns in the operator's workspace and a relative
+    // script name would resolve there — silently not loading the integration.
     const argv = withShellIntegration(["/usr/bin/bash"]);
     expect(argv[0]).toBe("/usr/bin/bash");
     expect(argv[1]).toBe("--rcfile");
-    expect(argv[2]).toBe("shell-integration-bash.sh");
+    expect(argv[2]!.startsWith("/")).toBe(true);
+    expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
   });
 
   test("a caller's own arguments survive, so -l still reads the profile", () => {
     const argv = withShellIntegration(["/usr/bin/bash", "-l"]);
-    expect(argv).toEqual([
-      "/usr/bin/bash",
-      "--rcfile",
-      "shell-integration-bash.sh",
-      "-l",
-    ]);
+    expect(argv[0]).toBe("/usr/bin/bash");
+    expect(argv[1]).toBe("--rcfile");
+    expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
+    // The caller's own argument survives.
+    expect(argv[3]).toBe("-l");
   });
 
   test("a pane running a command is not given a shell integration", () => {
@@ -79,6 +82,6 @@ describe("the pinned pane contract", () => {
     const argv = nativeTerminalPaneCommand("bash", "linux");
     expect(argv[0]).toBe("/bin/bash");
     expect(argv).toContain("--rcfile");
-    expect(argv).toContain("shell-integration-bash.sh");
+    expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
   });
 });

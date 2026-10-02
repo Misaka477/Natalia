@@ -79,12 +79,18 @@ export class PwshLocalExecutor extends ShellExecutor {
    * background process on its primary platform never asks for it. The refusal
    * names the combination that cannot work instead of failing there.
    */
-  override detachedPosixScript(): string {
+  override detachedPosixScript(input: {
+    command: string;
+    outputPath: string;
+  }): string {
+    // The command is named in the refusal so the failing call site is
+    // identifiable in a log; the script is refused for every input alike.
     throw new Error(
-      "the PowerShell executor cannot build a POSIX detached launcher script: " +
-        "PowerShell has no `setsid` and no `$!`, and Windows detaches natively " +
-        "(startDetachedProcess ignores posixScript there). Run pwsh on Windows " +
-        "for background processes, or point this call at the bash executor.",
+      `the PowerShell executor cannot build a POSIX detached launcher script ` +
+        `for \`${input.command}\`: PowerShell has no \`setsid\` and no \`$!\`, ` +
+        `and Windows detaches natively (startDetachedProcess ignores ` +
+        `posixScript there). Run pwsh on Windows for background processes, or ` +
+        `point this call at the bash executor.`,
     );
   }
 }

@@ -11,6 +11,7 @@ import {
   platformShell,
   resolveShellName,
   selectExecutor,
+  ENCODING_PREAMBLE,
   type ShellExecRequest,
   type ShellExecSpec,
 } from "@anthelia/shell";
@@ -232,4 +233,90 @@ test("the default is bash on every platform, so enabling the mirror changes noth
   expect(selectExecutor({ NATALIA_SHELL: "auto" }, "linux")).toBeInstanceOf(
     BashLocalExecutor,
   );
+});
+
+/**
+ * The matrix.
+ *
+ * The property under test is that every executor inherits every policy, so the
+ * same assertions run against both. That is only honest where the assertion does
+ * not need the shell to EXECUTE anything: the pure construction is cross-checked
+ * on both, and the execution tests stay bash-only with a note rather than being
+ * silently skipped for pwsh — a matrix that quietly omits a shell on the rows it
+ * cannot run is a matrix that lies about its coverage.
+ */
+const MATRIX: Array<[string, () => ShellExecutor]> = [
+  ["bash", () => new BashLocalExecutor()],
+  ["pwsh", () => new PwshLocalExecutor()],
+];
+
+for (const [name, make] of MATRIX) {
+  test(`${name}: resolves a command into a spawnable argv with a capped timeout`, () => {
+    const spec = make().resolve({
+      command: "some command",
+      workdir: "/work",
+      timeoutMs: 90 * 60 * 1000,
+    });
+    // Every executable must be an absolute path or a PATH name, never empty: an
+    // empty one spawns nothing and reads as a hang.
+    expect(spec.command.length).toBeGreaterThan(0);
+    expect(spec.args.length).toBeGreaterThan(0);
+    expect(spec.cwd).toBe("/work");
+    // The cap is the seam's, and it is shared by construction.
+    expect(spec.timeoutMs).toBe(600_000);
+    // The command text survives into the argv somewhere — no executor may drop
+    // it, or the shell would run an empty line.
+    expect([spec.command, ...spec.args].join(" ")).toContain("some command");
+  });
+
+  test(`${name}: the caller's environment is the base an executor's defaults sit on`, () => {
+    const spec = make().resolve({
+      command: "x",
+      env: { NATALIA_PROBE: "caller-value" },
+    });
+    expect(spec.env?.NATALIA_PROBE).toBe("caller-value");
+  });
+}
+
+test("pwsh's argv is exactly the four flags and one command element", () => {
+  // Pinned specifically, and NOT executed. These are the option spellings and
+  // the single-argv property that make quoting unnecessary, so a change to any
+  // of them is a change to the reason this shell needs no shellQuote — and a
+  // real pwsh host is what confirms pwsh accepts them.
+  const spec = new PwshLocalExecutor().resolve({ command: "Get-Date" });
+  expect(spec.args).toEqual([
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `${ENCODING_PREAMBLE}Get-Date`,
+  ]);
+  // The encoding prefix is part of the COMMAND, so it must precede it.
+  expect(spec.args[4]!.startsWith(ENCODING_PREAMBLE)).toBe(true);
+});
+
+test("pwsh refuses the POSIX detached launcher, and says which combination cannot work", () => {
+  // Not a stub that returns something plausible: pwsh has no `setsid` and no
+  // `$!`, so any spelling would be a second mechanism nothing has executed.
+  expect(() =>
+    new PwshLocalExecutor().detachedPosixScript({
+      command: "x",
+      outputPath: "/tmp/x.log",
+    }),
+  ).toThrow(/setsid/u);
+});
+
+test("EXECUTION is verified for bash and sh, not for pwsh", () => {
+  // The honest statement of what the matrix does not cover, kept as a test so it
+  // cannot be forgotten: the run/start paths above drive bash (and a hand-written
+  // FixedExecutor that spawns sh). pwsh's execution — its exit codes, its output
+  // encoding, whether -NonInteractive behaves as documented — is asserted nowhere
+  // in this file, because no PowerShell exists on the hosts that built it.
+  //
+  // When one runs it, these are the assertions to add:
+  //   - a nonzero exit resolves with that exit code, not a rejection;
+  //   - non-ASCII output arrives as UTF-8, which is what ENCODING_PREAMBLE buys;
+  //   - a pager never starts (ENV_OVERRIDES).
+  const pwshCanExecuteHere = Bun.which("pwsh") !== null;
+  expect(pwshCanExecuteHere).toBe(false);
 });

@@ -1,0 +1,154 @@
+import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  BashLocalExecutor,
+  ShellExecutor,
+  clampTimeout,
+  type ShellExecRequest,
+  type ShellExecSpec,
+} from "@anthelia/shell";
+
+/**
+ * The seam's own tests: the split between shell-specific and shared.
+ *
+ * These assert the properties that make the seam a seam, because a package whose
+ * only test is "bash still works" has not proven that a SECOND shell can be
+ * added. The decisive one is the last: an executor that has never heard of bash
+ * inherits every policy.
+ */
+
+test("timeouts are clamped, not trusted", () => {
+  // The caps are the ones the shell tool already carried; a caller asking for a
+  // negative, zero or absurd budget gets a defined one rather than a
+  // never-firing timer.
+  expect(clampTimeout(undefined)).toBe(120_000);
+  expect(clampTimeout(0)).toBe(120_000);
+  expect(clampTimeout(-5)).toBe(120_000);
+  expect(clampTimeout(1_000)).toBe(1_000);
+  expect(clampTimeout(90 * 60 * 1000)).toBe(600_000);
+});
+
+test("the bash executor resolves to the isolated argv, cwd and a capped timeout", () => {
+  const bash = new BashLocalExecutor();
+  const spec = bash.resolve({
+    command: "echo hi",
+    workdir: "/tmp",
+    timeoutMs: 90 * 60 * 1000,
+  });
+  // The exact argv `isolatedShellCommand` produced before the seam existed.
+  // Behaviour-preserving is the whole point of this step, so the shape is
+  // asserted rather than summarised.
+  expect(spec.args).toEqual(["--noprofile", "--norc", "-c", "echo hi"]);
+  expect(spec.cwd).toBe("/tmp");
+  expect(spec.timeoutMs).toBe(600_000);
+});
+
+test("a run reports exit code, streams and outcome without rejecting on failure", async () => {
+  const bash = new BashLocalExecutor();
+  const run = await bash.run(
+    bash.resolve({ command: "echo out; echo err 1>&2; exit 3" }),
+  );
+  // A NONZERO exit resolves. Rejecting on nonzero would collapse "the command
+  // failed" into "the command could not be run", which the shell tool has always
+  // distinguished.
+  expect(run.outcome).toBe("exited");
+  expect(run.exitCode).toBe(3);
+  expect(run.stdout).toContain("out");
+  expect(run.stderr).toContain("err");
+});
+
+test("a timeout resolves as a timeout and the process is actually gone", async () => {
+  const bash = new BashLocalExecutor();
+  // The command reports its own pid, so the leak check targets exactly the
+  // process the timeout was supposed to kill. (An earlier version called `start`
+  // AND `run` — two spawns — and checked the wrong one's pid, which is a test
+  // bug that reads as a leak.)
+  const spec = bash.resolve({
+    command: "sh -c 'echo $$; sleep 30'",
+    timeoutMs: 400,
+  });
+  const started = Date.now();
+  const run = await bash.run(spec);
+  const childPid = Number(run.stdout.trim().split("\n")[0]);
+
+  expect(run.outcome).toBe("timeout");
+  expect(run.exitCode).toBe(null);
+  expect(childPid).toBeGreaterThan(0);
+  expect(Date.now() - started).toBeLessThan(5_000);
+
+  // The tree-kill sends SIGTERM and escalates to SIGKILL after a two-second
+  // grace, so this waits past that window before asserting the tree is gone.
+  //
+  // `kill -0`, not `ps`: in a sandbox a process can be alive while `ps` will not
+  // list it, which reads as a survivor that is not one. `kill -0` asks the kernel
+  // about the one pid, which is the only thing being asserted.
+  await Bun.sleep(2_600);
+  const alive =
+    Bun.spawnSync(
+      ["sh", "-c", `kill -0 ${childPid} 2>/dev/null && echo yes || echo no`],
+      { stdout: "pipe" },
+    )
+      .stdout.toString()
+      .trim() === "yes";
+  expect(alive, `pid ${childPid} outlived its timeout`).toBe(false);
+});
+
+test("an abort signal resolves as aborted", async () => {
+  const bash = new BashLocalExecutor();
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 200);
+  const run = await bash.run(bash.resolve({ command: "sleep 30" }), {
+    command: "sleep 30",
+    signal: controller.signal,
+  });
+  expect(run.outcome).toBe("aborted");
+});
+
+test("a background process streams its output and reports its exit", async () => {
+  const bash = new BashLocalExecutor();
+  const work = await mkdtemp(join(tmpdir(), "shell-bg-"));
+  try {
+    const handle = await bash.start(
+      bash.resolve({ command: "echo streamed; exit 4", workdir: work }),
+    );
+    expect(handle.pid).toBeGreaterThan(0);
+    const chunks: string[] = [];
+    const exit = new Promise<{ exitCode: number | null }>((resolveExit) => {
+      handle.onExit((event) => resolveExit(event));
+    });
+    handle.onOutput((chunk) => chunks.push(chunk));
+    const { exitCode } = await exit;
+    expect(exitCode).toBe(4);
+    expect(chunks.join("")).toContain("streamed");
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("a second shell inherits every policy without touching the seam", async () => {
+  // THE reason this package exists. An executor that has never heard of bash —
+  // its `resolve` returns a fixed argv — still gets the timeout, the abort, the
+  // output capture and the outcome classification, because they live above the
+  // seam. This is the shape a pwsh executor will have.
+  class FixedExecutor extends ShellExecutor {
+    resolve(request: ShellExecRequest): ShellExecSpec {
+      return {
+        command: "sh",
+        args: ["-c", request.command],
+        cwd: request.workdir ?? process.cwd(),
+        timeoutMs: clampTimeout(request.timeoutMs),
+      };
+    }
+  }
+  const executor = new FixedExecutor();
+  expect(executor.resolve({ command: "x" }).args).toEqual(["-c", "x"]);
+  const run = await executor.run(
+    executor.resolve({ command: "echo pwsh-shaped; exit 2" }),
+  );
+  expect(run.outcome).toBe("exited");
+  expect(run.exitCode).toBe(2);
+  expect(run.stdout).toContain("pwsh-shaped");
+});

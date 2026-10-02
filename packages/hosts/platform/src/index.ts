@@ -342,6 +342,57 @@ export async function startDetachedProcess(input: {
  * Windows process-tree termination command. POSIX callers keep using a negative
  * PID signal, so `undefined` is returned there.
  */
+/**
+ * Terminate a process and its whole tree.
+ *
+ * Lives here rather than in a consumer package because it depends only on this
+ * package (`isWindows`, {@link processTreeKillCommand}), and the command
+ * substrate's seam needs it: a shell executor that had to depend on a tool
+ * package above it would be a reverse dependency.
+ *
+ * POSIX sends SIGTERM and escalates to SIGKILL after a grace period, so a child
+ * gets the chance to clean up; Windows has no process group, so the tree is
+ * terminated by the OS utility. A SIGKILL-only caller would leak a process that
+ * outlived its timeout.
+ */
+export function terminateChildProcessTree(pid: number | undefined) {
+  if (!pid) return;
+  const treeKill = processTreeKillCommand(pid);
+  if (treeKill) {
+    // Windows has no process group, so the tree is terminated by the OS
+    // utility. A failure still falls through to the single-process kill below.
+    try {
+      Bun.spawnSync([treeKill.executable, ...treeKill.args], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      return;
+    } catch {
+      // Fall through to the direct kill.
+    }
+  } else {
+    try {
+      process.kill(-pid, "SIGTERM");
+      const escalation = setTimeout(() => {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
+      }, 2_000);
+      escalation.unref();
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") return;
+    }
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
 export function processTreeKillCommand(
   pid: number,
   os?: NodeJS.Platform,

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://jsonschema.store.tsconfig.json",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true
+  },
+  "include": ["src", "test"],
+  "references": [
+    { "path": "../../hosts/confinement" },
+    { "path": "../../hosts/platform" }
+  ]
+}

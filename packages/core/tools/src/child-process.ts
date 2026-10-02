@@ -40,43 +40,9 @@ export function safeToolEnv(allowlist?: string[]) {
   );
 }
 
-export function terminateChildProcessTree(pid: number | undefined) {
-  if (!pid) return;
-  const treeKill = processTreeKillCommand(pid);
-  if (treeKill) {
-    // Windows has no process group, so the tree is terminated by the OS
-    // utility. A failure still falls through to the single-process kill below.
-    try {
-      Bun.spawnSync([treeKill.executable, ...treeKill.args], {
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-      return;
-    } catch {
-      // Fall through to the direct kill.
-    }
-  } else {
-    try {
-      process.kill(-pid, "SIGTERM");
-      const escalation = setTimeout(() => {
-        try {
-          process.kill(-pid, "SIGKILL");
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-        }
-      }, 2_000);
-      escalation.unref();
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") return;
-    }
-  }
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-  }
-}
+// Moved to @anthelia/platform: it depends only on that package, and the command
+// seam sits above this one. Re-exported so existing imports keep working.
+export { terminateChildProcessTree } from "@anthelia/platform";
 
 export function sendProcessSignal(pid: number, signal: NodeJS.Signals) {
   try {

@@ -1,9 +1,5 @@
-import { spawn } from "node:child_process";
-import { stat } from "node:fs/promises";
-import { profileShellCommand } from "@anthelia/platform";
-import { wrapConfinedCommand } from "@anthelia/confinement";
+import { BashLocalExecutor, clampTimeout } from "@anthelia/shell";
 import type { ToolExecutionContext } from "./types";
-import { safeToolEnv, terminateChildProcessTree } from "./child-process";
 
 /** The confinement wrapper's refusal prefix (its own stderr dialect). */
 const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
@@ -15,99 +11,55 @@ const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
  * execution primitive, not shell-plugin-specific: `@natalia/plugin-tool-web` runs the
  * headless browser through it. A tool plugin may use it without statically
  * depending on another tool plugin's package.
+ *
+ * The shell is a RUNTIME choice through the seam: `BashLocalExecutor` supplies
+ * the argv, and everything after that — confinement, the timeout, the abort, the
+ * output assembly, the wrapper-refusal classification — is shared by every shell
+ * and lives above the seam. Adding PowerShell is a new executor, not an edit
+ * here.
  */
+const shell = new BashLocalExecutor();
+
 export async function runShell(
   command: string,
   context: ToolExecutionContext,
   timeoutSec: number,
 ) {
-  await stat(context.workspaceRoot);
-  const shell = profileShellCommand(command);
-  // The confinement policy rides this call (sandbox study §3 item 4). No
-  // policy — or explicit danger-full-access — runs the raw command; a
-  // confined mode wraps the spawn and refuses when no backend exists,
-  // instead of silently degrading (fail-closed).
-  let executable = shell.executable;
-  let args = shell.args;
-  if (context.confinement && context.confinement !== "danger-full-access") {
-    const wrapped = wrapConfinedCommand({
-      mode: context.confinement,
-      workspaceRoot: context.workspaceRoot,
-      command: shell.executable,
-      args: shell.args,
-    });
-    if (!wrapped)
-      throw new Error(
-        "sandbox unavailable: the confinement backend is missing; refusing to run the command unconstrained (fail-closed)",
-      );
-    executable = wrapped.command;
-    args = wrapped.args;
-  }
-  return await new Promise<string>((resolvePromise, reject) => {
-    const child = spawn(executable, args, {
-      cwd: context.workspaceRoot,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: safeToolEnv(context.settings?.envAllowlist),
-    });
-    let settled = false;
-    const finish = (result: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      context.signal?.removeEventListener("abort", abort);
-      result();
-    };
-    const abort = () => {
-      terminateChildProcessTree(child.pid);
-      finish(() =>
-        reject(context.signal?.reason ?? new Error("command cancelled")),
-      );
-    };
-    const timer = setTimeout(() => {
-      terminateChildProcessTree(child.pid);
-      finish(() => reject(new Error(`command timed out after ${timeoutSec}s`)));
-    }, timeoutSec * 1000);
-    context.signal?.addEventListener("abort", abort, { once: true });
-    let stdout = "";
-    let stderr = "";
-    const childEvents = child as unknown as NodeJS.EventEmitter & {
-      stdout?: {
-        on(event: "data", listener: (chunk: Uint8Array) => void): unknown;
-      };
-      stderr?: {
-        on(event: "data", listener: (chunk: Uint8Array) => void): unknown;
-      };
-    };
-    childEvents.stdout?.on("data", (chunk) => (stdout += String(chunk)));
-    childEvents.stderr?.on("data", (chunk) => (stderr += String(chunk)));
-    childEvents.on("error", (error: Error) => {
-      finish(() => reject(error));
-    });
-    childEvents.on("close", (code: number | null) => {
-      // The wrapper prints `confinement-exec: ...` when IT refuses (missing
-      // landlock, an unappliable rule): that is a sandbox failure, not the
-      // command's own exit, and must read as one (dsh's runner-failure
-      // signature classification).
-      if (code !== 0 && stderr.startsWith(WRAPPER_FAILURE_SIGNATURE)) {
-        finish(() =>
-          reject(
-            new Error(
-              `sandbox refused the command before exec (fail-closed): ${stderr.trim()}`,
-            ),
-          ),
-        );
-        return;
-      }
-      const output = [
-        `exit=${code}`,
-        stdout && `stdout:\n${stdout}`,
-        stderr && `stderr:\n${stderr}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-      if (code === 0) finish(() => resolvePromise(output));
-      else finish(() => reject(new Error(output)));
-    });
+  const spec = shell.resolve({
+    command,
+    workdir: context.workspaceRoot,
+    timeoutMs: timeoutSec * 1000,
+    confinement: context.confinement,
+    workspaceRoot: context.workspaceRoot,
+    signal: context.signal,
   });
+  const run = await shell.run(spec, {
+    command,
+    confinement: context.confinement,
+    workspaceRoot: context.workspaceRoot,
+    signal: context.signal,
+  });
+
+  if (run.outcome === "spawn-failed")
+    throw new Error(
+      run.confinementRefusal ?? "the command could not be started",
+    );
+  if (run.outcome === "aborted")
+    throw context.signal?.reason ?? new Error("command cancelled");
+  if (run.outcome === "timeout")
+    throw new Error(`command timed out after ${timeoutSec}s`);
+
+  const stdout = run.stdout;
+  const stderr = run.stderr;
+  const output = [
+    `exit=${run.exitCode}`,
+    stdout && `stdout:\n${stdout}`,
+    stderr && `stderr:\n${stderr}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (run.exitCode === 0) return output;
+  throw new Error(output);
 }
+
+export { clampTimeout };

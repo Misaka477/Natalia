@@ -1,0 +1,21 @@
+/**
+ * The seam's public entry.
+ *
+ * This file only re-exports, so a concrete executor can depend on the abstract
+ * class (./shell) without importing this barrel — importing it would be a
+ * cycle.
+ */
+export { ShellExecutor } from "./shell";
+export { BashLocalExecutor } from "./bash-local";
+export {
+  DEFAULT_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
+  WRAPPER_FAILURE_SIGNATURE,
+  clampTimeout,
+} from "./types";
+export type {
+  ShellExecRequest,
+  ShellExecSpec,
+  ShellProcess,
+  ShellRunResult,
+} from "./types";

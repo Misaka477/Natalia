@@ -252,6 +252,66 @@ function interactiveSearchTool(): RuntimeTool {
   };
 }
 
+/**
+ * The command-level read, as a tool.
+ *
+ * It exists alongside `interactive_terminal_read` rather than replacing it: that
+ * one answers WHAT IS ON SCREEN NOW, this one answers WHAT A COMMAND PRODUCED. The
+ * description says so, because a model handed both needs to know which to reach
+ * for and the difference is not obvious from either name.
+ *
+ * The output it returns is a slice of the same screen the read tool pages, not a
+ * second capture — so the two cannot disagree about what a pane showed.
+ */
+function terminalLastCommandTool(): RuntimeTool {
+  return {
+    name: "interactive_terminal_last_command",
+    description:
+      "The last command a native Terminal pane ran, with its exit code and its output. Use this when the question is WHAT A COMMAND PRODUCED. Use interactive_terminal_read when the question is WHAT IS ON SCREEN NOW — this tool answers per command, that one answers per moment, and the command's output is a slice of the same screen. A pane whose shell emits no command markers reports an unknown command rather than guessing one.",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    async execute(input, context) {
+      const args = requireObject(input);
+      const id = requireString(args.id, "id");
+      const terminal = requireNativeTerminal(context);
+      const read = terminal.lastCommand;
+      // A backend that cannot read a command lifecycle — the mux facade drives a
+      // pane in another process — leaves the member off. Absence is the honest
+      // answer, and a named alternative is more use than a fabricated record.
+      if (!read)
+        throw new Error(
+          "this terminal backend cannot report commands; use interactive_terminal_read",
+        );
+      const command = read.call(terminal, id, {
+        ...(context.parentSessionID
+          ? { sessionID: context.parentSessionID }
+          : {}),
+      });
+      // Same shape every other terminal tool returns: text a model reads, not a
+      // structure it has to introspect.
+      return JSON.stringify(
+        {
+          id,
+          commandLine: command.commandLine,
+          exitCode: command.exitCode,
+          atPrompt: command.atPrompt,
+          ...(command.output === undefined ? {} : { output: command.output }),
+          revision: command.revision,
+        },
+        null,
+        2,
+      );
+    },
+  };
+}
+
 function terminalObserveTool(): RuntimeTool {
   return {
     name: "terminal_observe",
@@ -738,6 +798,10 @@ export function terminalTools(): RuntimeTool[] {
     interactiveStartTool(),
     terminalObserveTool(),
     interactiveReadTool(),
+    // Sits next to the read tool on purpose: the pair is what makes the two
+    // surfaces discoverable, rather than one of them only being reachable by a
+    // model that already knew to ask.
+    terminalLastCommandTool(),
     interactiveSearchTool(),
     interactiveWriteTool(),
     interactiveSendLineTool(),

@@ -207,6 +207,24 @@ export type TerminalToolService = {
     rows: number;
     cols: number;
   }>;
+  /**
+   * The command-level read.
+   *
+   * Optional, because not every backend can answer it: the pty-backed controller
+   * reads the shell-integration markers out of its own stream, while the mux
+   * facade drives a pane in another process whose command lifecycle it never
+   * sees. A caller must treat absence as "this pane cannot tell you".
+   */
+  lastCommand?(
+    id: string,
+    options?: { sessionID?: string },
+  ): {
+    commandLine: string | undefined;
+    exitCode: number | undefined;
+    atPrompt: boolean;
+    output: string | undefined;
+    revision: number;
+  };
   snapshot(id: string): Promise<{
     text: string;
     cursorX: number;

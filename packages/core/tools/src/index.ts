@@ -188,6 +188,10 @@ export function createToolRegistry(tools: RuntimeTool[]): ToolRegistry {
 const interactiveTerminalToolAliases = {
   interactive_start: "interactive_terminal_start",
   interactive_read: "interactive_terminal_read",
+  // The command-level read, alongside the per-moment one. A model that learned
+  // "interactive_read" reaches for it by the same shape of name; without this it
+  // would only find the tool under its full spelling.
+  interactive_last_command: "interactive_terminal_last_command",
   interactive_search: "interactive_terminal_search",
   interactive_write: "interactive_terminal_write",
   interactive_send_line: "interactive_terminal_send_line",

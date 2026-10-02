@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
@@ -10,6 +10,8 @@ import {
   terminalToolFamily,
   terminalTools,
 } from "../src";
+import { interactiveTerminalToolAliases } from "@anthelia/tools";
+import type { RuntimeTool } from "@anthelia/tools";
 import { terminalController } from "@anthelia/runtime-services";
 import {
   createPtyTerminalController,
@@ -901,3 +903,127 @@ test("search pages the rendered scrollback, escapes and all gone", async () => {
     .get("interactive_terminal_stop")!
     .execute({ id: "tty_search" }, context);
 });
+
+// --- The command-level read, as a model-facing tool -------------------------
+//
+// The route a model actually takes: tool -> service -> pane. A pty controller
+// built over a stub pty stands in for the shell, and emits the markers the way a
+// marked-up shell does.
+
+const ESC = "\u001b";
+const BEL = "\u0007";
+const cmdPromptStart = `${ESC}]133;A${BEL}`;
+const cmdExecuted = `${ESC}]133;C${BEL}`;
+const cmdFinished = (code?: number) =>
+  `${ESC}]133;D${code === undefined ? "" : `;${code}`}${BEL}`;
+const cmdLineMarker = (command: string) =>
+  `${ESC}]633;E;${command.replace(/\\/g, "\\\\").replace(/;/g, "\\x3b")}${BEL}`;
+
+function stubPtyForCommands(): {
+  factory: PtyFactory;
+  emit: (d: string) => void;
+} {
+  const listeners = new Set<(data: string) => void>();
+  const factory: PtyFactory = () =>
+    ({
+      pid: 7,
+      write(data: string) {
+        for (const l of listeners) l(data.replace(/\n/g, "\r\n"));
+      },
+      resize() {},
+      kill() {},
+      onData(listener: (data: string) => void) {
+        listeners.add(listener);
+        return {
+          dispose() {
+            listeners.delete(listener);
+          },
+        };
+      },
+      onExit() {
+        return { dispose() {} };
+      },
+    }) as unknown as PtyProcess;
+  return {
+    factory,
+    emit: (data) => {
+      for (const l of listeners) l(data);
+    },
+  };
+}
+
+/** The pane and the tools, wired the way the runtime wires them. */
+async function commandToolSetup() {
+  const root = await mkdtemp(join(tmpdir(), "natalia-command-tool-"));
+  const { factory, emit } = stubPtyForCommands();
+  const terminal = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless" as const,
+    spawn: factory,
+  });
+  const tools = new Map<string, RuntimeTool>();
+  for (const tool of terminalTools()) tools.set(tool.name, tool);
+  await terminal.start({ command: "bash", cwd: root, id: "tty_cmd" });
+  return {
+    root,
+    terminal: <never>terminal,
+    emit,
+    call: (id: string) =>
+      tools.get(id)!.execute({ id: "tty_cmd" }, <never>{ terminal }),
+    dispose: async () => {
+      await terminal.close?.();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
+
+test("the command-level tool reports the command, its exit code and its output", async () => {
+  const pane = await commandToolSetup();
+  emit_cycle(pane.emit, "echo hi", "hi\r\n", 0);
+  const read = JSON.parse(await pane.call("interactive_terminal_last_command"));
+  expect(read.commandLine).toBe("echo hi");
+  expect(read.exitCode).toBe(0);
+  expect(read.output).toContain("hi");
+  expect(read.atPrompt).toBe(true);
+  await pane.dispose();
+});
+
+test("the two read surfaces are both reachable, and the command one names the other", async () => {
+  const pane = await commandToolSetup();
+  // Same pane, two questions. The command read answers what a command produced;
+  // the screen read answers what is on screen now.
+  emit_cycle(pane.emit, "echo alpha", "alpha\r\n", 0);
+  const byCommand = JSON.parse(
+    await pane.call("interactive_terminal_last_command"),
+  );
+  const byScreen = JSON.parse(await pane.call("interactive_terminal_read"));
+  expect(byCommand.output).toContain("alpha");
+  expect(byScreen.text).toContain("alpha");
+  // Reachable under the short alias too: a model that learned "interactive_read"
+  // reaches for the sibling by the same shape of name.
+  const aliases = interactiveTerminalToolAliases;
+  expect(aliases.interactive_last_command).toBe(
+    "interactive_terminal_last_command",
+  );
+  await pane.dispose();
+});
+
+/** A full command cycle, the way a marked-up shell emits one. */
+function emit_cycle(
+  emit: (data: string) => void,
+  command: string,
+  output: string,
+  exitCode: number | undefined,
+) {
+  emit(
+    cmdPromptStart +
+      cmdLineMarker(command) +
+      cmdExecuted +
+      output +
+      cmdFinished(exitCode),
+  );
+}

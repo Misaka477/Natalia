@@ -56,7 +56,10 @@ export type ClosePolicy = {
 export function closeActionFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): ClosePolicy {
-  const raw = (env.NATALIA_MINIMISE_ON_CLOSE ?? "").trim().toLowerCase();
+  // Trimmed but NOT lower-cased: the C++ side compares the raw bytes
+  // (value == "1" || ...), and a TS mirror that accepted "TRUE" would promise a
+  // behaviour the product does not have. A test comparing the two keeps it so.
+  const raw = (env.NATALIA_MINIMISE_ON_CLOSE ?? "").trim();
   if (raw === "1" || raw === "true" || raw === "yes" || raw === "on")
     return {
       action: "minimise",

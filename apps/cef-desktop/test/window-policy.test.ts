@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   closeActionFromEnv,
   processSurvivesWindowClose,
@@ -25,7 +26,9 @@ test("an unset variable means quit — the default users already know", () => {
 });
 
 test("an explicit opt-in means minimise, and says so", () => {
-  for (const value of ["1", "true", "TRUE", "yes", "On"]) {
+  // The C++ side compares raw bytes, so uppercase spellings are NOT accepted;
+  // the cross-check test below is what keeps these two lists in step.
+  for (const value of ["1", "true", "yes", "on"]) {
     const policy = closeActionFromEnv({
       NATALIA_MINIMISE_ON_CLOSE: value,
     });
@@ -61,4 +64,30 @@ test("a hidden window's status answers 'am I still running?'", () => {
   expect(hidden).toContain("relaunching brings it back");
   // While the default policy never claims the window is hidden.
   expect(statusLineFor(closeActionFromEnv({}), "open")).not.toContain("hidden");
+});
+
+test("the C++ policy and the TS mirror agree on every input", () => {
+  // The two implementations are real, and only one of them is the product: the
+  // C++ `MinimiseOnClose()` is what CanClose calls, and this TS module is what the
+  // tests can reach. Nothing makes them drift loudly — a change on one side leaves
+  // the other green — so the equality is asserted here instead of trusted.
+  const cxx = readFileSync(
+    new URL("../src/simple_app.cc", import.meta.url),
+    "utf8",
+  );
+  // The C++ side's accepted values, read out of its own comparison.
+  const line = cxx.split("\n").find((entry) => entry.includes('value == "1"'))!;
+  const accepted = [...line.matchAll(/value == "([^"]+)"/gu)].map((m) => m[1]);
+  expect(accepted).toEqual(["1", "true", "yes", "on"]);
+
+  // Every value the C++ side accepts must minimise, and everything else must quit.
+  for (const value of accepted)
+    expect(
+      closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: value }).action,
+    ).toBe("minimise");
+  for (const value of ["", "   ", "no", "off", "2", "MINIMISE", "TRUE"])
+    expect(
+      closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: value }).action,
+      value,
+    ).toBe("quit");
 });

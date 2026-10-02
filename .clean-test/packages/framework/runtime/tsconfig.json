@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../../packages/framework/diff-wasm"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../hosts/config"
+    },
+    {
+      "path": "../../framework/object-store"
+    },
+    {
+      "path": "../../hosts/platform"
+    },
+    {
+      "path": "../agent"
+    },
+    {
+      "path": "../sandbox"
+    },
+    {
+      "path": "../session"
+    }
+  ]
+}

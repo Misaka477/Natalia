@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../hosts/config"
+    },
+    {
+      "path": "../../core/plugin"
+    },
+    {
+      "path": "../../core/runtime-services"
+    },
+    {
+      "path": "../../core/tools"
+    }
+  ]
+}

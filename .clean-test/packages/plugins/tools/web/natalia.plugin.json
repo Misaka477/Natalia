@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-web",
+  "version": "1.0.0",
+  "name": "Web Tools",
+  "description": "Fetching and searching the web.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

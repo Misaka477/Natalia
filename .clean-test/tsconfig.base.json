@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@anthelia/agent": ["packages/framework/agent/src/index.ts"],
+      "@anthelia/attachments": ["packages/framework/attachments/src/index.ts"],
+      "@anthelia/checkpoint": ["packages/framework/checkpoint/src/index.ts"],
+      "@anthelia/compaction": ["packages/framework/compaction/src/index.ts"],
+      "@anthelia/provider-model": [
+        "packages/framework/provider-model/src/index.ts"
+      ],
+      "@anthelia/retry": ["packages/framework/retry/src/index.ts"],
+      "@anthelia/sandbox": ["packages/framework/sandbox/src/index.ts"],
+      "@anthelia/session": ["packages/framework/session/src/index.ts"],
+      "@anthelia/session-store": [
+        "packages/framework/session-store/src/index.ts"
+      ],
+      "@anthelia/subagents": ["packages/framework/subagents/src/index.ts"],
+      "@anthelia/substrate": ["packages/framework/substrate/src/index.ts"],
+      "@anthelia/tools": ["packages/core/tools/src/index.ts"],
+      "@anthelia/turn-orchestration": [
+        "packages/framework/turn-orchestration/src/index.ts"
+      ],
+      "@anthelia/workspace": ["packages/framework/workspace/src/index.ts"],
+      "@anthelia/capability": ["packages/core/capability/src/index.ts"],
+      "@natalia/collab": ["packages/domains/collab/src/index.ts"],
+      "@natalia/collaboration": [
+        "packages/framework/collaboration/src/index.ts"
+      ],
+      "@anthelia/composition": ["packages/core/composition/src/index.ts"],
+      "@anthelia/config": ["packages/hosts/config/src/index.ts"],
+      "@anthelia/confinement": ["packages/hosts/confinement/src/index.ts"],
+      "@natalia/context-ledger": [
+        "packages/domains/context-ledger/src/index.ts"
+      ],
+      "@anthelia/contracts": ["packages/core/contracts/src/index.ts"],
+      "@anthelia/diff-wasm": ["packages/framework/diff-wasm/src/index.ts"],
+      "@natalia/engineering-intelligence": [
+        "packages/domains/engineering-intelligence/src/index.ts"
+      ],
+      "@natalia/example-ui-plugin": [
+        "packages/examples/ui-plugin/src/index.ts"
+      ],
+      "@anthelia/diff": ["packages/framework/diff/src/index.ts"],
+      "@anthelia/diff/runtime/diff-parse-client": [
+        "packages/framework/diff/src/runtime/diff-parse-client.ts"
+      ],
+      "@natalia/goal": ["packages/domains/goal/src/index.ts"],
+      "@natalia/goal-runtime": ["packages/domains/goal-runtime/src/index.ts"],
+      "@natalia/governance-ledger": [
+        "packages/domains/governance-ledger/src/index.ts"
+      ],
+      "@natalia/installer": ["packages/tooling/installer/src/index.ts"],
+      "@anthelia/object-store": ["packages/hosts/object-store/src/index.ts"],
+      "@anthelia/operation-log": [
+        "packages/framework/operation-log/src/index.ts"
+      ],
+      "@anthelia/platform": ["packages/hosts/platform/src/index.ts"],
+      "@anthelia/plugin": ["packages/core/plugin/src/index.ts"],
+      "@natalia/plugin-browser": ["packages/plugins/browser/src/index.ts"],
+      "@natalia/plugin-file-editor": [
+        "packages/plugins/ui/file-editor/src/index.ts"
+      ],
+      "@natalia/plugin-local-tools": [
+        "packages/plugins/local-tools/src/index.ts"
+      ],
+      "@natalia/plugin-mcp": ["packages/plugins/mcp/src/index.ts"],
+      "@natalia/plugin-mcp/ui": ["packages/plugins/mcp/src/ui/plugin.tsx"],
+      "@natalia/plugin-native-terminal": [
+        "packages/plugins/native-terminal/src/index.ts"
+      ],
+      "@natalia/plugin-skills": ["packages/plugins/skills/src/index.ts"],
+      "@natalia/plugin-skills/ui": [
+        "packages/plugins/skills/src/ui/plugin.tsx"
+      ],
+      "@natalia/plugin-team": ["packages/plugins/team/src/index.ts"],
+      "@natalia/plugin-tool-ask": ["packages/plugins/tools/ask/src/index.ts"],
+      "@natalia/plugin-tool-fs-read": [
+        "packages/plugins/tools/fs-read/src/index.ts"
+      ],
+      "@natalia/plugin-tool-fs-write": [
+        "packages/plugins/tools/fs-write/src/index.ts"
+      ],
+      "@natalia/plugin-tool-process": [
+        "packages/plugins/tools/process/src/index.ts"
+      ],
+      "@natalia/plugin-tool-search": [
+        "packages/plugins/tools/search/src/index.ts"
+      ],
+      "@natalia/plugin-tool-shell": [
+        "packages/plugins/tools/shell/src/index.ts"
+      ],
+      "@natalia/plugin-tool-todo": ["packages/plugins/tools/todo/src/index.ts"],
+      "@natalia/plugin-tool-todo/ui": [
+        "packages/plugins/tools/todo/src/ui/plugin.tsx"
+      ],
+      "@natalia/plugin-tool-web": ["packages/plugins/tools/web/src/index.ts"],
+      "@natalia/plugin-web-ui": ["packages/plugins/ui/web/src/index.ts"],
+      "@anthelia/rina": ["packages/framework/rina/src/index.ts"],
+      "@anthelia/runtime": ["packages/framework/runtime/src/index.ts"],
+      "@anthelia/runtime-config": [
+        "packages/framework/runtime-config/src/index.ts"
+      ],
+      "@anthelia/runtime-diagnostics": [
+        "packages/framework/runtime-diagnostics/src/index.ts"
+      ],
+      "@anthelia/runtime-services": [
+        "packages/core/runtime-services/src/index.ts"
+      ],
+      "@anthelia/runtime-status": [
+        "packages/framework/runtime-status/src/index.ts"
+      ],
+      "@natalia/tool-policy": ["packages/framework/tool-policy/src/index.ts"],
+      "@natalia/transport": ["packages/hosts/transport/src/index.ts"],
+      "@natalia/ui-host": ["packages/hosts/ui-host/src/index.ts"],
+      "@natalia/ui-kit": ["packages/plugins/ui/kit/src/index.ts"],
+      "@natalia/view-store": ["packages/hosts/view-store/src/index.ts"],
+      "@natalia/work-ledger": ["packages/domains/work-ledger/src/index.ts"]
+    },
+    "noUncheckedIndexedAccess": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["bun"]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-ui-neu",
+  "version": "1.0.0",
+  "name": "Natalia Neumorphism UI",
+  "description": "Neumorphism second UI as a plug-and-play UI plugin.",
+  "entry": "src/index.ts",
+  "scope": "process",
+  "provides": ["ui"],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["ui"]
+}

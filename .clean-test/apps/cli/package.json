@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/cli",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "natalia-ts": "./src/main.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test ./test --timeout 60000"
+  },
+  "dependencies": {
+    "@anthelia/composition": "workspace:*",
+    "@anthelia/config": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/operation-log": "workspace:*",
+    "@anthelia/platform": "workspace:*",
+    "@anthelia/plugin": "workspace:*",
+    "@anthelia/runtime": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/session-store": "workspace:*",
+    "@natalia/client": "workspace:*",
+    "@natalia/collaboration": "workspace:*",
+    "@natalia/engineering-intelligence": "workspace:*",
+    "@natalia/governance-ledger": "workspace:*",
+    "@natalia/installer": "workspace:*",
+    "@natalia/transport": "workspace:*",
+    "@natalia/ui-host": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthelia/session": "workspace:*",
+    "@anthelia/capability": "workspace:*"
+  }
+}

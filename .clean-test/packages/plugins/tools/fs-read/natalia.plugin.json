@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-fs-read",
+  "version": "1.0.0",
+  "name": "Filesystem Read Tools",
+  "description": "Reading workspace files and media metadata.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

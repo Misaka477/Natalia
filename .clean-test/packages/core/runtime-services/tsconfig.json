@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../framework/agent"
+    },
+    {
+      "path": "../../framework/runtime"
+    },
+    {
+      "path": "../../framework/runtime-diagnostics"
+    },
+    {
+      "path": "../../framework/session"
+    },
+    {
+      "path": "../capability"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../tools"
+    }
+  ]
+}

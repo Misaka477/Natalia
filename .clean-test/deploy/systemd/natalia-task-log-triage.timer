@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Natalia nightly log triage
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+# Catches up a run missed while the host was off. The task's own watermark
+# decides what is still unprocessed, so a catch-up run cannot double report.
+Persistent=true
+Unit=natalia-task-log-triage.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/governance-ledger",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "dependencies": {
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/session": "workspace:*"
+  }
+}

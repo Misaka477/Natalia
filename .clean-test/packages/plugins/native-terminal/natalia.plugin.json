@@ -1,0 +1,26 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-terminal",
+  "version": "1.0.0",
+  "name": "Terminal Tools",
+  "description": "Native terminal panes and interactive programs.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": ["terminal.controller"],
+  "requires": ["terminal.input"],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools", "services"],
+  "ui": {
+    "entry": "src/ui/plugin.tsx",
+    "panels": [
+      {
+        "id": "terminal",
+        "title": "终端",
+        "region": "side"
+      }
+    ]
+  }
+}

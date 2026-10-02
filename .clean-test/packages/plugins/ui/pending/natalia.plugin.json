@@ -1,0 +1,27 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-pending-inbox",
+  "version": "1.0.0",
+  "name": "Pending Inbox",
+  "description": "Approvals and questions in one side panel.",
+  "entry": "index.js",
+  "scope": "process",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": [],
+  "ui": {
+    "entry": "src/ui/plugin.tsx",
+    "panels": [
+      {
+        "id": "pending",
+        "title": "待处理",
+        "region": "side",
+        "order": 5
+      }
+    ]
+  }
+}

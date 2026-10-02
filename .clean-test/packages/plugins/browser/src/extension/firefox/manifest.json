@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "name": "Natalia Browser Bridge",
+  "version": "0.1.0",
+  "description": "Local bridge that lets Natalia control the user's existing Firefox browser.",
+  "permissions": ["tabs", "activeTab", "<all_urls>"],
+  "background": {
+    "scripts": ["background.js"]
+  }
+}

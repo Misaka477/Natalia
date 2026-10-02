@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Natalia nightly log triage through the resident executor
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+# A catch-up run cannot double report: the task's own watermark decides what is
+# still unprocessed.
+Persistent=true
+Unit=natalia-task-log-triage-submit.service
+
+[Install]
+WantedBy=timers.target

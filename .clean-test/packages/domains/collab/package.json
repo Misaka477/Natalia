@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/collab",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/attachments": "workspace:*",
+    "@anthelia/compaction": "workspace:*",
+    "@anthelia/config": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/operation-log": "workspace:*",
+    "@anthelia/provider-model": "workspace:*",
+    "@anthelia/rina": "workspace:*",
+    "@anthelia/runtime": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@anthelia/session": "workspace:*",
+    "@anthelia/session-store": "workspace:*",
+    "@anthelia/substrate": "workspace:*",
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/workspace": "workspace:*",
+    "@natalia/agent-prompts": "workspace:*",
+    "@natalia/collaboration": "workspace:*",
+    "@natalia/context-ledger": "workspace:*",
+    "@natalia/goal": "workspace:*",
+    "@natalia/governance-ledger": "workspace:*",
+    "@natalia/work-ledger": "workspace:*"
+  }
+}

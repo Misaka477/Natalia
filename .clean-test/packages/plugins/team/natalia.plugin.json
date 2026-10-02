@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-team",
+  "version": "1.0.0",
+  "name": "Team",
+  "description": "Parallel fan-out of sandboxed subagents and the lead reviewer's merge.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": ["team.behavior"],
+  "requires": ["subagents.service", "sandbox.service"],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools", "services"]
+}

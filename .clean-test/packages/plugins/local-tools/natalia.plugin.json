@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-local-tools",
+  "version": "1.0.0",
+  "name": "Local Tools",
+  "description": "Out-of-tree tool families discovered in configured paths.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": ["localTools.reload"],
+  "requires": ["localTools.input"],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools", "services"]
+}

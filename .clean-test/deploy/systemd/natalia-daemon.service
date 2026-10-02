@@ -1,0 +1,28 @@
+[Unit]
+Description=Natalia resident task executor
+Documentation=file:///opt/natalia-cli/deploy/examples/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/natalia/unattended.env
+WorkingDirectory=/srv/natalia-workspace
+# The port and the concurrency bound are the only arguments: every task detail
+# lives in its own task document, so nothing task specific and no credential
+# reaches this unit or a command line.
+ExecStart=/opt/natalia-cli/bin/natalia-ts daemon 8787 --max-concurrent-tasks 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/natalia-workspace/.natalia
+# Readiness is the registration file the client reads, not the printed URL: a
+# piped stdout is buffered, so a supervisor waiting for that line would stall.
+RuntimeDirectory=natalia
+StateDirectory=natalia
+
+[Install]
+WantedBy=multi-user.target

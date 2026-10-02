@@ -1,0 +1,21 @@
+[Unit]
+Description=Natalia nightly log triage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/natalia/unattended.env
+WorkingDirectory=/opt/natalia-cli
+# The task document owns the prompt, the flow, the profile, the retry budget and
+# the alert channels, so the unit only names the task. Nothing task specific and
+# no credential ever appears on the command line.
+ExecStart=/bin/sh -c 'exec /opt/natalia-cli/deploy/run-unattended.sh task run .natalia/tasks/nightly-log-triage.yaml --json'
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/natalia-workspace/.natalia
+
+# The container remains the egress boundary for shell and native terminal
+# commands. NATALIA_EGRESS_NETWORK names a pre-provisioned ACL network.

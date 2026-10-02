@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../core/runtime-services"
+    },
+    {
+      "path": "../../domains/context-ledger"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../retry"
+    },
+    {
+      "path": "../runtime"
+    }
+  ]
+}

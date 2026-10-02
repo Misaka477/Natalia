@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Natalia unattended engineering task nightly
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+Unit=natalia-unattended.service
+
+[Install]
+WantedBy=timers.target

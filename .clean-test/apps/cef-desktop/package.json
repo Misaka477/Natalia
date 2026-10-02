@@ -1,0 +1,12 @@
+{
+  "name": "@natalia/cef-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "bash run-cef-desktop.sh",
+    "build": "mkdir -p build && cd build && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake .. -DCMAKE_BUILD_TYPE=Release && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake --build . -j4"
+  },
+  "devDependencies": {}
+}

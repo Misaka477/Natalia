@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src", "test"],
+  "references": [
+    {
+      "path": "../../core/capability"
+    },
+    {
+      "path": "../../core/composition"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../core/plugin"
+    },
+    {
+      "path": "../../core/runtime-services"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../domains/collab"
+    },
+    {
+      "path": "../../domains/context-ledger"
+    },
+    {
+      "path": "../../domains/engineering-intelligence"
+    },
+    {
+      "path": "../../domains/goal"
+    },
+    {
+      "path": "../../domains/goal-runtime"
+    },
+    {
+      "path": "../../domains/governance-ledger"
+    },
+    {
+      "path": "../../domains/work-ledger"
+    },
+    {
+      "path": "../../framework/operation-log"
+    },
+    {
+      "path": "../../framework/rina"
+    },
+    {
+      "path": "../../framework/runtime-diagnostics"
+    },
+    {
+      "path": "../../framework/substrate"
+    },
+    {
+      "path": "../../hosts/config"
+    },
+    {
+      "path": "../../hosts/confinement"
+    },
+    {
+      "path": "../../hosts/platform"
+    },
+    {
+      "path": "../../hosts/ui-model"
+    },
+    {
+      "path": "../../hosts/view-store"
+    },
+    {
+      "path": "../../tooling/installer"
+    },
+    {
+      "path": "../../tooling/testing"
+    },
+    {
+      "path": "../agent"
+    },
+    {
+      "path": "../agent-prompts"
+    },
+    {
+      "path": "../attachments"
+    },
+    {
+      "path": "../checkpoint"
+    },
+    {
+      "path": "../collaboration"
+    },
+    {
+      "path": "../compaction"
+    },
+    {
+      "path": "../diff"
+    },
+    {
+      "path": "../provider-model"
+    },
+    {
+      "path": "../retry"
+    },
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../runtime-config"
+    },
+    {
+      "path": "../runtime-status"
+    },
+    {
+      "path": "../sandbox"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../session-store"
+    },
+    {
+      "path": "../subagents"
+    },
+    {
+      "path": "../tool-policy"
+    },
+    {
+      "path": "../turn-orchestration"
+    },
+    {
+      "path": "../workspace"
+    }
+  ]
+}

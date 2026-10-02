@@ -1,0 +1,6 @@
+[test]
+# `bun test packages/...` treats the argument as a path filter, so
+# "packages/core/tools/test" also matched the reference harness at
+# "devref/deepseek-harness/packages/core/tools/tests/". Keep the reference
+# project out of this repo's test runs.
+pathIgnorePatterns = ["devref/**"]

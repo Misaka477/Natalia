@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    {
+      "path": "apps/cli"
+    },
+    {
+      "path": "packages/core/contracts"
+    },
+    {
+      "path": "packages/examples/ui-plugin"
+    },
+    {
+      "path": "packages/hosts/ui-host"
+    },
+    {
+      "path": "packages/core/runtime-services"
+    },
+    {
+      "path": "packages/domains/context-ledger"
+    },
+    {
+      "path": "packages/domains/goal"
+    },
+    {
+      "path": "packages/domains/governance-ledger"
+    },
+    {
+      "path": "packages/framework/agent"
+    },
+    {
+      "path": "packages/framework/agent-prompts"
+    },
+    {
+      "path": "packages/framework/attachments"
+    },
+    {
+      "path": "packages/framework/checkpoint"
+    },
+    {
+      "path": "packages/framework/collaboration"
+    },
+    {
+      "path": "packages/framework/compaction"
+    },
+    {
+      "path": "packages/core/capability"
+    },
+    {
+      "path": "packages/framework/client"
+    },
+    {
+      "path": "packages/hosts/view-store"
+    },
+    {
+      "path": "packages/hosts/ui-model"
+    },
+    {
+      "path": "packages/framework/runtime"
+    },
+    {
+      "path": "packages/framework/retry"
+    },
+    {
+      "path": "packages/framework/runtime-config"
+    },
+    {
+      "path": "packages/framework/runtime-status"
+    },
+    {
+      "path": "packages/framework/session"
+    },
+    {
+      "path": "packages/framework/session-store"
+    },
+    {
+      "path": "packages/hosts/config"
+    },
+    {
+      "path": "packages/hosts/platform"
+    },
+    {
+      "path": "packages/framework/provider-model"
+    },
+    {
+      "path": "packages/core/tools"
+    },
+    {
+      "path": "packages/framework/sandbox"
+    },
+    {
+      "path": "packages/plugins/skills"
+    },
+    {
+      "path": "packages/hosts/transport"
+    },
+    {
+      "path": "packages/plugins/mcp"
+    },
+    {
+      "path": "packages/tooling/sdk"
+    },
+    {
+      "path": "packages/tooling/testing"
+    },
+    {
+      "path": "packages/framework/subagents"
+    },
+    {
+      "path": "packages/plugins/team"
+    },
+    {
+      "path": "packages/framework/tool-policy"
+    },
+    {
+      "path": "packages/plugins/native-terminal"
+    },
+    {
+      "path": "packages/framework/turn-orchestration"
+    },
+    {
+      "path": "packages/domains/work-ledger"
+    },
+    {
+      "path": "packages/framework/workspace"
+    },
+    {
+      "path": "packages/core/plugin"
+    },
+    {
+      "path": "packages/tooling/installer"
+    },
+    {
+      "path": "packages/plugins/local-tools"
+    }
+  ],
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js"
+  }
+}

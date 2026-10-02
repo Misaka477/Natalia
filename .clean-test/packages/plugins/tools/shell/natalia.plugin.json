@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-shell",
+  "version": "1.0.0",
+  "name": "Shell Tools",
+  "description": "One-shot command execution.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

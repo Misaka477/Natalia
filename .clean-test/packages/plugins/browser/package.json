@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/plugin-browser",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/tools": "workspace:*",
+    "@anthelia/plugin": "workspace:*"
+  },
+  "scripts": {
+    "install-extension": "bun scripts/install.ts",
+    "package-extension": "bun scripts/package.ts"
+  }
+}

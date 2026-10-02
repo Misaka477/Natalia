@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-ask",
+  "version": "1.0.0",
+  "name": "Interactive Question Tools",
+  "description": "Asking the user a structured question.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

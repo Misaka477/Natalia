@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-fs-write",
+  "version": "1.0.0",
+  "name": "Filesystem Write Tools",
+  "description": "Writing and editing workspace files.",
+  "entry": "index.js",
+  "scope": "workspace",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

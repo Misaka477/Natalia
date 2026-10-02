@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@natalia/engineering-intelligence",
+  "version": "0.0.0-m13",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthelia/runtime": "workspace:*",
+    "@anthelia/session": "workspace:*",
+    "@anthelia/session-store": "workspace:*",
+    "@anthelia/substrate": "workspace:*",
+    "@anthelia/workspace": "workspace:*",
+    "@natalia/collab": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@natalia/governance-ledger": "workspace:*",
+    "@anthelia/platform": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
+    "@natalia/work-ledger": "workspace:*"
+  }
+}

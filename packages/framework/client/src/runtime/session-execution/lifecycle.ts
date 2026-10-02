@@ -18,6 +18,7 @@ import { logOf, type OperationLog } from "@anthelia/operation-log";
 type Surface = Pick<
   RuntimeServiceClient,
   | "dispose"
+  | "shutdown"
   | "canReloadConfig"
   | "reloadConfig"
   | "updateConfig"
@@ -72,7 +73,9 @@ export function createLifecycleSurface(
   options: ClientSurfaceOptions,
 ): Surface {
   const log = logOf(ctx.state.serviceDirectory);
-  return {
+  /** The surface under construction, so `shutdown` can delegate to `dispose`. */
+  let disposeRuntime: () => Promise<void> = async () => undefined;
+  const surface: Surface = {
     async configGet() {
       await ctx.ports.getReady();
       const config = ctx.ports.getTsRuntimeConfig();
@@ -206,6 +209,15 @@ export function createLifecycleSurface(
         `dispose total +${Date.now() - flushStart}ms`,
       );
     },
+    // The explicit exit path (`session.shutdown` over RPC). A window that hides
+    // on close leaves the process alive, so something has to be able to end it
+    // that is not a signal or a task manager. It IS dispose rather than a second
+    // teardown: the graceful shutdown already does everything needed (flush,
+    // interrupt, close), and one implementation is why the RPC path and the
+    // host's own lifecycle cannot drift apart.
+    async shutdown() {
+      await disposeRuntime();
+    },
     async canReloadConfig() {
       await ctx.ports.getReady();
       const blocked = ctx.ports.configReloadBlockedReason();
@@ -263,6 +275,11 @@ export function createLifecycleSurface(
       return outcome;
     },
   };
+  // `shutdown` delegates to `dispose` by reference, so the pair cannot drift.
+  disposeRuntime = async () => {
+    await surface.dispose?.();
+  };
+  return surface;
 }
 
 function normalizeProviderRenamePatch(

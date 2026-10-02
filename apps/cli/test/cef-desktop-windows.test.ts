@@ -124,10 +124,11 @@ test("the native build chain skips only wezterm, and says so", () => {
   expect(pkg.scripts["diff:build-wasm"]).toContain("build-ast-packs.ts");
   for (const chain of ["build:windows", "build:distribution:native"]) {
     const script = pkg.scripts[chain]!;
-    // The Windows chain uses the platform-aware native step, not the Linux
-    // one — the merge kept the PR's side, which is correct: a Windows release
-    // must not build the Linux confinement backend.
-    expect(script).toContain("native:windows");
+    // The native step is platform-appropriate: the Windows chain uses
+    // `native:windows` (a Windows release must not build the Linux confinement
+    // backend), the distribution chain uses `native:all`.
+    if (chain === "build:windows") expect(script).toContain("native:windows");
+    else expect(script).toContain("native:all");
     // ts:build in a full chain must run WITHOUT the skip: that is what stages
     // the wezterm executables into the plugin distribution.
     expect(script).not.toContain("SKIP_NATIVE");

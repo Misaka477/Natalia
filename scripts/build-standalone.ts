@@ -90,6 +90,28 @@ async function stageTerminalNatives(
 }
 
 /**
+ * Assemble the web shell the CEF window loads.
+ *
+ * `apps/web/dist` is built by its own step (`npm run build:web`) and lived
+ * outside every release tree, so a release's window pointed at a server that had
+ * nothing to serve: the CEF host started, connected to 127.0.0.1:<port>, and got
+ * a connection the static server could not answer — a blank window in an
+ * otherwise complete install. The runtime serves this directory, so shipping it
+ * is what makes the window show anything.
+ */
+async function stageWebShell(outDir: string): Promise<void> {
+  const built = join(root, "apps", "web", "dist");
+  if (!(await Bun.file(join(built, "index.html")).exists()))
+    throw new Error(
+      "the web shell is not built — run \`npm run build:web\` before packaging " +
+        "(its output is apps/web/dist and no release step produces it)",
+    );
+  const target = join(outDir, "web");
+  await rm(target, { recursive: true, force: true });
+  await cp(built, target, { recursive: true });
+}
+
+/**
  * Assemble the CEF window host into the release tree (Linux and Windows; macOS is
  * deferred — see the note below).
  *
@@ -133,7 +155,12 @@ async function stageDesktopHost(
   }
   if (!(await Bun.file(source).exists()))
     throw new Error(
-      `${platformDir}: the desktop host is not built — run \`npm run desktop:cef:build\` (or scripts/build-cef-windows.ps1) before packaging`,
+      `${platformDir}: the desktop host is not built — run \`npm run desktop:cef:build\` ` +
+        `(or scripts/build-cef-windows.ps1 on Windows) before packaging. ` +
+        `Its output lives in a gitignored build directory, so a clean checkout ` +
+        `must rebuild it; this step deliberately does NOT build it, because a ` +
+        `release whose host was silently compiled here would hide that the host ` +
+        `build itself is a separate, platform-specific step.`,
     );
   await cp(source, join(outDir, `natalia-cef-desktop${suffix}`));
   // The CEF runtime it loads, which the host build already assembled beside
@@ -356,6 +383,7 @@ for (const target of targets) {
     // can run (a Windows release shipping Linux wezterm was the bug).
     await stageTerminalNatives(outDir, platformDir);
     await stageDesktopHost(outDir, platformDir);
+    await stageWebShell(outDir);
     // The shipped composition base (P3 "base profile 随包机制"): copied
     // into the app root BEFORE the hash walk, so SHA256SUMS lists it and
     // install.sh's files loop lands it next to the binary — where the

@@ -51,3 +51,44 @@ test("the CEF runtime travels with the binary", () => {
   ])
     expect(source, `missing ${required}`).toContain(required);
 });
+
+test("the web shell ships too, or the window has nothing to show", () => {
+  // The same gap one layer out: `apps/web/dist` was built by its own step and
+  // never entered a release tree, so the CEF host started, connected, and got a
+  // static server with no files — a blank window inside an otherwise complete
+  // install. Found by building a REAL release and listing what it could serve.
+  const source = script();
+  expect(source).toContain("async function stageWebShell(");
+  expect(source).toContain("await stageWebShell(outDir);");
+  // And it refuses rather than shipping an app whose window is blank.
+  expect(source).toContain("the web shell is not built");
+  expect(source).toContain("build:web");
+});
+
+test("the packaging chain builds its own prerequisites", async () => {
+  // `package:linux` used to assume the CEF host was already built — a
+  // gitignored build directory, so a clean checkout failed at `cd build`. It now
+  // names all four steps a Linux installable needs, in dependency order.
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const chain = pkg.scripts["package:linux"]!;
+  for (const step of [
+    "desktop:cef:build",
+    "build:distribution",
+    "build:web",
+    "release:build",
+    "appimage",
+  ])
+    expect(chain, `missing ${step}`).toContain(step);
+  // In order: the host, then the distribution, then the shell, then the tree,
+  // then the packer.
+  const order = [
+    chain.indexOf("desktop:cef:build"),
+    chain.indexOf("build:distribution"),
+    chain.indexOf("build:web"),
+    chain.indexOf("release:build"),
+    chain.indexOf("appimage"),
+  ];
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+});

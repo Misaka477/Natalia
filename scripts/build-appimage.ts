@@ -67,8 +67,9 @@ async function main(): Promise<number> {
     `[appimage] AppDir ready at ${result.appDir}\n` +
       `[appimage]   desktop entry: ${result.desktopEntry}\n` +
       `[appimage]   launcher:       ${result.appRun}\n` +
-      (result.icon ? `[appimage]   icon:           ${result.icon}\n` : "") +
-      `[appimage]   (no icon shipped — the repo has none to offer)`,
+      (result.icon
+        ? `[appimage]   icon:           ${result.icon}\n`
+        : "[appimage]   (no icon shipped — the repo has none to offer; the entry resolves to the launcher's generic mark)\n"),
   );
 
   // Packing needs appimagetool, which is an optional download. Degrade rather

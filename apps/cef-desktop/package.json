@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "bash run-cef-desktop.sh",
-    "build": "cd build && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake .. -DCMAKE_BUILD_TYPE=Release && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake --build . -j4"
+    "build": "mkdir -p build && cd build && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake .. -DCMAKE_BUILD_TYPE=Release && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake --build . -j4"
   },
   "devDependencies": {}
 }

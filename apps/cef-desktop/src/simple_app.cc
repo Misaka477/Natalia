@@ -13,6 +13,28 @@
 #include "include/wrapper/cef_helpers.h"
 #include "simple_handler.h"
 
+#include <cstdlib>
+
+namespace {
+
+// The close policy, read once per window so a torn-down environment cannot
+// flip it between the ask and the answer.
+//
+// NATALIA_MINIMISE_ON_CLOSE=1 turns the window's close button into "hide and
+// keep running", which is the only mode in which a relaunch has a window to
+// bring back. Unset (the default) means the ordinary application behaviour:
+// closing the window exits the process and the launcher's trap releases the
+// runtime with it. The policy's wording lives in window-policy.ts, mirror with
+// the tests that pin it.
+bool MinimiseOnClose() {
+  const char* raw = std::getenv("NATALIA_MINIMISE_ON_CLOSE");
+  if (raw == nullptr) return false;
+  std::string value(raw);
+  return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+}  // namespace
+
 namespace {
 
 // When using the Views framework this object provides the delegate
@@ -43,6 +65,15 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   }
 
   bool CanClose(CefRefPtr<CefWindow> window) override {
+    if (MinimiseOnClose()) {
+      // Hide, do not dispose: the runtime is the app's memory and the
+      // single-instance lock is what a relaunch talks to, so a hidden window
+      // still has somewhere to come back to. Refusing the close keeps CEF from
+      // tearing the browser down behind us.
+      window->Hide();
+      minimised_ = true;
+      return false;
+    }
     // Allow the window to close if the browser says it's OK.
     CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
     if (browser) {
@@ -50,6 +81,16 @@ class SimpleWindowDelegate : public CefWindowDelegate {
     }
     return true;
   }
+
+  /** Show a hidden window again (a relaunch's "bring it back"). */
+  void ShowWindow(CefRefPtr<CefWindow> window) {
+    if (minimised_ && window) {
+      window->Show();
+      minimised_ = false;
+    }
+  }
+
+  bool IsMinimised() const { return minimised_; }
 
   CefSize GetPreferredSize(CefRefPtr<CefView> view) override {
     return CefSize(800, 600);
@@ -67,6 +108,7 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   CefRefPtr<CefBrowserView> browser_view_;
   const cef_runtime_style_t runtime_style_;
   const cef_show_state_t initial_show_state_;
+  bool minimised_ = false;
 
   IMPLEMENT_REFCOUNTING(SimpleWindowDelegate);
 };

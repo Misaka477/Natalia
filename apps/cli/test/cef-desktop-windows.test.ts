@@ -255,6 +255,16 @@ test("the tray is Windows-only, self-contained Shell_NotifyIcon, and dies with t
 });
 
 test("the Linux tray is a detected system package, never a hard link", () => {
+  // What execution established, so the structural pins below are not mistaken for
+  // the whole story. Two probes, both on this Linux host:
+  //   1. the tray class itself: TrayIcon::Create -> a GTK main-loop iteration ->
+  //      dispose, clean exit, no crash. There is no tray in this environment to
+  //      embed into, so "it registered" is not claimed — only that it runs.
+  //   2. the menu mechanism the tray depends on: a GtkMenuItem wired through
+  //      g_signal_connect_swapped to a std::function fires both callbacks on
+  //      activate, with no display (shows=1, quits=1).
+  // What is NOT verified: that a panel shows the icon, and that a click on it
+  // reaches the process. Both need a real tray, which this host does not have.
   const cmake = readFileSync(
     new URL("../../cef-desktop/CMakeLists.txt", import.meta.url),
     "utf8",

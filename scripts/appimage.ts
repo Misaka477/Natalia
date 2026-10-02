@@ -62,7 +62,7 @@ export type AppImageResult = {
     exec: string;
     icon: string;
     terminal: boolean;
-    categories: "Development;";
+    categories: string;
   };
 };
 

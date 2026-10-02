@@ -171,7 +171,12 @@ test("the generated entry passes desktop-file-validate clean", async () => {
   // one main Category (which makes the app appear twice in the menu). Both cost
   // nothing to avoid and a support question to explain.
   const validator = Bun.which("desktop-file-validate");
-  if (!validator) test.skip("desktop-file-validate is not installed");
+  // Bun's dynamic skip needs the named form; a bare `test.skip(reason)` is not
+  // the two-argument call the type signature wants.
+  if (!validator) {
+    test.skip("desktop-file-validate is not installed", () => {});
+    return;
+  }
   const release = await fakeRelease();
   const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
   const result = await buildAppImage({
@@ -246,9 +251,10 @@ test("AppRun hands off to a running instance instead of starting a copy", async 
 async function withAppRun(
   release: string,
   out: string,
-  body: (
-    run: (env?: Record<string, string>) => Promise<string>,
-  ) => Promise<void>,
+  body: (tools: {
+    run: (env?: Record<string, string>) => string;
+    stateDir: string;
+  }) => Promise<void>,
 ): Promise<void> {
   const result = await buildAppImage({ releaseDir: release, outDir: out });
   const stateDir = await mkdtemp(join(tmpdir(), "natalia-apprun-state-"));

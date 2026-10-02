@@ -1,0 +1,23 @@
+{
+  "$schema": "https://jsonschema.store.tsconfig.json",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["bin", "*.ts", "test"],
+  "references": [
+    {
+      "path": "../packages/tooling/installer"
+    },
+    {
+      "path": "../packages/core/composition"
+    },
+    {
+      "path": "../packages/framework/session"
+    },
+    {
+      "path": "../apps/cli"
+    }
+  ]
+}

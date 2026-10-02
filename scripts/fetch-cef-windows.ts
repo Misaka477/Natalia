@@ -22,6 +22,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { createWriteStream } from "node:fs";
 
 const root = resolve(import.meta.dir, "..");
@@ -133,13 +134,15 @@ async function download(url: string, destination: string) {
   const total = Number(response.headers.get("content-length") ?? 0);
   let received = 0;
   let lastReported = -1;
+  // A node Writable, not a WHATWG writer: `getWriter()` does not exist on
+  // node's WriteStream, and the WHATWG dual-object reader that does have it
+  // is not what this loop drives. The stream's own promise API is.
   const file = createWriteStream(destination);
-  const writer = file.getWriter();
   const reader = response.body.getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    await writer.write(value);
+    if (!file.write(Buffer.from(value))) await once(file, "drain");
     received += value.byteLength;
     if (total > 0) {
       const percent = Math.floor((received / total) * 100);
@@ -151,7 +154,11 @@ async function download(url: string, destination: string) {
       }
     }
   }
-  await writer.close();
+  await new Promise<void>((resolveClose, rejectClose) => {
+    file.end((error?: Error | null) =>
+      error ? rejectClose(error) : resolveClose(),
+    );
+  });
   const size = (await stat(destination)).size;
   if (size === 0) throw new Error(`downloaded nothing: ${url}`);
   console.log(`[fetch-cef] downloaded ${(size / 1e6).toFixed(0)} MiB`);

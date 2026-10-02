@@ -51,6 +51,9 @@ type PluginManifest = {
   id: string;
   version: string;
   entry: string;
+  // Declared, not reached through the index signature: the two `ui.entry`
+  // accesses below were `unknown`-typed, so nothing checked them.
+  ui?: { entry: string };
   [key: string]: unknown;
 };
 type PackageManifest = {

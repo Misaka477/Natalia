@@ -8,7 +8,6 @@ import {
   renderInnoScript,
   renderWixFragment,
   scriptDeclaresEntryPoints,
-  planWindowsInstall,
 } from "../windows-installer";
 import { planWindowsInstall } from "../windows-install-plan";
 

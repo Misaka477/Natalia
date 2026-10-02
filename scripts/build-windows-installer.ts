@@ -56,9 +56,13 @@ function versionFromRelease(releaseDir: string): string {
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const version = argv.find((arg) => !arg.startsWith("-"));
+  // Inno Setup is the distribution path: it produces a working installer with no
+  // certificate, which is the project's situation (no budget for one). MSIX
+  // effectively requires signing, so it stays behind --format=wix for whoever
+  // later has a certificate.
   const format = (argv
     .find((arg) => arg.startsWith("--format="))
-    ?.split("=")[1] ?? "both") as "inno" | "wix" | "both";
+    ?.split("=")[1] ?? "inno") as "inno" | "wix" | "both";
   const releaseDir = version
     ? join(root, "dist", "release", version, HOST_TRIPLE)
     : await newestRelease();
@@ -74,6 +78,7 @@ async function main(): Promise<number> {
   }
 
   const appVersion = versionFromRelease(releaseDir);
+  const signWith = argv.find((arg) => arg.startsWith("--sign="))?.split("=")[1];
   const result = await buildWindowsInstallerInputs({
     releaseDir,
     outDir: join(root, "dist", "windows-installer", appVersion),

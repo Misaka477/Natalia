@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const runtimeConfigPath = resolve(root, ".natalia", "global-config.json");

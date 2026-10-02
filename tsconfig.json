@@ -133,6 +133,12 @@
     },
     {
       "path": "packages/plugins/local-tools"
+    },
+    {
+      "path": "scripts"
+    },
+    {
+      "path": "apps/cef-desktop"
     }
   ],
   "compilerOptions": {

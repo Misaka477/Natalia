@@ -25,19 +25,32 @@
  * A temp dir per PROCESS, not per test: `bun test` runs several files in one
  * process, and tests within a file already isolate their own workspaces. A
  * per-process root keeps files in a process from colliding while leaving the
+ * A temp dir per PROCESS, not per test: `bun test` runs several files in one
+ * process, and tests within a file already isolate their own workspaces. A
+ * per-process root keeps files in a process from colliding while leaving the
  * filesystem cheap to clean.
+ *
+ * WHAT THIS DOES NOT DO, deliberately: it does not set HOME.
+ *
+ * It did at first, and CI caught it: `rustup could not choose a version of cargo,
+ * because one wasn't specified explicitly` — the toolchain lives under `$HOME`,
+ * so a test preload that moves HOME hides it from every subprocess the tests
+ * spawn. It passed locally only because this host's toolchain is system-wide,
+ * which is exactly the environment-specific pass that must not decide a change.
+ * HOME stays where the operator put it.
+ *
+ * The consequence is that the session store is NOT isolated by this preload:
+ * `workspaceStoreRoot` takes a `home` parameter defaulting to `homedir()`, which
+ * reads HOME. Isolating that path means threading the home through every caller,
+ * which is a product change. The gap is named here and in bunfig.toml rather than
+ * assumed closed.
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-if (process.env.NATALIA_HOME === undefined) {
-  const home = mkdtempSync(join(tmpdir(), "natalia-test-home-"));
-  process.env.NATALIA_HOME = home;
-  // Some paths read HOME rather than NATALIA_HOME; covering both is what makes
-  // the isolation hold for a runtime that computes its state root either way.
-  if (process.env.HOME !== undefined) process.env.HOME = home;
-}
+if (process.env.NATALIA_HOME === undefined)
+  process.env.NATALIA_HOME = mkdtempSync(join(tmpdir(), "natalia-test-home-"));
 
 // The preload's own state root, so a test can assert the isolation holds rather
 // than trusting that an env var happens to be read.

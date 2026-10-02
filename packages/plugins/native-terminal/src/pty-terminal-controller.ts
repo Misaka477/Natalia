@@ -9,6 +9,12 @@ import {
   type TerminalScreen,
 } from "./terminal-screen";
 import {
+  initialCommandState,
+  parseShellMarkers,
+  foldShellMarkers,
+  type CommandState,
+} from "./shell-integration";
+import {
   SETTLEMENT_SOURCE_KINDS,
   type SettlementService,
 } from "@natalia/collaboration";
@@ -105,6 +111,12 @@ type PtySession = {
   output: string;
   /** The virtual screen the byte stream renders onto (the model's human view). */
   screen: TerminalScreen;
+  /**
+   * The command-level read: which command the pane is in and what it last
+   * returned. Folded from the stream's shell-integration markers as bytes arrive,
+   * so it is true at any moment without a second capture of anything.
+   */
+  commandState: CommandState;
   /** The last emitted frame's text (the diff base for scroll notices). */
   lastFrameText?: string;
   /** The scrollback depth at the last emitted frame. */
@@ -811,6 +823,15 @@ export function createPtyTerminalController(
     // screen, not the stream.
     applyTerminalOutput(session.screen, chunk);
     session.revision += 1;
+    // The command-level read, folded from the SAME chunk the screen just took.
+    // One input, two surfaces: the screen is what a terminal shows, the command
+    // state is what it means. They cannot disagree because neither re-reads the
+    // stream independently.
+    session.commandState = foldShellMarkers(
+      session.commandState,
+      parseShellMarkers(chunk),
+      session.revision,
+    );
     session.lastOutputAt = Date.now();
     touch(session);
     notifyRevision(session.id);
@@ -1132,6 +1153,11 @@ export function createPtyTerminalController(
       revision: 0,
       output: "",
       screen: createTerminalScreen({ rows, cols }),
+      // A pane starts at a prompt. If the shell inside never emits the markers,
+      // this stays atPrompt=true with every other field absent — the
+      // command-level read says "unknown", which is honest, rather than
+      // inventing a command line out of the screen.
+      commandState: initialCommandState(),
       lastActivityAt: now,
       disposers: [],
     };

@@ -369,4 +369,4 @@ jobs:
           npm run guard:imports && npm run guard:contract && npm run guard:deps
           && npm run guard:suppressions && npm run guard:tests
           && npm run guard:events && npm run guard:console
-          && npm run guard:orphans && npm run guard:test-workspaces
+          && npm run guard:orphans && npm run guard:budgets && npm run guard:test-workspaces

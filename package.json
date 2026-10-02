@@ -43,7 +43,7 @@
     "release:build": "bun scripts/build-standalone.ts",
     "licenses:check": "bun scripts/license-check.ts",
     "licenses:generate": "bun scripts/generate-third-party-licenses.ts",
-    "verify": "npm run format && npm run typecheck && npm run build:distribution && npm run diff:build-wasm && npm run test && npm run guard:imports && npm run guard:contract && npm run guard:deps && npm run guard:suppressions && npm run guard:tests && npm run guard:events && npm run guard:console && npm run guard:orphans && npm run guard:test-workspaces",
+    "verify": "npm run format && npm run typecheck && npm run build:distribution && npm run diff:build-wasm && npm run test && npm run guard:imports && npm run guard:contract && npm run guard:deps && npm run guard:suppressions && npm run guard:tests && npm run guard:events && npm run guard:console && npm run guard:orphans && npm run guard:budgets && npm run guard:test-workspaces",
     "cleanup:test-tmp": "bun packages/tooling/testing/bin/cleanup-test-tmp.ts",
     "docs:api-reference": "API_REFERENCE_WRITE=1 bun run packages/hosts/transport/test/api-reference.test.ts",
     "refresh:plugin-store": "bun scripts/refresh-plugin-store.ts",
@@ -71,7 +71,8 @@
     "build:everything": "bun scripts/build-everything.ts",
     "guard:orphans": "bun run packages/tooling/testing/bin/orphan-module-guard.ts",
     "appimage:fetch": "bun scripts/fetch-appimagetool.ts",
-    "package:linux:portable": "bun scripts/package-portable-linux.ts"
+    "package:linux:portable": "bun scripts/package-portable-linux.ts",
+    "guard:budgets": "bun run packages/tooling/testing/bin/timeout-budget-guard.ts"
   },
   "dependencies": {
     "@jsquash/jpeg": "^1.6.0",

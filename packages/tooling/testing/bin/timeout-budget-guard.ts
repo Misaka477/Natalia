@@ -35,12 +35,19 @@ for (let index = 0; index < lines.length; index += 1) {
   // The command may be nested under `dirs: >-`; scan forward for its parts.
   let timeout: number | undefined;
   const files: string[] = [];
-  for (let scan = index; scan < Math.min(index + 40, lines.length); scan += 1) {
+  // A layer's block runs to the NEXT `- layer:` marker — nothing else. Scanning
+  // a fixed window, or stopping at the first blank line, bleeds one layer's file
+  // list into its neighbours (the first version reported one file under four
+  // layers). The marker is the only reliable boundary.
+  const nextLayer = lines.findIndex(
+    (line, at) => at > index && /- layer: "/.test(line),
+  );
+  const end = nextLayer === -1 ? lines.length : nextLayer;
+  for (let scan = index; scan < end; scan += 1) {
     const t = /--timeout\s+(\d+)/.exec(lines[scan]!);
     if (t && timeout === undefined) timeout = Number(t[1]);
     for (const f of lines[scan]!.matchAll(/packages\/[\w./-]+\.test\.ts/gu))
       files.push(f[0]);
-    if (lines[scan]!.trim() === "" && scan > index + 1) break;
   }
   if (timeout === undefined) continue;
   layers.push({ name: match[1]!, timeout, files, line: index + 1 });
@@ -69,21 +76,16 @@ for (const layer of layers) {
   }
 }
 
-// KNOWN: the layer scan bleeds one layer's file list into the next for
-// multi-line folded commands, so the same file is reported under neighbours.
-// Until the scan is fixed this is a REPORT-ONLY tool: it prints findings and
-// exits 0, so it cannot redden CI with duplicates. The two real contradictions
-// it found (generation-tools 240s in a 60s layer; three-stream-isolation 90s in
-// a 60s layer) were fixed in verify.yml by hand.
-if (failures.length && process.env.TIMEOUT_BUDGET_STRICT === "1") {
+// The layer scan stops at the next `- layer:` marker, so no file is reported
+// under a neighbour. With that fixed this is a hard gate: the two contradictions
+// it originally found (generation-tools declaring 240s inside a 60s layer, and
+// three-stream-isolation declaring 90s inside a 60s layer) were repaired by hand
+// in verify.yml.
+if (failures.length) {
   console.error(`timeout-budget guard: ${failures.length} finding(s)`);
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
-if (failures.length)
-  console.log(
-    `timeout-budget guard: ${failures.length} raw finding(s), report-only (see the note in the script)`,
-  );
 console.log(
   `timeout-budget guard: ${checked} files in ${layers.length} layers, every declared budget fits its wall`,
 );

@@ -166,6 +166,10 @@ type CategoryId =
   | "runtime"
   | "interface"
   | "storage"
+  // The exit is not a setting, but it needs a home that is not among them: a
+  // window may hide on close while the runtime keeps running, so a visible way
+  // OUT has to exist.
+  | "system"
   | "plugin";
 
 /**
@@ -290,6 +294,22 @@ const categories: Category[] = [
     ],
   },
   {
+    // The exit, in its own category on purpose: it is the one setting that is
+    // not a setting. A window may hide on close (the minimise policy) and the
+    // runtime keep running, so a visible way to end the app has to exist — and
+    // it must not sit among toggles, where a mis-aimed tap would end a session
+    // with live work in it.
+    id: "system",
+    label: "系统",
+    items: [
+      {
+        label: "Quit Natalia",
+        description: "结束 Natalia：关闭窗口并停止运行时（需确认）",
+        value: "",
+      },
+    ],
+  },
+  {
     id: "interface",
     label: "界面",
     items: [
@@ -326,6 +346,12 @@ export function SettingsPanel(props: {
   onOpenModels?: () => void;
   themeMode?: string;
   onCycleThemeMode?: () => void;
+  /**
+   * Shut the application down. Optional: a surface without it (an embedded host,
+   * a read-only integration) simply does not render the row, rather than
+   * rendering a button that cannot answer.
+   */
+  onQuit?: () => void;
   state?: AppState;
   config?: ConfigV3;
   preferences?: {
@@ -410,7 +436,7 @@ export function SettingsPanel(props: {
     });
   });
 
-  const { alert, dialog } = useConfirmDialog();
+  const { alert, confirm, dialog } = useConfirmDialog();
   const [uiWriteScope, setUiWriteScope] = createSignal(
     props.preferences?.get<string>("uiWriteScope") ?? "project",
   );
@@ -967,6 +993,42 @@ export function SettingsPanel(props: {
                             type="button"
                             class="neu-settings-item neu-settings-item-button"
                             onClick={() => props.onOpenModels?.()}
+                          >
+                            <div class="neu-settings-item-main">
+                              <span class="neu-settings-item-label">
+                                {item.label}
+                              </span>
+                              <span class="neu-settings-item-description">
+                                {item.description}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      }
+                      // The exit row. A running app must have a visible way
+                      // OUT: this is what makes "close the window but keep
+                      // running" acceptable rather than a trap. It asks first —
+                      // one stray click should not end a session with live work.
+                      // A button, not a toggle: the row is an ACTION, and it
+                      // asks first through the panel's own confirm dialog —
+                      // ending a session with live work must take two deliberate
+                      // clicks, not one stray tap among the toggles.
+                      if (item.label === "Quit Natalia" && props.onQuit) {
+                        return (
+                          <button
+                            type="button"
+                            class="neu-settings-item neu-settings-item-button neu-settings-item-danger"
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "退出 Natalia？",
+                                message:
+                                  "窗口会关闭，运行时与所有会话一起停止。当前未落盘的进度会丢失。",
+                                confirmLabel: "退出",
+                                cancelLabel: "取消",
+                                danger: true,
+                              });
+                              if (ok) props.onQuit?.();
+                            }}
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">

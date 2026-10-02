@@ -2467,6 +2467,16 @@ button.neu-settings-item.neu-settings-item-button {
 button.neu-settings-item.neu-settings-item-button:active {
   box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
 }
+/* The exit. It reads as an action among settings, not as one more toggle —
+   the one row whose default press is destructive. */
+button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger
+  .neu-settings-item-label {
+  color: var(--neu-danger, #c0392b);
+  font-weight: 600;
+}
+button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:active {
+  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+}
 .neu-settings-plugin-panel {
   margin-bottom: 8px;
 }

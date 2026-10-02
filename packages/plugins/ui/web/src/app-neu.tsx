@@ -4527,6 +4527,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         }}
         themeMode={themeMode()}
         onCycleThemeMode={cycleThemeMode}
+        onQuit={() => {
+          // The app's exit. This exists because the window's close button may
+          // hide it instead (the minimise policy), and a hidden window with no
+          // exit is a trap. It calls the same shutdown the RPC surface does, so
+          // there is one exit path, not two.
+          void props.ctx.runtime?.shutdown?.();
+        }}
         state={state()}
         config={config()}
         preferences={props.ctx.preferences}

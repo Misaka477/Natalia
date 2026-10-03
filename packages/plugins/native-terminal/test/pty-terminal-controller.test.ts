@@ -369,6 +369,77 @@ test("a real bash pane reports its commands end to end", async () => {
 }, 25_000);
 
 /**
+ * The controller → bridge → child → shell path, on a shell whose rc is reached by
+ * environment rather than by argv.
+ *
+ * Everything else about zsh's integration is verified against `nativeTerminalPaneSpawn`
+ * directly, which measures the spec and not the journey: the controller has to put
+ * ZDOTDIR into the bridge's spec, the bridge has to merge it into the child's
+ * environment, and zsh has to read it. A test that stops at the spec would pass on
+ * a pane whose shell never sees the variable.
+ *
+ * The zsh pane must exist for this to be reachable at all, so the test is skipped
+ * where it does not — rather than asserted against a missing tool, which reports a
+ * failure the code did not cause.
+ */
+test("a zsh pane's shell really receives ZDOTDIR and reports commands", async () => {
+  if (!(await Bun.file("/usr/bin/zsh").exists())) {
+    console.warn("skipped: no zsh on this machine");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "natalia-zsh-e2e-"));
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  const started = await controller.start({
+    command: "zsh",
+    cwd: root,
+    id: "term_zsh",
+  });
+  const lastCommand = controller.lastCommand?.bind(controller);
+  expect(typeof lastCommand).toBe("function");
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  const waitFor = async (predicate: () => boolean, ms = 8_000) => {
+    const deadline = Date.now() + ms;
+    while (!predicate() && Date.now() < deadline) await Bun.sleep(50);
+  };
+  // First the pane has to reach a prompt at all. An rc that was never sourced still
+  // produces a prompt, so this alone proves nothing — the assertion that follows is
+  // the one that does.
+  await waitFor(() => lastCommand("term_zsh").atPrompt);
+  // Read the variable back OUT of the pane: if the controller did not hand it to
+  // the bridge, or the bridge did not merge it, this is empty and the integration
+  // is decorative.
+  controller.write("term_zsh", 'echo "zdot=[$ZDOTDIR]"\n');
+  await waitFor(() =>
+    (lastCommand("term_zsh").commandLine ?? "").includes("zdot=["),
+  );
+  const seen = lastCommand("term_zsh").output;
+  expect(seen).toContain("zdot=[");
+  expect(seen).toMatch(/zdot=\[\/tmp\/natalia-zsh-rc-\d+\]/);
+  // And the command lifecycle still works: the markers are what the rc emits, so a
+  // named command with a real exit code proves the rc ran rather than merely existed.
+  controller.write("term_zsh", "echo zsh-command-level\n");
+  await waitFor(() =>
+    (lastCommand("term_zsh").commandLine ?? "").includes("zsh-command-level"),
+  );
+  expect(lastCommand("term_zsh").commandLine).toBe("echo zsh-command-level");
+  expect(lastCommand("term_zsh").exitCode).toBe(0);
+  expect(lastCommand("term_zsh").output).toContain("zsh-command-level");
+  controller.write("term_zsh", "false\n");
+  await waitFor(() => lastCommand("term_zsh").exitCode === 1);
+  expect(lastCommand("term_zsh").exitCode).toBe(1);
+
+  controller.write("term_zsh", "exit\n");
+  await controller.close();
+}, 25_000);
+
+/**
  * The boundary cases a real pane hits that a happy-path test does not.
  *
  * Each of these is a place where the command-level read could quietly hand a

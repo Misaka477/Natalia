@@ -104,17 +104,44 @@ fi
 chmod +x "$TARGET/natalia"
 mkdir -p "$HOME_DIR/bin"
 # A relative symlink: moving/renaming the home keeps bin -> versions valid.
+# The previous pointer is captured BEFORE it is overwritten: an upgrade
+# re-points bin/natalia, and a rollback that merely DELETED it would leave a
+# working older install with no way to start it (measured: install A, then a
+# failed install B into the same home took A's bin/natalia with it).
+PREV_LINK="$(readlink "$HOME_DIR/bin/natalia" 2>/dev/null || true)"
 ln -sfn "../versions/$VERSION/natalia" "$HOME_DIR/bin/natalia"
+
+# Restores what the landing disturbed: the previous pointer if there was one,
+# nothing if there was not. A rollback that leaves the home as it found it is
+# the difference between "the install failed" and "the install uninstalled
+# something".
+rollback_landing() {
+  rm -rf "$TARGET"
+  if [ -n "$PREV_LINK" ]; then
+    ln -sfn "$PREV_LINK" "$HOME_DIR/bin/natalia"
+  else
+    rm -f "$HOME_DIR/bin/natalia"
+  fi
+  # The two directories this script created, removed only when this rollback
+  # emptied them: rmdir refuses a non-empty directory, so a previous install's
+  # versions/ and bin/ survive untouched, and a fresh home is left with no
+  # empty husks where the install "almost" happened.
+  rmdir "$HOME_DIR/versions" "$HOME_DIR/bin" 2>/dev/null || true
+}
 
 # 5. Immediately usable, or the install did not happen.
 if ! INSTALLED="$("$HOME_DIR/bin/natalia" --version 2>/dev/null)"; then
   echo "install.sh: the installed binary failed its --version check — rolling back" >&2
-  rm -rf "$TARGET" "$HOME_DIR/bin/natalia"
+  rollback_landing
   exit 1
 fi
 if [ "$INSTALLED" != "$VERSION" ]; then
   echo "install.sh: installed binary reports '$INSTALLED', expected '$VERSION' — rolling back" >&2
-  rm -rf "$TARGET" "$HOME_DIR/bin/natalia"
+  # What a rollback cannot restore is a re-install of the SAME version over a
+  # working one: step 4 has already overwritten that tree by the time this
+  # check runs. The supply-chain gate above is what keeps that case rare — a
+  # mismatched release identity is the last resort, not the first line.
+  rollback_landing
   exit 1
 fi
 

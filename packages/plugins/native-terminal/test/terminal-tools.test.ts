@@ -158,3 +158,70 @@ test("the read tool says null when the host cannot report an extent", async () =
   // the pane's output.
   expect(read.text).toContain("prompt$");
 });
+
+test("the read tool serves the byte window and its resume cursor", async () => {
+  // The byte window's contract, at the tool surface: a caller that bounds one
+  // huge line (which no line window can) and resumes from the end it is handed,
+  // with the byte extent beside the line extent in the same reply.
+  const registry = {
+    read: async (
+      _id: string,
+      options?: { startByte?: number; endByte?: number },
+    ) => {
+      if (options?.startByte !== undefined) {
+        // A 10 KiB document with the caller's window served from it.
+        const text = "x".repeat(4096);
+        return {
+          text,
+          startLine: 0,
+          endLine: 1,
+          totalLines: 1,
+          startByte: 4096,
+          endByte: 8192,
+          totalBytes: 10_240,
+          cursorX: 0,
+          cursorY: 0,
+          rows: 24,
+          cols: 80,
+        };
+      }
+      return {
+        text: "whole",
+        startLine: 0,
+        endLine: 1,
+        totalLines: 1,
+        startByte: 0,
+        endByte: 5,
+        totalBytes: 10_240,
+        cursorX: 0,
+        cursorY: 0,
+        rows: 24,
+        cols: 80,
+      };
+    },
+  };
+  const tool = terminalToolFamily().tools.find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  )!;
+  const context = { workspaceRoot: "/tmp", terminal: registry } as never;
+
+  const read = JSON.parse(
+    await tool.execute(
+      { id: "t_bytes", startByte: 4096, endByte: 8192 },
+      context,
+    ),
+  );
+  // The window the host served, in bytes, and the document's total: the two
+  // facts a byte walk needs, beside the line extent in the same reply.
+  expect(read.byteWindow).toEqual({ startByte: 4096, byteCount: 4096 });
+  expect(read.totalBytes).toBe(10_240);
+  // And the successor's address: where this window ended, because there is
+  // more document after it.
+  expect(read.nextCursorBytes).toEqual({ startByte: 8192 });
+
+  // The two families are mutually exclusive at the tool boundary: a caller
+  // that mixes them is told, rather than silently served one of them.
+  await expect(
+    tool.execute({ id: "t_bytes", startLine: 2, startByte: 100 }, context),
+  ).rejects.toThrow(/cannot be used together/);
+});

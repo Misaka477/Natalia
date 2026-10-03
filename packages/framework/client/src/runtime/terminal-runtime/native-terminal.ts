@@ -119,6 +119,12 @@ export function createNativeTerminalSurface(
         startLine: read.startLine,
         endLine: read.endLine,
         totalLines: read.totalLines,
+        // The byte extent rides the same read: a single huge line has no bound
+        // a line window can give it, and this surface is where both families
+        // cross to the transport.
+        startByte: read.startByte ?? null,
+        endByte: read.endByte ?? null,
+        totalBytes: read.totalBytes ?? null,
         // The caret rides the same read: a reconnect replayed the buffer and
         // dropped the cursor until the contract carried it, and this surface
         // is the transport's source for that frame.

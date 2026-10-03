@@ -459,6 +459,9 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
     // honest to what this host actually serves rather than to each other.
     cursorX: 0,
     cursorY: 0,
+    startByte: null,
+    endByte: null,
+    totalBytes: null,
   });
   await client.nativeTerminalOpenHub!();
   await expect(

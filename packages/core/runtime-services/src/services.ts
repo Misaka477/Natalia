@@ -564,6 +564,12 @@ export interface TerminalController {
       startLine?: number;
       /** The last line to return (inclusive). */
       endLine?: number;
+      /** The byte window: the first byte to return. Mutually exclusive with
+       *  the line window's bounds — one huge line has no bound a line window
+       *  can give it. */
+      startByte?: number;
+      /** The byte window: one past the last byte to return (exclusive). */
+      endByte?: number;
       sessionID?: string;
     },
   ): Promise<

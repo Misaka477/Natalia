@@ -111,6 +111,11 @@ function weztermToolContext(
       startLine: null,
       endLine: null,
       totalLines: null,
+      // The byte extent degrades with the line one: this fake is the
+      // "host cannot address a document" shape, in both families.
+      startByte: null,
+      endByte: null,
+      totalBytes: null,
     }),
     snapshot: (id: string) => registry.snapshot(id),
     observe: (

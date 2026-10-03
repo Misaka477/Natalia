@@ -2994,6 +2994,16 @@ export type RuntimeTerminalRead = {
   startLine: number | null;
   endLine: number | null;
   totalLines: number | null;
+  /**
+   * The same window addressed in BYTES, for the two cases lines cannot serve:
+   * a single huge line (a minified bundle `cat`-ed into the pane) has no bound
+   * a line window can give, and exact resume wants the successor window to
+   * start at this one's `endByte` with no arithmetic in between. Same null
+   * idiom: a host that cannot count bytes says so rather than guessing.
+   */
+  startByte: number | null;
+  endByte: number | null;
+  totalBytes: number | null;
   cursorX: number | null;
   cursorY: number | null;
 };

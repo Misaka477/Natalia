@@ -296,10 +296,15 @@ export function createTerminalController(input: {
       // The host's own return type states why these are null: its read carries
       // text, the cursor and the geometry, and nothing that locates the text in
       // a document. The pty controller keeps the document in-process and reports
-      // the real window and extent; this backend cannot, and says so.
+      // the real window and extent; this backend cannot, and says so. The byte
+      // extent is the same statement in the other family: a host that cannot
+      // address a line cannot count the bytes before it.
       startLine: null,
       endLine: null,
       totalLines: null,
+      startByte: null,
+      endByte: null,
+      totalBytes: null,
     };
   }
 

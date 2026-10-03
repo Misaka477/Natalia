@@ -110,7 +110,7 @@ function interactiveReadTool(): RuntimeTool {
   return {
     name: "interactive_terminal_read",
     description:
-      "Read a bounded line range from the same native Terminal pane used by the human. Returns text plus cursor position. Use startLine/endLine to page through complete scrollback without copying it all at once. The reply also carries `window` (the lines the host actually served) and `totalLines` (how much document there is), so a caller can tell how much scrollback exists and address a successor window from the current window's end instead of guessing; both are null on a backend that cannot report them.",
+      "Read a bounded window from the same native Terminal pane used by the human. Returns text plus cursor position. Use startLine/endLine to page through complete scrollback without copying it all at once, or startByte/endByte when a single line is too big to bound (a minified bundle cat-ed into the pane) or when the next window must start exactly where this one ended. The reply carries the served window and the document extent in BOTH families, so a caller can tell how much there is and address a successor from the current window's end instead of guessing; the extents are null on a backend that cannot report them.",
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -120,6 +120,11 @@ function interactiveReadTool(): RuntimeTool {
         startLine: { type: "number" },
         endLine: { type: "number" },
         cursor: { type: "number" },
+        // The byte window, for the two cases a line window cannot serve: one
+        // huge line has no bound a line window can give it, and exact resume
+        // wants no arithmetic between windows.
+        startByte: { type: "number" },
+        endByte: { type: "number" },
       },
       required: ["id"],
       additionalProperties: false,
@@ -130,8 +135,19 @@ function interactiveReadTool(): RuntimeTool {
       const startLine = optionalInteger(args.startLine, "startLine");
       const cursor = optionalInteger(args.cursor, "cursor");
       const endLine = optionalInteger(args.endLine, "endLine");
+      const startByte = optionalInteger(args.startByte, "startByte");
+      const endByte = optionalInteger(args.endByte, "endByte");
       if (startLine !== undefined && cursor !== undefined)
         throw new Error("startLine and cursor cannot be used together");
+      if (
+        (startByte !== undefined || endByte !== undefined) &&
+        (startLine !== undefined ||
+          cursor !== undefined ||
+          endLine !== undefined)
+      )
+        throw new Error(
+          "the byte window and the line window cannot be used together",
+        );
       const pageStartLine = startLine ?? cursor;
       const {
         text,
@@ -142,10 +158,15 @@ function interactiveReadTool(): RuntimeTool {
         startLine: servedStartLine,
         endLine: servedEndLine,
         totalLines,
+        startByte: servedStartByte,
+        endByte: servedEndByte,
+        totalBytes: servedTotalBytes,
       } = await requireNativeTerminal(context).read(id, {
         maxLines: Math.max(1, Math.min(numberOr(args.maxLines, 60), 200)),
         startLine: pageStartLine,
         endLine,
+        ...(startByte !== undefined ? { startByte } : {}),
+        ...(endByte !== undefined ? { endByte } : {}),
         ...(context.parentSessionID
           ? { sessionID: context.parentSessionID }
           : {}),
@@ -210,9 +231,25 @@ function interactiveReadTool(): RuntimeTool {
                 ...(endLine === undefined ? {} : { endLine }),
               }
             : undefined,
+          // The byte window, same job: the successor of a byte read starts at
+          // the end this one reports, with no arithmetic between them. Null
+          // when the host reports no byte extent (or nothing was served).
+          byteWindow:
+            servedStartByte === null || servedEndByte === null
+              ? null
+              : {
+                  startByte: servedStartByte,
+                  byteCount: Math.max(0, servedEndByte - servedStartByte),
+                },
+          totalBytes: servedTotalBytes ?? page.totalBytes,
+          nextCursorBytes:
+            servedEndByte !== null &&
+            servedTotalBytes !== null &&
+            servedEndByte < servedTotalBytes
+              ? { startByte: servedEndByte }
+              : undefined,
           text: page.text,
           truncated: page.truncated,
-          totalBytes: page.totalBytes,
           rangeDiscovery: "native_scrollback_unbounded",
         },
         null,

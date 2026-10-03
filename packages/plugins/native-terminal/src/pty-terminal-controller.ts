@@ -49,6 +49,8 @@ import type { NativeTerminalRegistry } from "./native-terminal";
 const DEFAULT_ROWS = 50;
 const DEFAULT_COLS = 200;
 const MAX_OUTPUT_BYTES = 256 * 1024;
+/** The default byte window when a caller says where to start but not where to stop. */
+const MAX_BYTE_WINDOW = 64 * 1024;
 
 /**
  * A caller's geometry, or the default when it is absent or nonsense.
@@ -1130,6 +1132,10 @@ export function createPtyTerminalController(
       maxLines?: number;
       startLine?: number;
       endLine?: number;
+      /** The byte window: a successor of a byte read starts at its predecessor's
+       *  `endByte`. Mutually exclusive with the line window's bounds. */
+      startByte?: number;
+      endByte?: number;
       sessionID?: string;
     },
   ) {
@@ -1160,6 +1166,67 @@ export function createPtyTerminalController(
     const maxLines = Math.max(1, Math.min(options?.maxLines ?? 60, 200));
     const normalize = (line: number) =>
       line < 0 ? Math.max(0, document.length + line) : line;
+    // The same document addressed in BYTES. Two cases a line window cannot
+    // serve: a single huge line (a minified bundle `cat`-ed into the pane) has
+    // no bound a line window can give it, and exact resume wants the successor
+    // window to start where this one ended with no arithmetic in between.
+    // Both windows report BOTH extents -- this host can count either, and a
+    // caller must not have to guess which family it is holding.
+    const full = document.join("\n");
+    const buffer = Buffer.from(full, "utf8");
+    const totalBytes = buffer.byteLength;
+    const byteOffsetOfLine = (line: number) => {
+      const clamped = Math.max(0, Math.min(line, document.length));
+      if (clamped === 0) return 0;
+      // The offset of line `clamped`'s first byte: the joined prefix plus the
+      // separator that follows it. (For clamped === document.length this is one
+      // past the document's last byte — a virtual position, which is why the
+      // END report below does not use it.)
+      const joined = document.slice(0, clamped).join("\n");
+      return Buffer.byteLength(joined, "utf8") + 1;
+    };
+    // The last byte the window actually served: the end of its last line,
+    // WITHOUT the separator that follows it. A byte window over the reported
+    // span then serves exactly the text the line window served — the two
+    // families are two addresses for one document, not two documents. (The
+    // first version reported the next line's start, so the line window's byte
+    // span carried a trailing separator its text did not, and a cross-window
+    // comparison came out one byte long.)
+    const endByteOfWindow = (endLineExclusive: number) =>
+      endLineExclusive >= document.length
+        ? totalBytes
+        : Math.max(0, byteOffsetOfLine(endLineExclusive) - 1);
+    // The exclusive END LINE of a byte window, which is not simply the count of
+    // separators before its end: a window whose last byte is a separator ends
+    // exactly at a line start and touches none of the next line, while one
+    // that ends mid-line carries part of that line and must claim it.
+    const endLineOfByte = (byteOffset: number) => {
+      const lines =
+        buffer.subarray(0, byteOffset).toString("utf8").split("\n").length - 1;
+      if (byteOffset > 0 && buffer[byteOffset - 1] === 0x0a) return lines;
+      return lines + 1;
+    };
+    if (options?.startByte !== undefined || options?.endByte !== undefined) {
+      const start = Math.max(0, Math.min(options?.startByte ?? 0, totalBytes));
+      const end =
+        options?.endByte === undefined
+          ? Math.min(totalBytes, start + MAX_BYTE_WINDOW)
+          : Math.max(start, Math.min(options.endByte, totalBytes));
+      return {
+        text: buffer.subarray(start, end).toString("utf8"),
+        startLine:
+          buffer.subarray(0, start).toString("utf8").split("\n").length - 1,
+        endLine: endLineOfByte(end),
+        totalLines: document.length,
+        startByte: start,
+        endByte: end,
+        totalBytes,
+        cursorX: session.screen.cursorX,
+        cursorY: session.screen.cursorY,
+        rows: session.rows,
+        cols: session.cols,
+      };
+    }
     let start: number;
     let endExclusive: number;
     if (options?.startLine === undefined) {
@@ -1184,6 +1251,9 @@ export function createPtyTerminalController(
       startLine: start,
       endLine: endExclusive,
       totalLines: document.length,
+      startByte: byteOffsetOfLine(start),
+      endByte: endByteOfWindow(endExclusive),
+      totalBytes,
       // The pane's own cursor (screen-relative), as the host reports it.
       cursorX: session.screen.cursorX,
       cursorY: session.screen.cursorY,

@@ -104,6 +104,10 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
           startLine: 0,
           endLine: 1,
           totalLines: 1,
+          // The byte extent of the same 8-byte document: the whole of it.
+          startByte: 0,
+          endByte: 8,
+          totalBytes: 8,
           // Where the pane's caret is: a shell sitting at the end of its
           // prompt, which is the case a reconnect gets wrong when the cursor
           // is dropped (the caret lands at the origin instead).
@@ -459,6 +463,9 @@ test("an empty pane reconnects to an empty screen, not to the last session's", a
           startLine: 0,
           endLine: 0,
           totalLines: 0,
+          startByte: 0,
+          endByte: 0,
+          totalBytes: 0,
           // And no caret: the null idiom, which is also what keeps the restore
           // frame the exact two-field shape this pin asserts.
           cursorX: null,

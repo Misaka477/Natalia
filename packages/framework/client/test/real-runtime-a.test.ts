@@ -1103,6 +1103,11 @@ test("terminal plugin config reload preserves its host-owned registry", async ()
       // at all is the null case, pinned by the wezterm-degraded read above.)
       cursorX: 0,
       cursorY: 0,
+      // And the byte extent degrades with the line one on this fixture's host:
+      // it answers with text and no document to address, in both families.
+      startByte: null,
+      endByte: null,
+      totalBytes: null,
     },
   );
   const firstController = kernel.service<object>(terminalController.id);

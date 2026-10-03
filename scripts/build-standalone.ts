@@ -53,9 +53,9 @@ const targets = explicit
  * The terminal executables are per-platform, and on the way out.
  *
  * The interactive terminal's default backend is this repo's own PTY controller
- * (an in-process document plus the platform's PTY bridge — Python on POSIX,
- * the ConPTY helper on Windows), which needs no terminal executables at all.
- * The fork's three binaries remain in the WINDOWS release only, and only
+ * (an in-process document plus the platform's PTY bridge — the Rust bridge on
+ * POSIX, the ConPTY helper on Windows), which needs no terminal executables at
+ * all. The fork's three binaries remain in the WINDOWS release only, and only
  * because the Windows pane still runs inside the mux until the ConPTY bridge's
  * mute-pane defect (issue #2) is fixed and the default flips. A POSIX release
  * therefore carries NO wezterm directory: measured by hiding the three
@@ -73,13 +73,34 @@ async function stageTerminalNatives(
 ): Promise<void> {
   const pluginDir = join(outDir, "plugins", "natalia-tool-terminal");
   if (!(await Bun.file(join(pluginDir, "index.js")).exists())) return;
+  // Our own bridge, in its OWN directory — and the fix for the bug that made
+  // a Windows release ship with no bridge at all (measured): the ConPTY binary
+  // used to ride `wezterm/` beside the fork's trio, and the retirement's
+  // POSIX trim below deleted it. Separate directories, separate owners.
+  const bridgeDir = join(pluginDir, "pty-bridge");
+  const isWindows = platformDir.startsWith("windows");
+  const bridgeName = isWindows
+    ? "natalia-conpty-bridge.exe"
+    : "natalia-pty-bridge";
+  const prebuilt = join(
+    root,
+    "packages/plugins/native-terminal/prebuilt",
+    isWindows ? "windows-x64" : "linux-x64",
+  );
+  await rm(bridgeDir, { recursive: true, force: true });
+  if (!(await Bun.file(join(prebuilt, bridgeName)).exists()))
+    throw new Error(
+      `${platformDir}: the terminal's ${bridgeName} is not built — run native-terminal:build-pty-bridge (POSIX) or native-terminal:build-conpty:windows before packaging`,
+    );
+  await mkdir(bridgeDir, { recursive: true });
+  await cp(join(prebuilt, bridgeName), join(bridgeDir, bridgeName));
   const weztermDir = join(pluginDir, "wezterm");
   const forkRelease = join(
     root,
     "packages/plugins/native-terminal/wezterm/target/release",
   );
   await rm(weztermDir, { recursive: true, force: true });
-  if (!platformDir.startsWith("windows")) return;
+  if (!isWindows) return;
   await mkdir(weztermDir, { recursive: true });
   for (const name of ["wezterm", "wezterm-gui", "wezterm-mux-server"]) {
     const executable = `${name}.exe`;
@@ -292,6 +313,27 @@ async function verifyRelease(
           );
     }
   }
+  // The bridge, positive shape: every release carries ITS platform's pty
+  // bridge, ours, in its own directory. The negative case existed first and
+  // taught the lesson — a Windows release once shipped without the ConPTY
+  // bridge because it rode the wezterm/ directory the POSIX trim deleted —
+  // so the check names the expected binary rather than trusting the staging.
+  const bridgeDir = join(
+    outDir,
+    "plugins",
+    "natalia-tool-terminal",
+    "pty-bridge",
+  );
+  const expectedBridge = platformDir.startsWith("windows")
+    ? "natalia-conpty-bridge.exe"
+    : "natalia-pty-bridge";
+  if (await isFile(join(bridgeDir, "..", "index.js"))) {
+    if (!(await isFile(join(bridgeDir, expectedBridge))))
+      problems.push(
+        `the ${platformDir} release carries no pty bridge (expected ` +
+          `pty-bridge/${expectedBridge}) — every pane spawn would fail`,
+      );
+  }
   // Every file on disk is covered by the checksums. VERSION and
   // SHA256SUMS are the verification's own inputs: a checksum cannot list
   // itself, and VERSION is what install.sh reads before it verifies.
@@ -317,6 +359,7 @@ async function verifyRelease(
   console.log(
     `verified ${platformDir}: layout, no machine-local state, ` +
       `${platformDir.startsWith("windows") ? "windows terminal tier" : "no terminal executables (pty backend)"}, ` +
+      `pty-bridge/${expectedBridge}, ` +
       `${files.length} files checksummed`,
   );
 }

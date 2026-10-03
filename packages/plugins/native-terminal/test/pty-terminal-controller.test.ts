@@ -261,13 +261,15 @@ test("pty controller subscribeOutput replays buffer then live chunks", async () 
   await controller.close();
 });
 
-test("default python pty spawn runs an interactive shell", async () => {
+test("the default pty spawn runs an interactive shell", async () => {
   if (process.platform === "win32") {
-    // The default spawn under bun is the Python pty bridge: `python3` plus the
-    // POSIX pty/fcntl/termios modules. Windows has neither, so the default
-    // spawn is not exercisable here (the wezterm-backed controller is the
-    // Windows path). Skipped rather than asserted against a missing tool.
-    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    // The default spawn under bun is the POSIX pty bridge: the Rust bridge when
+    // built, Python otherwise. Windows has neither, so the default spawn is not
+    // exercisable there (the wezterm-backed controller is the Windows path).
+    // Skipped rather than asserted against a missing tool.
+    console.warn(
+      "skipped on win32: the default pty spawn needs the POSIX bridge",
+    );
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "natalia-python-pty-"));
@@ -631,11 +633,14 @@ test("input written the instant a pty starts is not dropped by the bridge", asyn
     console.warn("skipped on win32: the python pty bridge needs POSIX pty");
     return;
   }
-  // Regression: the python bridge reads the startup spec with its own line
-  // reader. An input message that landed in the same socket read as the spec
-  // was left in that reader's buffer while the select loop only watched for
-  // NEW bytes, so the first write of a freshly started terminal vanished.
-  // Hosts write the moment start() resolves, so the wait is deliberately zero.
+  // Regression: the bridge reads the startup spec with its own line reader.
+  // An input message that landed in the same socket read as the spec was left
+  // in that reader's buffer while the select loop only watched for NEW bytes,
+  // so the first write of a freshly started terminal vanished. The Python
+  // bridge drains its buffer once before its loop; the Rust bridge drains it
+  // per iteration (measured: without that drain this test times out, which is
+  // how the Rust bridge's first version was caught). Hosts write the moment
+  // start() resolves, so the wait is deliberately zero.
   const root = await mkdtemp(join(tmpdir(), "natalia-python-pty-race-"));
   const controller = createPtyTerminalController({
     workspaceRoot: root,

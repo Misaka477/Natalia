@@ -148,18 +148,35 @@ npm run diff:build-wasm     # text-diff wasm + 44 个 AST wasm 包
 npm run build:windows       # 上面全部 + licenses + ts:build(不跳native) + plugin store + web
 ```
 
-`build:windows` 里的 `ts:build` **不带** `NATALIA_BUILD_SKIP_NATIVE`——在 Windows 构建机上它会检查三个 wezterm 可执行文件与 ConPTY 桥就位，并把它们 stage 进插件分发，缺一个就大声报错（半成品不是分发）。在 Linux 构建机上它**不再 stage 任何终端可执行文件**：POSIX 的终端层是自研 PTY 桥，发行树里没有 fork 的位置。
+`build:windows` 里的 `ts:build` **不带** `NATALIA_BUILD_SKIP_NATIVE`——在 Windows 构建机上它会检查三个 wezterm 可执行文件与 ConPTY 桥就位，并把它们 stage 进插件分发，缺一个就大声报错（半成品不是分发）。在 Linux 构建机上它 stage **Rust PTY 桥**（`prebuilt/linux-x64/natalia-pty-bridge`，缺了同样大声报错）而不再 stage fork 的任何东西：POSIX 的终端层是自研 PTY 桥，发行树里没有 fork 的位置。
 
 每一步的成功/跳过/失败都带耗时打印；结束时列出每个产物的实际大小
 （或“未构建”）。某一步失败会让整条构建停在那里并打印该命令的输出
 尾部——半成品不是分发。
 
-## 4. 终端可执行文件投放（prebuilt/，仅 Windows）
+## 4. 终端原生件投放（prebuilt/，按平台分）
 
-**自研终端接管后，只有 Windows 还需要投放**：Windows 面板的 PTY 仍借居在
-fork 的 mux 里（ConPTY 桥修好前），所以 Windows release 仍带那三个
-`.exe`。POSIX 没有任何可投的——自研 PTY 桥不经过这些目录，发行树里也
-不再有它们的位置。
+**自研终端接管后，投放的东西分两种，按平台各就各位**：
+
+| 平台    | prebuilt 目录           | 投放物                                     | 谁在跑它                                                |
+| ------- | ----------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| Linux   | `prebuilt/linux-x64/`   | `natalia-pty-bridge`（我们的 Rust PTY 桥） | POSIX 每个面板的默认字节通路（默认即它，Python 桥兜底） |
+| Windows | `prebuilt/windows-x64/` | fork 三件套 + `natalia-conpty-bridge.exe`  | Windows 面板的 PTY（mux 借居 + ConPTY 桥，未默认启用）  |
+
+两个目录里的桥是**我们自己的原生件**，由 `native-terminal:build-pty-bridge`
+（Rust，cargo）与 `native-terminal:build-conpty:windows`（clang-cl）分别编出。
+`ts-build` 与 release 构建按平台把它们 stage 进插件包**自己的目录**
+`pty-bridge/`——与 fork 三件套的 `wezterm/` 分开。曾经共用一个目录，
+retirement 的 POSIX 清理把借居的 ConPTY 桥一并删掉：一个 Windows release
+一个桥都没带，实测过。分目录、分所有者，一类的 trim 再也带不走另一类。
+
+POSIX 运行时解析顺序与 Windows 相同：显式目录 → **prebuilt 投放目录** →
+crate 自己的 `target/release`（开发者答案）。都解析不到时回落 Python 桥；
+`NATALIA_TERMINAL_BRIDGE=python` 可钉死旧桥做对比，`=rust` 则在桥缺失时
+大声报错——要 Rust 的那次运行不许悄悄测了另一个桥还当成对比。
+
+**Windows 侧维持原状**：Windows 面板的 PTY 仍借居在 fork 的 mux 里
+（ConPTY 桥修好前），所以 Windows release 仍带那三个 `.exe`。
 
 **如果你只有交叉编好的三个 Windows 可执行文件**（比如从别处下载的），
 把它们放进：

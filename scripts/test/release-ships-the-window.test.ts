@@ -131,12 +131,14 @@ test("a posix release carries no terminal executables — the tier is retired", 
   // terminal suite passes with them hidden). The release now states that
   // contract instead of shipping 240 MB nobody runs.
   const source = script();
-  // The staging skips POSIX after trimming whatever the shared dist carried.
+  // The staging skips the fork's three on POSIX after trimming whatever the
+  // shared dist carried (the bridge is staged per platform either way — see
+  // the pty-bridge pin below).
   const staging = source.slice(
     source.indexOf("async function stageTerminalNatives"),
     source.indexOf("async function stageDesktopHost"),
   );
-  expect(staging).toContain('if (!platformDir.startsWith("windows")) return;');
+  expect(staging).toContain("if (!isWindows) return;");
   // And the verifier treats a surviving directory as the retired tier coming
   // back, not as a platform accident: the message names the retirement.
   expect(source).toContain("a posix release carries a wezterm/ directory");
@@ -145,24 +147,38 @@ test("a posix release carries no terminal executables — the tier is retired", 
 
 test("ts-build stages the fork's trio on a Windows build only", () => {
   // Same retirement, one layer down: the distribution's plugin package must
-  // not advertise a wezterm tier on POSIX. The trio is Windows-only now; the
-  // ConPTY bridge — our own native, and what the Windows pane's PTY spawn
-  // actually uses — rides the same Windows list.
+  // not advertise a wezterm tier on POSIX. The trio is Windows-only now.
   const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
   expect(source).toContain('process.platform === "win32"');
-  // The trio and the bridge are named on the Windows side of the condition.
+  // The trio is named on the Windows side of the fork condition.
   const condition = source.slice(
-    source.indexOf("const executables = ("),
-    source.indexOf(");", source.indexOf("const executables = (")),
+    source.indexOf("const forkExecutables = ("),
+    source.indexOf(");", source.indexOf("const forkExecutables = (")),
   );
-  for (const name of [
-    '"wezterm"',
-    '"wezterm-gui"',
-    '"wezterm-mux-server"',
-    '"natalia-conpty-bridge"',
-  ])
+  for (const name of ['"wezterm"', '"wezterm-gui"', '"wezterm-mux-server"'])
     expect(condition, `${name} belongs on the Windows list`).toContain(name);
-  // And an empty POSIX list still trims a stale directory, so the plugin's
+  // And the empty POSIX list still trims a stale directory, so the plugin's
   // release files can say the tier does not exist.
-  expect(source).toContain("Nothing native to stage on this platform");
+  expect(source).toContain("distribution mode — the native executables");
+});
+
+test("our own pty bridges ride their own directory, not the fork's", () => {
+  // The bug this pins: the ConPTY bridge used to be staged into `wezterm/`
+  // beside the fork's trio, and the retirement's POSIX trim of that directory
+  // deleted it — a Windows release shipped with no bridge at all, measured.
+  // The bridges now ride `pty-bridge/`, staged per platform from prebuilt.
+  const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
+  expect(source).toContain('join(packageOutdir, "pty-bridge")');
+  expect(source).toContain('"natalia-pty-bridge"');
+  expect(source).toContain('"natalia-conpty-bridge.exe"');
+  // And the release builder re-stages them from the same prebuilt drop, with
+  // the positive-shape check that names the expected binary — the negative
+  // check (a stray wezterm/ directory) existed first, and it was the missing
+  // positive one that let the bridge-less release out.
+  const standalone = readFileSync(
+    join(root, "scripts", "build-standalone.ts"),
+    "utf8",
+  );
+  expect(standalone).toContain("expectedBridge");
+  expect(standalone).toContain("pty-bridge");
 });

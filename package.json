@@ -76,7 +76,8 @@
     "package:linux:portable": "bun scripts/package-portable-linux.ts",
     "guard:budgets": "bun run packages/tooling/testing/bin/timeout-budget-guard.ts",
     "verify:pwsh": "bun scripts/verify-pwsh.ts",
-    "verify:windows": "bun scripts/verify-windows-terminal.ts"
+    "verify:windows": "bun scripts/verify-windows-terminal.ts",
+    "native-terminal:build-pty-bridge": "bun scripts/build-pty-bridge.ts"
   },
   "dependencies": {
     "@jsquash/jpeg": "^1.6.0",

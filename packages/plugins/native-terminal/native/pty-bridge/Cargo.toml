@@ -1,0 +1,32 @@
+[package]
+name = "natalia-pty-bridge"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+# The POSIX PTY bridge, and the repo's answer to "can the byte path be ours".
+#
+# It speaks the SAME wire protocol as the Python bridge it replaces (and the
+# ConPTY helper on Windows): a JSON spec line on stdin, `{kind} {len}` frames
+# and a `{"pid":N}` handshake on stdout, JSON control lines back. Byte
+# compatibility is the whole contract — the controller, the panel and the
+# model cannot tell which bridge is behind the stream.
+#
+# Why Rust and not more Python: this process sits on EVERY byte of every
+# pane's output. `cat`-ing a large file or a runaway `yes` is interpreter
+# throughput in Python and a memcpy in Rust, with an allocator-free frame
+# path in between (the output frame is one write of the bytes just read).
+#
+# Dependencies are exactly what syscalls and one JSON line need: libc for
+# openpty/fork/execve/ioctl/select/waitpid, serde_json for the spec line
+# (its env values can contain any escape JSON.stringify emits, so the line
+# is parsed by a real parser and not by this file's optimism).
+
+[[bin]]
+name = "natalia-pty-bridge"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

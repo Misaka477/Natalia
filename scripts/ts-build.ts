@@ -185,52 +185,71 @@ for (const root of pluginRoots) {
         throw new Error(`${root}: missing shell integration script ${script}`);
       await cp(from, join(packageOutdir, script));
     }
-    const nativeRelease = join(root, "wezterm/target/release");
-    const nativeOutdir = join(packageOutdir, "wezterm");
-    const executableSuffix = process.platform === "win32" ? ".exe" : "";
-    // The fork's three binaries follow the retirement: they ride a WINDOWS
-    // build only, because the mux is the Windows pane's PTY until the ConPTY
-    // bridge flips (issue #2). A POSIX build stages none — the self-developed
-    // pty backend needs no terminal executables, measured by the terminal
-    // suite passing with the three executables hidden. The ConPTY bridge, by
-    // contrast, is our own native and stays on the Windows list: without it
-    // the store copy has no bridge and every Windows panel silently falls
-    // back to the mux's screen-dump path.
-    const executables = (
+    // Our own natives ride their OWN directory, staged per platform from the
+    // prebuilt drop the build scripts write: the Rust PTY bridge on POSIX
+    // (`native-terminal:build-pty-bridge`), the ConPTY bridge on Windows
+    // (`native-terminal:build-conpty:windows`). They used to ride `wezterm/`
+    // beside the fork's trio, and the release builder's wezterm-trim deleted
+    // the ConPTY bridge that shared it — a Windows release shipped with no
+    // bridge at all, measured. Separate directory, separate owner: a trim of
+    // one tier can no longer take the other with it.
+    const triple = `${process.platform === "win32" ? "windows" : "linux"}-${process.arch}`;
+    const bridgeName =
       process.platform === "win32"
-        ? [
-            "wezterm",
-            "wezterm-gui",
-            "wezterm-mux-server",
-            "natalia-conpty-bridge",
-          ]
+        ? "natalia-conpty-bridge.exe"
+        : "natalia-pty-bridge";
+    const bridgeFrom = join(root, "prebuilt", triple, bridgeName);
+    const bridgeOutdir = join(packageOutdir, "pty-bridge");
+    const nativeRelease = join(root, "wezterm/target/release");
+    const forkOutdir = join(packageOutdir, "wezterm");
+    // The fork's three follow the retirement: they ride a WINDOWS build only,
+    // because the mux is the Windows pane's PTY until the ConPTY bridge flips
+    // (issue #2). A POSIX build stages none — the self-developed pty backend
+    // needs no terminal executables, measured by the terminal suite passing
+    // with the three executables hidden.
+    const forkExecutables = (
+      process.platform === "win32"
+        ? ["wezterm", "wezterm-gui", "wezterm-mux-server"]
         : []
-    ).map((name) => `${name}${executableSuffix}`);
-    if (executables.length === 0) {
-      // Nothing native to stage on this platform. A stale copy from an
-      // earlier native build is trimmed, so the plugin's release files can
-      // say the tier does not exist rather than advertising it.
-      await rm(nativeOutdir, { recursive: true, force: true });
-    } else if (skipNative) {
+    ).map((name) => (process.platform === "win32" ? `${name}.exe` : name));
+    if (skipNative) {
       // The distribution stays truthful about what it carries: the release
-      // manifest omits the native tier rather than advertising it.
+      // manifest omits the native tiers rather than advertising them, and a
+      // stale copy from an earlier native build is trimmed so the plugin's
+      // release files can say the tier does not exist. (A store-loaded plugin
+      // without the bridge falls back to the Python one, by design.)
       console.log(
-        `${root}: distribution mode — the wezterm executables are not staged`,
+        `${root}: distribution mode — the native executables are not staged`,
       );
+      await rm(forkOutdir, { recursive: true, force: true });
+      await rm(bridgeOutdir, { recursive: true, force: true });
     } else {
-      for (const executable of executables)
-        if (!(await Bun.file(join(nativeRelease, executable)).exists()))
-          throw new Error(`${root}: missing terminal executable ${executable}`);
-      await mkdir(nativeOutdir, { recursive: true });
-      for (const executable of executables)
-        await cp(
-          join(nativeRelease, executable),
-          join(nativeOutdir, executable),
+      if (!(await Bun.file(bridgeFrom).exists()))
+        throw new Error(
+          `${root}: missing pty bridge ${bridgeName} (expected ${bridgeFrom}; run native-terminal:build-pty-bridge / build-conpty:windows)`,
         );
-      // Staged means listed: the manifest's `files` is the release
-      // bundle's truth, so a staged tier the manifest omits is a tier the
-      // package drops.
-      releaseFiles.push("wezterm");
+      await mkdir(bridgeOutdir, { recursive: true });
+      await cp(bridgeFrom, join(bridgeOutdir, bridgeName));
+      // Staged means listed: the manifest's `files` is the release bundle's
+      // truth, so a staged tier the manifest omits is a tier the package
+      // drops.
+      releaseFiles.push("pty-bridge");
+      if (forkExecutables.length === 0) {
+        await rm(forkOutdir, { recursive: true, force: true });
+      } else {
+        for (const executable of forkExecutables)
+          if (!(await Bun.file(join(nativeRelease, executable)).exists()))
+            throw new Error(
+              `${root}: missing terminal executable ${executable}`,
+            );
+        await mkdir(forkOutdir, { recursive: true });
+        for (const executable of forkExecutables)
+          await cp(
+            join(nativeRelease, executable),
+            join(forkOutdir, executable),
+          );
+        releaseFiles.push("wezterm");
+      }
     }
     releaseFiles.push("wezterm-command-worker.js");
   }

@@ -116,3 +116,4 @@ apps/cef-desktop/build/
 # a stray draft cannot be committed, and so prettier's **/*.md glob does not
 # fail the format gate on files that were never meant to ship.
 .btmp/
+/packages/plugins/native-terminal/native/pty-bridge/target/

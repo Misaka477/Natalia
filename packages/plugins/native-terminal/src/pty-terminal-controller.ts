@@ -366,9 +366,11 @@ function spawnWithNodePty(options: PtySpawnOptions): PtyProcess {
 /**
  * The framing both PTY bridges speak: a JSON spec line on stdin; `{kind} {size}`
  * frames and a `{"pid":N}` handshake on stdout; JSON control lines back. The
- * POSIX implementation is Python, the Windows one the ConPTY helper. The
- * controller, the panel and the model see the same real byte stream from
- * either, so the bridge in use is a detail of this file.
+ * POSIX implementation is the Rust bridge (native/pty-bridge), with the Python
+ * one as its fallback; the Windows one is the ConPTY helper. The controller,
+ * the panel and the model see the same real byte stream from either, so the
+ * bridge in use is a detail of this file — which is what makes them
+ * interchangeable, and what the two-bridge suite run proves.
  */
 function spawnPtyBridge(
   child: ReturnType<typeof spawn>,
@@ -493,6 +495,43 @@ function spawnWithPythonPty(options: PtySpawnOptions): PtyProcess {
   );
 }
 
+/// The crate's own release build (a developer's answer), mirroring how the
+/// fork's build dir is found: source layout has `native/pty-bridge/target`,
+/// a store-loaded plugin does not and must use the prebuilt drop.
+function rustBridgeBuildDir(): string {
+  return import.meta.url.endsWith(".ts")
+    ? join(import.meta.dir, "..", "native", "pty-bridge", "target", "release")
+    : join(import.meta.dir, "native", "pty-bridge");
+}
+
+/**
+ * The POSIX PTY, in Rust: packages/plugins/native-terminal/native/pty-bridge.
+ *
+ * The same wire protocol as the Python bridge — a JSON spec line in, `{kind}
+ * {len}` frames and a `{pid}` handshake out, the same control lines, the same
+ * DSR answer — so the controller cannot tell them apart. Why it exists: this
+ * process touches every byte of every pane, and `cat`-ing a large file was
+ * interpreter throughput in Python. The search mirrors the ConPTY helper's:
+ * the prebuilt drop first (a downloaded Natalia's answer), then the crate's
+ * own release build (a developer's).
+ */
+function spawnWithRustBridge(options: PtySpawnOptions): PtyProcess {
+  const helperName = "natalia-pty-bridge";
+  const candidates = [
+    join(nativeTerminalPrebuiltDir("linux"), helperName),
+    join(rustBridgeBuildDir(), helperName),
+  ];
+  const helper = candidates.find((candidate) => existsSync(candidate));
+  if (!helper)
+    throw new Error(
+      `the pty bridge is not built: run native-terminal:build-pty-bridge (expected ${candidates[0]})`,
+    );
+  return spawnPtyBridge(
+    spawn(helper, [], { stdio: ["pipe", "pipe", "inherit"] }),
+    options,
+  );
+}
+
 /**
  * The Windows PTY: a ConPTY host compiled from src/win/natalia-conpty-bridge.cc
  * (`npm run native-terminal:build-conpty:windows`), staged next to the wezterm
@@ -553,6 +592,21 @@ function defaultSpawn(input?: {
         return spawnWithNodePty(options);
       } catch {
         return spawnWithPythonPty(options);
+      }
+    }
+    // POSIX: the Rust bridge is the default when it is built — the byte path
+    // the user's performance decision asked for — with the Python bridge as
+    // the fallback, so a missing binary degrades instead of failing. The env
+    // var names one explicitly: "rust" THROWS when the binary is absent (a
+    // run that asked for the Rust bridge must not silently measure the Python
+    // one and call it a comparison), "python" pins the predecessor so both
+    // bridges stay measurable side by side.
+    const requested = process.env.NATALIA_TERMINAL_BRIDGE;
+    if (requested !== "python") {
+      try {
+        return spawnWithRustBridge(options);
+      } catch (error) {
+        if (requested === "rust") throw error;
       }
     }
     if (typeof Bun !== "undefined") return spawnWithPythonPty(options);

@@ -39,7 +39,21 @@ const BUNDLED = import.meta.dir;
  * real one itself, under a variable that says "I gave you this instead of
  * ~/.bashrc". A caller that already passes `-l` keeps it.
  */
-export function integratedShellArgv(shellPath: string): string[] | undefined {
+/**
+ * What a shell needs to start with its integration: the argv, and the environment
+ * it needs on top of the pane's own.
+ *
+ * Both, because the two shells are injected by different means. bash takes a
+ * `--rcfile` flag and nothing else. zsh has no such flag — it reads
+ * `$ZDOTDIR/.zshrc`, so the rc has to be reached by putting a directory holding our
+ * script on ZDOTDIR, and that is environment, not argv. Returning only the argv
+ * would leave zsh silently unintegrated, which is what the first version did: the
+ * map gained a zsh entry and the argv gained nothing, so a zsh pane looked
+ * configured and was not.
+ */
+export function integratedShellArgv(
+  shellPath: string,
+): { argv: string[]; env: Record<string, string> } | undefined {
   const name = basename(shellPath).replace(/\.(exe|cmd|bat)$/i, "");
   const script = SCRIPTS[name];
   if (!script) return undefined;
@@ -50,8 +64,9 @@ export function integratedShellArgv(shellPath: string): string[] | undefined {
   // through ZDOTDIR, so the argv cannot carry it — the caller has to set it.
   // `shell` here is only what gets exec'd; the rc is reached by env, not argv,
   // and that difference is why zsh is not just another map entry.
-  if (name === "zsh") return [shellPath];
-  return [shellPath, "--rcfile", join(BUNDLED, script)];
+  if (name === "zsh")
+    return { argv: [shellPath], env: { ZDOTDIR: join(BUNDLED, "zsh-rc") } };
+  return { argv: [shellPath, "--rcfile", join(BUNDLED, script)], env: {} };
 }
 
 /**
@@ -63,15 +78,18 @@ export function integratedShellArgv(shellPath: string): string[] | undefined {
  * command's output is the answer to what was asked, and the pane's own read still
  * carries it.
  */
-export function withShellIntegration(argv: readonly string[]): string[] {
-  if (argv.length === 0) return [...argv];
+export function withShellIntegration(argv: readonly string[]): {
+  argv: string[];
+  env: Record<string, string>;
+} {
+  if (argv.length === 0) return { argv: [...argv], env: {} };
   const [file] = argv;
-  if (typeof file !== "string") return [...argv];
+  if (typeof file !== "string") return { argv: [...argv], env: {} };
   const integrated = integratedShellArgv(file);
-  if (!integrated) return [...argv];
+  if (!integrated) return { argv: [...argv], env: {} };
   // Keep any arguments the caller already gave: `-l`, `-i`, a command. The rcfile
   // is appended rather than replacing the argv, so `bash -l` stays a shell that reads its profile.
-  return [...integrated, ...argv.slice(1)];
+  return { argv: [...integrated.argv, ...argv.slice(1)], env: integrated.env };
 }
 
 /**
@@ -85,6 +103,24 @@ export function withShellIntegration(argv: readonly string[]): string[] {
  * Returns undefined for anything that is not such a command, which is every
  * command a pane ever runs that is not a shell.
  */
+/**
+ * The environment a pane's shell needs to be integrated, by shell name.
+ *
+ * Split out from `withShellIntegration` because the argv path has already been
+ * integrated by the time a caller wants the environment: asking for both from one
+ * function is what produced `bash --rcfile X --rcfile X`.
+ */
+export function shellEnvFor(
+  command: string,
+  os?: NodeJS.Platform,
+): Record<string, string> {
+  const word = command.trim().split(/\s+/)[0] ?? "";
+  const name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+  if (!SCRIPTS[name]) return {};
+  if (name !== "zsh") return {};
+  return { ZDOTDIR: join(BUNDLED, "zsh-rc") };
+}
+
 export function interactiveShellArgv(
   command: string,
   os?: NodeJS.Platform,
@@ -98,7 +134,11 @@ export function interactiveShellArgv(
   if (!integrated) return undefined;
   // The path first, then the script flags that came with it, then whatever the
   // pane's own command line carried (`-l`, `-i`).
-  return [...resolveShellPath(integrated[0]!), ...integrated.slice(1), ...rest];
+  return [
+    ...resolveShellPath(integrated.argv[0]!),
+    ...integrated.argv.slice(1),
+    ...rest,
+  ];
 }
 
 /**

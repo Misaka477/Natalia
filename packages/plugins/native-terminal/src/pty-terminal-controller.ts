@@ -29,6 +29,7 @@ import type { TerminalController } from "@anthelia/runtime-services";
 import {
   nativeTerminalForkBuildDir,
   nativeTerminalPaneCommand,
+  nativeTerminalPaneSpawn,
   nativeTerminalPrebuiltDir,
 } from "./native-terminal";
 import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
@@ -1210,9 +1211,13 @@ export function createPtyTerminalController(
         );
     }
 
-    const argv = nativeTerminalPaneCommand(startInput.command);
+    // argv and env: a zsh pane is integrated through ZDOTDIR, which is not an
+    // argument, so taking only the argv would leave it silently unintegrated.
+    const spawnSpec = nativeTerminalPaneSpawn(startInput.command);
+    const argv = spawnSpec.argv;
     const file = argv[0] ?? "/bin/sh";
     const args = argv.slice(1);
+    const shellEnv = spawnSpec.env;
     const id = startInput.id ?? `terminal_${randomUUID()}`;
     // The one geometry the session, its screen and the spawned pty share. A
     // caller's rows/cols win; anything absent or nonsensical falls back to the
@@ -1252,7 +1257,11 @@ export function createPtyTerminalController(
       cwd: startInput.cwd,
       cols,
       rows,
-      env: envRecord(),
+      // `shellEnv` first: it carries what the pane's shell needs to be integrated
+      // (zsh's ZDOTDIR). `envRecord()` then supplies the operator's own
+      // environment, so PATH, HOME and locale still reach the child — an
+      // integration that replaced them would spawn a shell that cannot find ls.
+      env: { ...shellEnv, ...envRecord() },
       command: startInput.command,
     });
     session.pty = pty;

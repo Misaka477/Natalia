@@ -15,6 +15,7 @@ import { executableName, isWindows } from "@anthelia/platform";
 import { selectExecutor } from "@anthelia/shell";
 import {
   interactiveShellArgv,
+  shellEnvFor,
   withShellIntegration,
 } from "./shell-integration-argv";
 
@@ -214,7 +215,30 @@ export function nativeTerminalPaneCommand(
     os,
     shellExecutable: "/bin/sh",
   });
-  return withShellIntegration([spec.command, ...spec.args]);
+  return withShellIntegration([spec.command, ...spec.args]).argv;
+}
+
+/**
+ * The pane's spawn spec: argv AND the environment the shell needs.
+ *
+ * Separate from `nativeTerminalPaneCommand` because that one is a pinned contract
+ * — callers and tests assert on its argv — and a zsh pane's integration is not
+ * expressible as argv. It arrives as ZDOTDIR, which is environment, so a pane that
+ * wants the command-level read needs both halves or it gets neither.
+ */
+export function nativeTerminalPaneSpawn(
+  command: string,
+  os?: NodeJS.Platform,
+): { argv: string[]; env: Record<string, string> } {
+  // The pane argv ALREADY went through the integrator inside
+  // `nativeTerminalPaneCommand`, so wrapping it here again would double the
+  // `--rcfile` — which is what the first version did, and the argv shows it:
+  // `bash --rcfile X --rcfile X`. What this adds is only the environment half,
+  // which the argv path cannot carry.
+  return {
+    argv: nativeTerminalPaneCommand(command, os),
+    env: shellEnvFor(command, os),
+  };
 }
 
 export function createWezTermHost(

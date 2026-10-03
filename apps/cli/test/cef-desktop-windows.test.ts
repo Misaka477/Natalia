@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 /**
  * The CEF desktop's Windows-half pins.
@@ -252,6 +252,55 @@ test("the tray is Windows-only, self-contained Shell_NotifyIcon, and dies with t
   expect(cmake.slice(cmake.indexOf("else()", listWin))).not.toContain(
     "simple_tray_win.cc",
   );
+});
+
+/**
+ * The tray's own failure path, run as a binary.
+ *
+ * The test above pins CMake text — necessary (a machine without libappindicator must
+ * still configure) but it does not run anything. What execution once established
+ * about the tray lived in a comment with nothing behind it, and on a machine that DID
+ * have a usable display the tray could be broken outright without a test noticing.
+ *
+ * `natalia-tray-probe` calls `TrayIcon::Create` and prints which of the two outcomes
+ * it saw. It is built inside the appindicator branch, so its absence means "no
+ * libappindicator here" and the test says so rather than failing — the same
+ * distinction the tray itself makes between `Create` returning nullptr and crashing.
+ *
+ * Two ways this could lie, and how each is avoided: an exit code alone would pass on
+ * a binary that never reached `Create` (observed — stdout was buffered and lost
+ * through a pipe while the process still exited 0), so the assertion is on the printed
+ * outcome, not the status. And a run with no panel is not a failure, so the probe is
+ * asked what it saw instead of being asked to succeed.
+ */
+test("the Linux tray probe runs and reports what Create actually did", () => {
+  const probe = resolve(
+    import.meta.dir,
+    "..",
+    "..",
+    "cef-desktop",
+    "build",
+    "natalia-tray-probe",
+  );
+  if (!existsSync(probe)) {
+    console.warn(
+      "skipped: natalia-tray-probe not built (no libappindicator on this machine?)",
+    );
+    return;
+  }
+  const result = Bun.spawnSync([probe], { stderr: "ignore" });
+  const stdout = result.stdout.toString();
+  // Whatever it saw, it said so. An empty report means the probe did not reach its
+  // own print, which is the failure worth catching — not a missing panel.
+  expect(stdout, "the probe must report an outcome").toMatch(
+    /TRAY_CREATED|TRAY_CREATE_RETURNED_NULL/,
+  );
+  if (stdout.includes("TRAY_CREATED")) {
+    // Created here means the callbacks were armed and the object disposed — the
+    // lifecycle the comment claimed, now checked rather than remembered.
+    expect(stdout).toContain("CALLBACKS_ARMED show=0 quit=0");
+    expect(stdout).toContain("DISPOSED_CLEANLY");
+  }
 });
 
 test("the Linux tray is a detected system package, never a hard link", () => {

@@ -142,6 +142,32 @@ foreach(_pkg ${_AI_CANDIDATES})
     target_link_libraries(natalia-cef-desktop PRIVATE ${_AI_LIBRARIES})
     target_link_directories(natalia-cef-desktop PRIVATE ${_AI_LIBRARY_DIRS})
     target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_HAVE_APPINDICATOR)
+    # The tray's failure path, as a binary that can actually be run.
+    #
+    # Built here, inside the appindicator branch, because it calls into the tray
+    # implementation and so needs the same libraries — building it unconditionally
+    # would fail on the machines that have no libappindicator, which are precisely
+    # the machines this probe is for. It links the tray privately and prints what it
+    # saw rather than asserting one outcome: `--expect-panel` makes it fail when a
+    # panel was expected and none came, so the same binary serves both a CI machine
+    # and one with a real tray.
+    # The implementation travels WITH the probe: it is compiled into the desktop
+    # target separately, and a probe that linked only its own translation unit
+    # failed on undefined `TrayIcon::Create` — the header declares, the .cc defines.
+    add_executable(natalia-tray-probe
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_probe.cc"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_linux.cc"
+    )
+    # The same define the tray implementation is compiled under. The whole header is
+    # inside `#if defined(NATALIA_HAVE_APPINDICATOR)`, so without this the probe
+    # includes an empty file and fails with "'natalia' has not been declared" — which
+    # reads like a namespace typo rather than a missing define.
+    target_compile_definitions(natalia-tray-probe PRIVATE NATALIA_HAVE_APPINDICATOR)
+    target_include_directories(natalia-tray-probe SYSTEM PRIVATE ${_NATALIA_GLIB_DIRS} ${_AI_INCLUDE_DIRS})
+    target_link_libraries(natalia-tray-probe PRIVATE ${_AI_LIBRARIES})
+    if(NATALIA_AYATANA_APPINDICATOR)
+      target_compile_definitions(natalia-tray-probe PRIVATE NATALIA_AYATANA_APPINDICATOR)
+    endif()
     if(NATALIA_AYATANA_APPINDICATOR)
       target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_AYATANA_APPINDICATOR)
     endif()

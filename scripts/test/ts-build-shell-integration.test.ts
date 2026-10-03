@@ -29,9 +29,10 @@ test("the release stages the shell-integration rc scripts", () => {
       script,
     );
   }
-  // zsh's rc is a generated directory, so it needs the copy too — an entry in the
-  // map without the file it points at is the same gap in a different shape.
-  expect(source).toContain("zsh-rc/.zshrc");
+  // zsh's rc is generated at runtime into the temp dir rather than shipped, so a
+  // stale copy in the release would name wherever it was built — the exact defect
+  // this replaces. Its staging belongs in the plugin, not in ts-build.
+  expect(source).not.toContain("zsh-rc");
   // And the staging must not sit inside the native-skip branch: that flag stages
   // the wezterm binaries, and a pane's rc files are not binaries. Compared by
   // position rather than by slicing, because the native block follows the staging

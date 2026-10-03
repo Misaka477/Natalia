@@ -185,13 +185,6 @@ for (const root of pluginRoots) {
         throw new Error(`${root}: missing shell integration script ${script}`);
       await cp(from, join(packageOutdir, script));
     }
-    for (const entry of [["zsh-rc/.zshrc", "zsh-rc/.zshrc"]] as const) {
-      const from = join(root, "src", entry[0]);
-      if (await Bun.file(from).exists()) {
-        await mkdir(join(packageOutdir, "zsh-rc"), { recursive: true });
-        await cp(from, join(packageOutdir, entry[1]));
-      }
-    }
     const nativeRelease = join(root, "wezterm/target/release");
     const nativeOutdir = join(packageOutdir, "wezterm");
     const executableSuffix = process.platform === "win32" ? ".exe" : "";

@@ -56,7 +56,12 @@ describe("withShellIntegration", () => {
     // Absolute, for the same reason as bash's rcfile: a pane spawns in the
     // operator's workspace, and a relative ZDOTDIR would look there.
     expect(env.ZDOTDIR!.startsWith("/")).toBe(true);
-    expect(basename(env.ZDOTDIR!)).toBe("zsh-rc");
+    // A per-process directory under the temp dir, NOT beside the package. Written
+    // there and generated fresh, because its content is a path: one baked beside a
+    // source checkout is wrong the moment the package is installed elsewhere, which
+    // is what the first version shipped.
+    expect(env.ZDOTDIR!).toContain("natalia-zsh-rc-");
+    expect(env.ZDOTDIR).not.toContain("/packages/plugins/native-terminal/");
     // And the environment is not the pane's whole environment: it is only this,
     // so the operator's PATH and HOME still reach the child.
     expect(Object.keys(env)).toEqual(["ZDOTDIR"]);

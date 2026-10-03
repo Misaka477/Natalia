@@ -44,29 +44,22 @@ async function checkViewportHandshake() {
   // The bridge is spawned the way the controller spawns it, with the spec on
   // stdin, so the stderr report is the real one.
   const { spawn } = await import("node:child_process");
-  const { readFileSync } = await import("node:fs");
+  const { existsSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const source = join(
-    import.meta.dir,
-    "..",
-    "packages",
-    "plugins",
-    "native-terminal",
-    "src",
-    "native-terminal.ts",
+  // The path comes from the package's own resolver, NOT from reading its source.
+  // The first version grepped the source for the function name and matched
+  // nothing — the identifier is camelCase where the grep expected kebab — so the
+  // check reported "no bridge binary" on a host that had one. Source is not data.
+  const { nativeTerminalPrebuiltDir, nativeTerminalForkBuildDir } =
+    await import("../packages/plugins/native-terminal/src/index");
+  const candidates = [
+    process.env.NATALIA_CONPTY_BRIDGE,
+    join(nativeTerminalPrebuiltDir("win32"), "natalia-conpty-bridge.exe"),
+    join(nativeTerminalForkBuildDir(), "natalia-conpty-bridge.exe"),
+  ];
+  const exe = candidates.find(
+    (candidate) => candidate && existsSync(candidate),
   );
-  let prebuilt = "";
-  try {
-    // The bridge's staged location, the same one the controller passes to spawn.
-    const text = readFileSync(source, "utf8");
-    const match = text.match(/native-terminal-fork-build[^"']*/);
-    prebuilt = match?.[0] ?? "";
-  } catch {
-    // A source layout that moved is not a failure of the handshake.
-  }
-  const exe =
-    process.env.NATALIA_CONPTY_BRIDGE ??
-    (prebuilt ? join(prebuilt, "natalia-conpty-bridge.exe") : "");
   if (!exe) {
     record(
       "P23 viewport handshake",

@@ -2,6 +2,22 @@ import { expect, test } from "bun:test";
 import type { LocalAttachment, RuntimeEvent } from "@anthelia/contracts";
 import { contextLedgerFactory, createContextLedgerFactory } from "../src";
 
+test("every create() is a separate ledger, so two agents never share compaction state", () => {
+  // The seam between what is tested and what runs. The client tests build
+  // `new ContextLedger()` directly and pin that two instances are independent,
+  // which leaves the FACTORY unguarded: making `create` return a shared ledger
+  // would give navi and nia one compaction state in production and turn no test
+  // red — measured, by doing exactly that mutation.
+  const factory = createContextLedgerFactory();
+  const first = factory.create();
+  const second = factory.create();
+  expect(second).not.toBe(first);
+  // And they really are separate, not merely distinct objects wrapping one store.
+  first.add({ id: "t1:user", role: "user", content: "mine" } as never);
+  expect(second.snapshot().entries).toHaveLength(0);
+  expect(first.snapshot().entries).toHaveLength(1);
+});
+
 test("context ledger restores completed turns and tool pairs once", () => {
   const attachment: LocalAttachment = {
     id: "att-1",

@@ -23,6 +23,17 @@
 # does it. A reader that only understands 133 still gets the lifecycle; only the
 # command line is lost.
 
+#
+# SOURCING IT BY HAND. A pane Natalia starts gets this file via `--rcfile`, but the
+# script is equally meant to be sourced into a shell that is already running:
+#
+#     source /path/to/shell-integration-bash.sh
+#
+# Measured in a real interactive pane: the command that sources it is NOT itself
+# recorded (there are no markers yet), and every command from the NEXT prompt on
+# is. So it takes effect one prompt later, which is the honest answer to "when does
+# this start working" rather than an immediately or never.
+
 # Injecting twice would double the prompt markers, so a nested shell (a subshell
 # from a command) must not reinstall the hooks.
 if [ -n "${NATALIA_SHELL_INTEGRATION:-}" ]; then

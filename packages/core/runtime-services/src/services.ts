@@ -567,6 +567,9 @@ export interface TerminalController {
     },
   ): Promise<{
     text: string;
+    startLine: number;
+    endLine: number;
+    totalLines: number;
     cursorX: number;
     cursorY: number;
     rows: number;

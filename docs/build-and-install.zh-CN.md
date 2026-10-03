@@ -212,7 +212,7 @@ CEF 本身跨平台（Chromium Embedded Framework，Windows/macOS/Linux 全都�
 | 平台    | CEF SDK 根                | 入口                           | 启动器                                                                                                                                                                                                   | 构建                        |
 | ------- | ------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | Linux   | `.cef-test/`              | `cefsimple_linux.cc`（`main`） | `run-cef-desktop.sh`                                                                                                                                                                                     | `npm run desktop:cef:build` |
-| Windows | `npm run package:windows` | 双击 Setup.exe                 | 两路输入（`.iss`/`.wxs`）已就位并有测试；容器选型已定：Inno Setup（无证书，MSIX 实际要签名）；`.iss` 已在真编译器下出过真 Setup.exe（wine + `NATALIA_ISCC`，合成树），真 release 树仍缺 Windows CEF host |
+| Windows | `npm run package:windows` | 双击 Setup.exe                 | 两路输入（`.iss`/`.wxs`）已就位并有测试；容器选型已定：Inno Setup（无证书，MSIX 实际要签名）；`.iss` 已在真编译器下编译、且 Setup.exe 已跑通安装→卸载循环（wine + `NATALIA_ISCC`，合成树），真 release 树仍缺 Windows CEF host |
 | macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications    | bundle 与 dmg staging 代码测过，**但没有 macOS release 产物喂它**（见下）；只在合成树上验证过                                                                                                            |
 
 Windows 从零开始：
@@ -243,10 +243,10 @@ PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/share/pkgconfig \
 | 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                                                                                                                                                       |
 | ------- | ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Linux   | `npm run appimage`        | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖）                                                                                                                                                                                             |
-| Windows | `npm run package:windows` | 双击 Setup.exe                | 两路输入（`.iss`/`.wxs`）渲染已就位并有测试；**容器选型已定：Inno Setup**（无签名证书，MSIX 实际要签名）。渲染出的 `.iss` 已在真 Inno 编译器下编译出真 Setup.exe（wine + `NATALIA_ISCC`，合成树）；**真 release 树仍缺 Windows CEF host**，需 Windows 机器 |
+| Windows | `npm run package:windows` | 双击 Setup.exe                | 两路输入（`.iss`/`.wxs`）渲染已就位并有测试；**容器选型已定：Inno Setup**（无签名证书，MSIX 实际要签名）。渲染出的 `.iss` 已在真 Inno 编译器下编译出真 Setup.exe，且该 Setup.exe 已跑通**安装→卸载**全循环（wine 11 + Inno 6.7.3，合成树：文件落位、`unins000.exe` 生成、卸载移除）；**真 release 树仍缺 Windows CEF host**，需 Windows 机器 |
 | macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications   | 已在**真 darwin release 树**上验证过（`bun --target=bun-darwin-arm64` 交叉编译出的 66MB Mach-O runtime 被打进 bundle，`plistlib` 解析 Info.plist 15 键）；**CEF host 仍是合成占位**——它需在 mac 上构建                                                     |
 
-**每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是真编译器 + 合成树（编译验证不等于安装验证）；macOS 那行同样只有合成树。三者不是一回事。
+**每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是真编译器 + 真安装/卸载循环 + 合成树（三者都过，但树不是真 release）；macOS 那行只有合成树。三者不是一回事。
 
 **Linux AppImage 的一个运行时依赖**：生成的 `AppRun` 用 `socat` 做二次启动的接管探测
 （连上单实例 socket 即证明实例在，详见 `scripts/appimage.ts` 里那段注释）。没装 socat 的

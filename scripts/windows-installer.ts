@@ -19,7 +19,7 @@
  * the dmg staging already use: the artifact a Mac needs is produced anywhere; the
  * one-tool-only step is named rather than faked.
  */
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import {
@@ -358,6 +358,32 @@ function resolveEnvCompiler(variable: string): string | null {
   const named = process.env[variable];
   if (!named) return null;
   return Bun.which(named);
+}
+
+/**
+ * The newest windows-x64 release tree under a base directory, or undefined.
+ *
+ * "Newest" is by BUILD TIME, not by name: sorting the paths lexicographically
+ * picked a directory called `uninst` over `0.0.0-m13` (measured — a leftover
+ * scratch release hijacked a real installer build and packed the wrong tree),
+ * and version-shaped directory names do not sort as versions anyway.
+ */
+export async function newestRelease(
+  base: string,
+  hostTriple: string,
+): Promise<string | undefined> {
+  if (!existsSync(base)) return undefined;
+  const candidates: string[] = [];
+  for await (const version of new Bun.Glob("*/").scan({
+    cwd: base,
+    onlyFiles: false,
+  })) {
+    const dir = join(base, version, hostTriple);
+    if (existsSync(dir)) candidates.push(dir);
+  }
+  return candidates
+    .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
+    .at(-1);
 }
 
 /** True when the rendered script declares a Start Menu entry and an uninstaller. */

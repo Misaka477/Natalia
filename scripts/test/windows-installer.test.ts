@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, utimes } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildWindowsInstallerInputs,
+  newestRelease,
   renderInnoScript,
   renderWixFragment,
   scriptDeclaresEntryPoints,
@@ -265,4 +266,42 @@ test("a compiler, when one is named, produces a real Setup.exe", async () => {
   expect(
     (await Bun.file(result.installer!).arrayBuffer()).byteLength,
   ).toBeGreaterThan(100_000);
+});
+
+test("the newest release is the one built last, not the one named last", async () => {
+  // Measured, not speculated: `candidates.sort()` on the paths picks
+  // `uninst` over `0.0.0-m13`, and a leftover scratch release under
+  // dist/release hijacked a real installer build with it (it packed the wrong
+  // tree and cost a compile cycle). Directory names are not versions, so
+  // "newest" has to mean build time.
+  const base = await mkdtemp(join(tmpdir(), "natalia-rel-newest-"));
+  const tree = async (name: string) => {
+    const dir = join(base, name, "windows-x64");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "natalia.exe"), "rt\n");
+    return dir;
+  };
+  const old = await tree("0.0.0-m13");
+  const scratch = await tree("uninst");
+  // Distinct times on both sides of the comparison, because EQUAL mtimes make
+  // the answer the glob's scan order and the test would be pinning nothing.
+  const past = new Date(1_000_000_000);
+  const future = new Date(2_000_000_000);
+  // The version-shaped one is built younger: the scratch one is in the past.
+  await utimes(scratch, past, past);
+  await utimes(old, future, future);
+  expect(await newestRelease(base, "windows-x64")).toBe(old);
+  // And when the scratch one IS newer, it wins — same rule, opposite names.
+  await utimes(scratch, future, future);
+  await utimes(old, past, past);
+  expect(await newestRelease(base, "windows-x64")).toBe(scratch);
+});
+
+test("no release tree means no answer, not a stale one", async () => {
+  expect(
+    await newestRelease(
+      await mkdtemp(join(tmpdir(), "natalia-rel-none-")),
+      "windows-x64",
+    ),
+  ).toBeUndefined();
 });

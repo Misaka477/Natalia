@@ -17,7 +17,10 @@
  */
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildWindowsInstallerInputs } from "./windows-installer";
+import {
+  buildWindowsInstallerInputs,
+  newestRelease,
+} from "./windows-installer";
 
 const root = resolve(import.meta.dir, "..");
 const HOST_TRIPLE = "windows-x64";
@@ -29,21 +32,6 @@ function findIcon(): string | undefined {
     join(root, "assets", "icon.ico"),
   ];
   return candidates.find((candidate) => existsSync(candidate));
-}
-
-async function newestRelease(): Promise<string | undefined> {
-  const base = join(root, "dist", "release");
-  if (!existsSync(base)) return undefined;
-  const candidates: string[] = [];
-  for await (const version of new Bun.Glob("*/").scan({
-    cwd: base,
-    onlyFiles: false,
-  })) {
-    const dir = join(base, version, HOST_TRIPLE);
-    if (existsSync(dir)) candidates.push(dir);
-  }
-  candidates.sort();
-  return candidates.at(-1);
 }
 
 function versionFromRelease(releaseDir: string): string {
@@ -65,7 +53,7 @@ async function main(): Promise<number> {
     ?.split("=")[1] ?? "inno") as "inno" | "wix" | "both";
   const releaseDir = version
     ? join(root, "dist", "release", version, HOST_TRIPLE)
-    : await newestRelease();
+    : await newestRelease(join(root, "dist", "release"), HOST_TRIPLE);
 
   if (!releaseDir || !existsSync(join(releaseDir, "natalia.exe"))) {
     console.error(

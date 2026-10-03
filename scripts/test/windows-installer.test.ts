@@ -126,8 +126,17 @@ test("the rendered script's Source paths are release-relative", async () => {
       /^([A-Za-z]:)?[\\/]/u,
     );
   const script = renderInnoScript(plan);
+  // The rendered line, not just the plan's own field. Asserting RELATIVITY here
+  // and not merely "does not contain this run's release dir": a path baked from a
+  // DIFFERENT machine — `/home/buildmachine/...` — contains no part of the local
+  // release path and passes that weaker check. Measured: baking exactly that in
+  // turned nothing red.
   for (const line of script.split("\n"))
-    if (line.startsWith("Source:")) expect(line).not.toContain(release);
+    if (line.startsWith("Source:")) {
+      expect(line).not.toContain(release);
+      const source = /Source: "([^"]*)"/.exec(line)?.[1] ?? "";
+      expect(source).not.toMatch(/^([A-Za-z]:)?[\\/]/u);
+    }
   // And every file still gets a line, subdirectories included.
   expect(script).toContain('DestDir: "{app}\\libcef-bin"');
   expect(script).toContain('DestDir: "{app}\\resources\\plugins"');

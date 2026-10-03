@@ -352,7 +352,15 @@ test.each([
     // assertion, which says a third provider request was issued but not WHICH
     // stream issued it — so the failure was not actionable without pulling the
     // log apart. A count is the one failure shape that carries no diagnosis.
-    expect(requests.map((entry) => entry.channel)).toEqual([aborted, peer]);
+    // Which channels, as a SET. Not a sequence: the two streams' provider calls
+    // race, and demanding an order fails 4 runs out of 5 under concurrency — I
+    // added that order requirement in round 102 thinking it made the failure
+    // diagnosable, and it instead manufactured a failure that then cost six
+    // rounds to diagnose. Sorted, so a third request still shows as an extra name
+    // (CI's `[nia, navi, nia]`) and a missing one as a short list.
+    expect(requests.map((entry) => entry.channel).sort()).toEqual(
+      [aborted, peer].sort(),
+    );
   } finally {
     releaseAll(gates);
     await client.dispose?.();

@@ -3832,7 +3832,26 @@ export type RuntimeClient = {
   nativeTerminalRead?(
     id: string,
     sessionID?: string,
-  ): Promise<{ id: string; text: string }>;
+  ): Promise<{
+    id: string;
+    text: string;
+    /**
+     * The window that was served and the document's extent — what makes the pane
+     * pageable. `startLine` is the first line served (inclusive), `endLine` is one
+     * past the last line served, and `totalLines` is how much document there is
+     * to walk. A successor window is addressed from its predecessor's `endLine`,
+     * never from an arithmetic offset.
+     *
+     * Null when the backend cannot report it: the WezTerm host's read returns
+     * text, the cursor and the geometry from a separate process, and the numbers
+     * cannot be recovered on this side of that boundary. A null is an honest
+     * "this read cannot be paged"; zeros would look like a one-line document and
+     * quietly mislead the walker.
+     */
+    startLine: number | null;
+    endLine: number | null;
+    totalLines: number | null;
+  }>;
   nativeTerminalOpenHub?(): Promise<{ muxWindowID: number }>;
   nativeTerminalClaimHumanInput?(
     id: string,

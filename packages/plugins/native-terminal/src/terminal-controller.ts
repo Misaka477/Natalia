@@ -269,11 +269,38 @@ export function createTerminalController(input: {
     return nativeTerminal ? await reconcile() : [];
   }
 
+  /**
+   * Reads a pane through the WezTerm host.
+   *
+   * The extent is null here, and that is the honest answer rather than a
+   * shortfall. The host's `read` returns text, the cursor and the geometry --
+   * nothing about where that text sits in the document or how long the document
+   * is, and the host is a separate process so the numbers cannot be recovered
+   * here either. Zeros would satisfy the shape and read as a one-line document,
+   * which is how paging quietly misleads on this path; a null says "this read
+   * cannot be paged" and a caller can degrade on it. Refusing instead would take
+   * every wezterm read down -- text included -- for a feature this backend never
+   * had.
+   *
+   * That gap is also the reason this backend is scheduled for retirement rather
+   * than extension: a model-facing read that cannot page is not a smaller
+   * version of the contract, it is a different one.
+   */
   async function read(
     id: string,
     options?: { maxLines?: number; sessionID?: string },
   ) {
-    return await requireTerminal().read(id, options);
+    const result = await requireTerminal().read(id, options);
+    return {
+      ...result,
+      // The host's own return type states why these are null: its read carries
+      // text, the cursor and the geometry, and nothing that locates the text in
+      // a document. The pty controller keeps the document in-process and reports
+      // the real window and extent; this backend cannot, and says so.
+      startLine: null,
+      endLine: null,
+      totalLines: null,
+    };
   }
 
   async function openHub() {

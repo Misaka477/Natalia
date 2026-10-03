@@ -1114,6 +1114,14 @@ export function createPtyTerminalController(
     }
     return {
       text: document.slice(start, endExclusive).join("\n"),
+      // The window that was actually served, and how much document there is to page
+      // through. Without the extent a caller asking for `startLine: 400` gets an empty
+      // string and cannot tell "nothing there" from "there is nothing at all", so it
+      // cannot page without guessing -- which is the difference between a window and
+      // a guess.
+      startLine: start,
+      endLine: endExclusive,
+      totalLines: document.length,
       // The pane's own cursor (screen-relative), as the host reports it.
       cursorX: session.screen.cursorX,
       cursorY: session.screen.cursorY,

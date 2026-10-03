@@ -105,11 +105,21 @@ export function createNativeTerminalSurface(
       const exec = sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
-      const { text } = await terminal.read(id, {
+      // The window and the extent ride along. Destructuring to `text` alone dropped
+      // the three fields that make paging navigable, so a caller of this surface got
+      // a pane it could not walk -- the same gap the controller-level change fixed,
+      // reintroduced here by a narrower read.
+      const read = await terminal.read(id, {
         maxLines: 200,
         ...(sessionID ? { sessionID } : {}),
       });
-      return { id, text };
+      return {
+        id,
+        text: read.text,
+        startLine: read.startLine,
+        endLine: read.endLine,
+        totalLines: read.totalLines,
+      };
     },
     async nativeTerminalOpenHub() {
       await ctx.ports.getReady();

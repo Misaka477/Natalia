@@ -98,7 +98,13 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
         return session;
       },
       async nativeTerminalRead(id) {
-        return { id, text: "prompt$ " };
+        return {
+          id,
+          text: "prompt$ ",
+          startLine: 0,
+          endLine: 1,
+          totalLines: 1,
+        };
       },
       async nativeTerminalWrite(input) {
         writes.push(input.input);
@@ -434,7 +440,15 @@ test("an empty pane reconnects to an empty screen, not to the last session's", a
       },
       async nativeTerminalRead() {
         // The pane is genuinely empty.
-        return { id: "term_empty", text: "" };
+        return {
+          id: "term_empty",
+          text: "",
+          // An empty document: zero lines, which is what a pane that has
+          // produced nothing has. 0/1/1 would call it one line long.
+          startLine: 0,
+          endLine: 0,
+          totalLines: 0,
+        };
       },
       async nativeTerminalWrite() {
         return { id: "x", writtenBytes: 0, delivery: "accepted" as const };

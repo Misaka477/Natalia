@@ -567,6 +567,17 @@ export interface TerminalController {
     },
   ): Promise<{
     text: string;
+    /**
+     * The window that was served and the document's extent — what makes the pane
+     * pageable: `startLine` is the first line served (inclusive), `endLine` is one
+     * past the last line served, `totalLines` is the document's length. Null when
+     * the backend cannot report them (the WezTerm host answers from a separate
+     * process and its read carries no extent) — an honest "unknown", where zeros
+     * would impersonate a one-line document.
+     */
+    startLine: number | null;
+    endLine: number | null;
+    totalLines: number | null;
     cursorX: number;
     cursorY: number;
     rows: number;

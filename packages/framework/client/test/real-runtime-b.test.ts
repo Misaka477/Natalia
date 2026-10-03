@@ -442,9 +442,18 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
   expect(await client.nativeTerminalList!()).toMatchObject([
     { id: "tty_management", status: "running", paneID: 71 },
   ]);
-  expect(await client.nativeTerminalRead!("tty_management")).toEqual({
+  // The extent rides along the read, and on this backend it is null: the
+  // fixture's host answers with text and nothing that locates it in a document,
+  // so a null says "cannot page" where zeros would impersonate a one-line
+  // document. The real extent is pinned by the pty controller's own paging
+  // test; this assertion pins the degradation a wezterm-backed runtime serves.
+  const paneRead = await client.nativeTerminalRead!("tty_management");
+  expect(paneRead).toEqual({
     id: "tty_management",
     text: "native pane output",
+    startLine: null,
+    endLine: null,
+    totalLines: null,
   });
   await client.nativeTerminalOpenHub!();
   await expect(

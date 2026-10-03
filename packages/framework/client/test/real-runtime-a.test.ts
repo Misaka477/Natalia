@@ -1090,7 +1090,15 @@ test("terminal plugin config reload preserves its host-owned registry", async ()
     { id: "reload_terminal" },
   ]);
   await expect(client.nativeTerminalRead?.("reload_terminal")).resolves.toEqual(
-    { id: "reload_terminal", text: "reload pane output" },
+    {
+      id: "reload_terminal",
+      text: "reload pane output",
+      // The host registry answers with text and nothing that locates it in a
+      // document: the honest extent is "unknown", not a one-line impersonation.
+      startLine: null,
+      endLine: null,
+      totalLines: null,
+    },
   );
   const firstController = kernel.service<object>(terminalController.id);
 

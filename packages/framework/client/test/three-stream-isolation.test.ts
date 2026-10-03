@@ -358,6 +358,11 @@ test.each([
     // diagnosable, and it instead manufactured a failure that then cost six
     // rounds to diagnose. Sorted, so a third request still shows as an extra name
     // (CI's `[nia, navi, nia]`) and a missing one as a short list.
+    // The count on its own line first. With only the sorted comparison, a third
+    // request shows as one removed and one added name, which a reader has to count
+    // to interpret; stating the count first makes CI's `[nia, navi, nia]` read as
+    // "3 requests where 2 were expected" before the names appear.
+    expect(requests).toHaveLength(2);
     expect(requests.map((entry) => entry.channel).sort()).toEqual(
       [aborted, peer].sort(),
     );

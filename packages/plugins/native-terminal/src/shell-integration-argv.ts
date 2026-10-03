@@ -26,6 +26,7 @@ import { basename, join } from "node:path";
  */
 const SCRIPTS: Record<string, string> = {
   bash: "shell-integration-bash.sh",
+  zsh: "shell-integration-zsh.sh",
 };
 
 /** The directory this module lives in: where the bundled scripts are. */
@@ -45,6 +46,11 @@ export function integratedShellArgv(shellPath: string): string[] | undefined {
   // No `-i`: bash rejects the combination outright (`--: invalid option`), which
   // is the loud kind of failure — measured directly. A pane's stdin is a pty, and
   // bash reads `--rcfile` for that case.
+  // bash reads `--rcfile`; zsh has no such flag and takes a replacement rc
+  // through ZDOTDIR, so the argv cannot carry it — the caller has to set it.
+  // `shell` here is only what gets exec'd; the rc is reached by env, not argv,
+  // and that difference is why zsh is not just another map entry.
+  if (name === "zsh") return [shellPath];
   return [shellPath, "--rcfile", join(BUNDLED, script)];
 }
 

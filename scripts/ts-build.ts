@@ -169,6 +169,29 @@ for (const root of pluginRoots) {
     });
     if (!worker.success)
       throw new Error(`${root}: terminal worker build failed`);
+    // The shell-integration rc scripts. Without these a pane starts, its argv
+    // points at `--rcfile <this package>/shell-integration-bash.sh`, and bash
+    // finds nothing — so the command-level read never comes alive on an installed
+    // copy, which is exactly what happened: the scripts were verified in a pty and
+    // never staged, so the verification covered the source tree and not a release.
+    // They ride the release regardless of NATALIA_BUILD_SKIP_NATIVE: that flag
+    // stages the wezterm binaries, not the text files a pane sources.
+    for (const script of [
+      "shell-integration-bash.sh",
+      "shell-integration-zsh.sh",
+    ]) {
+      const from = join(root, "src", script);
+      if (!(await Bun.file(from).exists()))
+        throw new Error(`${root}: missing shell integration script ${script}`);
+      await cp(from, join(packageOutdir, script));
+    }
+    for (const entry of [["zsh-rc/.zshrc", "zsh-rc/.zshrc"]] as const) {
+      const from = join(root, "src", entry[0]);
+      if (await Bun.file(from).exists()) {
+        await mkdir(join(packageOutdir, "zsh-rc"), { recursive: true });
+        await cp(from, join(packageOutdir, entry[1]));
+      }
+    }
     const nativeRelease = join(root, "wezterm/target/release");
     const nativeOutdir = join(packageOutdir, "wezterm");
     const executableSuffix = process.platform === "win32" ? ".exe" : "";

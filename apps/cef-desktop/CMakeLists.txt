@@ -81,6 +81,50 @@ else()
 #            maintained Ayatana fork, whose API is identical) and the file is
 #            compiled out when neither is found, so the link never fails.
 set(NATALIA_HAVE_APPINDICATOR OFF)
+# glib is resolved on its own and its two directories are put in the tray's
+# `target_include_directories`, because that call is what actually reaches
+# `CXX_INCLUDES` (verified by reading the generated flags.make).
+#
+# Why not let the tray's chain carry it: measured, `_AI_INCLUDE_DIRS` does contain
+# two glib directories, and on this machine both are empty of headers —
+# `include/glib-2.0` holds neither glib.h nor glibconfig.h. glib's own include is
+# split in half (glib.h in one dir, glibconfig.h in a lib-specific one), so a
+# `<glib.h>` include fails with a message that names a header, not a path, and the
+# directory it names is present.
+#
+# So: resolve glib separately, and keep only directories that actually contain one
+# of the two headers. That is a check on the directory rather than on what some
+# other .pc claimed, and it is what makes this survive a prefix that advertises
+# include/glib-2.0 with nothing in it.
+# glib's two directories are found by asking the FILESYSTEM, not pkg-config.
+#
+# Measured: `pkg_check_modules(glib-2.0)` on this machine answers with three conda
+# directories, and none of the three contains glib.h or glibconfig.h — the printed
+# value is [conda/include/glib-2.0; conda/lib/glib-2.0/include; conda/include] while
+# the headers are at /usr/include/glib-2.0 and /usr/lib64/glib-2.0/include. Its
+# LIBRARY answer is correct (pkgcfg_lib points at /usr/lib64), so include and library
+# disagree, and trusting the include half buys a compile failure.
+#
+# glib's include is split in two, so both are needed and either alone is useless.
+# Searching the system prefixes and keeping the first hit of each half is a check
+# against the filesystem rather than against what a .pc claimed.
+set(_NATALIA_GLIB_PREFIXES /usr /usr/local)
+set(_NATALIA_GLIB_DIRS "")
+foreach(_p ${_NATALIA_GLIB_PREFIXES})
+  foreach(_sub include/glib-2.0 lib64/glib-2.0/include lib/glib-2.0/include include/glib-2.0/include)
+    if(EXISTS "${_p}/${_sub}/glib.h")
+      list(APPEND _NATALIA_GLIB_DIRS "${_p}/${_sub}")
+    endif()
+  endforeach()
+  foreach(_sub lib64/glib-2.0/include lib/glib-2.0/include include/glib-2.0/include)
+    if(EXISTS "${_p}/${_sub}/glibconfig.h")
+      list(APPEND _NATALIA_GLIB_DIRS "${_p}/${_sub}")
+    endif()
+  endforeach()
+endforeach()
+if(NOT _NATALIA_GLIB_DIRS)
+  message(WARNING "glib headers not found under ${_NATALIA_GLIB_PREFIXES}; the tray build will fail on <glib.h>")
+endif()
 # Both spellings are detected, each TOGETHER with gtk+-3.0: the library's own
 # .pc Requires it, and glib's headers arrive through that chain, so checking the
 # tray module alone leaves gdkconfig.h unable to find glib.h at compile time.
@@ -94,7 +138,7 @@ foreach(_pkg ${_AI_CANDIDATES})
       set(NATALIA_AYATANA_APPINDICATOR ON)
     endif()
     list(APPEND NATALIA_CEF_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_linux.cc")
-    target_include_directories(natalia-cef-desktop SYSTEM PRIVATE ${_AI_INCLUDE_DIRS})
+    target_include_directories(natalia-cef-desktop SYSTEM PRIVATE ${_NATALIA_GLIB_DIRS} ${_AI_INCLUDE_DIRS})
     target_link_libraries(natalia-cef-desktop PRIVATE ${_AI_LIBRARIES})
     target_link_directories(natalia-cef-desktop PRIVATE ${_AI_LIBRARY_DIRS})
     target_compile_definitions(natalia-cef-desktop PRIVATE NATALIA_HAVE_APPINDICATOR)

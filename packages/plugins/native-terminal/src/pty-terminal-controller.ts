@@ -242,6 +242,38 @@ while True:
         alive = False
         break
 
+# A shell that runs a full line editor asks the terminal where the cursor is before it
+# draws anything: OSC-133-aware PowerShell (through PSReadLine) sends DSR, ESC [ 6 n, on
+# start and blocks until a terminal answers ESC [ <row> ; <col> R. This bridge IS that
+# terminal -- it owns the pty the child writes into -- and it never answered. The child
+# waits forever for a reply, its read-line call returns empty, and the command-level read
+# comes back with no command at all. bash and zsh never notice because neither asks.
+#
+# The reply goes to the pty MASTER, which is the child's input -- where a terminal
+# emulator's answer belongs, and why the pane's own output never shows it as such. A test
+# therefore asserts on the shell reading its own stdin, not on the rendered screen.
+#
+# The answer is the window size, not a cursor position, because this bridge does not
+# track the cursor: it forwards bytes rather than emulating a screen. An app asking
+# "where is the cursor" gets "the extent of the terminal", which is enough for a line
+# editor to lay itself out, and is honest about what is actually known here.
+DSR_QUERY = b"\x1b[6n"
+
+def answer_cursor_queries(chunk):
+    if DSR_QUERY not in chunk:
+        return chunk
+    rows, cols = 24, 80
+    try:
+        packed = fcntl.ioctl(master, termios.TIOCGWINSZ, bytes(8))
+        rows, cols = struct.unpack("HHHH", packed)[:2]
+    except OSError:
+        pass
+    os.write(master, b"\x1b[%d;%dR" % (rows, cols))
+    # Consumed rather than forwarded: the host renders a screen and has no more use for
+    # the request than this bridge does.
+    return chunk.replace(DSR_QUERY, b"")
+
+
 while alive:
     readable, _, _ = select.select([stdin, master], [], [])
     if stdin in readable:
@@ -269,7 +301,7 @@ while alive:
         if not chunk:
             alive = False
             break
-        send("o", chunk)
+        send("o", answer_cursor_queries(chunk))
 try:
     waited, status = os.waitpid(pid, 0)
     code = os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1

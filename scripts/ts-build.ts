@@ -188,18 +188,30 @@ for (const root of pluginRoots) {
     const nativeRelease = join(root, "wezterm/target/release");
     const nativeOutdir = join(packageOutdir, "wezterm");
     const executableSuffix = process.platform === "win32" ? ".exe" : "";
-    const executables = [
-      "wezterm",
-      "wezterm-gui",
-      "wezterm-mux-server",
-      // The Windows PTY bridge (ConPTY host): the PTY backend's spawn on
-      // win32, built by native-terminal:build-conpty:windows. It is a native
-      // artifact of this package like the wezterm three, so it rides the same
-      // staging list - otherwise the store copy has no bridge and every
-      // Windows panel silently falls back to the mux's screen-dump path.
-      ...(process.platform === "win32" ? ["natalia-conpty-bridge"] : []),
-    ].map((name) => `${name}${executableSuffix}`);
-    if (skipNative) {
+    // The fork's three binaries follow the retirement: they ride a WINDOWS
+    // build only, because the mux is the Windows pane's PTY until the ConPTY
+    // bridge flips (issue #2). A POSIX build stages none — the self-developed
+    // pty backend needs no terminal executables, measured by the terminal
+    // suite passing with the three executables hidden. The ConPTY bridge, by
+    // contrast, is our own native and stays on the Windows list: without it
+    // the store copy has no bridge and every Windows panel silently falls
+    // back to the mux's screen-dump path.
+    const executables = (
+      process.platform === "win32"
+        ? [
+            "wezterm",
+            "wezterm-gui",
+            "wezterm-mux-server",
+            "natalia-conpty-bridge",
+          ]
+        : []
+    ).map((name) => `${name}${executableSuffix}`);
+    if (executables.length === 0) {
+      // Nothing native to stage on this platform. A stale copy from an
+      // earlier native build is trimmed, so the plugin's release files can
+      // say the tier does not exist rather than advertising it.
+      await rm(nativeOutdir, { recursive: true, force: true });
+    } else if (skipNative) {
       // The distribution stays truthful about what it carries: the release
       // manifest omits the native tier rather than advertising it.
       console.log(

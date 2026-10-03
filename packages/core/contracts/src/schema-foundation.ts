@@ -24,6 +24,20 @@ export const timeoutSchema = z.object({
  */
 export const terminalWindowConfigSchema = z.object({
   windowMode: z.enum(["auto", "windowless", "window"]).default("auto"),
+  /**
+   * The terminal backend. `pty` — this repo's own controller (an in-process
+   * document, the platform's PTY bridge, the web panel's xterm renderer) — is
+   * the default and the only supported value.
+   *
+   * `wezterm` is DEPRECATED as of the retirement decision: the interactive
+   * terminal is the self-developed stack, and the fork's binaries already
+   * ship in the WINDOWS release only (the Windows pane still runs in the mux
+   * until the ConPTY bridge's mute-pane defect is fixed). The value stays
+   * accepted so an old config keeps parsing; it selects a controller whose
+   * POSIX releases no longer carry executables, so on Linux it fails at pane
+   * start with the fork's own "not built" error. The value and the controller
+   * behind it are removed once the ConPTY bridge flips on Windows.
+   */
   backend: z.enum(["wezterm", "pty"]).default("pty"),
 });
 

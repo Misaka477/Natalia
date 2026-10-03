@@ -118,18 +118,25 @@ POSIX 完全一致的引号/重定向语义）。解析顺序：
 npm run build:everything
 ```
 
-八个步骤：confinement 后端 → 对象存储原生 crate（cdylib + 常驻索引
-daemon）→ AST wasm 包（核心 + 44 语言）→ 许可清单 → wezterm Ubuntu
-（podman，glibc 对齐）→ wezterm Windows（交叉构建）→ 插件分发 →
-双平台 release（自带契约自检：布局/无机器本地状态/本平台终端二进制/
-全部文件在校验和清单里）。
+七个步骤：confinement 后端 → 对象存储原生 crate（cdylib + 常驻索引
+daemon）→ AST wasm 包（核心 + 44 语言）→ 许可清单 → wezterm Windows
+（交叉构建，见下）→ 插件分发 → 双平台 release（自带契约自检：布局/
+无机器本地状态/终端层契约/全部文件在校验和清单里）。
+
+**交互式终端是自研栈**：默认后端是本仓库自己的 PTY 控制器（进程内文档 +
+平台 PTY 桥 + web 面板 xterm 渲染）。wezterm fork 已宣布退役：**POSIX
+release 不再携带任何终端可执行文件**（实测：藏掉 fork 三件套后终端测试
+193 个全过，Linux 运行时零依赖），`terminal.backend: "wezterm"` 已标记
+deprecated。fork 三件套目前**只活在 Windows release**，且只因 Windows
+面板的 PTY 还借居在 mux 里——等 ConPTY 桥的 mute-pane 缺陷
+（issue #2）修好、默认翻转后再整链删除。
 
 跳过标志的**确切含义**（只有 wezterm 是可跳的）：
 
-| 跳过                                               | 影响                                                                                                                                                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--skip-wezterm-ubuntu` / `--skip-wezterm-windows` | 不编 wezterm。**唯一可跳的一项**——如果你已编译好三个可执行文件，把它们投到 `packages/plugins/native-terminal/wezterm/target/release/`（`ts-build` 只读这个路径）即可，分发与源码运行都能用 |
-| `--skip-release`                                   | 只编原生构件，不打 release 包                                                                                                                                                              |
+| 跳过                     | 影响                                                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--skip-wezterm-windows` | 不编 wezterm。**唯一可跳的一项**——已交叉编好三个 `.exe` 就投到 `packages/plugins/native-terminal/wezterm/target/release/`（`ts-build` 只读这个路径） |
+| `--skip-release`         | 只编原生构件，不打 release 包                                                                                                                        |
 
 **其余没有跳过标志，也不该有**：confinement 后端、object-store 原生 crate、AST wasm 包都是运行时真正需要的能力，跳掉 = 少功能或静默降级，不是一个等价构建。
 
@@ -141,27 +148,29 @@ npm run diff:build-wasm     # text-diff wasm + 44 个 AST wasm 包
 npm run build:windows       # 上面全部 + licenses + ts:build(不跳native) + plugin store + web
 ```
 
-`build:windows` 里的 `ts:build` **不带** `NATALIA_BUILD_SKIP_NATIVE`——它会检查三个 wezterm 可执行文件在 `wezterm/target/release/` 并把它们 stage 进插件分发，缺一个就大声报错（半成品不是分发）。
+`build:windows` 里的 `ts:build` **不带** `NATALIA_BUILD_SKIP_NATIVE`——在 Windows 构建机上它会检查三个 wezterm 可执行文件与 ConPTY 桥就位，并把它们 stage 进插件分发，缺一个就大声报错（半成品不是分发）。在 Linux 构建机上它**不再 stage 任何终端可执行文件**：POSIX 的终端层是自研 PTY 桥，发行树里没有 fork 的位置。
 
 每一步的成功/跳过/失败都带耗时打印；结束时列出每个产物的实际大小
 （或“未构建”）。某一步失败会让整条构建停在那里并打印该命令的输出
 尾部——半成品不是分发。
 
-## 4. 终端可执行文件投放（prebuilt/）
+## 4. 终端可执行文件投放（prebuilt/，仅 Windows）
 
-交互式终端用的是本仓库维护的 wezterm fork。**如果你只有编译好的
-三个可执行文件**（比如从别处下载的），把它们放进：
+**自研终端接管后，只有 Windows 还需要投放**：Windows 面板的 PTY 仍借居在
+fork 的 mux 里（ConPTY 桥修好前），所以 Windows release 仍带那三个
+`.exe`。POSIX 没有任何可投的——自研 PTY 桥不经过这些目录，发行树里也
+不再有它们的位置。
+
+**如果你只有交叉编好的三个 Windows 可执行文件**（比如从别处下载的），
+把它们放进：
 
 ```
-packages/plugins/native-terminal/prebuilt/<平台>/
+packages/plugins/native-terminal/prebuilt/windows-x64/
 ```
 
-其中 `<平台>` 是 `windows-x64` 或 `linux-x64`，三个文件是
-`wezterm` / `wezterm-gui` / `wezterm-mux-server`（Windows 带 `.exe`）。
-
+三个文件是 `wezterm.exe` / `wezterm-gui.exe` / `wezterm-mux-server.exe`。
 这个目录就是为“下载后直接用”准备的：**不需要你手动创建 wezterm
 target/release 那一长串路径**——解压出来的目录结构本身就长这样。
-release 包里已带对应平台的三个文件，无需再投。
 
 解析顺序：显式指定的目录 → **prebuilt 投放目录** → fork 自己的构建
 目录。解析不到时，报错信息会直接点名 prebuilt 目录（而不是只甩一个
@@ -175,8 +184,14 @@ release 包里已带对应平台的三个文件，无需再投。
 | `prebuilt/windows-x64/`   | **运行时**（源码跑 `serve` 时插件自己解析） | 从源码跑                               |
 | `wezterm/target/release/` | **`ts-build`**（打分发时 stage 进插件包）   | 打分发（`build:windows` / `ts:build`） |
 
-`ts-build` 不跳 native 时**只读 `wezterm/target/release/`**：三个可执行文件缺一个，就直接抛
-`missing terminal executable wezterm.exe`。要打分发，就把编译好的三个文件**同时**投到这两处。
+`ts-build` 在 Windows 构建机上不跳 native 时读 `wezterm/target/release/`：
+可执行文件缺一个，就直接抛 `missing terminal executable wezterm.exe`。
+要打 Windows 分发，就把编译好的三个文件**同时**投到这两处。
+
+**ConPTY 桥（`natalia-conpty-bridge.exe`，我们自己的原生件）**目前由
+`native-terminal:build-conpty:windows` 编到 `prebuilt/windows-x64/`，
+运行时默认**不启用**（`NATALIA_TERMINAL_CONPTY=1` 开启，mute-pane 缺陷
+见 issue #2）——它是默认翻转后整链删除 fork 的前提。
 
 ## 5. 从源码跑（Windows / Linux 通用）
 

@@ -70,6 +70,14 @@ export function createTerminalPlugin(input: TerminalControllerInput): Plugin {
       // missing service degrades to a controller that reports no notices.
       const settlement =
         api.services.get<SettlementService>(SETTLEMENT_SERVICE);
+      // The retired path: `backend: "wezterm"` (or a host registry handed in
+      // from outside, which is how the real-runtime tests drive it) selects
+      // the mux controller. POSIX releases no longer carry the fork's
+      // executables — the self-developed pty backend is the product — so on
+      // Linux this selection now fails at pane start with the fork's own
+      // "not built" error, which is the honest answer to a deprecated
+      // request. The controller and this branch are deleted once the ConPTY
+      // bridge flips on Windows and the mux has no callers left.
       if (input.backend === "wezterm" || input.external) {
         controller = createTerminalController({
           ...input,

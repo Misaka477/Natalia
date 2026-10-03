@@ -124,3 +124,45 @@ test("a cross-platform release names the host build ITS platform needs", () => {
   expect(source).toContain("desktop:cef:build:windows (on Windows)");
   expect(source).toContain("desktop:cef:build (on macOS)");
 });
+
+test("a posix release carries no terminal executables — the tier is retired", () => {
+  // The interactive terminal's default is the self-developed pty controller;
+  // the fork's three binaries were dead weight on POSIX (measured: the whole
+  // terminal suite passes with them hidden). The release now states that
+  // contract instead of shipping 240 MB nobody runs.
+  const source = script();
+  // The staging skips POSIX after trimming whatever the shared dist carried.
+  const staging = source.slice(
+    source.indexOf("async function stageTerminalNatives"),
+    source.indexOf("async function stageDesktopHost"),
+  );
+  expect(staging).toContain('if (!platformDir.startsWith("windows")) return;');
+  // And the verifier treats a surviving directory as the retired tier coming
+  // back, not as a platform accident: the message names the retirement.
+  expect(source).toContain("a posix release carries a wezterm/ directory");
+  expect(source).toContain("the pty backend");
+});
+
+test("ts-build stages the fork's trio on a Windows build only", () => {
+  // Same retirement, one layer down: the distribution's plugin package must
+  // not advertise a wezterm tier on POSIX. The trio is Windows-only now; the
+  // ConPTY bridge — our own native, and what the Windows pane's PTY spawn
+  // actually uses — rides the same Windows list.
+  const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
+  expect(source).toContain('process.platform === "win32"');
+  // The trio and the bridge are named on the Windows side of the condition.
+  const condition = source.slice(
+    source.indexOf("const executables = ("),
+    source.indexOf(");", source.indexOf("const executables = (")),
+  );
+  for (const name of [
+    '"wezterm"',
+    '"wezterm-gui"',
+    '"wezterm-mux-server"',
+    '"natalia-conpty-bridge"',
+  ])
+    expect(condition, `${name} belongs on the Windows list`).toContain(name);
+  // And an empty POSIX list still trims a stale directory, so the plugin's
+  // release files can say the tier does not exist.
+  expect(source).toContain("Nothing native to stage on this platform");
+});

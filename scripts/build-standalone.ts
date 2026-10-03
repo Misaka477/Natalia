@@ -50,20 +50,22 @@ const targets = explicit
     : [`bun-${hostTarget}` as const];
 
 /**
- * Keeps only the platform's own terminal executables in the release: the
- * plugin distribution stages a whole `wezterm/` directory, and the two
- * native builds populate the same fork's target/release — both platforms'
- * files sit side by side until this trims each release to its own.
- */
-/**
- * The terminal executables are per-platform: both native builds stage into
- * the same fork's target/release, and the shared dist/ts copy carries
- * whichever was staged when ts-build ran — a Windows release shipping the
- * Linux binaries was the bug, and trimming-only produced an empty dir as
- * the second attempt (the cross-build stages AFTER ts-build). Each release
- * therefore takes its own executables straight from the fork, whatever the
- * distribution happened to carry, and fails loudly when the platform's
- * build is missing (a release whose terminal cannot run is a lie).
+ * The terminal executables are per-platform, and on the way out.
+ *
+ * The interactive terminal's default backend is this repo's own PTY controller
+ * (an in-process document plus the platform's PTY bridge — Python on POSIX,
+ * the ConPTY helper on Windows), which needs no terminal executables at all.
+ * The fork's three binaries remain in the WINDOWS release only, and only
+ * because the Windows pane still runs inside the mux until the ConPTY bridge's
+ * mute-pane defect (issue #2) is fixed and the default flips. A POSIX release
+ * therefore carries NO wezterm directory: measured by hiding the three
+ * executables and running the terminal suite green (193 tests), the Linux
+ * runtime path never touches them. Shipping them anyway was 240 MB of dead
+ * weight per release.
+ *
+ * The POSIX branch still REMOVES a staged copy if one is there (the shared
+ * dist/ts carries whichever platform staged last), so the release tree states
+ * the new contract rather than inheriting the old one.
  */
 async function stageTerminalNatives(
   outDir: string,
@@ -76,14 +78,14 @@ async function stageTerminalNatives(
     root,
     "packages/plugins/native-terminal/wezterm/target/release",
   );
-  const suffix = platformDir.startsWith("windows") ? ".exe" : "";
   await rm(weztermDir, { recursive: true, force: true });
+  if (!platformDir.startsWith("windows")) return;
   await mkdir(weztermDir, { recursive: true });
   for (const name of ["wezterm", "wezterm-gui", "wezterm-mux-server"]) {
-    const executable = `${name}${suffix}`;
+    const executable = `${name}.exe`;
     if (!(await Bun.file(join(forkRelease, executable)).exists()))
       throw new Error(
-        `${platformDir}: the terminal's ${executable} is not built — run the platform's wezterm build before packaging`,
+        `${platformDir}: the terminal's ${executable} is not built — run the Windows wezterm cross build before packaging`,
       );
     await cp(join(forkRelease, executable), join(weztermDir, executable));
   }
@@ -204,8 +206,9 @@ async function stageDesktopHost(
  *    manifest.json, plugins/);
  * 2. NO machine-local state — the dev plugin-store, the pty stores, the
  *    test workspaces (they tied the artifact to the building machine);
- * 3. the terminal natives are THIS platform's own executables (a Windows
- *    release with Linux wezterm, or an empty directory, are both lies);
+ * 3. the terminal tier follows the retirement: a POSIX release carries NO
+ *    terminal executables (the self-developed pty backend is the only
+ *    default), a Windows release carries its three and only those;
  * 4. every file on disk is covered by the checksums (an uncovered file
  *    is a file no installer verifies).
  */
@@ -254,7 +257,15 @@ async function verifyRelease(
   ])
     if (await Bun.file(join(outDir, forbidden)).exists())
       problems.push(`machine-local state shipped: ${forbidden}/`);
-  // The terminal natives: this platform's three executables and nothing else.
+  // The terminal natives, and their retirement: a POSIX release carries NONE
+  // (the self-developed pty backend needs no executables — see
+  // stageTerminalNatives), and a stray directory there is the old contract
+  // coming back, which fails the build. Windows still carries its three until
+  // the ConPTY bridge flips (issue #2), with the positive-shape check: a
+  // windows release must not carry a bare binary, a posix one must not exist
+  // at all. (The old check's trap: `endsWith` against the empty suffix passes
+  // every string — which is how the first version passed a linux release full
+  // of wezterm.exe.)
   const weztermDir = join(
     outDir,
     "plugins",
@@ -262,23 +273,24 @@ async function verifyRelease(
     "wezterm",
   );
   if (await isFile(join(weztermDir, "..", "index.js"))) {
-    const suffix = platformDir.startsWith("windows") ? ".exe" : "";
-    const entries = await readdir(weztermDir).catch(() => []);
-    if (entries.length !== 3)
-      problems.push(
-        `the terminal carries ${entries.length} executables, expected 3`,
-      );
-    const wantsWindows = platformDir.startsWith("windows");
-    // The check is the POSITIVE shape: a posix release must not carry
-    // an .exe, a windows release must not carry a bare one. `endsWith`
-    // against the empty suffix is the trap this replaces — every string
-    // "ends with" "" — which is how the first version of this check
-    // passed a linux release full of wezterm.exe.
-    for (const entry of entries)
-      if (entry.endsWith(".exe") !== wantsWindows)
+    if (!platformDir.startsWith("windows")) {
+      if (await isDir(weztermDir))
         problems.push(
-          `the ${platformDir} release carries a foreign terminal binary: ${entry}`,
+          "a posix release carries a wezterm/ directory — the pty backend " +
+            "needs no terminal executables, so this is the retired tier back",
         );
+    } else {
+      const entries = await readdir(weztermDir).catch(() => []);
+      if (entries.length !== 3)
+        problems.push(
+          `the terminal carries ${entries.length} executables, expected 3`,
+        );
+      for (const entry of entries)
+        if (!entry.endsWith(".exe"))
+          problems.push(
+            `the ${platformDir} release carries a foreign terminal binary: ${entry}`,
+          );
+    }
   }
   // Every file on disk is covered by the checksums. VERSION and
   // SHA256SUMS are the verification's own inputs: a checksum cannot list
@@ -304,7 +316,7 @@ async function verifyRelease(
     );
   console.log(
     `verified ${platformDir}: layout, no machine-local state, ` +
-      `${platformDir.startsWith("windows") ? "windows" : "posix"} terminal natives, ` +
+      `${platformDir.startsWith("windows") ? "windows terminal tier" : "no terminal executables (pty backend)"}, ` +
       `${files.length} files checksummed`,
   );
 }

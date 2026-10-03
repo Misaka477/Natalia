@@ -2,17 +2,18 @@
  * THE ONE-SHOT BUILD: every native artifact a distribution needs, in one
  * command, fail-loud.
  *
- * The eight steps, in dependency order:
+ * The seven steps, in dependency order:
  *
  *   1. the confinement backend   (the shell tools fail CLOSED without it)
  *   2. the object-store's native crate — the cdylib (the store's FFI) AND
  *      the resident index daemon binary
  *   3. the AST packs             (the wasm core + the 44 languages)
  *   4. the license manifest      (the build's own metadata gate)
- *   5. the wezterm fork, Ubuntu  (podman — a glibc match to the release)
- *   6. the wezterm fork, Windows (the cross build's three .exe)
- *   7. the plugin distribution   (ts-build in distribution mode + store)
- *   8. the releases              (linux-x64 + windows-x64, self-verified)
+ *   5. the wezterm fork, Windows (the cross build's three .exe — the only
+ *      platform still carrying the fork, and only until the ConPTY bridge
+ *      flips; POSIX releases ship no terminal executables at all)
+ *   6. the plugin distribution   (ts-build in distribution mode + store)
+ *   7. the releases              (linux-x64 + windows-x64, self-verified)
  *
  * What it is NOT: a test runner. Tests are the verify chain's business;
  * this builds. What it refuses to do: continue past a failed step. A
@@ -20,7 +21,6 @@
  * "mostly worked" is how a release ships with the wrong native binaries.
  *
  * Flags (each skips honestly, and every skip is printed in the summary):
- *   --skip-wezterm-ubuntu    no podman on this host
  *   --skip-wezterm-windows   no cross toolchain
  *   --skip-release           natives only, no standalone bundles
  */
@@ -130,14 +130,12 @@ const steps: Step[] = [
     run: () => command(["run", "licenses:check"]),
   },
   {
-    name: "wezterm for Ubuntu (podman, a glibc match)",
-    skipFlag: "--skip-wezterm-ubuntu",
-    run: () => command(["run", "native-terminal:build-wezterm:ubuntu"]),
-  },
-  {
-    name: "wezterm for Windows (the cross build)",
+    name: "the wezterm fork, Windows (the cross build's three .exe)",
     skipFlag: "--skip-wezterm-windows",
-    run: () => command(["run", "native-terminal:build-wezterm-windows-cross"]),
+    // The colon form, not the dash one: the dash named a script package.json
+    // has never carried, so this step died with "Missing script" on any host
+    // that reached it — found while retiring the Ubuntu twin beside it.
+    run: () => command(["run", "native-terminal:build-wezterm:windows-cross"]),
   },
   {
     name: "the plugin distribution",

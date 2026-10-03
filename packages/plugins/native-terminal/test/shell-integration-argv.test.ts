@@ -84,13 +84,14 @@ describe("withShellIntegration", () => {
 
 describe("integratedShellArgv", () => {
   test("a shell has an entry only once it has been run", () => {
-    // bash and zsh were both driven end to end — a real shell in a pty, emitting
-    // the markers in the order the parser expects, exit codes included. pwsh has
-    // not been run anywhere yet, so it has no entry: adding one on the strength of
-    // a script that was never executed is how an unverified path ships.
+    // All three were driven end to end — a real shell in a pty, emitting the markers in
+    // the order the parser expects, exit codes included. `fish` has not been run
+    // anywhere, so it has no entry: adding one on the strength of a script that was
+    // never executed is how an unverified path ships.
     expect(integratedShellArgv("/usr/bin/bash")).toBeDefined();
     expect(integratedShellArgv("/usr/bin/zsh")).toBeDefined();
-    expect(integratedShellArgv("/usr/bin/pwsh")).toBeUndefined();
+    expect(integratedShellArgv("/usr/bin/pwsh")).toBeDefined();
+    expect(integratedShellArgv("/usr/bin/fish")).toBeUndefined();
   });
 
   test("a Windows spelling does not match the POSIX entry", () => {

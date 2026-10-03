@@ -28,6 +28,7 @@ import { basename, join } from "node:path";
 const SCRIPTS: Record<string, string> = {
   bash: "shell-integration-bash.sh",
   zsh: "shell-integration-zsh.sh",
+  pwsh: "shell-integration-pwsh.ps1",
 };
 
 /** The directory this module lives in: where the bundled scripts are. */
@@ -74,6 +75,22 @@ export function integratedShellArgv(
       // shell's own name and `$PWD` left wherever the pane started, so neither
       // locates a sibling file (both tried, both silently loaded nothing).
       env: { ZDOTDIR: ensureZshRcDir() },
+    };
+  // PowerShell has no --rcfile and reads no rc file of its own. It takes a command to
+  // dot-source, and it must be INTERACTIVE for the read-line override to be the one
+  // that reads input -- measured: without `-Interactive` the startup and prompt markers
+  // appear and the command line arrives empty, and nothing in the argv looks wrong.
+  if (name === "pwsh")
+    return {
+      argv: [
+        shellPath,
+        "-NoLogo",
+        "-NoExit",
+        "-Interactive",
+        "-Command",
+        `. '${join(BUNDLED, script)}'`,
+      ],
+      env: {},
     };
   return { argv: [shellPath, "--rcfile", join(BUNDLED, script)], env: {} };
 }

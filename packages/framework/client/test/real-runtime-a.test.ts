@@ -2729,6 +2729,16 @@ test("runtime sends a baseline system prompt without configured agent instructio
   });
   client.start(() => undefined);
   await client.submitAndWait!("who are you?");
+  // A request must have been captured before its content is meaningfully
+  // examined. Without this, a provider that never streamed makes every `toContain`
+  // below fail against `String(undefined)` — "expected to contain
+  // <natalia_cli_persona>, received [undefined]" — which reads like the prompt is
+  // wrong rather than like no prompt ever arrived. CI failed this test once in
+  // exactly that undiagnosable shape.
+  expect(
+    requests.length,
+    "a provider request must have been captured before its prompt is read",
+  ).toBeGreaterThan(0);
   const systemPrompt = String(requests[0]?.messages[0]?.content);
   const runtimeContext = (requests[0]?.messages ?? [])
     .filter((message) => message.role === "user")

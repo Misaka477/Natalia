@@ -348,7 +348,11 @@ test.each([
     expect(
       await (peer === "navi" ? client.naviChat! : client.niaChat!).abort!(),
     ).toEqual({ aborted: false });
-    expect(requests).toHaveLength(2);
+    // The channels, not just the count. CI saw `Received length: 3` at this
+    // assertion, which says a third provider request was issued but not WHICH
+    // stream issued it — so the failure was not actionable without pulling the
+    // log apart. A count is the one failure shape that carries no diagnosis.
+    expect(requests.map((entry) => entry.channel)).toEqual([aborted, peer]);
   } finally {
     releaseAll(gates);
     await client.dispose?.();

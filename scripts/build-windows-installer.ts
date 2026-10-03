@@ -92,8 +92,10 @@ async function main(): Promise<number> {
   if (result.installer) lines.push(`[win-inst] installer: ${result.installer}`);
   else
     lines.push(
-      `[win-inst] no compiler here — the input above is the deliverable; ` +
-        `compile it on a Windows host where ISCC or candle is on PATH.`,
+      `[win-inst] no compiler here — the input above sits BESIDE the release ` +
+        `it packs, so it compiles on a Windows host where ISCC or candle is on ` +
+        `PATH, or through a named one: NATALIA_ISCC=/path/to/iscc (wine's ` +
+        `ISCC on Linux, say).`,
     );
   if (!result.plan.shortcut.iconRelative)
     lines.push(

@@ -94,7 +94,10 @@ test("a build without a compiler writes the inputs rather than failing", async (
   });
   expect(existsSync(result.iss!)).toBe(true);
   expect(existsSync(result.wxs!)).toBe(true);
-  if (Bun.which("ISCC") === null && Bun.which("candle") === null) {
+  // A compiler NAMED through the environment counts as present: the compile
+  // then really runs, which is the point of the variable.
+  const named = !!process.env.NATALIA_ISCC || !!process.env.NATALIA_CANDLE;
+  if (Bun.which("ISCC") === null && Bun.which("candle") === null && !named) {
     expect(result.compiled).toBe(false);
     expect(result.installer).toBeUndefined();
   }
@@ -175,4 +178,91 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   expect(logs.length).toBeGreaterThanOrEqual(2);
   // And a lock failure must surface, not vanish.
   expect(script).toContain("SuppressibleMsgBox");
+});
+
+test("the Pascal section's column one carries only declarations", async () => {
+  // The escape-eating bug this pins: a comment line in the renderer's source
+  // held `%USERPROFILE%\.config\natalia`, and in a double-quoted TS string `\.`
+  // drops the backslash while `\n` becomes a real newline — so the rendered
+  // .iss sprouted a bare line `atalia (both computed by` at column one of the
+  // [Code] section, where Pascal expects `begin`. ISCC: "'BEGIN' expected",
+  // compile aborted. Every string-containment assertion in this file passed.
+  //
+  // So the pin is structural, on the RENDERED text: in [Code], a token at
+  // column one is a declaration and nothing else.
+  const release = await fakeWindowsRelease();
+  const plan = await planWindowsInstall({
+    releaseDir: release,
+    icon: "icon.ico",
+  });
+  const script = renderInnoScript(plan);
+  const allowed = ["//", "var", "procedure", "begin", "end"];
+  let inCode = false;
+  for (const line of script.split("\n")) {
+    if (line === "[Code]") {
+      inCode = true;
+      continue;
+    }
+    if (inCode && line.startsWith("[")) break; // the next section
+    if (!inCode || line.trim() === "" || line.startsWith(" ")) continue;
+    expect(
+      allowed.some((prefix) => line.startsWith(prefix)),
+      `column one carries a stray token: ${JSON.stringify(line)}`,
+    ).toBe(true);
+  }
+});
+
+test("the written inputs sit beside the sources they name", async () => {
+  // The Source lines are release-relative on purpose, so the script compiles
+  // exactly where it is written. Writing it anywhere else — the previous
+  // behaviour, a separate outDir — produced a delivered .iss that failed with
+  // "Source file does not exist" on the Windows host the output told to compile
+  // it. Found by actually compiling the thing under wine's ISCC.
+  const release = await fakeWindowsRelease();
+  const outDir = await mkdtemp(join(tmpdir(), "win-beside-"));
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir,
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  expect(result.iss!.startsWith(release)).toBe(true);
+  expect(existsSync(result.iss!)).toBe(true);
+  // And the compiled installer still lands in the deliverable directory.
+  if (!result.installer) expect(outDir).not.toContain(result.iss!.slice(0, -4));
+});
+
+test("a compiler, when one is named, produces a real Setup.exe", async () => {
+  // The end-to-end pin the render tests cannot be: the whole script, accepted
+  // by an actual Inno compiler, yielding an installer. Absent a compiler the
+  // test says so and skips — CI has none, and a skip that prints its reason is
+  // how the tray probe treats the same situation.
+  const compiler =
+    Bun.which("ISCC") ??
+    (process.env.NATALIA_ISCC ? Bun.which(process.env.NATALIA_ISCC) : null);
+  if (!compiler) {
+    console.warn(
+      "skipped: no ISCC on PATH and NATALIA_ISCC unset — the compile step " +
+        "runs where a compiler is named (a Windows host, or wine's ISCC)",
+    );
+    return;
+  }
+  const release = await fakeWindowsRelease();
+  const outDir = await mkdtemp(join(tmpdir(), "win-compile-"));
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir,
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  // The function itself ran the compiler (both the script and its sources are
+  // in the release tree), and it reported success.
+  expect(result.compiled).toBe(true);
+  expect(existsSync(result.installer!)).toBe(true);
+  // A real installer is not a text file.
+  expect(
+    (await Bun.file(result.installer!).arrayBuffer()).byteLength,
+  ).toBeGreaterThan(100_000);
 });

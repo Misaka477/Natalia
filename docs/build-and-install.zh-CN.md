@@ -209,11 +209,11 @@ bun apps/cef-desktop/serve-web.ts       # 静态 web → 127.0.0.1:5178
 CEF 本身跨平台（Chromium Embedded Framework，Windows/macOS/Linux 全都支持）。
 **这个仓库目前接了两个平台**，差的从来不是 CEF：
 
-| 平台    | CEF SDK 根                | 入口                           | 启动器                                                                                                                            | 构建                        |
-| ------- | ------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Linux   | `.cef-test/`              | `cefsimple_linux.cc`（`main`） | `run-cef-desktop.sh`                                                                                                              | `npm run desktop:cef:build` |
-| Windows | `npm run package:windows` | 双击 Setup.exe                 | 链条与两路输入（`.iss`/`.wxs`）已就绪并在合成树上渲染验证过；**容器那一锤等你选 MSIX 还是 Inno Setup**，且需一台 Windows 机器编译 |
-| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications    | bundle 与 dmg staging 代码测过，**但没有 macOS release 产物喂它**（见下）；只在合成树上验证过                                     |
+| 平台    | CEF SDK 根                | 入口                           | 启动器                                                                                                                                                                                                   | 构建                        |
+| ------- | ------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Linux   | `.cef-test/`              | `cefsimple_linux.cc`（`main`） | `run-cef-desktop.sh`                                                                                                                                                                                     | `npm run desktop:cef:build` |
+| Windows | `npm run package:windows` | 双击 Setup.exe                 | 两路输入（`.iss`/`.wxs`）已就位并有测试；容器选型已定：Inno Setup（无证书，MSIX 实际要签名）；`.iss` 已在真编译器下出过真 Setup.exe（wine + `NATALIA_ISCC`，合成树），真 release 树仍缺 Windows CEF host |
+| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications    | bundle 与 dmg staging 代码测过，**但没有 macOS release 产物喂它**（见下）；只在合成树上验证过                                                                                                            |
 
 Windows 从零开始：
 
@@ -240,13 +240,13 @@ PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/share/pkgconfig \
 
 ### 6b. 安装包：各平台的实话
 
-| 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                                                                                                   |
-| ------- | ------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Linux   | `npm run appimage`        | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖）                                                                                                                                         |
-| Windows | `npm run package:windows` | 双击 Setup.exe                | 链条与两路输入（`.iss`/`.wxs`）已就绪并在合成树上渲染验证过；**容器那一锤等你选 MSIX 还是 Inno Setup**，且需一台 Windows 机器编译                                                                      |
-| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications   | 已在**真 darwin release 树**上验证过（`bun --target=bun-darwin-arm64` 交叉编译出的 66MB Mach-O runtime 被打进 bundle，`plistlib` 解析 Info.plist 15 键）；**CEF host 仍是合成占位**——它需在 mac 上构建 |
+| 平台    | 装包脚本                  | 用户要做什么                  | 状态                                                                                                                                                                                                                                                       |
+| ------- | ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux   | `npm run appimage`        | 双击 AppImage，或从应用菜单点 | **可用**，已在真 release 产物上验证过（含 `ldd` 零未解析依赖）                                                                                                                                                                                             |
+| Windows | `npm run package:windows` | 双击 Setup.exe                | 两路输入（`.iss`/`.wxs`）渲染已就位并有测试；**容器选型已定：Inno Setup**（无签名证书，MSIX 实际要签名）。渲染出的 `.iss` 已在真 Inno 编译器下编译出真 Setup.exe（wine + `NATALIA_ISCC`，合成树）；**真 release 树仍缺 Windows CEF host**，需 Windows 机器 |
+| macOS   | `npm run appbundle`       | 把 `.app` 拖到 Applications   | 已在**真 darwin release 树**上验证过（`bun --target=bun-darwin-arm64` 交叉编译出的 66MB Mach-O runtime 被打进 bundle，`plistlib` 解析 Info.plist 15 键）；**CEF host 仍是合成占位**——它需在 mac 上构建                                                     |
 
-**每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是合成树渲染；macOS 那行同样只有合成树。三者不是一回事。
+**每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是真编译器 + 合成树（编译验证不等于安装验证）；macOS 那行同样只有合成树。三者不是一回事。
 
 **macOS 为什么 defer**：`release:build --all` 只构建 host + windows-x64，因为没有
 macOS 的终端构建（`build-wezterm-*.ts` 只有 ubuntu 和 windows 两版）。一个交互终端

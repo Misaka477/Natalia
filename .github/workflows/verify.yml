@@ -126,7 +126,7 @@ jobs:
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 ./packages/tooling/testing/test \
                               ./packages/tooling/installer/test ./packages/tooling/sdk/test \
-                              ./packages/core/plugin/test
+                              ./packages/core/plugin/test ./scripts/test
           - layer: "substrate-1"
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 ./packages/hosts/platform/test \

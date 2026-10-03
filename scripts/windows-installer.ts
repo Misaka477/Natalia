@@ -150,8 +150,8 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "// the single-instance lock (instance.ts) is the other half of that.",
     "",
     "// Uninstalling does not delete your data, because the data is not inside the",
-    "// install folder: the session stores live at %USERPROFILE%\.natalia and the",
-    "// workspace list at %USERPROFILE%\.config\natalia (both computed by",
+    "// install folder: the session stores live at %USERPROFILE%\\.natalia and the",
+    "// workspace list at %USERPROFILE%\\.config\\natalia (both computed by",
     "// packages/hosts/platform/src/store-paths.ts, NOT the usual %APPDATA%). So the",
     "// uninstaller ASKS, on its own page, with both paths printed. Default off: a",
     "// normal uninstall should leave the user's history alone.",
@@ -306,20 +306,30 @@ export async function buildWindowsInstallerInputs(
     outDir,
     compiled: false,
   };
+  // The inputs are written BESIDE THE SOURCES, in the release directory, not in
+  // outDir. The Source lines are release-relative on purpose — an absolute path
+  // bakes the build machine in (a test pins the relativity, learned from a real
+  // 91 MB release) — so the script compiles exactly where it is written and
+  // nowhere else. Writing it to outDir instead produced a delivered .iss that
+  // failed with "Source file does not exist" on the very Windows host the
+  // message told to compile it. The COMPILED installer is what lands in outDir.
   if (format === "inno" || format === "both") {
-    const iss = join(outDir, `${plan.installDirName}.iss`);
+    const iss = join(options.releaseDir, `${plan.installDirName}.iss`);
     await writeFile(iss, renderInnoScript(plan, options.signTool), "utf8");
     result.iss = iss;
   }
   if (format === "wix" || format === "both") {
-    const wxs = join(outDir, `${plan.installDirName}.wxs`);
+    const wxs = join(options.releaseDir, `${plan.installDirName}.wxs`);
     await writeFile(wxs, renderWixFragment(plan), "utf8");
     result.wxs = wxs;
   }
 
-  // Compiling needs the tool, and only Windows has it. A build anywhere else
-  // produces the inputs, which is the part a Windows build needs.
-  const inno = Bun.which("ISCC");
+  // Compiling needs the tool, and only Windows has one natively. A build
+  // anywhere else produces the inputs, which is the part a Windows build needs.
+  // NATALIA_ISCC names a compiler for a host that has one under another name —
+  // wine's ISCC on Linux, say — so the compile step is reachable without
+  // pretending the platform has the tool natively.
+  const inno = Bun.which("ISCC") ?? resolveEnvCompiler("NATALIA_ISCC");
   if (inno && result.iss) {
     const installer = join(outDir, `Setup-${plan.appName}-${plan.version}.exe`);
     const run = Bun.spawnSync([inno, `/O${outDir}`, result.iss], {
@@ -331,7 +341,7 @@ export async function buildWindowsInstallerInputs(
       result.installer = installer;
     }
   }
-  const candle = Bun.which("candle");
+  const candle = Bun.which("candle") ?? resolveEnvCompiler("NATALIA_CANDLE");
   if (candle && result.wxs) {
     const obj = join(outDir, `${plan.installDirName}.wixobj`);
     const run = Bun.spawnSync([candle, result.wxs, "-o", obj, "-arch", "x64"], {
@@ -341,6 +351,13 @@ export async function buildWindowsInstallerInputs(
     if (run.exitCode === 0) result.compiled = true;
   }
   return result;
+}
+
+/** A compiler named by an environment variable, or null when unset. */
+function resolveEnvCompiler(variable: string): string | null {
+  const named = process.env[variable];
+  if (!named) return null;
+  return Bun.which(named);
 }
 
 /** True when the rendered script declares a Start Menu entry and an uninstaller. */

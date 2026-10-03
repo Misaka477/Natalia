@@ -30,7 +30,13 @@ export type WebTerminalProps = {
 
 type ServerMessage =
   | { type: "ready"; id: string; rows?: number; cols?: number }
-  | { type: "restore"; id: string; text: string }
+  | {
+      type: "restore";
+      id: string;
+      text: string;
+      cursorX?: number;
+      cursorY?: number;
+    }
   | { type: "output"; data: string; id?: string }
   | { type: "exit"; id: string }
   | { type: "error"; message: string; fatal?: boolean; id?: string };
@@ -200,6 +206,13 @@ export function WebTerminal(props: WebTerminalProps) {
       if (message.type === "restore") {
         term?.clear();
         if (message.text) term?.write(message.text);
+        // And the caret: the replay carries the host's cursor when it has one,
+        // and a reconnect that repaints it at the origin lies about where the
+        // next keystroke lands -- for a shell inside a line editor that is the
+        // difference between typing at the prompt and typing over the buffer
+        // head. CSI row;col is 1-based, the host's cursor is 0-based.
+        if (message.cursorX != null && message.cursorY != null)
+          term?.write(`\x1b[${message.cursorY + 1};${message.cursorX + 1}H`);
       }
       if (message.type === "output") term?.write(message.data);
       if (message.type === "error") {

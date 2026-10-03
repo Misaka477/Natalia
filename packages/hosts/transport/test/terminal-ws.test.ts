@@ -104,6 +104,11 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
           startLine: 0,
           endLine: 1,
           totalLines: 1,
+          // Where the pane's caret is: a shell sitting at the end of its
+          // prompt, which is the case a reconnect gets wrong when the cursor
+          // is dropped (the caret lands at the origin instead).
+          cursorX: 7,
+          cursorY: 0,
         };
       },
       async nativeTerminalWrite(input) {
@@ -139,7 +144,13 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
   // The pane's screen comes back BEFORE the live stream continues, so a
   // reattach does not start blank.
   expect(messages).toEqual([
-    { type: "restore", id: "term_web", text: "prompt$ " },
+    {
+      type: "restore",
+      id: "term_web",
+      text: "prompt$ ",
+      cursorX: 7,
+      cursorY: 0,
+    },
     { type: "output", data: "live\n" },
     expect.objectContaining({ type: "ready", id: "term_web" }),
   ]);
@@ -448,6 +459,10 @@ test("an empty pane reconnects to an empty screen, not to the last session's", a
           startLine: 0,
           endLine: 0,
           totalLines: 0,
+          // And no caret: the null idiom, which is also what keeps the restore
+          // frame the exact two-field shape this pin asserts.
+          cursorX: null,
+          cursorY: null,
         };
       },
       async nativeTerminalWrite() {

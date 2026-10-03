@@ -119,6 +119,11 @@ export function createNativeTerminalSurface(
         startLine: read.startLine,
         endLine: read.endLine,
         totalLines: read.totalLines,
+        // The caret rides the same read: a reconnect replayed the buffer and
+        // dropped the cursor until the contract carried it, and this surface
+        // is the transport's source for that frame.
+        cursorX: read.cursorX ?? null,
+        cursorY: read.cursorY ?? null,
       };
     },
     async nativeTerminalOpenHub() {

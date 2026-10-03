@@ -2977,6 +2977,12 @@ export type RuntimeTerminalObservationSession = Omit<
  * be paged"; zeros would look like a one-line document and quietly mislead the
  * walker.
  *
+ * `cursorX`/`cursorY` are the pane's caret (0-based, screen-relative), same null
+ * idiom: the pty host reports them, a host that owns no screen does not. They
+ * are what a reconnect needs — a replay that restores the buffer but drops the
+ * caret repaints it at the origin, and the next keystroke lands where the human
+ * did not choose.
+ *
  * ONE declaration, referenced by every surface that serves or consumes a pane
  * read — the runtime client, the controller port and the tool service. The
  * second copy of this shape (the tool service's) lagged the first by a full
@@ -2988,6 +2994,8 @@ export type RuntimeTerminalRead = {
   startLine: number | null;
   endLine: number | null;
   totalLines: number | null;
+  cursorX: number | null;
+  cursorY: number | null;
 };
 export type WorkspaceSummary = {
   workspaceID: string;

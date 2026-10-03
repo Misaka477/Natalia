@@ -1098,6 +1098,11 @@ test("terminal plugin config reload preserves its host-owned registry", async ()
       startLine: null,
       endLine: null,
       totalLines: null,
+      // This runtime's panes own a real screen, so the caret IS reported --
+      // at the origin of a pane that has drawn nothing. (A host with no screen
+      // at all is the null case, pinned by the wezterm-degraded read above.)
+      cursorX: 0,
+      cursorY: 0,
     },
   );
   const firstController = kernel.service<object>(terminalController.id);

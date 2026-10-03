@@ -16,7 +16,15 @@ export type TerminalWsMessage =
 
 export type TerminalWsServerMessage =
   | { type: "ready"; id: string; rows?: number; cols?: number }
-  | { type: "restore"; id: string; text: string }
+  | {
+      type: "restore";
+      id: string;
+      text: string;
+      /** The pane's cursor, when the host reported it: a reconnect that
+       *  replays the buffer but drops the caret repaints it at the origin. */
+      cursorX?: number;
+      cursorY?: number;
+    }
   | { type: "output"; data: string }
   | { type: "exit"; id: string }
   | { type: "error"; message: string; fatal?: boolean };
@@ -128,10 +136,21 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           // where that matters most (a shell that just started, or one that
           // exited and was respawned), and it is the case a `if (text)` guard
           // silently skips.
+          //
+          // AND the cursor rides along when the host reported it: a reconnect
+          // that replays the buffer but drops the cursor repaints the caret at
+          // the origin, which for a shell mid-line-editor is a lie about where
+          // typing will land. The fields are spread only when present, so a
+          // host that cannot report one (or an empty pane) keeps the exact
+          // two-field frame it always sent — null would be a second spelling
+          // of "absent" on the wire.
           send(ws, {
             type: "restore",
             id: session.id,
             text: snapshot?.text ?? "",
+            ...(snapshot?.cursorX != null && snapshot?.cursorY != null
+              ? { cursorX: snapshot.cursorX, cursorY: snapshot.cursorY }
+              : {}),
           });
         } catch (error) {
           // A failed replay must not cost the pane its live stream: the socket

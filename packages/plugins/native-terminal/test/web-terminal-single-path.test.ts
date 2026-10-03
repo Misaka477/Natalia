@@ -78,3 +78,29 @@ test("OSC 52 — the clipboard write — is refused on purpose", () => {
   );
   expect(screen).toContain("function skipOsc(");
 });
+
+test("a reconnect restores the caret, not just the buffer", () => {
+  // VSCode's process reconnection serializes the buffer AND the cursor; ours
+  // replayed only the text, so after a panel reopen or a browser reload the
+  // caret sat at the origin while the shell was mid-line-editor — the next
+  // keystroke lands somewhere the human did not choose. The transport now
+  // carries the host's cursor in the restore frame when it has one, and the
+  // client parks the caret there: CSI row;col, 1-based, from the host's
+  // 0-based pair.
+  const text = source();
+  const restore = text.slice(
+    text.indexOf('message.type === "restore"'),
+    text.indexOf('message.type === "output"'),
+  );
+  // The buffer is still replayed first, and the clear still comes before it.
+  expect(restore).toContain("term?.clear()");
+  expect(restore).toContain("if (message.text) term?.write(message.text)");
+  // Then the caret, only when the host reported both coordinates (a backend
+  // that cannot report one keeps the origin rather than being told 0;0).
+  expect(restore).toContain(
+    "message.cursorX != null && message.cursorY != null",
+  );
+  expect(restore).toContain(
+    "\\x1b[${message.cursorY + 1};${message.cursorX + 1}H",
+  );
+});

@@ -454,6 +454,11 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
     startLine: null,
     endLine: null,
     totalLines: null,
+    // The caret reads 0;0 from the fixture's pane while the extent stays null:
+    // the two are answered by different layers here, and the pins keep both
+    // honest to what this host actually serves rather than to each other.
+    cursorX: 0,
+    cursorY: 0,
   });
   await client.nativeTerminalOpenHub!();
   await expect(

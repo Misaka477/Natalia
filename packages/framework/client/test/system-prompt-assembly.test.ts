@@ -18,6 +18,31 @@ function source(relative: string): string {
   return readFileSync(join(root, relative), "utf8");
 }
 
+test("every assembly site returns a byte-identical static prompt", async () => {
+  // The test below reads the PROMPT TEXT file and asserts it holds no dynamic
+  // value. That guards one file, not the property: persona is ASSEMBLED in
+  // chat-prompt.ts, and appending a dynamic value there — a date, a session id —
+  // leaves every source-text assertion green. Measured: `agentSystemPrompt("nia")
+  // + "\nSession: " + Date.now()` turned nothing red.
+  //
+  // It matters because the static prompt exists to be byte-identical across
+  // sessions and workspaces, so the provider's prefix cache hits. One per-session
+  // byte and every turn pays full input price.
+  const { createChatPrompt } = await import(
+    "../../../domains/collab/src/chat-prompt"
+  );
+  const prompt = createChatPrompt({} as never);
+  const first = prompt.niaChatPersona();
+  // A second call, later, from a different context: same bytes or the property
+  // is broken. Date.now() and new Date() are the two shapes that break it.
+  await Bun.sleep(5);
+  const second = prompt.niaChatPersona();
+  expect(second).toBe(first);
+  expect(first).not.toMatch(
+    /\bDate\.now\(|new Date\(|sessionID|workspaceRoot/u,
+  );
+});
+
 test("the static prompt carries no dynamic value", () => {
   const prompts = source("packages/framework/agent-prompts/src/index.ts");
   // No workspace path, no date, no skill enumeration, no caller-supplied state.

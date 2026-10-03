@@ -63,3 +63,98 @@ test("the start tool asks for the grid it was given, and the default when it was
   await tool.execute({ command: "htop", rows: 0, cols: -2 }, context);
   expect(started.at(-1)).toMatchObject({ command: "htop", rows: 0, cols: -2 });
 });
+
+test("the read tool reports the served window and the document's extent", async () => {
+  // The model pages with these two facts and nothing else: where the served
+  // window sits, and how much document there is. A window reported without the
+  // extent is the gap this closes — the caller could see what it got and not
+  // what was left, so it paged by guessing.
+  const registry = {
+    read: async () => ({
+      text: "line-a\nline-b\nline-c",
+      // A ten-line document, with lines 5..7 served: `endLine` is one past the
+      // last line served, the controller's own convention.
+      startLine: 5,
+      endLine: 8,
+      totalLines: 10,
+      cursorX: 0,
+      cursorY: 2,
+      rows: 24,
+      cols: 80,
+    }),
+  };
+  const tool = terminalToolFamily().tools.find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  )!;
+  const context = { workspaceRoot: "/tmp", terminal: registry } as never;
+
+  const read = JSON.parse(
+    await tool.execute({ id: "t_read", startLine: 5, maxLines: 3 }, context),
+  );
+  // `lineCount`, not a second `endLine`: the controller's end is exclusive and
+  // the tool's `endLine` parameter is inclusive, and one name for both is how a
+  // walker loses its place.
+  expect(read.window).toEqual({ startLine: 5, lineCount: 3 });
+  expect(read.totalLines).toBe(10);
+});
+
+test("a window past the document's end reports zero lines served, not a negative count", async () => {
+  // The controller answers a beyond-the-end window with the requested start and
+  // the document's extent, so the raw difference is negative. What was served is
+  // nothing, and a caller that subtracts without clamping reads -50 lines.
+  const registry = {
+    read: async () => ({
+      text: "",
+      startLine: 1_050,
+      endLine: 1_000,
+      totalLines: 1_000,
+      cursorX: 0,
+      cursorY: 0,
+      rows: 24,
+      cols: 80,
+    }),
+  };
+  const tool = terminalToolFamily().tools.find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  )!;
+  const context = { workspaceRoot: "/tmp", terminal: registry } as never;
+
+  const read = JSON.parse(
+    await tool.execute(
+      { id: "t_read", startLine: 1_050, maxLines: 50 },
+      context,
+    ),
+  );
+  expect(read.window).toEqual({ startLine: 1_050, lineCount: 0 });
+  expect(read.totalLines).toBe(1_000);
+  expect(read.text).toBe("");
+});
+
+test("the read tool says null when the host cannot report an extent", async () => {
+  // The wezterm host answers with text, the cursor and the geometry — nothing
+  // that locates the text in a document. The tool must say so: zeros would read
+  // as a one-line document and send the model paging a pane that has none.
+  const registry = {
+    read: async () => ({
+      text: "prompt$ ",
+      startLine: null,
+      endLine: null,
+      totalLines: null,
+      cursorX: 0,
+      cursorY: 0,
+      rows: 24,
+      cols: 80,
+    }),
+  };
+  const tool = terminalToolFamily().tools.find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  )!;
+  const context = { workspaceRoot: "/tmp", terminal: registry } as never;
+
+  const read = JSON.parse(await tool.execute({ id: "t_read" }, context));
+  expect(read.window).toBeNull();
+  expect(read.totalLines).toBeNull();
+  // The text still arrives: the extent is the part that cannot be known, not
+  // the pane's output.
+  expect(read.text).toContain("prompt$");
+});

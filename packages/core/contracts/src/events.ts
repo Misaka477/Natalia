@@ -2963,6 +2963,32 @@ export type RuntimeTerminalObservationSession = Omit<
   screen?: TerminalScreenSnapshot;
   transcript?: string;
 };
+
+/**
+ * What one pane read serves: the text, and the extent that makes the read
+ * pageable. `startLine` is the first line served (inclusive), `endLine` is one
+ * past the last line served, and `totalLines` is how much document there is to
+ * walk — a successor window is addressed from its predecessor's `endLine`, never
+ * from an arithmetic offset.
+ *
+ * Null when the backend cannot report it: the WezTerm host's read returns text,
+ * the cursor and the geometry from a separate process, and the numbers cannot be
+ * recovered on this side of that boundary. A null is an honest "this read cannot
+ * be paged"; zeros would look like a one-line document and quietly mislead the
+ * walker.
+ *
+ * ONE declaration, referenced by every surface that serves or consumes a pane
+ * read — the runtime client, the controller port and the tool service. The
+ * second copy of this shape (the tool service's) lagged the first by a full
+ * feature once: the controller reported the extent and the tools, typed against
+ * their own narrower literal, could not see a field of it.
+ */
+export type RuntimeTerminalRead = {
+  text: string;
+  startLine: number | null;
+  endLine: number | null;
+  totalLines: number | null;
+};
 export type WorkspaceSummary = {
   workspaceID: string;
   root: string;
@@ -3832,26 +3858,7 @@ export type RuntimeClient = {
   nativeTerminalRead?(
     id: string,
     sessionID?: string,
-  ): Promise<{
-    id: string;
-    text: string;
-    /**
-     * The window that was served and the document's extent — what makes the pane
-     * pageable. `startLine` is the first line served (inclusive), `endLine` is one
-     * past the last line served, and `totalLines` is how much document there is
-     * to walk. A successor window is addressed from its predecessor's `endLine`,
-     * never from an arithmetic offset.
-     *
-     * Null when the backend cannot report it: the WezTerm host's read returns
-     * text, the cursor and the geometry from a separate process, and the numbers
-     * cannot be recovered on this side of that boundary. A null is an honest
-     * "this read cannot be paged"; zeros would look like a one-line document and
-     * quietly mislead the walker.
-     */
-    startLine: number | null;
-    endLine: number | null;
-    totalLines: number | null;
-  }>;
+  ): Promise<{ id: string } & RuntimeTerminalRead>;
   nativeTerminalOpenHub?(): Promise<{ muxWindowID: number }>;
   nativeTerminalClaimHumanInput?(
     id: string,

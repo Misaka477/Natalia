@@ -17,6 +17,7 @@ import type {
 import type {
   ExecutionTarget,
   RuntimeEvent,
+  RuntimeTerminalRead,
   SandboxDiffKind,
   SandboxStatus,
 } from "@anthelia/contracts";
@@ -200,13 +201,14 @@ export type TerminalToolService = {
       endLine?: number;
       sessionID?: string;
     },
-  ): Promise<{
-    text: string;
-    cursorX: number;
-    cursorY: number;
-    rows: number;
-    cols: number;
-  }>;
+  ): Promise<
+    RuntimeTerminalRead & {
+      cursorX: number;
+      cursorY: number;
+      rows: number;
+      cols: number;
+    }
+  >;
   /**
    * The command-level read.
    *

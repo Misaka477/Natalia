@@ -83,6 +83,68 @@ function terminalRegistry() {
   return registry;
 }
 
+/**
+ * The tools' terminal surface, the way the runtime builds one over a wezterm
+ * host registry.
+ *
+ * The host answers with text, the cursor and the geometry — and nothing that
+ * locates that text in a document — so the extent served here is null, exactly
+ * what the production wezterm controller reports. A bare registry used to pass
+ * as the tool context by the luck of overlapping shapes; the read contract now
+ * states the extent, and this wrapper is where the host's honest "cannot page"
+ * enters rather than a cast that hides the difference.
+ */
+function weztermToolContext(
+  workspaceRoot: string,
+  registry: NativeTerminalRegistry,
+) {
+  const terminal = {
+    start: (input: Parameters<NativeTerminalRegistry["start"]>[0]) =>
+      registry.start(input),
+    list: () => registry.list(),
+    reconcile: () => registry.reconcile(),
+    read: async (
+      id: string,
+      options?: Parameters<NativeTerminalRegistry["read"]>[1],
+    ) => ({
+      ...(await registry.read(id, options)),
+      startLine: null,
+      endLine: null,
+      totalLines: null,
+    }),
+    snapshot: (id: string) => registry.snapshot(id),
+    observe: (
+      id: string,
+      afterRevision: number,
+      options?: Parameters<NativeTerminalRegistry["observe"]>[2],
+    ) => registry.observe(id, afterRevision, options),
+    session: (id: string) => registry.session(id),
+    markObserved: (id: string, text: string, revision: number) =>
+      registry.markObserved(id, text, revision),
+    lastObservedRevision: (id: string) => registry.lastObservedRevision(id),
+    write: (
+      id: string,
+      value: string,
+      options?: Parameters<NativeTerminalRegistry["write"]>[2],
+    ) => registry.write(id, value, options),
+    resize: (
+      id: string,
+      rows: number,
+      cols: number,
+      actor: "model" | "human",
+      sessionID?: string,
+    ) => registry.resize(id, rows, cols, actor, sessionID),
+    requestHuman: (id: string, reason: string, sessionID?: string) =>
+      registry.requestHuman(id, reason, sessionID),
+    stop: (
+      id: string,
+      actor: "model" | "human" | "system",
+      sessionID?: string,
+    ) => registry.stop(id, actor, sessionID),
+  };
+  return { workspaceRoot, terminal };
+}
+
 test("the terminal plugin owns its tools and aliases and unloads cleanly", async () => {
   const tools = new ToolRegistry();
   const registry = createPluginRegistry({ tools });
@@ -183,7 +245,7 @@ test("interactive Terminal tools keep model I/O on one native host pane", async 
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   const startResult = await tools
     .get("interactive_terminal_start")!
@@ -317,7 +379,7 @@ test("unified interactive terminal input tool sends text and key sequences", asy
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -390,7 +452,7 @@ test("interactive terminal snapshot returns cursor and revision without afterRev
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -437,7 +499,7 @@ test("terminal observe latest mode returns current state without waiting", async
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -484,7 +546,7 @@ test("terminal observe tail mode returns only recent lines", async () => {
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -534,7 +596,7 @@ test("terminal observe cursor mode returns lines around cursor", async () => {
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -577,7 +639,7 @@ test("terminal observe new_only mode returns only new text since last observatio
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -629,7 +691,7 @@ test("interactive terminal input paste mode wraps text in bracketed paste escape
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -668,7 +730,7 @@ test("terminal observe afterRevision is optional and defaults to current state",
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -762,7 +824,7 @@ test("terminal_observe latest reports a point-in-time read, not a wait outcome",
     async resize() {},
     async stop() {},
   });
-  const context = { workspaceRoot: root, terminal: nativeTerminal };
+  const context = weztermToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -1003,6 +1065,13 @@ test("the two read surfaces are both reachable, and the command one names the ot
   const byScreen = JSON.parse(await pane.call("interactive_terminal_read"));
   expect(byCommand.output).toContain("alpha");
   expect(byScreen.text).toContain("alpha");
+  // The screen read reports the served window and the document's extent, so
+  // the model can walk the scrollback instead of guessing where the window it
+  // just received sits. A real pane keeps its document in-process, so these
+  // are numbers, never nulls.
+  expect(byScreen.window?.startLine).toBeGreaterThanOrEqual(0);
+  expect(byScreen.window?.lineCount).toBeGreaterThanOrEqual(1);
+  expect(byScreen.totalLines).toBeGreaterThanOrEqual(byScreen.window.lineCount);
   // Reachable under the short alias too: a model that learned "interactive_read"
   // reaches for the sibling by the same shape of name.
   const aliases = interactiveTerminalToolAliases;

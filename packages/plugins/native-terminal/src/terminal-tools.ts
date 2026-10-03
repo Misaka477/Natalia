@@ -110,7 +110,7 @@ function interactiveReadTool(): RuntimeTool {
   return {
     name: "interactive_terminal_read",
     description:
-      "Read a bounded line range from the same native Terminal pane used by the human. Returns text plus cursor position. Use startLine/endLine to page through complete scrollback without copying it all at once.",
+      "Read a bounded line range from the same native Terminal pane used by the human. Returns text plus cursor position. Use startLine/endLine to page through complete scrollback without copying it all at once. The reply also carries `window` (the lines the host actually served) and `totalLines` (how much document there is), so a caller can tell how much scrollback exists and address a successor window from the current window's end instead of guessing; both are null on a backend that cannot report them.",
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -133,15 +133,23 @@ function interactiveReadTool(): RuntimeTool {
       if (startLine !== undefined && cursor !== undefined)
         throw new Error("startLine and cursor cannot be used together");
       const pageStartLine = startLine ?? cursor;
-      const { text, cursorX, cursorY, rows, cols } =
-        await requireNativeTerminal(context).read(id, {
-          maxLines: Math.max(1, Math.min(numberOr(args.maxLines, 60), 200)),
-          startLine: pageStartLine,
-          endLine,
-          ...(context.parentSessionID
-            ? { sessionID: context.parentSessionID }
-            : {}),
-        });
+      const {
+        text,
+        cursorX,
+        cursorY,
+        rows,
+        cols,
+        startLine: servedStartLine,
+        endLine: servedEndLine,
+        totalLines,
+      } = await requireNativeTerminal(context).read(id, {
+        maxLines: Math.max(1, Math.min(numberOr(args.maxLines, 60), 200)),
+        startLine: pageStartLine,
+        endLine,
+        ...(context.parentSessionID
+          ? { sessionID: context.parentSessionID }
+          : {}),
+      });
       const page = nativeTerminalReadPage(text, {
         startLine: pageStartLine,
         endLine,
@@ -176,6 +184,26 @@ function interactiveReadTool(): RuntimeTool {
                   endLine: page.endLine,
                   deliveredLines: page.deliveredLines,
                 },
+          // The window the host actually served and the document's extent, from
+          // the controller rather than recomputed from the delivered text: what
+          // makes the walk navigable instead of guessed. `lineCount` and not a
+          // second `endLine` — the controller's end is one past the last line
+          // served while this tool's `endLine` parameter is inclusive, and two
+          // meanings under one name in one payload is how a walker gets lost.
+          // Null is the honest unknown on a backend whose host reports no
+          // extent; it says "cannot page" where zeros would say "one line".
+          window:
+            servedStartLine === null || servedEndLine === null
+              ? null
+              : {
+                  startLine: servedStartLine,
+                  // Zero when the window sits past the document's end: the
+                  // controller reports the requested start and the document's
+                  // extent there, so a bare difference would be negative — the
+                  // served window is empty, and empty is what it says.
+                  lineCount: Math.max(0, servedEndLine - servedStartLine),
+                },
+          totalLines,
           nextCursor: page.nextStartLine
             ? {
                 startLine: page.nextStartLine,

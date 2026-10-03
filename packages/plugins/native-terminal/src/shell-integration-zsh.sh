@@ -70,6 +70,19 @@ __natalia_first_prompt=""
 __natalia_prompt_start() { builtin printf '\033]133;A\a'; }
 __natalia_prompt_end() { builtin printf '\033]133;B\a'; }
 
+# OSC 7: WHERE the shell is, as a file:// URL — the iTerm/FinalTerm spelling
+# every shell-integration-aware terminal reads. The pane's spawn-time cwd is
+# stale the moment the operator types `cd`, and a reader that wants the pane's
+# files needs the live one. Emitted before each prompt because that is when
+# the directory is settled; percent-encoded because the sequence's grammar
+# ends at BEL and a space belongs INSIDE the URL. `%` first, then space: the
+# second substitution must not re-encode the first's output.
+__natalia_report_cwd() {
+	builtin local encoded="${PWD//%/%25}"
+	encoded="${encoded// /%20}"
+	builtin printf '\033]7;file://%s%s\a' "${HOST:-localhost}" "$encoded"
+}
+
 __natalia_command_output_start() {
 	if [ -z "${__natalia_first_prompt:-}" ]; then
 		builtin return
@@ -101,6 +114,7 @@ __natalia_precmd() {
 		__natalia_in_command=""
 	fi
 	__natalia_command=""
+	__natalia_report_cwd
 	__natalia_first_prompt=1
 }
 

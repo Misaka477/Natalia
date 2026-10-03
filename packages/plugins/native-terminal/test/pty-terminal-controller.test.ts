@@ -371,6 +371,72 @@ test("a real bash pane reports its commands end to end", async () => {
 }, 25_000);
 
 /**
+ * OSC 7: the pane's working directory tracks the shell, not the spawn.
+ *
+ * A model asking "which directory is this pane in" gets `cwd` on the session,
+ * and the spawn-time value is stale the moment the operator types `cd` — the
+ * pane is then somewhere else entirely, and a file read relative to the spawn
+ * cwd reads the wrong tree. The shell-integration scripts emit OSC 7 before
+ * every prompt, so the pane follows. Driven through a REAL bash: the command's
+ * `cd` has to reach the shell, the shell's PROMPT_COMMAND has to emit the
+ * sequence, and the controller has to fold it — a hand-fed marker would prove
+ * only the fold.
+ */
+test("a pane's cwd follows the shell, not the spawn", async () => {
+  if (process.platform === "win32") {
+    console.warn(
+      "skipped on win32: the default pty spawn needs the POSIX bridge",
+    );
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "natalia-cwd-track-"));
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_cwd",
+  });
+  // The predicate is AWAITED, and that is load-bearing: an async predicate
+  // handed to a sync `!predicate()` check is always truthy — a Promise is an
+  // object — so the loop would exit on its first check and the assertions below
+  // would run before the write even reached the socket. Measured: the write
+  // takes a few event-loop ticks to flush, and this pane's cd silently never
+  // landed in the first version of this test.
+  const waitFor = async (
+    predicate: () => boolean | Promise<boolean>,
+    ms = 8_000,
+  ) => {
+    const deadline = Date.now() + ms;
+    while (!(await predicate()) && Date.now() < deadline) await Bun.sleep(50);
+  };
+  const paneCwd = async () =>
+    (await controller.list()).find((session) => session.id === "term_cwd")?.cwd;
+  const lastCommand = controller.lastCommand?.bind(controller);
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  await waitFor(() => lastCommand("term_cwd").atPrompt);
+  // At the prompt, the pane reports where it started.
+  expect(await paneCwd()).toBe(started.cwd);
+  // The operator moves. The pane's directory must follow — this is the value
+  // the model's file tools would use, and the failure mode is silent: a stale
+  // cwd reads a tree the operator is not in.
+  controller.write("term_cwd", "cd /tmp\n");
+  await waitFor(async () => (await paneCwd()) === "/tmp");
+  expect(await paneCwd()).toBe("/tmp");
+  // And back: the fold updates on every prompt, it does not latch.
+  controller.write("term_cwd", `cd ${root}\n`);
+  await waitFor(async () => (await paneCwd()) === root);
+  expect(await paneCwd()).toBe(root);
+  await controller.close();
+}, 25_000);
+
+/**
  * The controller → bridge → child → shell path, on a shell whose rc is reached by
  * environment rather than by argv.
  *

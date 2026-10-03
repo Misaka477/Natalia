@@ -982,6 +982,14 @@ export function createPtyTerminalController(
     // state is what it means. They cannot disagree because neither re-reads the
     // stream independently.
     const markers = parseShellMarkers(chunk);
+    // OSC 7: the pane's working directory follows the shell. The spawn-time
+    // cwd is stale the moment the operator types `cd`, and the model's file
+    // tools work relative to the pane — so the pane reports where the shell
+    // IS, not where it was started. `publicSession` already carries the field;
+    // this is what keeps it alive.
+    for (const marker of markers) {
+      if (marker.kind === "cwd") session.cwd = marker.cwd;
+    }
     if (markers.some((marker) => marker.kind === "command-executed"))
       session.outputBaseLines = paneText(session);
     // The render layer: the same bytes the raw buffer keeps, applied to

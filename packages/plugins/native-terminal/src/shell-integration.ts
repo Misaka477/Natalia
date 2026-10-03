@@ -30,7 +30,8 @@ export type ShellMarker =
   | { kind: "command-start" }
   | { kind: "command-executed" }
   | { kind: "command-finished"; exitCode?: number }
-  | { kind: "command-line"; command: string };
+  | { kind: "command-line"; command: string }
+  | { kind: "cwd"; cwd: string };
 
 /** OSC 133/633 runs to BEL or ST (`ESC \`). */
 const TERMINATORS = "(?:\\u0007|\\x1b\\\\)";
@@ -43,21 +44,40 @@ const TERMINATORS = "(?:\\u0007|\\x1b\\\\)";
  * then concatenating reorders them. `matchAll` walks the stream left to right, so
  * a single alternation preserves it.
  *
- * Group 1 is the lifecycle letter and group 2 its exit code; group 3 is the
- * command line. Exactly one of the two families is present per match, which is
- * what makes the dispatch below total.
+ * Group 1 is the OSC 7 path, group 2 the lifecycle letter and group 3 its exit
+ * code, group 4 the command line. Exactly one family is present per match, which
+ * is what makes the dispatch below total.
  *
- * Group 3 takes everything after `E;` and does not split the sequence's optional
+ * Group 4 takes everything after `E;` and does not split the sequence's optional
  * third field (a nonce). Our injector escapes `;` to `\x3b` before emitting, so a
  * sequence from it never carries a raw semicolon; the nonce is still not split
  * out, because we never generate one and a foreign script that emits one
  * unescaped could make a raw semicolon mean either a separator or part of the
  * command. Carrying it is the failure that cannot mislead.
+ *
+ * OSC 7 (`file://host/path`) is the cwd family: where the shell IS, not what it
+ * ran. The host part is skipped — this repo reads one machine's panes — and the
+ * path is captured WITH its leading slash: the first version consumed the `/`
+ * and produced the RELATIVE form (`tmp` for `/tmp`), which silently made every
+ * reported directory wrong. The path is kept percent-encoded until the marker is
+ * built, since decoding is a place to get it wrong (a literal `%` in a directory
+ * name) and the caller can decode with the same rules the encoder used.
  */
 const MARKER_RE = new RegExp(
-  `\\x1b\\](?:133;([A-D])(?:;([^\\u0007\\x1b]*))?|633;E;([^\\u0007\\x1b]*))${TERMINATORS}`,
+  `\\x1b\\](?:7;file://[^/\\u0007\\x1b]*(/[^\\u0007\\x1b]*)|133;([A-D])(?:;([^\\u0007\\x1b]*))?|633;E;([^\\u0007\\x1b]*))${TERMINATORS}`,
   "g",
 );
+
+/** Percent-decode an OSC 7 path; a malformed escape keeps its raw form. */
+function decodeCwd(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    // A lone `%` or a truncated escape is a producer bug, not a reason to lose
+    // the directory: the raw form is still more useful than nothing.
+    return path;
+  }
+}
 
 /**
  * Extract the markers from a chunk of terminal output, in stream order.
@@ -70,9 +90,14 @@ const MARKER_RE = new RegExp(
 export function parseShellMarkers(text: string): ShellMarker[] {
   const markers: ShellMarker[] = [];
   for (const match of text.matchAll(MARKER_RE)) {
-    const letter = match[1];
-    const argument = match[2];
-    const command = match[3];
+    const cwd = match[1];
+    const letter = match[2];
+    const argument = match[3];
+    const command = match[4];
+    if (cwd !== undefined) {
+      markers.push({ kind: "cwd", cwd: decodeCwd(cwd) });
+      continue;
+    }
     if (letter === undefined) {
       if (command !== undefined)
         markers.push({ kind: "command-line", command });

@@ -122,6 +122,65 @@ describe("parseShellMarkers", () => {
   });
 });
 
+describe("parseShellMarkers: OSC 7, the working directory", () => {
+  /** OSC 7: `ESC ] 7 ; file://host/path TERMINATOR`. */
+  const osc7 = (path: string, host = "localhost", terminator = BEL) =>
+    `${ESC}]7;file://${host}${path}${terminator}`;
+
+  test("reads the pane's cwd and drops the host part", () => {
+    expect(parseShellMarkers(osc7("/tmp/work"))).toEqual([
+      { kind: "cwd", cwd: "/tmp/work" },
+    ]);
+    // The host is this machine's own name and means nothing to the reader.
+    expect(parseShellMarkers(osc7("/tmp", "Zephyrus-M16"))).toEqual([
+      { kind: "cwd", cwd: "/tmp" },
+    ]);
+  });
+
+  test("percent-decodes the path, which is where the spaces live", () => {
+    expect(parseShellMarkers(osc7("/tmp/my%20dir"))).toEqual([
+      { kind: "cwd", cwd: "/tmp/my dir" },
+    ]);
+    // `%` itself is encoded as %25 by the emitter; decoding restores it.
+    expect(parseShellMarkers(osc7("/tmp/100%25"))).toEqual([
+      { kind: "cwd", cwd: "/tmp/100%" },
+    ]);
+  });
+
+  test("reads the ST terminator spelling too", () => {
+    expect(parseShellMarkers(osc7("/tmp", "localhost", ST))).toEqual([
+      { kind: "cwd", cwd: "/tmp" },
+    ]);
+  });
+
+  test("a malformed escape keeps the raw form rather than losing the cwd", () => {
+    // A lone `%` is a producer bug; the directory is still worth reporting.
+    expect(parseShellMarkers(osc7("/tmp/100%"))).toEqual([
+      { kind: "cwd", cwd: "/tmp/100%" },
+    ]);
+    expect(parseShellMarkers(osc7("/tmp/%zz"))).toEqual([
+      { kind: "cwd", cwd: "/tmp/%zz" },
+    ]);
+  });
+
+  test("keeps stream order against the lifecycle markers", () => {
+    // A real prompt emits the cwd beside the lifecycle: the directory is read
+    // from the same pass, in the order the shell produced them.
+    const text = `${osc7("/tmp/work")}${promptStart}${commandStart}`;
+    expect(parseShellMarkers(text)).toEqual([
+      { kind: "cwd", cwd: "/tmp/work" },
+      { kind: "prompt-start" },
+      { kind: "command-start" },
+    ]);
+  });
+
+  test("an empty host (the local form) still reads", () => {
+    expect(parseShellMarkers(`${ESC}]7;file:///tmp${BEL}`)).toEqual([
+      { kind: "cwd", cwd: "/tmp" },
+    ]);
+  });
+});
+
 describe("foldShellMarkers", () => {
   test("starts at a prompt", () => {
     expect(initialCommandState()).toEqual({ atPrompt: true });

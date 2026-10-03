@@ -93,8 +93,13 @@ function Global:Prompt() {
 	$Result = ''
 	# 133;A -- a prompt is being drawn.
 	$Result += "$([char]0x1b)]133;A`a"
-	# 633;P;Cwd -- where the pane is, for a reader that wants it.
-	$Result += "$([char]0x1b)]633;P;Cwd=$(__NataliaEscape $PWD.ProviderPath)`a"
+	# OSC 7 -- where the pane is, as a file:// URL: the iTerm/FinalTerm spelling
+	# every shell-integration-aware terminal reads, and now ours too. It replaces
+	# the private `633;P;Cwd` this line used to emit: a namespace only this repo
+	# understood was a marker nobody read, and the standard one is read by every
+	# terminal including this one. Percent-encoded because the sequence's grammar
+	# ends at BEL and a space belongs INSIDE the URL.
+	$Result += "$([char]0x1b)]7;file://$env:COMPUTERNAME$([System.Uri]::EscapeDataString($PWD.ProviderPath))`a"
 	# The operator's own prompt still draws: this adds markers around it rather than
 	# replacing it.
 	$Result += $Global:__NataliaState.OriginalPrompt.Invoke()

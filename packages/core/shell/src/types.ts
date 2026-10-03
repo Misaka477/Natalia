@@ -56,6 +56,15 @@ export type ShellExecRequest = {
    * name an executor instead.
    */
   shellExecutable?: string | undefined;
+  /**
+   * The harness-owned `NATALIA_*` facts for this execution.
+   *
+   * Merged by the executor AFTER {@link env} and after every ambient `NATALIA_*`
+   * entry has been dropped, so a managed fact always wins: a caller cannot displace
+   * `NATALIA_HOME` by naming it, and the harness process's own stale value cannot
+   * leak in. See `applyShellEnv`.
+   */
+  shellEnv?: import("./shell-env").ShellEnv | undefined;
 };
 
 /** A resolved request: everything needed to spawn, and nothing shell-shaped. */
@@ -66,7 +75,30 @@ export type ShellExecSpec = {
   timeoutMs: number;
   stdin?: string | undefined;
   env?: Record<string, string | undefined> | undefined;
+  /** The managed snapshot, carried through from the request. */
+  shellEnv?: import("./shell-env").ShellEnv | undefined;
 };
+
+/**
+ * What the sandbox actually did, reported independently of the exit status.
+ *
+ * Present only when confinement was requested. The three things a caller must be
+ * able to tell apart are "the command failed", "the policy refused the command",
+ * and "the sandbox could not run at all" — and only the first is visible in an
+ * exit code.
+ *
+ * `denied` is NOT here yet: the confinement wrapper's stderr dialect does not
+ * separate a policy refusal from a runner failure, so a `denied: true` would be a
+ * guess dressed as a fact. Its refusal arrives as `runnerFailed` with the wrapper's
+ * own text in `confinementRefusal`, and separating the two is deferred work on the
+ * wrapper rather than something to invent here.
+ */
+export interface ShellSandboxInfo {
+  /** The mode that was requested for this execution. */
+  mode: import("@anthelia/confinement").ConfinementMode;
+  /** The sandbox runner declined before the command could run. */
+  runnerFailed: boolean;
+}
 
 /** A finished foreground run. Nonzero exits and timeouts RESOLVE, not reject. */
 export type ShellRunResult = {
@@ -77,6 +109,8 @@ export type ShellRunResult = {
   outcome: "exited" | "timeout" | "aborted" | "spawn-failed";
   /** The wrapper's own refusal, when confinement declined before exec. */
   confinementRefusal?: string | undefined;
+  /** What the sandbox did, when confinement was requested. */
+  sandbox?: ShellSandboxInfo | undefined;
 };
 
 /** A live background process. */

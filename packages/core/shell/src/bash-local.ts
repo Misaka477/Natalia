@@ -44,6 +44,11 @@ export class BashLocalExecutor extends ShellExecutor {
       timeoutMs: clampLocal(request.timeoutMs),
       stdin: request.stdin,
       env: request.env,
+      // Carried through untouched: the managed namespace is merged by
+      // `spawnSpec` after the ambient drop, so it must survive `resolve` rather
+      // than be applied here — applying it here would put harness facts inside an
+      // executor, and every other executor would then need its own copy.
+      shellEnv: request.shellEnv,
     };
   }
 

@@ -34,7 +34,9 @@ import {
   type ShellExecSpec,
   type ShellProcess,
   type ShellRunResult,
+  type ShellSandboxInfo,
 } from "./types";
+import { applyShellEnv } from "./shell-env";
 
 /** Where the policy lives: everything here is shell-independent. */
 export abstract class ShellExecutor {
@@ -126,6 +128,16 @@ export abstract class ShellExecutor {
         // The wrapper prints its own refusal when IT declines (missing landlock
         // backend, an unappliable rule): that is a sandbox failure, not the
         // command's exit, and it must read as one.
+        //
+        // What the sandbox did is stamped on every path, so a caller reads the fact
+        // rather than inferring it from the exit code.
+        const sandbox: ShellSandboxInfo | undefined =
+          request?.confinement && request.confinement !== "danger-full-access"
+            ? {
+                mode: request.confinement as ConfinementMode,
+                runnerFailed: false,
+              }
+            : undefined;
         if (code !== 0 && stderr.startsWith(WRAPPER_FAILURE_SIGNATURE))
           finish(() =>
             resolveRun({
@@ -134,11 +146,18 @@ export abstract class ShellExecutor {
               stderr,
               outcome: "spawn-failed",
               confinementRefusal: stderr.trim(),
+              sandbox: sandbox && { ...sandbox, runnerFailed: true },
             }),
           );
         else
           finish(() =>
-            resolveRun({ exitCode: code, stdout, stderr, outcome: "exited" }),
+            resolveRun({
+              exitCode: code,
+              stdout,
+              stderr,
+              outcome: "exited",
+              sandbox,
+            }),
           );
       });
     });
@@ -218,7 +237,8 @@ export abstract class ShellExecutor {
         args: [...args],
       });
       // Fail-closed: a missing backend must not silently degrade to running the
-      // command unconstrained.
+      // command unconstrained. `runnerFailed` says the sandbox could not run rather
+      // than that the command failed — the distinction an exit code cannot carry.
       if (!wrapped)
         return {
           error: {
@@ -226,6 +246,7 @@ export abstract class ShellExecutor {
             stdout: "",
             stderr: "",
             outcome: "spawn-failed",
+            sandbox: { mode: mode as ConfinementMode, runnerFailed: true },
           },
         };
       command = wrapped.command;
@@ -241,7 +262,13 @@ export abstract class ShellExecutor {
         // environment, so a caller's value still wins per-key. Reading
         // `request.env` here instead discarded every executor default whenever a
         // caller passed anything — the pwsh overrides would never have applied.
-        env: spec.env,
+        //
+        // `applyShellEnv` then drops any ambient `NATALIA_*` entry and merges the
+        // managed snapshot last, so a harness-owned fact cannot be displaced by a
+        // caller's `env` entry nor inherited from whenever this process started.
+        env: applyShellEnv(spec.env, spec.shellEnv) as
+          | Record<string, string>
+          | undefined,
       }),
     };
   }

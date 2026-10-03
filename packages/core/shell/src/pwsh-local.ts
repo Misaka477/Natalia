@@ -63,6 +63,11 @@ export class PwshLocalExecutor extends ShellExecutor {
       // way round makes the caller's environment lose to a default, which is the
       // precedence the seam's other executor never has to think about.
       env: { ...ENV_OVERRIDES, ...request.env },
+      // Carried through, not merged here. `ENV_OVERRIDES` above are the executor's
+      // own defaults for THIS shell; the managed namespace is harness-owned and is
+      // merged by `spawnSpec` after the ambient drop, so it outranks both — a
+      // harness fact must not lose to a shell default either.
+      shellEnv: request.shellEnv,
     };
   }
 

@@ -1,9 +1,23 @@
 import { clampTimeout, selectExecutor } from "@anthelia/shell";
+import { ShellEnvRegistry } from "@anthelia/shell";
 import type { ToolExecutionContext } from "./types";
 import { safeToolEnv } from "./child-process";
 
 /** The confinement wrapper's refusal prefix (its own stderr dialect). */
 const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
+
+/**
+ * The harness-owned environment facts a model's command sees.
+ *
+ * `NATALIA_HOME` is the reason this exists: the allowlist in `safeToolEnv` is
+ * correct policy and it excluded every `NATALIA_*` name, so a command run by a model
+ * could not find the harness's own home unless an operator happened to allowlist it.
+ * Facts the harness owns are now injected rather than opted into.
+ *
+ * Built once here because this process is the harness: a second registry would
+ * answer "which home did that command see" differently from this one.
+ */
+const shellEnv = new ShellEnvRegistry(process.env.NATALIA_HOME ?? "");
 
 /**
  * Runs one shell command inside the workspace with output capture.
@@ -38,6 +52,11 @@ export async function runShell(
     // it was missing between the seam's introduction and now — typecheck found it
     // as an unused type, and nothing else would have.
     env: safeToolEnv(context.settings?.envAllowlist),
+    // Merged after the allowlist by the executor, so it displaces nothing a
+    // caller's policy chose to include and cannot be displaced itself.
+    shellEnv: shellEnv.collect({
+      sessionID: context.sessionID,
+    }),
   });
   const run = await shell.run(spec, {
     command,

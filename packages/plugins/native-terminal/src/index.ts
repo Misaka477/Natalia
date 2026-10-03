@@ -10,6 +10,13 @@ export {
   nativeInputBrokerEndpoint,
   nativeTerminalForkBuildDir,
   nativeTerminalPaneCommand,
+  // The pane's full spawn spec — argv AND the environment its shell needs. A pane
+  // that takes only the argv is silently unintegrated on zsh, whose rc arrives as
+  // ZDOTDIR rather than as a flag. It has to be exported, not merely used inside
+  // the package: an installed plugin's consumers reach it only through this
+  // boundary, and the first version tested it in-package only, so it worked there
+  // and was absent wherever the plugin is loaded from its build output.
+  nativeTerminalPaneSpawn,
   nativeTerminalPrebuiltDir,
   platformTriple,
   reclaimStaleMuxRuntimeDirs,

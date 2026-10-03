@@ -63,12 +63,28 @@ test("one huge line gets a bound no line window can give it", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-bytes-"));
   const { controller, waitFor } = await paneIn(root, "t_huge");
   try {
-    // A single line far past any line window's useful bound: 64 KiB of one
+    // A single line far past any line window's useful bound: 70 KiB of one
     // uninterrupted run. `maxLines: 1` on the LINE window would serve all of
     // it, because it is one line.
+    //
+    // Streamed, not built as one argv: `$(seq 1 70000)` expands to 70000
+    // arguments and a runner with a small ARG_MAX (the CI one, measured) runs
+    // the command with none of them — the pane then holds only its prompt and
+    // the assertions test nothing. `head -c` through `tr` cannot hit that.
+    //
+    // And the string is DOUBLE-backslashed (`'\\0'`), which is load-bearing:
+    // `tr '\0'` in a TS source is the NUL escape, so the first version of this
+    // test wrote a real NUL byte into the pane. The line discipline echoed it
+    // as `^@`, bash read a command with a NUL in the middle of its quoted
+    // argument and waited at a continuation prompt for the quote to close —
+    // the pane echoed the line and never ran it, and the assertion saw a
+    // 148-byte document. A shell's input is bytes; every layer the test's
+    // string crosses (TS literal, JSON control line, the bridge's parse) has
+    // its own escape rules, and only the shell's spelling is the one that
+    // matters.
     controller.write(
       "t_huge",
-      "printf 'x%.0s' $(seq 1 65536); echo; echo HUGE_DONE\n",
+      "head -c 70000 /dev/zero | tr '\\0' 'x'; echo; echo HUGE_DONE\n",
     );
     await waitFor(async () =>
       (await controller.read("t_huge", { maxLines: 200 })).text.includes(

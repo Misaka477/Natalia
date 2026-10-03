@@ -196,3 +196,29 @@ maybe(
     }
   },
 );
+
+maybe("a second version upgrades in place and keeps the first", async () => {
+  // The upgrade path, which is where the landing's re-pointing lives: install
+  // 1.0, then install 2.0 into the same home. The pointer must follow the new
+  // version and the old tree must stay (an upgrade is not a move), and the
+  // previous install's recovery is the same pointer-keeping the rollback does.
+  const home = await mkdtemp(join(tmpdir(), "natalia-inst-upgrade-"));
+  const first = await fakeRelease({ version: "1.0.0-first" });
+  expect((await install(first, home)).code).toBe(0);
+
+  const second = await fakeRelease({ version: "2.0.0-second" });
+  const result = await install(second, home);
+  expect(result.code).toBe(0);
+  // The pointer follows the new version.
+  expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
+    "../versions/2.0.0-second/natalia",
+  );
+  const version = Bun.spawnSync([join(home, "bin", "natalia"), "--version"], {
+    stdout: "pipe",
+  });
+  expect(version.stdout.toString().trim()).toBe("2.0.0-second");
+  // And the old version is still there to come back to.
+  expect(existsSync(join(home, "versions", "1.0.0-first", "natalia"))).toBe(
+    true,
+  );
+});

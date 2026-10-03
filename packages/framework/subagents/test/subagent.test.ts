@@ -927,6 +927,12 @@ test("same sessionID resumes id counter across registry restarts", async () => {
     workDir: dir,
     sessionID: "persistent",
   });
+  // The two registries must resolve to the SAME store directory, or the restart
+  // reads a different file and the resume fails with a bare `Received length: 0`
+  // — which is what CI saw, and which by itself does not say whether the write
+  // went elsewhere or the read did. Asserting the paths first makes the failure
+  // name the divergence instead of leaving it to be inferred.
+  expect(reg2.store.dir).toBe(reg1.store.dir);
   await reg2.load();
   expect(reg2.list()).toHaveLength(1);
   expect(reg2.list()[0]!.id).toBe("a1");

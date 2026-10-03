@@ -269,51 +269,11 @@ export function createTerminalController(input: {
     return nativeTerminal ? await reconcile() : [];
   }
 
-  /**
-   * Reads a pane through the WezTerm host.
-   *
-   * This CANNOT honour the read contract, and says so rather than returning a
-   * plausible-looking value. The host's `read` returns text, the cursor and the
-   * geometry -- nothing about where that text sits in the document or how long the
-   * document is, and the host is a separate process so the numbers cannot be
-   * recovered here either. Returning zeros would satisfy the shape and hand a caller
-   * nothing to navigate with, which is how paging quietly stopped working on this
-   * path.
-   *
-   * The refusal is also the reason this backend is scheduled for retirement rather
-   * than extension: a model-facing read that cannot page is not a smaller version of
-   * the contract, it is a different one.
-   */
   async function read(
     id: string,
     options?: { maxLines?: number; sessionID?: string },
   ) {
-    const result = await requireTerminal().read(id, options);
-    // The host's own return type states the gap: `text`, cursor, geometry, and no
-    // extent. Reading it through a Partial is what makes the check below honest
-    // rather than a guess about what a remote process might send one day.
-    const extent = result as Partial<{
-      startLine: number;
-      totalLines: number;
-    }>;
-    if (
-      !Number.isFinite(extent.startLine) ||
-      !Number.isFinite(extent.totalLines)
-    )
-      throw new Error(
-        "the WezTerm host cannot report a pane's line extent, so this read cannot " +
-          "be paged; use the pty terminal backend, which keeps the document " +
-          "in-process",
-      );
-    return {
-      ...result,
-      startLine: extent.startLine as number,
-      // One past the last line served: `startLine` plus however many lines the host
-      // actually returned, which is the only honest way to state the end from what
-      // it gave.
-      endLine: (extent.startLine as number) + result.text.split("\n").length,
-      totalLines: extent.totalLines as number,
-    };
+    return await requireTerminal().read(id, options);
   }
 
   async function openHub() {

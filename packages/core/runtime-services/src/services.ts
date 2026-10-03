@@ -567,21 +567,6 @@ export interface TerminalController {
     },
   ): Promise<{
     text: string;
-    /**
-     * The window that was actually served, and the extent of the document it came
-     * from.
-     *
-     * Required, not optional: an implementation that cannot report the extent also
-     * cannot support paging, and an optional field lets it pass the shape check while
-     * giving a caller nothing to navigate with. The caller would then receive an
-     * empty string for an out-of-range window and no way to tell "nothing there"
-     * from "there is nothing at all" -- which is guessing, not paging.
-     */
-    startLine: number;
-    /** One past the last line served (exclusive). */
-    endLine: number;
-    /** How many lines the pane's document holds in total. */
-    totalLines: number;
     cursorX: number;
     cursorY: number;
     rows: number;

@@ -51,3 +51,30 @@ test("the replay clears before writing, so an empty screen stays empty", () => {
   expect(restore).toContain("term?.clear()");
   expect(restore).toContain("if (message.text)");
 });
+
+test("OSC 52 — the clipboard write — is refused on purpose", () => {
+  // A program in the pane can ask the terminal to write the human's clipboard
+  // (OSC 52), and the pane is where the MODEL's commands run — so the ask can
+  // come from something the human never launched. xterm 5.5.0 registers no
+  // OSC 52 handler, so the sequence is dropped today; this pins the decision
+  // rather than leaving the safety to a version's internals: the handler is
+  // registered AND returns false, and the comment names the threat so the
+  // next reader does not "restore" it as a missing feature.
+  const text = source();
+  expect(text).toContain("registerOscHandler(52, () => false)");
+  // And the model's own screen never carries the sequence either: the virtual
+  // screen drops every OSC, which is what keeps a clipboard write out of the
+  // pane's READ as well as out of the human's clipboard.
+  const screen = readFileSync(
+    join(
+      root,
+      "packages",
+      "plugins",
+      "native-terminal",
+      "src",
+      "terminal-screen.ts",
+    ),
+    "utf8",
+  );
+  expect(screen).toContain("function skipOsc(");
+});

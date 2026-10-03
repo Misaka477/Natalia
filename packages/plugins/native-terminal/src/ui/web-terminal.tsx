@@ -274,6 +274,18 @@ export function WebTerminal(props: WebTerminalProps) {
     });
     // Keep browser-only shortcuts (notably Ctrl+W, which closes the tab)
     // from stealing keys that terminal programs like vim/tmux need.
+    //
+    // AND the clipboard's security posture, stated explicitly rather than
+    // inherited: OSC 52 — "write this text to the user's clipboard" — is
+    // REFUSED here. The threat is not exotic: the pane is where the model's
+    // commands run, so any command it issues can emit this sequence, and a
+    // silent write would let a program replace what the human pastes next
+    // (a password field, a transaction) with something the human never saw.
+    // Measured: xterm 5.5.0's core registers no OSC 52 handler, so the
+    // sequence is already dropped — this handler keeps that true on purpose,
+    // and makes the reason findable instead of folklore. The human's own copy
+    // path (selection + Ctrl+Shift+C, above) is consent-driven and unrelated.
+    term.parser?.registerOscHandler(52, () => false);
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown" && event.type !== "keyup") return true;
       const key = event.key.toLowerCase();

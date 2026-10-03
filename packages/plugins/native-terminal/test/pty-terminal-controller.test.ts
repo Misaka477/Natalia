@@ -297,6 +297,77 @@ test("default python pty spawn runs an interactive shell", async () => {
   await controller.close();
 }, 15_000);
 
+/**
+ * The command-level read, through the REAL pty bridge and a REAL bash.
+ *
+ * Everything above feeds markers in by hand, which verifies the parser and the
+ * fold but not that a pane ever produces them. This one closes that gap: the
+ * controller derives the argv (`bash --rcfile <the bundled script>`), the bridge
+ * spawns it, bash sources it, and the markers travel the same route a marked-up
+ * shell's bytes would.
+ *
+ * It is the regression asset for the two defects found while verifying this by
+ * hand: a relative rcfile path (which resolves against the operator's workspace
+ * and silently loads nothing), and `-i` added to the argv (which bash rejects
+ * outright, `--: invalid option`).
+ */
+test("a real bash pane reports its commands end to end", async () => {
+  if (process.platform === "win32") {
+    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "natalia-command-e2e-"));
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  // `bash`, not `bash -l` and not a command: the pane IS an interactive shell,
+  // which is the only shape the integration is derived for.
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_e2e",
+  });
+  // Optional on the interface — a backend that cannot read a command lifecycle
+  // leaves it off — so its presence on the pty controller is itself asserted.
+  const lastCommand = controller.lastCommand?.bind(controller);
+  expect(typeof lastCommand).toBe("function");
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  const waitFor = async (predicate: () => boolean, ms = 8_000) => {
+    const deadline = Date.now() + ms;
+    while (!predicate() && Date.now() < deadline) await Bun.sleep(50);
+  };
+  // The rcfile takes a moment under a fresh bash; wait for the first prompt.
+  await waitFor(() => lastCommand("term_e2e").atPrompt);
+  controller.write("term_e2e", "echo end-to-end-value\n");
+  await waitFor(() =>
+    (lastCommand("term_e2e").commandLine ?? "").includes("end-to-end-value"),
+  );
+  const command = lastCommand("term_e2e");
+  expect(command.commandLine).toBe("echo end-to-end-value");
+  expect(command.exitCode).toBe(0);
+  // Exactly that command's output — not the whole pane.
+  expect(command.output).toContain("end-to-end-value");
+
+  // The two surfaces agree because they read one stream: the screen holds what
+  // the command read bounded.
+  const screen = await controller.read("term_e2e", { maxLines: 60 });
+  expect(screen.text).toContain("end-to-end-value");
+  expect(command.output).not.toContain("__never__");
+
+  // A nonzero exit reaches the reader, which is what the D marker carries.
+  controller.write("term_e2e", "false\n");
+  await waitFor(() => lastCommand("term_e2e").exitCode === 1);
+  expect(lastCommand("term_e2e").exitCode).toBe(1);
+
+  controller.write("term_e2e", "exit\n");
+  await controller.close();
+}, 25_000);
+
 test("input written the instant a pty starts is not dropped by the bridge", async () => {
   if (process.platform === "win32") {
     // Same reason as the default-spawn test above: the bridge under test is

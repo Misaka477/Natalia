@@ -52,17 +52,26 @@ async function install(
   from: string,
   home: string,
 ): Promise<{ code: number; output: string }> {
-  const proc = Bun.spawnSync(
-    ["bash", INSTALL, "--from", from, "--home", home],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
+  const proc = Bun.spawn(["bash", INSTALL, "--from", from, "--home", home], {
+    stdout: "pipe",
+    stderr: "pipe",
+    // A machine behind an HTTP proxy would send 127.0.0.1 through it and get
+    // a 502 for the local test server; the bypass is the test's own
+    // environment, not a property of the script under test.
+    env: {
+      ...process.env,
+      no_proxy: "127.0.0.1,localhost",
+      NO_PROXY: "127.0.0.1,localhost",
     },
-  );
-  return {
-    code: proc.exitCode,
-    output: `${proc.stdout.toString()}${proc.stderr.toString()}`,
-  };
+  });
+  // Async, not spawnSync: the URL-path test serves the release from this same
+  // process, and a synchronous child would block the loop the server needs.
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { code, output: `${stdout}${stderr}` };
 }
 
 // The script is POSIX shell and the layout is POSIX paths; Windows runs the
@@ -145,3 +154,45 @@ maybe("a failed install into a fresh home leaves no husks", async () => {
   expect(existsSync(join(home, "bin"))).toBe(false);
   expect(existsSync(join(home, "versions"))).toBe(false);
 });
+
+maybe(
+  "the URL path installs, because a URL is the default --from",
+  async () => {
+    // The directory path is the test convenience; the shipping default is a
+    // release URL (NATALIA_INSTALL_BASE, or the hosted one the header names).
+    // The two paths share the verification but not the fetch, and a fetch that
+    // silently mistreats the URL would ship a broken default. Served from this
+    // process, so the test needs no network.
+    const release = await fakeRelease();
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (request) => {
+        const file = Bun.file(
+          join(release, decodeURIComponent(new URL(request.url).pathname)),
+        );
+        return (await file.exists())
+          ? new Response(file)
+          : new Response("not found", { status: 404 });
+      },
+    });
+    try {
+      const home = await mkdtemp(join(tmpdir(), "natalia-inst-url-"));
+      const result = await install(`http://127.0.0.1:${server.port}/`, home);
+      expect(result.code).toBe(0);
+      const version = Bun.spawnSync(
+        [join(home, "bin", "natalia"), "--version"],
+        {
+          stdout: "pipe",
+        },
+      );
+      expect(version.stdout.toString().trim()).toBe("9.9.9-test");
+      // And the subdirectory the [Files]-style loop exercises (plugins/one.js).
+      expect(
+        existsSync(join(home, "versions", "9.9.9-test", "plugins", "one.js")),
+      ).toBe(true);
+    } finally {
+      server.stop(true);
+    }
+  },
+);

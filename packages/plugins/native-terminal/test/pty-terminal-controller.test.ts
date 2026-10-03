@@ -431,6 +431,74 @@ test("a real pane's boundary cases stay honest", async () => {
 }, 40_000);
 
 /**
+ * A command that has not finished.
+ *
+ * Every other test waits for a command to complete, so none of them exercises the
+ * state a pane is in MOST of the time: something is running. `less` waiting on
+ * RETURN and `head` waiting on stdin are the two shapes a model actually meets —
+ * measured against a real bash, both report no exit code and no output.
+ *
+ * That is the whole point of the absent-not-zero rule: a command that is still
+ * running must not read as one that succeeded. If this ever reports 0, a model
+ * would act on a hang as though it were a result.
+ */
+test("a command still running reports no exit code and no output", async () => {
+  if (process.platform === "win32") {
+    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "natalia-command-running-"));
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_running",
+  });
+  const lastCommand = controller.lastCommand?.bind(controller);
+  expect(typeof lastCommand).toBe("function");
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  const waitFor = async (predicate: () => boolean, ms = 8_000) => {
+    const deadline = Date.now() + ms;
+    while (!predicate() && Date.now() < deadline) await Bun.sleep(50);
+  };
+  await waitFor(() => lastCommand(started.id).atPrompt);
+
+  // A command that blocks on stdin: it will never finish on its own.
+  controller.write(started.id, "head -1\n");
+  await waitFor(() =>
+    (lastCommand(started.id).commandLine ?? "").includes("head -1"),
+  );
+  const running = lastCommand(started.id);
+  // The command line IS known — the D marker for the previous prompt told us.
+  expect(running.commandLine).toBe("head -1");
+  // But nothing about its outcome is: it has not finished.
+  expect(running.exitCode).toBeUndefined();
+  expect(running.output).toBeUndefined();
+  expect(running.atPrompt).toBe(false);
+
+  // The screen read, by contrast, still shows the pane — which is the point of
+  // having both: the command read says "no answer yet", the screen says what is
+  // on screen right now.
+  const screen = await controller.read(started.id, { maxLines: 10 });
+  expect(screen.text).toContain("head -1");
+
+  controller.write(started.id, "some input\n");
+  await waitFor(() => lastCommand(started.id).exitCode === 0);
+  // Once it finishes, the read completes normally.
+  expect(lastCommand(started.id).exitCode).toBe(0);
+
+  controller.write(started.id, "exit\n");
+  await controller.close();
+}, 30_000);
+
+/**
  * The realistic case: a shell whose rc ALREADY installs a shell integration.
  *
  * Our script sources the operator's rc so their prompt and aliases survive, and a

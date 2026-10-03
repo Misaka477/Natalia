@@ -50,8 +50,14 @@ record(
   spec.command,
 );
 record(
-  "environment overrides are the documented three",
-  JSON.stringify(spec.env) === JSON.stringify({ ...ENV_OVERRIDES }),
+  "environment overrides keep the command from blocking",
+  // The EXPECTED VALUES ARE LITERAL, not re-serialised from the module under
+  // test. The first version compared spec.env against {...ENV_OVERRIDES} — the
+  // same constant the executor uses — so the two sides could never disagree and
+  // the check could not fail: deleting PAGER from the executor left it green,
+  // measured. A check that cannot fail is worse than no check.
+  JSON.stringify(spec.env) ===
+    JSON.stringify({ NO_COLOR: "1", PAGER: "cat", GIT_PAGER: "cat" }),
   JSON.stringify(spec.env),
 );
 record(

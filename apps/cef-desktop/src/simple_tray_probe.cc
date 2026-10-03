@@ -72,9 +72,9 @@ int main(int argc, char** argv) {
   std::printf("TRAY_CREATED\n");
   std::printf("CALLBACKS_ARMED show=%d quit=%d\n", shows, quits);
 
-  // The menu Create built. The tray owns it privately; GTK tracks it as a
-  // toplevel (a GtkMenu is a GtkWindow), so it is reachable without widening the
-  // production type for a test's convenience.
+  // The menu Create built, through the accessor TrayIcon exposes for exactly
+  // this. (GTK does NOT register an unattached menu as a toplevel, so walking
+  // gtk_window_list_toplevels finds nothing — measured, not assumed.)
   GtkWidget* showItem = nullptr;
   GtkWidget* quitItem = nullptr;
   GList* items = menuItems(GTK_MENU(tray->menu()));

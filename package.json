@@ -77,7 +77,8 @@
     "appimage:fetch": "bun scripts/fetch-appimagetool.ts",
     "package:linux:portable": "bun scripts/package-portable-linux.ts",
     "guard:budgets": "bun run packages/tooling/testing/bin/timeout-budget-guard.ts",
-    "verify:pwsh": "bun scripts/verify-pwsh.ts"
+    "verify:pwsh": "bun scripts/verify-pwsh.ts",
+    "verify:windows": "bun scripts/verify-windows-terminal.ts"
   },
   "dependencies": {
     "@jsquash/jpeg": "^1.6.0",

@@ -315,6 +315,16 @@ test("the Linux tray probe runs and reports what Create actually did", () => {
     // Created here means the callbacks were armed and the object disposed — the
     // lifecycle the comment claimed, now checked rather than remembered.
     expect(stdout).toContain("CALLBACKS_ARMED show=0 quit=0");
+    // And the exit entry the goal names: the menu the tray built carries both
+    // commands, and activating them — what a click does — fires the callbacks.
+    // A tray whose Quit is missing or un wired would fail HERE rather than at a
+    // user's click, which is the whole point of asking the binary.
+    expect(stdout, "the menu must carry the show and quit entries").toContain(
+      "MENU_ENTRIES_FOUND",
+    );
+    expect(stdout).toContain("SHOW_CALLBACK_FIRED=1");
+    expect(stdout).toContain("QUIT_CALLBACK_FIRED=1");
+    expect(stdout).toContain("PASS");
     expect(stdout).toContain("DISPOSED_CLEANLY");
   }
 });
@@ -323,13 +333,18 @@ test("the Linux tray is a detected system package, never a hard link", () => {
   // What execution established, so the structural pins below are not mistaken for
   // the whole story. Two probes, both on this Linux host:
   //   1. the tray class itself: TrayIcon::Create -> a GTK main-loop iteration ->
-  //      dispose, clean exit, no crash. There is no tray in this environment to
-  //      embed into, so "it registered" is not claimed — only that it runs.
+  //      dispose, clean exit, no crash. A StatusNotifier host IS alive on this host
+  //      (`dbus-send … ListNames` shows org.kde.StatusNotifierWatcher and its
+  //      Host-4374 items, and the probe run reports TRAY_CREATED against it) — the
+  //      XEmbed SYSTEM_TRAY_S0 being empty is the older protocol and says nothing
+  //      about this one. What is still NOT claimed: that the icon is visible on the
+  //      panel. Registration is machine-checkable; pixels are a human's to confirm.
   //   2. the menu mechanism the tray depends on: a GtkMenuItem wired through
   //      g_signal_connect_swapped to a std::function fires both callbacks on
   //      activate, with no display (shows=1, quits=1).
-  // What is NOT verified: that a panel shows the icon, and that a click on it
-  // reaches the process. Both need a real tray, which this host does not have.
+  // What is NOT verified: that a panel shows the icon, and that a real human click
+  // on it reaches the process. The probe activates the entries programmatically —
+  // it pins the wiring from the visible entry to the callback, not the click.
   const cmake = readFileSync(
     new URL("../../cef-desktop/CMakeLists.txt", import.meta.url),
     "utf8",

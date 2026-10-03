@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   closeActionFromEnv,
+  closeActionFor,
   processSurvivesWindowClose,
   relaunchActionFor,
   statusLineFor,
@@ -54,6 +55,24 @@ test("the process survives only when the action is minimise", () => {
     expect(processSurvivesWindowClose(action)).toBe(survives);
 });
 
+test("the tray's Quit exits even under the minimise policy", () => {
+  // The regression this pins: the tray exists only while the window is hidden,
+  // which only happens under minimise — so a Quit answered with another hide
+  // is an exit entry that works in every state except the one it appears in.
+  const minimise = closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: "1" });
+  expect(minimise.action).toBe("minimise");
+  expect(closeActionFor("tray-quit", minimise)).toBe("quit");
+  expect(
+    processSurvivesWindowClose(closeActionFor("tray-quit", minimise)),
+  ).toBe(false);
+  // The window's own close button is still the policy's to answer.
+  expect(closeActionFor("window-button", minimise)).toBe("minimise");
+  // And under the default policy both sources agree on quit anyway.
+  const quit = closeActionFromEnv({});
+  expect(closeActionFor("tray-quit", quit)).toBe("quit");
+  expect(closeActionFor("window-button", quit)).toBe("quit");
+});
+
 test("a hidden window's status answers 'am I still running?'", () => {
   const policy = closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: "1" });
   const open = statusLineFor(policy, "open");
@@ -90,4 +109,42 @@ test("the C++ policy and the TS mirror agree on every input", () => {
       closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: value }).action,
       value,
     ).toBe("quit");
+});
+
+test("the C++ quit override exists, and it is checked first", () => {
+  // The tray's Quit closes the window through CefWindow::Close(), and CEF routes
+  // that through CanClose (cef_window_delegate.h: "called for user-initiated
+  // window close actions and when CefWindow::Close() is called"). So the
+  // override's whole value is ORDERING: the flag must be answered before the
+  // minimise branch, and set before the Close() it is meant to survive. This
+  // asserts the order in the one file that is the product.
+  const cxx = readFileSync(
+    new URL("../src/simple_app.cc", import.meta.url),
+    "utf8",
+  );
+
+  const canCloseStart = cxx.indexOf("bool CanClose");
+  expect(canCloseStart).toBeGreaterThan(-1);
+  const canCloseEnd = cxx.indexOf("\n  }", canCloseStart);
+  const canClose = cxx.slice(canCloseStart, canCloseEnd);
+  // Answered first: the flag check precedes the policy branch.
+  expect(canClose.indexOf("quit_requested_")).toBeGreaterThan(-1);
+  expect(canClose.indexOf("quit_requested_")).toBeLessThan(
+    canClose.indexOf("MinimiseOnClose()"),
+  );
+
+  // Both tray quit callbacks (Windows and Linux) set the flag before closing,
+  // and nothing else in the file closes the window without it.
+  const closes = [...cxx.matchAll(/window_->Close\(\)/gu)];
+  expect(closes.length).toBe(2);
+  for (const close of closes) {
+    const at = close.index!;
+    const lambda = cxx.lastIndexOf("[this]()", at);
+    expect(lambda).toBeGreaterThan(-1);
+    // The most recent flag-set before this Close() is inside this very lambda
+    // and precedes the call: the quit is what sets it, and it is set first.
+    const lastSet = cxx.lastIndexOf("quit_requested_ = true;", at);
+    expect(lastSet).toBeGreaterThanOrEqual(lambda);
+    expect(lastSet).toBeLessThan(at);
+  }
 });

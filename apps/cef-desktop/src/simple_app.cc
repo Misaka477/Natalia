@@ -36,6 +36,16 @@ namespace {
 // runtime with it. The policy's wording lives in window-policy.ts, mirror with
 // the tests that pin it.
 //
+// ONE EXIT IS NOT THE POLICY'S TO SWALLOW: the tray's Quit. The tray exists
+// only while the window is hidden, which only happens in minimise mode, so
+// without an override the one state where the exit entry is visible is the one
+// state where it does nothing — CEF calls CanClose for `CefWindow::Close()`
+// too ("user-initiated window close actions and when CefWindow::Close() is
+// called", cef_window_delegate.h), so a Quit that closes the window lands in
+// the minimise branch and hides again. `quit_requested_` is set before that
+// Close(), and checked FIRST in CanClose. window-policy.ts mirrors the same
+// rule ("tray-quit" overrides the policy) and a test compares the two.
+//
 // This delegate is the CROSS-PLATFORM one (CefWindowDelegate), so all three
 // platforms share this decision. The per-platform residue, and why each is not
 // here:
@@ -97,6 +107,10 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   }
 
   bool CanClose(CefRefPtr<CefWindow> window) override {
+    // The tray's explicit quit, checked FIRST: it is the one close the minimise
+    // policy must not answer with a hide. See the policy comment above for why
+    // this ordering is the whole fix.
+    if (quit_requested_) return true;
     if (MinimiseOnClose()) {
       // Hide, do not dispose: the runtime is the app's memory and the
       // single-instance lock is what a relaunch talks to, so a hidden window
@@ -160,8 +174,13 @@ class SimpleWindowDelegate : public CefWindowDelegate {
             },
             [this]() {
               // The user's explicit exit: the browser closes for real, which
-              // ends the message loop and so the process. This is deliberately
-              // NOT CanClose — that path would hide again.
+              // ends the message loop and so the process, and the launcher's
+              // trap releases the runtime with it. The flag is what makes it
+              // "for real" — CEF routes CefWindow::Close() through CanClose
+              // (see cef_window_delegate.h), and without it this click would
+              // land in the minimise branch and hide the very window whose
+              // tray was just used to ask for the exit.
+              quit_requested_ = true;
               if (window_) window_->Close();
             },
         });
@@ -180,7 +199,13 @@ class SimpleWindowDelegate : public CefWindowDelegate {
                 minimised_ = false;
               }
             },
-            [this]() { if (window_) window_->Close(); },
+            [this]() {
+              // Same two steps as Windows: the explicit exit sets the flag
+              // CanClose checks first, so the minimise policy cannot swallow
+              // the tray's own Quit.
+              quit_requested_ = true;
+              if (window_) window_->Close();
+            },
         });
   }
 #endif
@@ -191,6 +216,13 @@ class SimpleWindowDelegate : public CefWindowDelegate {
   const cef_runtime_style_t runtime_style_;
   const cef_show_state_t initial_show_state_;
   bool minimised_ = false;
+  /**
+   * Set by the tray's Quit before it closes the window, and checked first in
+   * CanClose. It exists because the tray only exists while the window is
+   * hidden, which only happens under the minimise policy — without this the
+   * explicit exit would be answered with another hide.
+   */
+  bool quit_requested_ = false;
 #if defined(OS_WIN) || defined(NATALIA_HAVE_APPINDICATOR)
   // Windows and Linux call the same two-function class by the same name through
   // deliberately identical headers; nothing here needs to know which one it is.

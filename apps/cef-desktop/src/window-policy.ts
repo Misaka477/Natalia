@@ -33,6 +33,13 @@
 /** What the window should do when the human closes it. */
 export type CloseAction = "quit" | "minimise";
 
+/** Where a close came from. */
+export type CloseSource =
+  /** The window's own close button (or the platform's equivalent gesture). */
+  | "window-button"
+  /** The tray's Quit — the explicit exit, present while the window is hidden. */
+  | "tray-quit";
+
 /** Where the window currently is, for the launcher entry to act on. */
 export type WindowState = "open" | "hidden";
 
@@ -101,4 +108,25 @@ export function statusLineFor(
  */
 export function processSurvivesWindowClose(action: CloseAction): boolean {
   return action === "minimise";
+}
+
+/**
+ * What the window should do for a close from `source`, given the policy.
+ *
+ * The tray's Quit is the explicit exit, and it OVERRIDES the minimise policy:
+ * the tray only exists while the window is hidden, which only happens under
+ * minimise — so without the override the one state where the exit entry is
+ * visible is the one state where it does nothing. The C++ side carries the
+ * same rule (`quit_requested_`, checked first in CanClose — see the policy
+ * comment in simple_app.cc), and the parity test compares the two.
+ *
+ * The window's close button is the policy's to answer: minimise when opted in,
+ * quit otherwise.
+ */
+export function closeActionFor(
+  source: CloseSource,
+  policy: ClosePolicy,
+): CloseAction {
+  if (source === "tray-quit") return "quit";
+  return policy.action;
 }

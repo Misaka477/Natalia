@@ -59,6 +59,18 @@ class TrayIcon {
 
   ~TrayIcon();
 
+  /**
+   * The menu this tray built, for the tray probe's activation check.
+   *
+   * The probe needs to activate the menu items the way a click does — GTK does
+   * not register an unattached menu as a toplevel, so the widget is otherwise
+   * unreachable from outside the class. The alternative was to leave the one
+   * property the goal names ("an explicit exit entry") unpinnable: that the
+   * entry exists, and that reaching it fires on_quit. Nothing in the product
+   * calls this; it exists so a test can.
+   */
+  GtkWidget* menu() const { return menu_; }
+
  private:
   TrayIcon() = default;
 

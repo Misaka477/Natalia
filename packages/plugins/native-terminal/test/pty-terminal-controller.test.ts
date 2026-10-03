@@ -369,6 +369,68 @@ test("a real bash pane reports its commands end to end", async () => {
 }, 25_000);
 
 /**
+ * The boundary cases a real pane hits that a happy-path test does not.
+ *
+ * Each of these is a place where the command-level read could quietly hand a
+ * model something wrong: another command's output, an invented exit code, or a
+ * command that never ran. All measured against a real bash before being pinned.
+ */
+test("a real pane's boundary cases stay honest", async () => {
+  if (process.platform === "win32") {
+    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "natalia-command-edges-"));
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_edges",
+  });
+  const lastCommand = controller.lastCommand?.bind(controller);
+  expect(typeof lastCommand).toBe("function");
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  const waitFor = async (predicate: () => boolean, ms = 10_000) => {
+    const deadline = Date.now() + ms;
+    while (!predicate() && Date.now() < deadline) await Bun.sleep(50);
+  };
+  await waitFor(() => lastCommand(started.id).atPrompt);
+
+  // A command that scrolls past the grid: the NEXT command's output must not
+  // carry the previous one's, which is what the projection's prefix check is for.
+  controller.write(started.id, "seq 1 200\n");
+  await waitFor(() => lastCommand(started.id).exitCode === 0);
+  controller.write(started.id, "echo after-the-flood\n");
+  await waitFor(() =>
+    (lastCommand(started.id).commandLine ?? "").includes("after-the-flood"),
+  );
+  const afterFlood = lastCommand(started.id);
+  expect(afterFlood.exitCode).toBe(0);
+  expect(afterFlood.output).toContain("after-the-flood");
+  // The flood itself is NOT in this command's output.
+  expect(afterFlood.output).not.toContain("1\n2\n3");
+  expect((afterFlood.output ?? "").split("\n").length).toBeLessThan(5);
+
+  // A command that does not exist: 127 is the real code, and it must survive.
+  controller.write(started.id, "definitely-not-a-real-command\n");
+  await waitFor(() => lastCommand(started.id).exitCode === 127);
+  expect(lastCommand(started.id).exitCode).toBe(127);
+  expect(lastCommand(started.id).output).toContain(
+    "definitely-not-a-real-command",
+  );
+
+  controller.write(started.id, "exit\n");
+  await controller.close();
+}, 40_000);
+
+/**
  * The realistic case: a shell whose rc ALREADY installs a shell integration.
  *
  * Our script sources the operator's rc so their prompt and aliases survive, and a

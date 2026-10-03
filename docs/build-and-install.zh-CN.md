@@ -248,6 +248,11 @@ PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/share/pkgconfig \
 
 **每行的验证深度写在自己的「状态」里，不藏在脚注**：Linux 那行是真 release + 真 AppDir + ldd；Windows 那行是真编译器 + 合成树（编译验证不等于安装验证）；macOS 那行同样只有合成树。三者不是一回事。
 
+**Linux AppImage 的一个运行时依赖**：生成的 `AppRun` 用 `socat` 做二次启动的接管探测
+（连上单实例 socket 即证明实例在，详见 `scripts/appimage.ts` 里那段注释）。没装 socat 的
+机器上首次启动不受影响（无 socket 可探），二次启动退到 pid 分支——行为仍安全，但不是设计
+路径。CI 的 core-2 层为跑这些测试装了 `desktop-file-utils` 和 `socat`。
+
 **macOS 为什么 defer**：`release:build --all` 只构建 host + windows-x64，因为没有
 macOS 的终端构建（`build-wezterm-*.ts` 只有 ubuntu 和 windows 两版）。一个交互终端
 跑不起来的 release 是带校验和的谎言，所以不做。`appbundle`/dmg staging 的代码写好并

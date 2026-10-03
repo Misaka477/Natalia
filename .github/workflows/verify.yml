@@ -330,6 +330,17 @@ jobs:
           --manifest-path packages/hosts/confinement/native/Cargo.toml
       - name: Install
         run: bun install --frozen-lockfile
+      # The script tests drive real tools, not mocks of them: the AppImage test
+      # runs the generated AppRun, whose second-launch probe is a socat connect,
+      # and the entry test hands the generated .desktop to the freedesktop
+      # validator. Wiring scripts/test into CI exposed that both tools are
+      # absent on a stock runner — so they are installed here, for the layer
+      # that runs them, rather than the tests being quietly skipped everywhere.
+      - name: Install the tools the script tests drive
+        if: matrix.layer == 'core-2'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils socat
       - name: Fetch the built distribution from the artifacts job
         uses: actions/download-artifact@v4
         with:

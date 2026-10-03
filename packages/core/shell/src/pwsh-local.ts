@@ -7,13 +7,20 @@
  * must be escaped, and this does not, so there is no second quoting layer here to
  * get wrong. It is also why this executor needs no `shellQuote`-equivalent.
  *
- * NOT VERIFIED BY EXECUTION. No PowerShell exists on the hosts that built this
- * (and none under wine), so the argv, the preambles and the overrides below are
- * asserted as data and NOT run. What that means concretely: the option spellings
- * and the encoding preamble are transcribed from the reference implementation and
- * from PowerShell's documented flags, and a real pwsh host is where they get
+ * NOT VERIFIED BY EXECUTION. No PowerShell exists on the hosts that built this,
+ * so the argv, the preambles and the overrides below are asserted as data and
+ * NOT run. What that means concretely: the option spellings and the encoding
+ * preamble are transcribed from the reference implementation and from
+ * PowerShell's documented flags, and a real pwsh host is where they get
  * confirmed. `resolve` is pure construction and is covered by the seam's tests;
  * everything about how pwsh INTERPRETS what it is handed is not.
+ *
+ * The wine route was tried too, and it is a dead end worth recording rather
+ * than re-attempting: under wine-staging 11.0 the .NET host loads (the
+ * PowerShell 7.6.6 startup traces appear, coreclr and AMSI initialise) and then
+ * exits 0 WITHOUT the script engine running — `-Command "exit 42"` returns 0.
+ * So "none under wine" is not an assumption here, it is a measurement; the
+ * executor waits for a real Windows host, same as the platformShell flip.
  */
 import { ShellExecutor } from "./shell";
 import { clampTimeout } from "./types";

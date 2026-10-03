@@ -164,88 +164,118 @@ test("the icon ships under the entry's own name", async () => {
   expect(entry["Icon"]).toBe("natalia");
 });
 
-test("the generated entry passes desktop-file-validate clean", async () => {
-  // A launcher reads the entry; the freedesktop VALIDATOR is what tells us the
-  // entry is legal. Two of its complaints are the kind a build can ship by
-  // accident: an application version in the spec's Version key, and more than
-  // one main Category (which makes the app appear twice in the menu). Both cost
-  // nothing to avoid and a support question to explain.
-  const validator = Bun.which("desktop-file-validate");
-  // Bun's dynamic skip needs the named form; a bare `test.skip(reason)` is not
-  // the two-argument call the type signature wants.
-  if (!validator) {
-    test.skip("desktop-file-validate is not installed", () => {});
-    return;
-  }
-  const release = await fakeRelease();
-  const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
-  const result = await buildAppImage({
-    releaseDir: release,
-    outDir: out,
-    version: "9.9.9-test",
-  });
-  const run = Bun.spawnSync([validator!, result.desktopEntry], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const output = `${run.stdout.toString()}${run.stderr.toString()}`;
-  expect(output.trim()).toBe("");
-});
-
-test("AppRun hands off to a running instance instead of starting a copy", async () => {
-  // The generated launcher is the app's only product use of the single-instance
-  // lock, and the branch that matters is the one a user hits by clicking the icon
-  // twice. Three outcomes, all measured by running the generated script:
-  //   a live listener  -> ask it to show, exit 0 (no second copy)
-  //   a stale socket with a LIVE pid    -> defer, exit 0 (the app is starting)
-  //   a stale socket with a dead pid    -> take the lock over (a crash recovers)
-  const release = await fakeRelease();
-  const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
-  await withAppRun(release, out, async ({ run, stateDir }) => {
-    // 1. A listener that answers.
-    const answering = Bun.spawn(
-      [
-        "socat",
-        `UNIX-LISTEN:${stateDir}/natalia.instance.sock,fork`,
-        'SYSTEM:echo {"ok":true}',
-      ],
-      { stdout: "ignore", stderr: "ignore" },
-    );
-    await Bun.sleep(300);
-    // Connecting IS the signal now: the app is there, so this launch exits
-    // without starting a copy. Empty output, exit 0.
-    expect(run()).toBe("");
-    answering.kill();
-
-    // 2. A socket file with NO listener (what a starting app has before its
-    //    listener is up, or one that died without cleaning up), plus a live pid.
-    //    socat removes its socket on exit, so this state is created by hand.
-    const keep = Bun.spawn(["sleep", "30"], {
-      stdout: "ignore",
-      stderr: "ignore",
+// The skip is the DECLARATION-time form: calling test.skip() inside a test
+// body is an error in bun ("Cannot call test.skip() inside a test"), which is
+// how this test behaved on a machine without the validator — a hard failure
+// instead of the documented absence. It ran green for years only because this
+// directory ran in no automated suite at all.
+const validator = Bun.which("desktop-file-validate");
+(validator ? test : test.skip)(
+  "the generated entry passes desktop-file-validate clean",
+  async () => {
+    // A launcher reads the entry; the freedesktop VALIDATOR is what tells us the
+    // entry is legal. Two of its complaints are the kind a build can ship by
+    // accident: an application version in the spec's Version key, and more than
+    // one main Category (which makes the app appear twice in the menu). Both cost
+    // nothing to avoid and a support question to explain.
+    const release = await fakeRelease();
+    const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
+    const result = await buildAppImage({
+      releaseDir: release,
+      outDir: out,
+      version: "9.9.9-test",
     });
-    await writeFile(join(stateDir, "natalia.instance.pid"), `${keep.pid}\n`);
-    const orphanSocket = join(stateDir, "natalia.instance.sock");
-    const bound = Bun.spawn(
-      ["socat", `UNIX-LISTEN:${orphanSocket},fork`, "SYSTEM:true"],
-      { stdout: "ignore", stderr: "ignore" },
+    const run = Bun.spawnSync(
+      [Bun.which("desktop-file-validate")!, result.desktopEntry],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
     );
-    await Bun.sleep(300);
-    bound.kill(9);
-    await Bun.sleep(100);
-    // The file survives a SIGKILL, and nothing is listening on it.
-    expect(existsSync(orphanSocket)).toBe(true);
-    expect(run()).toContain("deferring to it");
-    keep.kill();
+    const output = `${run.stdout.toString()}${run.stderr.toString()}`;
+    expect(output.trim()).toBe("");
+  },
+);
 
-    // 3. The same orphan socket, with a DEAD pid: the lock is taken over.
-    await writeFile(join(stateDir, "natalia.instance.pid"), "999999\n");
-    const third = await run({
-      NATALIA_INSTANCE_SOCK: `${stateDir}/answer.sock`,
+// The generated AppRun probes the lock socket with socat (its own comment
+// explains why the probe is a connect and not a request), so this test needs
+// socat present — a machine without it gets the declaration-time skip, which
+// is the documented absence, not a failure. The CI layer that runs it installs
+// it, because the product's second-launch path genuinely uses it.
+const SOCAT = Bun.which("socat");
+
+(SOCAT ? test : test.skip)(
+  "AppRun hands off to a running instance instead of starting a copy",
+  async () => {
+    // The generated launcher is the app's only product use of the single-instance
+    // lock, and the branch that matters is the one a user hits by clicking the icon
+    // twice. Three outcomes, all measured by running the generated script:
+    //   a live listener  -> ask it to show, exit 0 (no second copy)
+    //   a stale socket with a LIVE pid    -> defer, exit 0 (the app is starting)
+    //   a stale socket with a dead pid    -> take the lock over (a crash recovers)
+    //
+    // The listeners are bun's own AF_UNIX servers. socat used to play that part,
+    // which made the test fail on any machine without socat — including every CI
+    // runner — while the AppRun under test needs socat only for its own connect.
+    const release = await fakeRelease();
+    const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
+    await withAppRun(release, out, async ({ run, stateDir }) => {
+      const socketPath = join(stateDir, "natalia.instance.sock");
+      // 1. A listener that answers — in this process, so the test itself needs no
+      //    socat. Connecting IS the signal: the app is there, so this launch exits
+      //    without starting a copy. Empty output, exit 0.
+      const answering = Bun.listen({
+        unix: socketPath,
+        socket: {
+          open(socket) {
+            socket.write('{"ok":true}\n');
+          },
+          data(socket) {
+            socket.write('{"ok":true}\n');
+          },
+          error() {},
+          close() {},
+        },
+      });
+      await Bun.sleep(100);
+      expect(run()).toBe("");
+      answering.stop(true);
+
+      // 2. A socket file with NO listener (what a starting app has before its
+      //    listener is up, or one that died without cleaning up), plus a live pid.
+      //    A stopped listener removes its socket, so the file is left by a KILLED
+      //    listener: the same state a crash produces, and SIGKILL cannot clean up.
+      const keep = Bun.spawn(["sleep", "30"], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      await writeFile(join(stateDir, "natalia.instance.pid"), `${keep.pid}\n`);
+      const killed = Bun.spawn(
+        [
+          "bun",
+          "-e",
+          `Bun.listen({ unix: ${JSON.stringify(socketPath)}, socket: { data() {}, error() {}, close() {} } });setInterval(() => {}, 1000);`,
+        ],
+        { stdout: "ignore", stderr: "ignore" },
+      );
+      await Bun.sleep(300);
+      killed.kill(9);
+      await killed.exited;
+      await Bun.sleep(100);
+      // The file survives the kill, and nothing is listening on it.
+      expect(existsSync(socketPath)).toBe(true);
+      expect(run()).toContain("deferring to it");
+      keep.kill();
+
+      // 3. The same orphan socket, with a DEAD pid: the lock is taken over.
+      await writeFile(join(stateDir, "natalia.instance.pid"), "999999\n");
+      const third = await run({
+        NATALIA_INSTANCE_SOCK: `${stateDir}/answer.sock`,
+      });
+      expect(third).toContain("HOST_LAUNCHED");
     });
-    expect(third).toContain("HOST_LAUNCHED");
-  });
-});
+  },
+);
 
 /** Renders an AppDir, then runs its AppRun with a private state dir. */
 async function withAppRun(

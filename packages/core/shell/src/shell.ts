@@ -30,6 +30,7 @@ import { terminateChildProcessTree } from "@anthelia/platform";
 
 import {
   WRAPPER_FAILURE_SIGNATURE,
+  WRAPPER_REFUSAL_EXIT,
   type ShellExecRequest,
   type ShellExecSpec,
   type ShellProcess,
@@ -138,7 +139,14 @@ export abstract class ShellExecutor {
                 runnerFailed: false,
               }
             : undefined;
-        if (code !== 0 && stderr.startsWith(WRAPPER_FAILURE_SIGNATURE))
+        // The wrapper's exit code AND its signature. Either alone would
+        // misclassify: the code alone would take an ordinary exit 2 away from a
+        // command that happens to use it, and the signature alone would believe a
+        // command that printed a convincing line of its own.
+        if (
+          code === WRAPPER_REFUSAL_EXIT &&
+          stderr.startsWith(WRAPPER_FAILURE_SIGNATURE)
+        )
           finish(() =>
             resolveRun({
               exitCode: null,

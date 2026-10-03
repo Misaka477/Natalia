@@ -132,6 +132,18 @@ export type ShellProcess = {
  */
 export const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
 
+/**
+ * The exit code the wrapper uses for EVERY refusal.
+ *
+ * Read from `native/src/main.rs`: `fail()` prints the signature and exits 2, and so
+ * does `usage()`. The comment there says the code exists precisely so a
+ * classification layer can tell "the runner refused" from "the command ran" — which
+ * is what it is used for here, instead of trusting the stderr text alone. A command
+ * is free to print anything it likes to stderr, so the code and the signature are
+ * required TOGETHER: the code without the signature is an ordinary exit 2.
+ */
+export const WRAPPER_REFUSAL_EXIT = 2;
+
 /** Default and maximum timeouts, matching the shell tool's existing caps. */
 export const DEFAULT_TIMEOUT_MS = 120_000;
 export const MAX_TIMEOUT_MS = 600_000;

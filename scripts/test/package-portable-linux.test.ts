@@ -61,7 +61,17 @@ test("a mode that was lost is repaired, and the loss is reported", async () => {
   expect(appRunLine).toContain("rwxr-xr-x");
 });
 
-test("extracting the bundle and running it starts the application", async () => {
+// The name says "starts the application", and it does not: the app under test is
+// a stub this file writes (`#!/bin/sh\necho HOST_LAUNCHED`), so what is verified is
+// the BUNDLE's contract — tarball layout, the AppDir/AppRun path, and that the
+// entry point is executable after extraction with no install step. That is the
+// packager's whole job and it is worth pinning, but it is not the application
+// starting, and a reader who trusted the name would believe more than was checked.
+//
+// Closing that gap means a real release in the fixture — the shape the AppImage
+// test uses (it renders from a real 91 MB release) — which is a different test,
+// not a rename of this one. Until then the name is honest about its scope.
+test("extracting the bundle and running its entry point executes it", async () => {
   // The user's path, executed: download, extract, run. No install, no command
   // line beyond the tar the message prints.
   const { root } = await treeWithAppDir();

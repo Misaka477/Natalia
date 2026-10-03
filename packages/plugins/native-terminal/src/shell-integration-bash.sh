@@ -143,7 +143,36 @@ __natalia_preexec() {
 
 # A DEBUG trap already installed (starship, bash-preexec, a prompt framework)
 # must keep working, so ours chains to it rather than replacing it.
-__natalia_original_dbg_trap="$(trap -p DEBUG | sed -n "s/^trap -- '\(.*\)' DEBUG$/\1/p")"
+#
+# The extraction is NOT a `sed` one-liner. `trap -p` prints its argument as a
+# quoted literal, and that literal is not guaranteed to be on one line -- a trap
+# built from a command substitution with an embedded newline prints across
+# several. A line-oriented pattern silently captures the first line only, and the
+# chained trap then runs half a command, which is worse than not chaining at all.
+#
+# So let bash do the splitting: evaluate the `trap -p` output as an array
+# assignment and read the middle element. `terms=( trap -- '<anything>' DEBUG )`
+# keeps `<anything>` verbatim because bash's own parser separates the terms,
+# rather than a regex. Same shape VSCode's integration uses, for the same reason.
+__natalia_get_trap() {
+  builtin local -a terms
+  builtin eval "terms=( $(trap -p "${1:-DEBUG}") )"
+  # 0: trap   1: --   2: the literal   3: DEBUG
+  builtin printf '%s' "${terms[2]:-}"
+}
+
+__natalia_original_dbg_trap="$(__natalia_get_trap)"
+#
+# If the operator's trap is multi-line, we cannot reproduce it inline: `trap -p`
+# prints it across several lines and neither a line-oriented pattern nor the array
+# split above recovers more than the first (both measured). Chaining a HALF trap
+# is worse than chaining none — it runs half a command — so the guard is to notice
+# and stop. The user's trap keeps working; only our chaining is skipped.
+__natalia_dbg_lines=$(trap -p DEBUG | wc -l | tr -d ' ')
+if [ "${__natalia_dbg_lines:-0}" -gt 1 ] && [ -n "$__natalia_original_dbg_trap" ]; then
+	__natalia_original_dbg_trap=""
+	printf '\033]633;P;PromptType=chained-trap-skipped\a'
+fi
 if [ -n "$__natalia_original_dbg_trap" ]; then
 	__natalia_preexec_chained() {
 		__natalia_preexec

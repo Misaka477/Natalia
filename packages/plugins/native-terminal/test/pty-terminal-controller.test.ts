@@ -368,6 +368,61 @@ test("a real bash pane reports its commands end to end", async () => {
   await controller.close();
 }, 25_000);
 
+/**
+ * The realistic case: a shell whose rc ALREADY installs a shell integration.
+ *
+ * Our script sources the operator's rc so their prompt and aliases survive, and a
+ * developer's rc commonly has WezTerm's or VSCode's own integration in it. Both
+ * then emit markers into the same stream. If our read depended on being the only
+ * emitter it would be the common case that breaks, not the rare one.
+ *
+ * Runs against the real HOME, so it exercises whatever this host has.
+ */
+test("ours reads correctly alongside an integration the operator already had", async () => {
+  if (process.platform === "win32") {
+    console.warn("skipped on win32: the default pty spawn needs python3 + pty");
+    return;
+  }
+  const home = process.env.HOME;
+  if (!home) {
+    console.warn("skipped: no HOME to source");
+    return;
+  }
+  const controller = createPtyTerminalController({
+    workspaceRoot: home,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "runtime-test",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless",
+  });
+  const started = await controller.start({
+    command: "bash",
+    cwd: home,
+    id: "term_coexist",
+  });
+  const lastCommand = controller.lastCommand?.bind(controller);
+  expect(typeof lastCommand).toBe("function");
+  if (!lastCommand) throw new Error("unreachable: asserted above");
+  const waitFor = async (predicate: () => boolean, ms = 8_000) => {
+    const deadline = Date.now() + ms;
+    while (!predicate() && Date.now() < deadline) await Bun.sleep(50);
+  };
+  await waitFor(() => lastCommand(started.id).atPrompt);
+  controller.write(started.id, "echo coexist-value\n");
+  await waitFor(() =>
+    (lastCommand(started.id).commandLine ?? "").includes("coexist-value"),
+  );
+  const command = lastCommand(started.id);
+  // The read is ours: our command line, our exit code, our output slice. Whatever
+  // else emits markers into this stream, the fold takes the last of each kind.
+  expect(command.commandLine).toBe("echo coexist-value");
+  expect(command.exitCode).toBe(0);
+  expect(command.output).toContain("coexist-value");
+  controller.write(started.id, "exit\n");
+  await controller.close();
+}, 25_000);
+
 test("input written the instant a pty starts is not dropped by the bridge", async () => {
   if (process.platform === "win32") {
     // Same reason as the default-spawn test above: the bridge under test is

@@ -283,8 +283,24 @@ test("the Linux tray probe runs and reports what Create actually did", () => {
     "natalia-tray-probe",
   );
   if (!existsSync(probe)) {
+    // Loud, not silent. CI does not build the CEF host, so on every CI run this test
+    // would find no binary — and returning quietly there means a pass in the summary
+    // and no signal if the probe is later deleted, or stops being built at all. A
+    // guard that cannot be seen failing is the failure this whole file is about, so
+    // the two situations are told apart by the machine rather than assumed: a real
+    // tray machine has libappindicator, and no binary then means it broke.
+    const hasAppIndicator =
+      Bun.spawnSync(["pkg-config", "--exists", "appindicator3-0.1"])
+        .exitCode === 0;
+    if (hasAppIndicator) {
+      throw new Error(
+        "libappindicator is present but natalia-tray-probe was not built: run " +
+          "`cmake --build build --target natalia-tray-probe`. The tray would be " +
+          "unprotected silently otherwise.",
+      );
+    }
     console.warn(
-      "skipped: natalia-tray-probe not built (no libappindicator on this machine?)",
+      "skipped: no libappindicator on this machine, so the tray is compiled out",
     );
     return;
   }

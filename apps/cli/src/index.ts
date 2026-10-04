@@ -13,6 +13,7 @@ import {
   defaultConfigV3,
   defaultGlobalConfigPath,
   loadConfigFile,
+  loadOrCreateConfigFile,
   loadTrustStore,
   migrateConfig,
   migrationSummaryText,
@@ -39,7 +40,13 @@ export async function startupDiagnostics(
   configPath: string,
   tty = Boolean(process.stdout.isTTY),
 ): Promise<StartupDiagnostics> {
-  const loaded = await loadConfigFile(configPath);
+  // loadOrCreate, NOT load: a first run has no `.natalia/config.json` yet — the
+  // path is `${process.cwd()}/.natalia/config.json`, so on an installed copy
+  // launched from the Start Menu it is inside the install directory, which the
+  // installer cannot pre-create. The strict read is what made the installed app
+  // die with ENOENT on its first launch. A dev checkout never saw it: its repo
+  // root has had a `.natalia/` for as long as this path has existed.
+  const loaded = await loadOrCreateConfigFile(configPath);
   return {
     configPath,
     migrationSummary: migrationSummaryText(loaded.summary),
@@ -49,11 +56,23 @@ export async function startupDiagnostics(
 }
 
 export async function plainStatus(configPath: string) {
-  const loaded = await loadConfigFile(configPath);
+  const loaded = await loadOrCreateConfigFile(configPath);
   const ref = loaded.config.defaultModel;
-  if (!ref) throw new Error("missing default model: none configured");
-  const effective = resolveEffectiveModel(loaded.config, ref);
-  if (!effective) throw new Error("missing default model: none configured");
+  const effective = ref ? resolveEffectiveModel(loaded.config, ref) : undefined;
+  if (!ref || !effective) {
+    // A fresh install has no model, and that is a STATE TO REPORT, not a crash.
+    // The throw here is what the user read as "I installed it and it won't
+    // open": ENOENT first, and once that was fixed this line instead. `doctor`
+    // already reports an unconfigured model as a state (model_not_configured);
+    // status now agrees with it rather than dying.
+    return {
+      mode: process.stdout.isTTY ? "tty" : "plain",
+      configured: false as const,
+      reason: "no default model is configured yet",
+      configPath,
+      migrationSummary: migrationSummaryText(loaded.summary),
+    };
+  }
   const resolver = new ContextWindowResolver();
   const resolved = await resolver.resolve({
     provider: effective.providerID,
@@ -63,6 +82,7 @@ export async function plainStatus(configPath: string) {
   });
   return {
     mode: process.stdout.isTTY ? "tty" : "plain",
+    configured: true as const,
     model: effective.ref.model,
     provider: effective.providerID,
     contextWindow: resolved,

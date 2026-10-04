@@ -159,23 +159,13 @@ for (const root of pluginRoots) {
     if (await Bun.file(uiCss).exists()) releaseFiles.push("ui/plugin.css");
   }
   if (manifest.id === "natalia-tool-terminal") {
-    const worker = await Bun.build({
-      entrypoints: [join(root, "src/wezterm-command-worker.ts")],
-      outdir: packageOutdir,
-      target: "bun",
-      format: "esm",
-      naming: "wezterm-command-worker.js",
-      packages: "bundle",
-    });
-    if (!worker.success)
-      throw new Error(`${root}: terminal worker build failed`);
     // The shell-integration rc scripts. Without these a pane starts, its argv
     // points at `--rcfile <this package>/shell-integration-bash.sh`, and bash
     // finds nothing — so the command-level read never comes alive on an installed
     // copy, which is exactly what happened: the scripts were verified in a pty and
     // never staged, so the verification covered the source tree and not a release.
     // They ride the release regardless of NATALIA_BUILD_SKIP_NATIVE: that flag
-    // stages the wezterm binaries, not the text files a pane sources.
+    // stages the pty bridges, not the text files a pane sources.
     for (const script of [
       "shell-integration-bash.sh",
       "shell-integration-zsh.sh",
@@ -200,18 +190,6 @@ for (const root of pluginRoots) {
         : "natalia-pty-bridge";
     const bridgeFrom = join(root, "prebuilt", triple, bridgeName);
     const bridgeOutdir = join(packageOutdir, "pty-bridge");
-    const nativeRelease = join(root, "wezterm/target/release");
-    const forkOutdir = join(packageOutdir, "wezterm");
-    // The fork's three follow the retirement: they ride a WINDOWS build only,
-    // because the mux is the Windows pane's PTY until the ConPTY bridge flips
-    // (issue #2). A POSIX build stages none — the self-developed pty backend
-    // needs no terminal executables, measured by the terminal suite passing
-    // with the three executables hidden.
-    const forkExecutables = (
-      process.platform === "win32"
-        ? ["wezterm", "wezterm-gui", "wezterm-mux-server"]
-        : []
-    ).map((name) => (process.platform === "win32" ? `${name}.exe` : name));
     if (skipNative) {
       // The distribution stays truthful about what it carries: the release
       // manifest omits the native tiers rather than advertising them, and a
@@ -221,7 +199,6 @@ for (const root of pluginRoots) {
       console.log(
         `${root}: distribution mode — the native executables are not staged`,
       );
-      await rm(forkOutdir, { recursive: true, force: true });
       await rm(bridgeOutdir, { recursive: true, force: true });
     } else {
       if (!(await Bun.file(bridgeFrom).exists()))
@@ -234,24 +211,7 @@ for (const root of pluginRoots) {
       // truth, so a staged tier the manifest omits is a tier the package
       // drops.
       releaseFiles.push("pty-bridge");
-      if (forkExecutables.length === 0) {
-        await rm(forkOutdir, { recursive: true, force: true });
-      } else {
-        for (const executable of forkExecutables)
-          if (!(await Bun.file(join(nativeRelease, executable)).exists()))
-            throw new Error(
-              `${root}: missing terminal executable ${executable}`,
-            );
-        await mkdir(forkOutdir, { recursive: true });
-        for (const executable of forkExecutables)
-          await cp(
-            join(nativeRelease, executable),
-            join(forkOutdir, executable),
-          );
-        releaseFiles.push("wezterm");
-      }
     }
-    releaseFiles.push("wezterm-command-worker.js");
   }
 
   const releasePackage = {

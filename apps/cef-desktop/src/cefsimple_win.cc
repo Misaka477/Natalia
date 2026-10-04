@@ -59,12 +59,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // travels here (Linux passes argc/argv instead).
   CefMainArgs main_args(hInstance);
 
+  // Where the startup trace goes. Declared here, filled once the cache root is
+  // known, because an installed host exited with code 38 and NOTHING said why:
+  // no window, no child process, no stdout, and a CEF log holding one unrelated
+  // warning. Every step below stamps a line here, which survives the exit.
+  std::wstring trace_path;
+  auto trace = [&trace_path](const char* step) {
+    if (trace_path.empty()) return;
+    HANDLE file = CreateFileW(trace_path.c_str(), FILE_APPEND_DATA,
+                              FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    std::string line(step);
+    line += "\n";
+    DWORD written = 0;
+    WriteFile(file, line.data(), static_cast<DWORD>(line.size()), &written,
+              nullptr);
+    CloseHandle(file);
+  };
+
+  trace("entered wWinMain");
   // CEF applications have multiple sub-processes (render, GPU, etc) that share
   // the same executable. This function checks the command-line and, if this is
   // a sub-process, executes the appropriate logic.
   int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+  trace("CefExecuteProcess returned");
   if (exit_code >= 0) {
     // The sub-process has completed so return here.
+    trace("subprocess path; returning its code");
     return exit_code;
   }
 
@@ -96,12 +118,26 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     std::wstring root(cache_root);
     root += L"\\Natalia\\CEF";
     CreateDirectoryW(root.c_str(), nullptr);
-    CefString(&settings.root_cache_path).FromWString(root);
-    CefString(&settings.cache_path).FromWString(root + L"\\cache");
+    // cache_path — the browser's user-data directory, and the thing Chromium's
+    // ProcessSingleton keys on. Setting it to a per-user path is what keeps two
+    // installs (or an install and the dev build) from fighting over one lock.
+    //
+    // The history here is worth keeping: setting `root_cache_path` INSTEAD made
+    // CefInitialize return false with exit code 38 and an empty CEF log, and the
+    // verbose log then showed why — Chromium's ProcessSingleton found a lock it
+    // believed belonged to a live instance, ran `RunDeElevated` to notify it,
+    // and got ACCESS_DENIED (0x5), so init gave up. That is the process-singleton
+    // hand-off path CEF's own comment warns about, and with no cache_path the
+    // singleton's directory was not the one being cleaned between runs. CEF's
+    // examples set cache_path; this does too.
+    CefString(&settings.cache_path).FromWString(root);
     // The log file, so a future failure has somewhere to say what happened
-    // instead of exiting silently.
+    // instead of exiting silently. VERBOSE while the init failure is being
+    // hunted: at WARNING libcef wrote one unrelated line and nothing else, so
+    // the failing check was invisible.
     CefString(&settings.log_file).FromWString(root + L"\\cef.log");
-    settings.log_severity = LOGSEVERITY_WARNING;
+    settings.log_severity = LOGSEVERITY_VERBOSE;
+    trace_path = root + L"\\startup-trace.txt";
   }
 
 #if !defined(CEF_USE_SANDBOX)
@@ -119,22 +155,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // Initialize the CEF browser process. May return false if initialization
   // fails or if early exit is desired (for example, due to process singleton
   // relaunch behavior).
-  if (!CefInitialize(main_args, settings, app.get(),
+  trace("before CefInitialize");
+  const bool cef_initialized =
+      CefInitialize(main_args, settings, app.get(),
 #if defined(CEF_USE_SANDBOX)
-                     cef_sandbox_info
+                    cef_sandbox_info
 #else
-                     nullptr
+                    nullptr
 #endif
-                     )) {
-    return CefGetExitCode();
+      );
+  trace(cef_initialized ? "CefInitialize ok" : "CefInitialize FAILED");
+  if (!cef_initialized) {
+    const int code = CefGetExitCode();
+    char line[96] = {0};
+    _snprintf_s(line, sizeof(line), _TRUNCATE,
+                "CefGetExitCode=%d; returning it", code);
+    trace(line);
+    return code;
   }
 
   // Run the CEF message loop. This will block until CefQuitMessageLoop() is
   // called.
+  trace("entering CefRunMessageLoop");
   CefRunMessageLoop();
+  trace("CefRunMessageLoop returned");
 
   // Shut down CEF.
   CefShutdown();
+  trace("CefShutdown done");
 
   return 0;
 }

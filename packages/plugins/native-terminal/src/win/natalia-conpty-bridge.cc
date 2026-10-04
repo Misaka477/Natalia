@@ -217,6 +217,16 @@ std::wstring widen(const std::string &text) {
   return wide;
 }
 
+std::string narrow(const std::wstring &text) {
+  if (text.empty()) return std::string();
+  const int needed = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                                         nullptr, 0, nullptr, nullptr);
+  std::string narrow((size_t)needed, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), narrow.data(),
+                      needed, nullptr, nullptr);
+  return narrow;
+}
+
 std::wstring quote(const std::wstring &text) {
   std::wstring quoted = L"\"";
   for (const wchar_t c : text) {
@@ -391,6 +401,14 @@ int main() {
   fprintf(stderr,
           "conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
           (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
+  // The command line, verbatim. The Windows CI's first native run showed
+  // cmd.exe reporting `'"echo CONPTY_NATIVE_OK' is not recognized` — a command
+  // line with an unbalanced leading quote, from a builder that on its face
+  // wraps every argument in a pair. Reading the builder cannot settle which
+  // byte is wrong; printing it can, and the next run either shows the malformed
+  // line (builder bug) or a well-formed one (a cmd.exe tail-parsing quirk).
+  fprintf(stderr, "conpty-bridge: command line: %s\n",
+          narrow(commandLine).c_str());
 
   const HANDLE outputPump = CreateThread(nullptr, 0, pumpConsoleOutput, nullptr, 0, nullptr);
 

@@ -104,6 +104,28 @@ const EXCLUDED = new Set([
 ]);
 
 /**
+ * Machine-local runtime state that must never be INSTALLED either, tested by
+ * the release self-check with `Bun.file().exists()` — which is false for a
+ * DIRECTORY, so `plugin-store/` walked straight through the guard and into the
+ * installer (a 91 MB release that carried this checkout's dev plugin store:
+ * `natalia.lock`, its node_modules and the initialized marker). The same three
+ * names `build-standalone.ts` refuses to copy into a release. Matched on the
+ * path's leading segments, because the glob yields `plugin-store\node_modules\…`
+ * and the offender is the top-level directory.
+ */
+const EXCLUDED_PREFIXES = new Set([
+  "plugin-store",
+  "cli-dev-pty-stores",
+  "client-test-workspaces",
+]);
+
+function excludedTarget(target: string): boolean {
+  if (EXCLUDED.has(target)) return true;
+  const head = target.split("\\")[0]!;
+  return EXCLUDED_PREFIXES.has(head);
+}
+
+/**
  * The upgrade code: a stable identity for "this product", independent of
  * version, so 1.2 upgrades 1.1 instead of installing beside it. Derived from the
  * app name so it cannot drift between versions, and a stable string is what an
@@ -154,7 +176,7 @@ export async function planWindowsInstall(
     // The relative path is the target path as-is: the release directory already
     // carries the layout the app expects (binary, CEF runtime, resources/).
     const target = entry.split("/").join("\\");
-    if (EXCLUDED.has(target)) continue;
+    if (excludedTarget(target)) continue;
     // Relative to the release directory, so the rendered script compiles on any
     // host that has the tree rather than only on the one that built it.
     const source = entry.split("/").join("\\");

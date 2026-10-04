@@ -35,7 +35,14 @@ function findIcon(): string | undefined {
 }
 
 function versionFromRelease(releaseDir: string): string {
-  const parts = releaseDir.split("/");
+  // BOTH separators. `releaseDir` is built with node:path's `join`, which emits
+  // the platform's own — a backslash on Windows — so a `/`-split finds no
+  // `windows-x64` and every installer on Windows claims version `0.0.0`. Inno
+  // uses AppVersion to decide an upgrade, so m12 → m13 read as the same version
+  // and the installer would not upgrade it. Third instance of this class in the
+  // repo (the release walk and the full-read inventory both normalized after
+  // the fact); normalize here rather than learning it a fourth time.
+  const parts = releaseDir.split(/[/\\]/);
   const index = parts.lastIndexOf(HOST_TRIPLE);
   if (index > 0) return parts[index - 1]!;
   return "0.0.0";

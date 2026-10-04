@@ -254,9 +254,24 @@ async function verifyRelease(
     "client-test-workspaces",
     "plugin-store",
     "cli-dev-pty-stores",
-  ])
-    if (await Bun.file(join(outDir, forbidden)).exists())
-      problems.push(`machine-local state shipped: ${forbidden}/`);
+  ]) {
+    // A STAT, not Bun.file().exists(): the offender is a DIRECTORY, and
+    // `Bun.file()` on a directory reports "no such file" — so this guard passed
+    // a release carrying a full dev plugin-store (natalia.lock + node_modules +
+    // the initialized marker, 76 manifest entries of machine-local state) and
+    // the installer then shipped it. The guard's own comment already records
+    // that `plugins` needed a stat for the same reason; the forbidden list did
+    // not get the same treatment when it was written.
+    try {
+      const stats = await stat(join(outDir, forbidden));
+      if (stats.isDirectory() || stats.isFile())
+        problems.push(
+          `machine-local state shipped: ${forbidden}/ (${stats.isDirectory() ? "directory" : "file"})`,
+        );
+    } catch {
+      // Absent, which is the only passing answer.
+    }
+  }
   // The terminal natives: the retired fork tier makes NO appearance in any
   // release now — a stray wezterm/ directory is the old contract coming back
   // and fails the build (the negative check's trap was real: `endsWith`
@@ -415,6 +430,17 @@ for (const target of targets) {
         recursive: true,
       });
     }
+    // And PURGE them from the release after the copy, not only before it. The
+    // per-entry rm above skips copying; it does not clear one that is already
+    // in outDir, and the whole-tree `rm(outDir, {force:true})` above silently
+    // does nothing when the OS holds a file open (Windows does this constantly
+    // — the machine this was measured on had ENOENT/EBUSY everywhere). A stale
+    // plugin-store from a previous run therefore survives into the manifest and
+    // the installer, which is how a machine-local dev store shipped: 31 seconds
+    // after the binary compiled, `plugin-store/` appeared in the tree, and the
+    // guard that names it did not see it (it asked `Bun.file().exists()`).
+    for (const entry of stateDirs)
+      await rm(join(outDir, entry), { recursive: true, force: true });
     // The interactive terminal's natives are per-platform: the Linux build
     // (podman) and the Windows cross-build stage into the SAME
     // target/release, so the shared dist/ts copy carries whichever was

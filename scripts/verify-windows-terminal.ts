@@ -50,12 +50,12 @@ async function checkViewportHandshake() {
   // The first version grepped the source for the function name and matched
   // nothing — the identifier is camelCase where the grep expected kebab — so the
   // check reported "no bridge binary" on a host that had one. Source is not data.
-  const { nativeTerminalPrebuiltDir, nativeTerminalForkBuildDir } =
-    await import("../packages/plugins/native-terminal/src/index");
+  const { nativeTerminalPrebuiltDir } = await import(
+    "../packages/plugins/native-terminal/src/index"
+  );
   const candidates = [
     process.env.NATALIA_CONPTY_BRIDGE,
     join(nativeTerminalPrebuiltDir("win32"), "natalia-conpty-bridge.exe"),
-    join(nativeTerminalForkBuildDir(), "natalia-conpty-bridge.exe"),
   ];
   const exe = candidates.find(
     (candidate) => candidate && existsSync(candidate),

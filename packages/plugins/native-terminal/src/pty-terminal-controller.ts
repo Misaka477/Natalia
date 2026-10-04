@@ -26,14 +26,12 @@ import type {
   RuntimeNativeTerminalSession,
 } from "@anthelia/contracts";
 import type { TerminalController } from "@anthelia/runtime-services";
+import { nativeTerminalPrebuiltDir } from "./prebuilt-dir";
 import {
-  nativeTerminalForkBuildDir,
   nativeTerminalPaneCommand,
   nativeTerminalPaneSpawn,
-  nativeTerminalPrebuiltDir,
-} from "./native-terminal";
+} from "./pane-command";
 import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
-import type { NativeTerminalRegistry } from "./native-terminal";
 
 /**
  * The spawn geometry for a terminal nobody sized yet.
@@ -151,15 +149,6 @@ export type PtyTerminalControllerInput = {
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
   windowMode(): "auto" | "windowless" | "window";
-  backend?: "wezterm" | "pty";
-  /**
-   * The WezTerm host registry, when one exists 鈥?a GETTER because the registry
-   * is built by the host controller's init. The PTY backend uses it on Windows
-   * for its pane: the in-process PTYs it has everywhere else (node-pty, the
-   * Python bridge) do not exist there, and a mux pane is a real PTY the panel
-   * can render.
-   */
-  nativeTerminal?: () => NativeTerminalRegistry | undefined;
   spawn?: PtyFactory;
   maxPerSession?: number;
   idleMs?: number;
@@ -536,28 +525,17 @@ function spawnWithRustBridge(options: PtySpawnOptions): PtyProcess {
 
 /**
  * The Windows PTY: a ConPTY host compiled from src/win/natalia-conpty-bridge.cc
- * (`npm run native-terminal:build-conpty:windows`), staged next to the wezterm
- * executables in prebuilt/<triple>/. It is the platform's own pseudo
-console
- * speaking the POSIX bridge's protocol, so this path delivers the same real
- * byte stream Linux gets - not a screen dump differ.
- *
- * The search mirrors `resolveNataliaWezTermForkExecutable`: the prebuilt drop
- * (a downloaded/unpacked Natalia's answer) first, then the fork's own build
- * directory (a developer's answer) - the plugin as loaded from the store has
- * the fork's build dir, and a downloaded distribution has the prebuilt one, so
- * asking only one of them misses depending on where the code runs from.
+ * (`npm run native-terminal:build-conpty:windows`), found in the prebuilt drop
+ * the release archive makes. It is the platform's own pseudo console speaking
+ * the POSIX bridge's protocol, so this path delivers the same real byte stream
+ * Linux gets.
  */
 function spawnWithConptyBridge(options: PtySpawnOptions): PtyProcess {
   const helperName = "natalia-conpty-bridge.exe";
-  const candidates = [
-    join(nativeTerminalPrebuiltDir("win32"), helperName),
-    join(nativeTerminalForkBuildDir(), helperName),
-  ];
-  const helper = candidates.find((candidate) => existsSync(candidate));
-  if (!helper)
+  const helper = join(nativeTerminalPrebuiltDir("win32"), helperName);
+  if (!existsSync(helper))
     throw new Error(
-      `the ConPTY bridge is not built: run native-terminal:build-conpty:windows (expected ${candidates[0]})`,
+      `the ConPTY bridge is not built: run native-terminal:build-conpty:windows (expected ${helper})`,
     );
   return spawnPtyBridge(
     spawn(helper, [], { stdio: ["pipe", "pipe", "inherit"] }),
@@ -565,25 +543,23 @@ function spawnWithConptyBridge(options: PtySpawnOptions): PtyProcess {
   );
 }
 
-function defaultSpawn(input?: {
-  nativeTerminal?: () => NativeTerminalRegistry | undefined;
-}): PtyFactory {
+function defaultSpawn(): PtyFactory {
   return (options) => {
     if (process.platform === "win32") {
       // The ConPTY bridge is the Windows default. Not an opt-in: the mute pane
-      // it once produced (P23) is fixed and verified 鈥?the Windows CI's
+      // it once produced (P23) is fixed and verified — the Windows CI's
       // conpty-native drives round-trip the typed line AND the command's
-      // answer, the pane paints, and the exit frame reads the child's code 鈥?      // and the two alternatives on this platform are dead weights on any
-      // default build: the WezTerm mux adapter needs the fork's three natives
-      // (the retirement removed them from the build), and the Python bridge
-      // needs the POSIX pty module (a runner pane died on `fcntl` before this
-      // flip, logged verbatim in pwsh-e2e). A missing bridge binary throws with
-      // its build command in the message: loud, never a silent degrade to a
-      // pane that cannot start.
+      // answer, the pane paints, and the exit frame reads the child's code —
+      // and the two alternatives on this platform are dead weights on any
+      // default build: the WezTerm mux adapter needed the fork's three natives
+      // (the retirement removed them), and the Python bridge needs the POSIX
+      // pty module (a runner pane died on `fcntl` before this flip). A missing
+      // bridge binary throws with its build command in the message: loud,
+      // never a silent degrade to a pane that cannot start.
       return spawnWithConptyBridge(options);
     }
-    // POSIX: the Rust bridge is the default when it is built 鈥?the byte path
-    // the user's performance decision asked for 鈥?with the Python bridge as
+    // POSIX: the Rust bridge is the default when it is built — the byte path
+    // the user's performance decision asked for — with the Python bridge as
     // the fallback, so a missing binary degrades instead of failing. The env
     // var names one explicitly: "rust" THROWS when the binary is absent (a
     // run that asked for the Rust bridge must not silently measure the Python
@@ -644,8 +620,7 @@ export function createPtyTerminalController(
   let activeSession: string | undefined;
   let closed = false;
   let initialized = false;
-  const spawnPty =
-    input.spawn ?? defaultSpawn({ nativeTerminal: input.nativeTerminal });
+  const spawnPty = input.spawn ?? defaultSpawn();
   const maxPerSession = Math.max(
     1,
     input.maxPerSession ?? DEFAULT_MAX_PER_SESSION,

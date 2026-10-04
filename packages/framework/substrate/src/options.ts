@@ -31,7 +31,6 @@ export type RealRuntimeClientOptions = {
   permissionMode?: "ask" | "auto" | "read_only";
   toolPolicy?: ToolPolicy;
   hooks?: ToolHooks;
-  nativeTerminal?: TerminalControllerInput["external"];
   /** Host-owned registry shared with task delivery and other capability consumers. */
   capabilityRegistry?: CapabilityRegistry;
   /** Preferred host-owned capability lifetime; survives runtime config reloads. */

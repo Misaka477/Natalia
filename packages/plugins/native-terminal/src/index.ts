@@ -1,14 +1,5 @@
+export { nativeTerminalPrebuiltDir, platformTriple } from "./prebuilt-dir";
 export {
-  NATIVE_INPUT_BROKER_VERSION,
-  NativeTerminalRegistry,
-  createWezTermHost,
-  decodeNativeInputClaim,
-  decodeNativeInputDecision,
-  encodeNativeInputDecision,
-  monospaceFontFallback,
-  nativeInputBrokerDecision,
-  nativeInputBrokerEndpoint,
-  nativeTerminalForkBuildDir,
   nativeTerminalPaneCommand,
   // The pane's full spawn spec — argv AND the environment its shell needs. A pane
   // that takes only the argv is silently unintegrated on zsh, whose rc arrives as
@@ -17,28 +8,7 @@ export {
   // boundary, and the first version tested it in-package only, so it worked there
   // and was absent wherever the plugin is loaded from its build output.
   nativeTerminalPaneSpawn,
-  nativeTerminalPrebuiltDir,
-  platformTriple,
-  reclaimStaleMuxRuntimeDirs,
-  resolveNataliaWezTermForkExecutable,
-  resolveWezTermExecutable,
-  startNativeInputBroker,
-  writeWezTermNativeDomainConfig,
-  type NativeInputBroker,
-  type NativeInputClaim,
-  type NativeInputDecision,
-  type NativeInputKind,
-  type NativeTerminalAuditEvent,
-  type NativeTerminalHost,
-  type NativeTerminalHub,
-  type NativeTerminalPane,
-  type NativeTerminalSession,
-  type NativeTerminalWriteResult,
-} from "./native-terminal";
-export {
-  createTerminalController,
-  type TerminalControllerInput,
-} from "./terminal-controller";
+} from "./pane-command";
 export {
   createPtyTerminalController,
   type PtyFactory,

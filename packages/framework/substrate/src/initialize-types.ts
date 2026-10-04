@@ -26,7 +26,6 @@ export type InitializeOptions = {
   operationLogsDir?: string;
   vaultDir?: string;
   useSqliteStore?: boolean;
-  nativeTerminal?: import("@anthelia/runtime-services").TerminalControllerInput["external"];
   provider?: StreamingProvider;
   tools?: import("@anthelia/tools").ToolRegistry;
   permissionProfile?: string;

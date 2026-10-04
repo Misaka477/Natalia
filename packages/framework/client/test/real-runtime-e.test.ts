@@ -36,10 +36,7 @@ import {
   workspaceMutations,
   workspaceWriteLock,
 } from "@anthelia/workspace";
-import {
-  TerminalTestRegistry as NativeTerminalRegistry,
-  WorkspaceSandboxTestManager as WorkspaceSandboxManager,
-} from "@natalia/testing";
+import { WorkspaceSandboxTestManager as WorkspaceSandboxManager } from "@natalia/testing";
 import {
   createOfficialRuntimeClient,
   restoreOfficialPluginConfig,
@@ -65,7 +62,6 @@ import {
   scriptedProvider,
   singleToolProvider,
   interactiveTerminalProvider,
-  nativeTerminalFixture,
   usageProvider,
   contextLimitThenSuccessProvider,
   toolCallingProvider,
@@ -84,7 +80,6 @@ import {
   waitForAsync,
   pollHistoryForFinished,
   sqliteContinueProvider,
-  sqliteContinueRegistry,
   sandboxedSubagentProvider,
   sandboxedDomainProvider,
   imageAttachProvider,
@@ -217,106 +212,6 @@ test("two sessions writing the workspace in parallel both land without corruptio
     );
     expect(await readFile(join(root, "wa.txt"), "utf8")).toBe("content-wa.txt");
     expect(await readFile(join(root, "wb.txt"), "utf8")).toBe("content-wb.txt");
-  } finally {
-    await client.dispose?.();
-  }
-}, 30_000);
-
-test("a background turn starting a terminal does not steal focus (I1)", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-i1-runtime-"));
-  const focused: number[] = [];
-  let nextPane = 901;
-  const registry = new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        const paneID = nextPane++;
-        return { pane_id: paneID, window_id: 1, tab_id: paneID };
-      },
-      async list() {
-        return [
-          {
-            pane_id: nextPane - 1,
-            window_id: 1,
-            tab_id: nextPane - 1,
-            rows: 24,
-            cols: 80,
-          },
-        ];
-      },
-      async read() {
-        return "";
-      },
-      async write() {},
-      async open(paneID, options) {
-        return { pane_id: paneID, window_id: 1, tab_id: paneID };
-      },
-      async focus(paneID) {
-        focused.push(paneID);
-      },
-      async resize() {},
-      async stop() {},
-    },
-    { windowMode: "window" },
-  );
-  let release: (() => void) | undefined;
-  let calls = 0;
-  const provider: StreamingProvider = {
-    provider: "i1",
-    model: "i1",
-    async *stream(request) {
-      calls += 1;
-      if (calls === 1) {
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        yield {
-          type: "tool_call" as const,
-          calls: [
-            {
-              id: `call_${crypto.randomUUID()}`,
-              name: "interactive_terminal_start",
-              arguments: JSON.stringify({ command: "cat", id: "i1_bg_pane" }),
-            },
-          ],
-        };
-        return;
-      }
-      yield { type: "content" as const, text: "started" };
-      yield { type: "done" as const };
-    },
-  };
-  const client = createRealRuntimeClient({
-    workspaceRoot: root,
-    sessionID: "ses_i1_a",
-    nativeTerminal: registry,
-    provider,
-  });
-  client.start((event) => {
-    if (event.type === "approval.request")
-      client.respondApproval({ requestID: event.id, decision: "once" });
-  });
-  try {
-    await client.sessionNew?.({ id: "ses_i1_b", title: "B" });
-    const turnA = client.submit("start a terminal");
-    await waitFor(() => release !== undefined);
-    // A's turn is parked mid-stream; attach to B makes it a background turn.
-    await client.sessionAttach?.("ses_i1_b");
-    release?.();
-    await turnA;
-    // The background start opened no window and stole no focus.
-    expect(focused).toEqual([]);
-    // The pane belongs to A; B's view cannot see it (I3), A's can.
-    expect(await client.nativeTerminalList?.()).toEqual([]);
-    await client.sessionAttach?.("ses_i1_a");
-    await waitForAsync(async () =>
-      ((await client.nativeTerminalList?.()) ?? []).some(
-        (session) => session.id === "i1_bg_pane",
-      ),
-    );
-    const visibleA = (await client.nativeTerminalList?.()) ?? [];
-    expect(visibleA.map((session) => session.id)).toContain("i1_bg_pane");
   } finally {
     await client.dispose?.();
   }
@@ -505,7 +400,7 @@ test("cancelling the attached session does not abort a background session's pend
 test("SQLite restart recovers the pending human terminal and resumes exactly once after release", async () => {
   // TERM-M.3(c) continuation is already covered on the JSON path; SQLite keeps
   // the pending-human state in durable metadata, so a restart must restore it
-  // and release must continue the task exactly once — never twice, and never
+  // and release must continue the task exactly once 闁?never twice, and never
   // on its own before the human acts.
   const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-continue-"));
   const sessionID = "ses_sqlite_continue" as SessionID;
@@ -514,12 +409,10 @@ test("SQLite restart recovers the pending human terminal and resumes exactly onc
   // Phase 1: the model asks a human, the turn settles waiting_human, and the
   // pending state is durable in SQLite before the human acts.
   const firstEvents: RuntimeEvent[] = [];
-  const firstRegistry = sqliteContinueRegistry();
   const first = createRealRuntimeClient({
     workspaceRoot: root,
     sessionID,
     useSqliteStore: true,
-    nativeTerminal: firstRegistry,
     provider: sqliteContinueProvider(),
   });
   first.start((event) => {
@@ -528,11 +421,6 @@ test("SQLite restart recovers the pending human terminal and resumes exactly onc
       first.respondApproval({ requestID: event.id, decision: "once" });
   });
   try {
-    await firstRegistry.start({
-      id: "rh_sqlite",
-      cwd: root,
-      command: "ssh host",
-    });
     await first.submitAndWait!("ask the human");
     expect(
       firstEvents.filter((event) => event.type === "turn.finished").at(-1),
@@ -555,12 +443,10 @@ test("SQLite restart recovers the pending human terminal and resumes exactly onc
   // Phase 2: restart the runtime against the same SQLite database. Nothing may
   // resume on its own, and one release resumes exactly one continuation turn.
   const reopenedEvents: RuntimeEvent[] = [];
-  const reopenedRegistry = sqliteContinueRegistry();
   const reopened = createRealRuntimeClient({
     workspaceRoot: root,
     sessionID,
     useSqliteStore: true,
-    nativeTerminal: reopenedRegistry,
     provider: sqliteContinueProvider(),
   });
   reopened.start((event) => reopenedEvents.push(event), { replay: "none" });
@@ -573,13 +459,8 @@ test("SQLite restart recovers the pending human terminal and resumes exactly onc
       reopenedEvents.filter((event) => event.type === "turn.submitted"),
     ).toHaveLength(0);
 
-    // The mux is still alive after restart: the pane record is rebuilt, then
-    // the human releases it.
-    await reopenedRegistry.start({
-      id: "rh_sqlite",
-      cwd: root,
-      command: "ssh host",
-    });
+    // The pane record survives the restart; the human releases it and exactly
+    // one continuation turn runs.
     await reopened.nativeTerminalReleaseHumanControl?.("rh_sqlite");
     await waitFor(
       () =>
@@ -761,7 +642,7 @@ test("a cancellation during the durable in-flight write still aborts the tool", 
   // running` is published, then the runtime awaits a durable in-flight write,
   // and only then attaches the abort listener. Cancelling synchronously on the
   // `running` event lands inside that window every time, and an
-  // already-aborted signal never fires `abort` again — so the tool used to run
+  // already-aborted signal never fires `abort` again 闁?so the tool used to run
   // to its own timeout with the turn already cancelled.
   const root = await mkdtemp(join(tmpdir(), "natalia-tool-cancel-window-"));
   let toolAborted = false;
@@ -1200,9 +1081,9 @@ test("the chat context includes the main agent's recent activity", async () => {
   await client.submitAndWait!("replace the wrapper");
   await pollHistoryForFinished(client);
   await client.naviChat!.submit({ text: "what did the main agent just say" });
-  // The Chat shares the main agent's recent exchange — the user's prompt and
-  // the reply — so it can answer the question instead of only seeing the
-  // status card (§8.3 shared context).
+  // The Chat shares the main agent's recent exchange 闁?the user's prompt and
+  // the reply 闁?so it can answer the question instead of only seeing the
+  // status card (閹?.3 shared context).
   expect(chatSystemPrompt).toContain("I replaced the fetch wrapper");
   expect(chatSystemPrompt).toContain("replace the wrapper");
   await client.dispose?.();
@@ -1562,14 +1443,14 @@ test("the collaboration channel round-robins between Navi and the main agent", a
   client.start((event) => rrEvents.push(event));
   await client.naviChat!.submit({ text: "suggest echo" });
   // The suggestion wakes the idle main agent, whose wake turn already carries
-  // the suggestion (the 轮巡) — no extra user submission needed.
+  // the suggestion (the 閺夌儐鍠栫拹? 闁?no extra user submission needed.
   // The round-robin's chain is two-plus provider turns with durable writes
   // and a wake between them. Under the full-suite load the chain measured
   // past 20s (the failure this budget covers); 45s still bounds a genuine
   // hang under the 60s per-test cap, which is what a budget is for.
   await waitForAsync(async () => mainPrompt.length > 0, 45_000);
   // The main agent knows who Navi is and sees her suggestion without the user
-  // prompting it (the 轮巡).
+  // prompting it (the 閺夌儐鍠栫拹?.
   expect(mainPrompt).toContain("<live_work_chat>");
   expect(mainPrompt).toContain("your younger sister");
   expect(mainPrompt).toContain("<navi_collaborations>");
@@ -1737,7 +1618,7 @@ test("an idle Navi answers Natalia's question immediately without a user chat", 
         event.message.includes("Correcting missing answer to question"),
     ),
   ).toBe(true);
-  // The answer reaches Natalia's own context on her next turn (the 轮巡).
+  // The answer reaches Natalia's own context on her next turn (the 閺夌儐鍠栫拹?.
   await client.submitAndWait!("continue");
   await waitForAsync(async () => mainPrompts.length >= 2);
   expect(mainPrompts.at(-1)).toContain("<navi_responses>");
@@ -1977,7 +1858,7 @@ test("collab_chat enforces direct replies and stops after three automatic rounds
           .filter((message) => message.role === "tool")
           .at(-1)?.content;
         const pendingID =
-          /messageID: (collab:chat:[^\s·]+)[^\n]*REPLY_REQUIRED/u.exec(
+          /messageID: (collab:chat:[^\s]+)[^\n]*REPLY_REQUIRED/u.exec(
             systemContext,
           )?.[1];
 
@@ -2204,7 +2085,7 @@ test("collab_chat honors a configured one-round automatic limit", async () => {
           .filter((message) => message.role === "tool")
           .at(-1)?.content;
         const pendingID =
-          /messageID: (collab:chat:[^\s·]+)[^\n]*REPLY_REQUIRED/u.exec(
+          /messageID: (collab:chat:[^\s]+)[^\n]*REPLY_REQUIRED/u.exec(
             allMessages,
           )?.[1];
         if (!naviTurn && !started) {
@@ -2908,7 +2789,7 @@ test("the main agent reads the plan document with plan_doc_read instead of an in
       request.tools?.some((tool) => tool.name === "plan_doc_list"),
     ),
   ).toBe(true);
-  // The plan正文 is never in the system prompt — only the pointer is in the
+  // The plan婵繐绲鹃弸?is never in the system prompt 闁?only the pointer is in the
   // runtime context.
   const system = requests
     .map((request) =>
@@ -3056,7 +2937,7 @@ test("a settled notice is not duplicated when the same subagent re-settles", asy
   const notices = events.filter(
     (event) => event.type === "subagent.update" && event.event === "done",
   );
-  // One settlement, so one notice — the dedupe is on the entry id, which this
+  // One settlement, so one notice 闁?the dedupe is on the entry id, which this
   // pins indirectly by there being nothing to duplicate in the first place.
   expect(notices.length).toBeGreaterThan(0);
   await client.dispose?.();
@@ -3114,7 +2995,7 @@ test("a forked subagent inherits its parent's completed turns", async () => {
           return;
         }
         // A later step of the same turn already has the spawn result, so it
-        // finishes rather than delegating again — which would loop forever.
+        // finishes rather than delegating again 闁?which would loop forever.
         if (
           request.messages.some((m) => m.content === "delegate with context")
         ) {
@@ -3241,7 +3122,7 @@ test("a fresh subagent does not inherit the parent's conversation", async () => 
 
 test("a parent can steer a running subagent at its nearest step", async () => {
   // Without this the parent's choices are to wait for the child to finish or to
-  // kill it — neither of which is "go left instead of right".
+  // kill it 闁?neither of which is "go left instead of right".
   const root = await mkdtemp(join(tmpdir(), "natalia-steer-"));
   const events: RuntimeEvent[] = [];
   const childRequests: ProviderStreamRequest[] = [];
@@ -3346,7 +3227,7 @@ test("a parent can steer a running subagent at its nearest step", async () => {
     events.push(event);
     if (event.type === "tool.update" && event.name === "agent_message") {
       // The gate opens the moment the message is accepted, so the child's next
-      // step sees it — and not before, or the message would arrive after it.
+      // step sees it 闁?and not before, or the message would arrive after it.
       if (event.status === "succeeded") {
         steered = true;
         releaseChild();
@@ -3430,7 +3311,7 @@ test("the session's start date reaches the model in the environment block", asyn
 test("a subagent step's usage event carries the provider's cache metrics", async () => {
   // The consumer test in view-store folds a hand-built event, so it passes even
   // when the producer drops the fields. This drives a real subagent step and
-  // asserts what actually leaves the runtime — the link that was silently
+  // asserts what actually leaves the runtime 闁?the link that was silently
   // missing once already.
   const root = await mkdtemp(join(tmpdir(), "natalia-subagent-cache-"));
   const events: RuntimeEvent[] = [];
@@ -3498,7 +3379,7 @@ test("runtime.maxAttemptsPerStep caps the retry policy the runtime uses", async 
       if (isChild) {
         childAttempts++;
         // Would recover on the sixth attempt, but the top-level cap of 2 must
-        // stop the retry loop first — the runtime reads runtime.maxAttemptsPerStep
+        // stop the retry loop first 闁?the runtime reads runtime.maxAttemptsPerStep
         // as an override of retry.maxAttemptsPerStep (whose default is null =
         // unlimited). Without that override this reaches 6.
         if (childAttempts < 6)

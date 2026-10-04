@@ -447,7 +447,7 @@ function terminalObserveTool(): RuntimeTool {
       });
       let text = observation.text;
       const session = nativeTerminal.session(id);
-      const previousText = session.lastObservedText;
+      const previousText = session?.lastObservedText;
       if (mode === "tail") {
         const lines = text.split("\n");
         if (lines.at(-1) === "") lines.pop();

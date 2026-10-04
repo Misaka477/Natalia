@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   mkdir,
   mkdtemp as createEmptyWorkspace,
@@ -36,10 +36,7 @@ import {
   workspaceMutations,
   workspaceWriteLock,
 } from "@anthelia/workspace";
-import {
-  TerminalTestRegistry as NativeTerminalRegistry,
-  WorkspaceSandboxTestManager as WorkspaceSandboxManager,
-} from "@natalia/testing";
+import { WorkspaceSandboxTestManager as WorkspaceSandboxManager } from "@natalia/testing";
 import {
   createOfficialRuntimeClient,
   restoreOfficialPluginConfig,
@@ -65,7 +62,6 @@ import {
   scriptedProvider,
   singleToolProvider,
   interactiveTerminalProvider,
-  nativeTerminalFixture,
   usageProvider,
   contextLimitThenSuccessProvider,
   toolCallingProvider,
@@ -84,7 +80,6 @@ import {
   waitForAsync,
   pollHistoryForFinished,
   sqliteContinueProvider,
-  sqliteContinueRegistry,
   sandboxedSubagentProvider,
   sandboxedDomainProvider,
   imageAttachProvider,
@@ -359,11 +354,10 @@ test("runtime status and diagnostics expose only published safe state", async ()
   const client = createRealRuntimeClient({
     workspaceRoot: root,
     // Hermetic about the store: no migration attempt, no external-store
-    // diagnostic — this test asserts the exact diagnostics surface.
+    // diagnostic 鈥?this test asserts the exact diagnostics surface.
     checkpointDir: join(root, ".natalia", "checkpoint-store"),
     sessionID: "ses_runtime_status",
     provider: scriptedProvider("ready"),
-    nativeTerminal: nativeTerminalFixture(),
   });
   const events: RuntimeEvent[] = [];
   client.start((event) => events.push(event));
@@ -473,7 +467,7 @@ export default (): ToolFamily => ({
       event.type === "tool.registered",
   );
   // The out-of-tree family's tool is in the catalogue, owned by the local-tools
-  // plugin like any other built-in — nothing about an external family is
+  // plugin like any other built-in 鈥?nothing about an external family is
   // special-cased once it loads. The journal scope is the plugin's workspace
   // scope, because the plugin owns every family it loads.
   expect(registered.find((event) => event.name === "extra_run")).toMatchObject({
@@ -934,7 +928,7 @@ test("workspace framework services are always present and stable across reloads"
   // The workspace subsystem is framework-internal: it is not gated by
   // plugins.enabled and is present on first boot.
   // Framework-internal services now bind through the service directory, whose
-  // owner per binding is `service:<token.id>` — still not a plugin owner.
+  // owner per binding is `service:<token.id>` 鈥?still not a plugin owner.
   expect(kernel.ownerOf("services", workspaceWriteLock.id)).toMatch(
     /^service:/u,
   );
@@ -1040,118 +1034,6 @@ test("compaction framework service is always present and stable across reloads",
     kernel.service<ProviderModelController>(providerModelController.id),
   ).toBe(firstController);
   await client.dispose?.();
-}, 60_000);
-
-test("terminal plugin config reload preserves its host-owned registry", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-terminal-config-reload-"));
-  await mkdir(join(root, ".natalia"), { recursive: true });
-  const configPath = join(root, ".natalia", "config.json");
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
-  let stops = 0;
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 81, window_id: 8, tab_id: 1 };
-    },
-    async list() {
-      return [{ pane_id: 81, window_id: 8, tab_id: 1, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "reload pane output";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {
-      stops += 1;
-    },
-  });
-  await nativeTerminal.start({
-    id: "reload_terminal",
-    cwd: root,
-    command: "cat",
-    sessionID: "ses_terminal_config_reload",
-  });
-  const kernel = new CapabilityRegistry();
-  const client = createRealRuntimeClient({
-    workspaceRoot: root,
-    sessionID: "ses_terminal_config_reload",
-    capabilityRegistry: kernel,
-    nativeTerminal,
-    provider: scriptedProvider("ready"),
-  });
-  client.start(() => undefined);
-  await client.runtimeStatus?.();
-
-  expect(kernel.has("natalia-tool-terminal")).toBe(true);
-  expect(kernel.service(terminalController.id)).toBeDefined();
-  expect(await client.nativeTerminalList?.()).toMatchObject([
-    { id: "reload_terminal" },
-  ]);
-  await expect(client.nativeTerminalRead?.("reload_terminal")).resolves.toEqual(
-    {
-      id: "reload_terminal",
-      text: "reload pane output",
-      // The host registry answers with text and nothing that locates it in a
-      // document: the honest extent is "unknown", not a one-line impersonation.
-      startLine: null,
-      endLine: null,
-      totalLines: null,
-      // This runtime's panes own a real screen, so the caret IS reported --
-      // at the origin of a pane that has drawn nothing. (A host with no screen
-      // at all is the null case, pinned by the wezterm-degraded read above.)
-      cursorX: 0,
-      cursorY: 0,
-      // And the byte extent degrades with the line one on this fixture's host:
-      // it answers with text and no document to address, in both families.
-      startByte: null,
-      endByte: null,
-      totalBytes: null,
-    },
-  );
-  const firstController = kernel.service<object>(terminalController.id);
-
-  // A reload with the same windowMode must not rebuild the plugin: the input
-  // callbacks and the host-owned registry are recreated per catalog build, but
-  // the identity is derived from windowMode alone.
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      version: 3,
-      runtime: { terminal: { windowMode: "windowless" } },
-    }),
-  );
-  await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
-  // windowMode changed, so the plugin is rebuilt; the host-owned registry is
-  // borrowed as-is, so its sessions survive and nothing is disposed.
-  expect(kernel.has("natalia-tool-terminal")).toBe(true);
-  expect(kernel.service<object>(terminalController.id)).not.toBe(
-    firstController,
-  );
-  expect(await client.nativeTerminalList?.()).toMatchObject([
-    { id: "reload_terminal" },
-  ]);
-  expect(stops).toBe(0);
-
-  // Re-contributing host input may rebuild the physical plugin, but the
-  // host-owned terminal registry and its sessions remain mounted.
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      version: 3,
-      runtime: { terminal: { windowMode: "windowless" } },
-    }),
-  );
-  await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
-  expect(kernel.service<object>(terminalController.id)).toBeDefined();
-  expect(await client.nativeTerminalList?.()).toMatchObject([
-    { id: "reload_terminal" },
-  ]);
-  expect(stops).toBe(0);
-
-  await client.dispose?.();
-  expect(stops).toBe(0);
 }, 60_000);
 
 test("checkpoint config reload reconciles its lifecycle", async () => {
@@ -2475,7 +2357,6 @@ test("durable diagnostics restore on runtime reopen and render through the comma
     checkpointDir: join(root, ".natalia", "checkpoint-store"),
     sessionID,
     provider: scriptedProvider("first"),
-    nativeTerminal: nativeTerminalFixture(),
   });
   first.start(() => undefined);
   await first.runtimeStatus?.();
@@ -2487,7 +2368,6 @@ test("durable diagnostics restore on runtime reopen and render through the comma
     checkpointDir: join(root, ".natalia", "checkpoint-store"),
     sessionID,
     provider: scriptedProvider("reopened"),
-    nativeTerminal: nativeTerminalFixture(),
   });
   reopened.start((event) => events.push(event));
   expect(await reopened.diagnostics?.()).toMatchObject([
@@ -2749,8 +2629,8 @@ test("runtime sends a baseline system prompt without configured agent instructio
   await client.submitAndWait!("who are you?");
   // A request must have been captured before its content is meaningfully
   // examined. Without this, a provider that never streamed makes every `toContain`
-  // below fail against `String(undefined)` — "expected to contain
-  // <natalia_cli_persona>, received [undefined]" — which reads like the prompt is
+  // below fail against `String(undefined)` 鈥?"expected to contain
+  // <natalia_cli_persona>, received [undefined]" 鈥?which reads like the prompt is
   // wrong rather than like no prompt ever arrived. CI failed this test once in
   // exactly that undiagnosable shape.
   expect(
@@ -2773,7 +2653,7 @@ test("runtime sends a baseline system prompt without configured agent instructio
   expect(systemPrompt).toContain(
     "Natalia is a gentle, cute, and thoughtful girl",
   );
-  expect(systemPrompt).toContain("娜塔莉娅");
+  expect(systemPrompt).toContain("濞滃鑾夊▍");
   expect(systemPrompt).toContain(
     "Do not turn a simple personal question into a detached disclaimer",
   );

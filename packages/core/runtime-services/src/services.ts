@@ -536,22 +536,19 @@ export type TerminalControllerInput = {
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
   windowMode(): "auto" | "windowless" | "window";
-  /** Provider-private native registry, interpreted only by the terminal subsystem. */
-  external?: unknown;
-  /** Interactive terminal host. Omitted / unknown values use in-process PTY. */
-  backend?: "wezterm" | "pty";
   /** Cap on concurrent PTYs for one Natalia session. PTY backend only. */
   maxPerSession?: number;
   /** Recycle a session's idle PTY when the cap is hit. PTY backend only. */
   idleMs?: number;
 };
+
+/** Backend-neutral terminal port. Native registry classes never cross this boundary. */
 export interface SandboxService extends SandboxToolService {
   init(): Promise<void>;
   close(): Promise<void>;
   referencedObjectIDs(): Promise<Set<string> | undefined>;
   runningResourceCount(): number;
 }
-/** Backend-neutral terminal port. Native registry classes never cross this boundary. */
 export interface TerminalController {
   init(): Promise<void>;
   list(sessionID?: string): Promise<RuntimeNativeTerminalSession[]>;

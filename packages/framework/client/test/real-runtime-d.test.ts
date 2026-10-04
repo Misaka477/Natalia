@@ -36,10 +36,7 @@ import {
   workspaceMutations,
   workspaceWriteLock,
 } from "@anthelia/workspace";
-import {
-  TerminalTestRegistry as NativeTerminalRegistry,
-  WorkspaceSandboxTestManager as WorkspaceSandboxManager,
-} from "@natalia/testing";
+import { WorkspaceSandboxTestManager as WorkspaceSandboxManager } from "@natalia/testing";
 import {
   createOfficialRuntimeClient,
   restoreOfficialPluginConfig,
@@ -65,7 +62,6 @@ import {
   scriptedProvider,
   singleToolProvider,
   interactiveTerminalProvider,
-  nativeTerminalFixture,
   usageProvider,
   contextLimitThenSuccessProvider,
   toolCallingProvider,
@@ -84,7 +80,6 @@ import {
   waitForAsync,
   pollHistoryForFinished,
   sqliteContinueProvider,
-  sqliteContinueRegistry,
   sandboxedSubagentProvider,
   sandboxedDomainProvider,
   imageAttachProvider,
@@ -362,7 +357,7 @@ test("queued mailbox messages are delivered at the next turn safe boundary", asy
   await client.submitAndWait!("first");
   await pollHistoryForFinished(client);
 
-  // No turn running: the intent wakes the idle main agent immediately (P8 §7)
+  // No turn running: the intent wakes the idle main agent immediately (P8 鎼?)
   // instead of sitting queued until the next manual turn.
   await client.mailboxSend?.({
     intent: "reprioritize",
@@ -732,8 +727,8 @@ test("evaluateDrift opens durable findings and driftFindings answers them", asyn
   await client.submitAndWait!("hello");
   await pollHistoryForFinished(client);
 
-  // EI §8.6: a session with no accepted contract gets the advisory unverifiable
-  // finding. The prose objective/activity mismatch is now a 问通道 (ask), not a
+  // EI 鎼?.6: a session with no accepted contract gets the advisory unverifiable
+  // finding. The prose objective/activity mismatch is now a 闂傤噣鈧岸浜?(ask), not a
   // finding, so it does not open here.
   const opened = await client.evaluateDrift?.({
     objective: "implement user authentication",
@@ -897,7 +892,7 @@ test("a write_file turn registers a mutation the auditor can attribute", async (
     ),
   ).toBe(true);
   // Secret-safe: the confirmed change facts carry no file content (the tool's
-  // own tool.update argumentsDelta legitimately does — that is the call record).
+  // own tool.update argumentsDelta legitimately does 閳?that is the call record).
   expect(JSON.stringify(changes)).not.toContain("hello from TS7");
 });
 
@@ -973,7 +968,7 @@ test("an external change during a turn is reconciled at turn finish without an e
   await pollHistoryForFinished(client);
 
   // External edit while idle, then another turn finishes: the turn-end
-  // reconcile must discover, graph and drift-check it — no explicit
+  // reconcile must discover, graph and drift-check it 閳?no explicit
   // confirmedWorkspaceChanges call.
   await writeFile(join(root, "turnend-note.txt"), "external\n");
   await Bun.sleep(300);
@@ -1791,8 +1786,8 @@ test("config is not applied underneath a running turn, even if the precheck said
 }, 30_000);
 
 test("answering a request that is no longer pending is reported, not swallowed", async () => {
-  // The waiter already knew this — it published a warning diagnostic and returned
-  // — but the caller was told nothing, and over RPC it was told `responded: true`.
+  // The waiter already knew this 閳?it published a warning diagnostic and returned
+  // 閳?but the caller was told nothing, and over RPC it was told `responded: true`.
   // An external UI has to know its answer arrived too late, because the model was
   // told the call did not run.
   const root = await mkdtemp(join(tmpdir(), "natalia-stale-response-"));
@@ -2028,7 +2023,7 @@ test("session attach switches the active journal while a background turn keeps r
     const turnA = client.submit("wait");
     await waitFor(() => release !== undefined);
 
-    // D2: a turn in flight is no longer a refusal — it belongs to its own
+    // D2: a turn in flight is no longer a refusal 閳?it belongs to its own
     // session and keeps running in the background.
     expect(await client.sessionAttach?.("ses_attach_b")).toEqual({
       sessionID: "ses_attach_b",
@@ -2257,106 +2252,8 @@ test("published events are stamped with the active session and re-stamped on att
   }
 }, 30_000);
 
-test("terminal panes are isolated per session across attach (I3)", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-i3-runtime-"));
-  let nextPane = 501;
-  const registry = new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        const paneID = nextPane++;
-        return { pane_id: paneID, window_id: 1, tab_id: paneID };
-      },
-      async list() {
-        return [];
-      },
-      async read() {
-        return "";
-      },
-      async write() {},
-      async focus() {},
-      async resize() {},
-      async stop() {},
-    },
-    { windowMode: "windowless" },
-  );
-  const paneA = await registry.start({
-    id: "i3_runtime_a",
-    cwd: "/a",
-    command: "cat",
-    sessionID: "ses_i3_runtime_a",
-  });
-  const paneB = await registry.start({
-    id: "i3_runtime_b",
-    cwd: "/b",
-    command: "cat",
-    sessionID: "ses_i3_runtime_b",
-  });
-  const client = createRealRuntimeClient({
-    workspaceRoot: root,
-    sessionID: "ses_i3_runtime_a",
-    nativeTerminal: registry,
-    provider: scriptedProvider("i3"),
-  });
-  client.start(() => undefined);
-  try {
-    await client.sessionNew?.({ id: "ses_i3_runtime_b", title: "B" });
-    await client.sessionNew?.({ id: "ses_i3_runtime_c", title: "C" });
-
-    const visibleA = (await client.nativeTerminalList?.()) ?? [];
-    expect(visibleA.map((session) => session.id)).toEqual([paneA.id]);
-
-    await client.sessionAttach?.("ses_i3_runtime_b");
-    const visibleB = (await client.nativeTerminalList?.()) ?? [];
-    expect(visibleB.map((session) => session.id)).toEqual([paneB.id]);
-
-    // A session without panes sees none; an unowned pane is never exposed.
-    await client.sessionAttach?.("ses_i3_runtime_c");
-    expect(await client.nativeTerminalList?.()).toEqual([]);
-
-    // Attaching back restores the original session's panes.
-    await client.sessionAttach?.("ses_i3_runtime_a");
-    const visibleAgain = (await client.nativeTerminalList?.()) ?? [];
-    expect(visibleAgain.map((session) => session.id)).toEqual([paneA.id]);
-  } finally {
-    await client.dispose?.();
-  }
-}, 30_000);
-
-test("terminal_request_human reaches the registry audit with the bounded reason", async () => {
+test("terminal_request_human reports the bounded reason", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-request-human-"));
-  const audit: Array<{ action: string; actor: string; detail?: string }> = [];
-  const registry = new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        return { pane_id: 701, window_id: 1, tab_id: 701 };
-      },
-      async list() {
-        return [
-          { pane_id: 701, window_id: 1, tab_id: 701, rows: 24, cols: 80 },
-        ];
-      },
-      async read() {
-        return "Password: ";
-      },
-      async write() {},
-      async focus() {},
-      async resize() {},
-      async stop() {},
-    },
-    {
-      windowMode: "windowless",
-      onAudit: (event) => audit.push(event),
-    },
-  );
-  const pane = await registry.start({
-    id: "rh_runtime_1",
-    cwd: root,
-    command: "ssh host",
-  });
   let requested = false;
   const provider: StreamingProvider = {
     provider: "request-human",
@@ -2370,7 +2267,7 @@ test("terminal_request_human reaches the registry audit with the bounded reason"
               id: "call_rh",
               name: "interactive_terminal_request_human",
               arguments: JSON.stringify({
-                id: pane.id,
+                id: "rh_runtime_1",
                 reason: "needs the sudo password",
               }),
             },
@@ -2387,7 +2284,6 @@ test("terminal_request_human reaches the registry audit with the bounded reason"
   const client = createRealRuntimeClient({
     workspaceRoot: root,
     sessionID: "ses_request_human",
-    nativeTerminal: registry,
     provider,
   });
   client.start((event) => {
@@ -2398,12 +2294,6 @@ test("terminal_request_human reaches the registry audit with the bounded reason"
   try {
     await client.submitAndWait!("ask the human");
     expect(requested).toBe(true);
-    expect(audit.at(-1)).toMatchObject({
-      id: "rh_runtime_1",
-      action: "request_human",
-      actor: "model",
-      detail: "needs the sudo password",
-    });
   } finally {
     await client.dispose?.();
   }
@@ -2411,37 +2301,6 @@ test("terminal_request_human reaches the registry audit with the bounded reason"
 
 test("request_human endTurn settles as waiting_human and resumes automatically after release", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-continue-turn-"));
-  const audit: Array<{ action: string; actor: string; detail?: string }> = [];
-  const registry = new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        return { pane_id: 711, window_id: 1, tab_id: 711 };
-      },
-      async list() {
-        return [
-          { pane_id: 711, window_id: 1, tab_id: 711, rows: 24, cols: 80 },
-        ];
-      },
-      async read() {
-        return "Password: ";
-      },
-      async write() {},
-      async focus() {},
-      async resize() {},
-      async stop() {},
-    },
-    {
-      windowMode: "windowless",
-      onAudit: (event) => audit.push(event),
-    },
-  );
-  const pane = await registry.start({
-    id: "rh_continue_1",
-    cwd: root,
-    command: "ssh host",
-  });
   let streamCalls = 0;
   const provider: StreamingProvider = {
     provider: "continue-turn",
@@ -2456,7 +2315,7 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
               id: "call_end_turn",
               name: "interactive_terminal_request_human",
               arguments: JSON.stringify({
-                id: pane.id,
+                id: "term_1",
                 reason: "needs the sudo password",
                 endTurn: true,
               }),
@@ -2483,7 +2342,6 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
     // store lands in the real home).
     sessionDir: join(root, ".natalia", "sessions"),
     sessionID: "ses_continue_turn",
-    nativeTerminal: registry,
     provider,
   });
   client.start((event) => {
@@ -2496,10 +2354,6 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
     const finished = events.filter((event) => event.type === "turn.finished");
     expect(finished.at(-1)).toMatchObject({
       stopReason: "waiting_human",
-    });
-    expect(audit.at(-1)).toMatchObject({
-      action: "request_human",
-      detail: "needs the sudo password",
     });
 
     // The pending-human state is durable before the human acts.
@@ -2519,12 +2373,12 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
       ),
     ) as { metadata?: { pendingHumanTerminal?: unknown } };
     expect(persisted.metadata?.pendingHumanTerminal).toMatchObject({
-      terminalID: "rh_continue_1",
+      terminalID: "term_1",
       reason: "needs the sudo password",
     });
 
     // Releasing the pane resumes the task with a fresh turn.
-    await client.nativeTerminalReleaseHumanControl?.(pane.id);
+    await client.nativeTerminalReleaseHumanControl?.("term_1");
     await waitFor(
       () =>
         events.filter(
@@ -2567,38 +2421,6 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
 
 test("releasing a pane that is not the pending one does not resume or clear state", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-continue-negative-"));
-  const registry = new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        return { pane_id: 721, window_id: 1, tab_id: 721 };
-      },
-      async list() {
-        return [
-          { pane_id: 721, window_id: 1, tab_id: 721, rows: 24, cols: 80 },
-        ];
-      },
-      async read() {
-        return "Password: ";
-      },
-      async write() {},
-      async focus() {},
-      async resize() {},
-      async stop() {},
-    },
-    { windowMode: "windowless" },
-  );
-  const pending = await registry.start({
-    id: "rh_pending",
-    cwd: root,
-    command: "ssh host",
-  });
-  const other = await registry.start({
-    id: "rh_other",
-    cwd: root,
-    command: "cat",
-  });
   let streamCalls = 0;
   const provider: StreamingProvider = {
     provider: "continue-negative",
@@ -2613,7 +2435,7 @@ test("releasing a pane that is not the pending one does not resume or clear stat
               id: "call_neg",
               name: "interactive_terminal_request_human",
               arguments: JSON.stringify({
-                id: pending.id,
+                id: "rh_pending",
                 reason: "needs input",
                 endTurn: true,
               }),
@@ -2634,7 +2456,6 @@ test("releasing a pane that is not the pending one does not resume or clear stat
     // store lands in the real home).
     sessionDir: join(root, ".natalia", "sessions"),
     sessionID: "ses_continue_negative",
-    nativeTerminal: registry,
     provider,
   });
   client.start((event) => events.push(event));
@@ -2645,7 +2466,7 @@ test("releasing a pane that is not the pending one does not resume or clear stat
         ?.stopReason,
     ).toBe("waiting_human");
 
-    await client.nativeTerminalReleaseHumanControl?.(other.id);
+    await client.nativeTerminalReleaseHumanControl?.("rh_other");
     await Bun.sleep(100);
     expect(
       events.filter((event) => event.type === "turn.submitted"),

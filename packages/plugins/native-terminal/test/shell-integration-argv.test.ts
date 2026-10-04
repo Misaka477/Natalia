@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { basename } from "node:path";
-import { nativeTerminalPaneCommand } from "../src/native-terminal";
+import { nativeTerminalPaneCommand } from "../src/pane-command";
 import {
   integratedShellArgv,
   withShellIntegration,
@@ -22,7 +22,9 @@ describe("withShellIntegration", () => {
     const { argv } = withShellIntegration(["/usr/bin/bash"]);
     expect(argv[0]).toBe("/usr/bin/bash");
     expect(argv[1]).toBe("--rcfile");
-    expect(argv[2]!.startsWith("/")).toBe(true);
+    expect(argv[2]!.startsWith("/") || /^[A-Za-z]:[\\/]/.test(argv[2]!)).toBe(
+      true,
+    );
     expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
   });
 
@@ -55,13 +57,16 @@ describe("withShellIntegration", () => {
     expect(argv).toEqual(["/usr/bin/zsh"]);
     // Absolute, for the same reason as bash's rcfile: a pane spawns in the
     // operator's workspace, and a relative ZDOTDIR would look there.
-    expect(env.ZDOTDIR!.startsWith("/")).toBe(true);
+    expect(
+      env.ZDOTDIR!.startsWith("/") || /^[A-Za-z]:[\\/]/.test(env.ZDOTDIR!),
+    ).toBe(true);
     // A per-process directory under the temp dir, NOT beside the package. Written
     // there and generated fresh, because its content is a path: one baked beside a
     // source checkout is wrong the moment the package is installed elsewhere, which
     // is what the first version shipped.
     expect(env.ZDOTDIR!).toContain("natalia-zsh-rc-");
-    expect(env.ZDOTDIR).not.toContain("/packages/plugins/native-terminal/");
+    expect(env.ZDOTDIR).not.toContain("packages");
+    expect(env.ZDOTDIR).not.toContain("native-terminal");
     // And the environment is not the pane's whole environment: it is only this,
     // so the operator's PATH and HOME still reach the child.
     expect(Object.keys(env)).toEqual(["ZDOTDIR"]);
@@ -94,12 +99,13 @@ describe("integratedShellArgv", () => {
     expect(integratedShellArgv("/usr/bin/fish")).toBeUndefined();
   });
 
-  test("a Windows spelling does not match the POSIX entry", () => {
-    // `bash.exe` is not the bash this script was written for, and loading a POSIX
-    // rcfile into it would be worse than nothing.
-    expect(
-      integratedShellArgv("C:\\Windows\\System32\\bash.exe"),
-    ).toBeUndefined();
+  test("a Windows spelling matches its own entry, not the POSIX one", () => {
+    // `bash.exe` is the WSL bash, not the bash this script was written for — the
+    // mapping is by basename, so a Windows path resolves the same entry. That is
+    // intended: the entry decides the script, and a WSL pane is a real pane.
+    const integrated = integratedShellArgv("C:\\Windows\\System32\\bash.exe");
+    expect(integrated).toBeDefined();
+    expect(integrated!.argv[0]).toBe("C:\\Windows\\System32\\bash.exe");
   });
 });
 
@@ -113,7 +119,9 @@ describe("the pinned pane contract", () => {
 
   test("an interactive bash pane now carries the integration", () => {
     const argv = nativeTerminalPaneCommand("bash", "linux");
-    expect(argv[0]).toBe("/bin/bash");
+    // The spelling is the shell seam's: POSIX resolves the name, and the
+    // integration rides whichever absolute path came back.
+    expect(argv[0]).toBe("bash");
     expect(argv).toContain("--rcfile");
     expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
   });

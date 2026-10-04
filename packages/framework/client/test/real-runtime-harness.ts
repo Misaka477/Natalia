@@ -1,6 +1,6 @@
-// The shared prelude and helpers of the real-runtime suite, split out
+﻿// The shared prelude and helpers of the real-runtime suite, split out
 // when the suite became five parallel CI jobs: one harness imported by
-// every file, so a helper exists once. Not a test file — no test().
+// every file, so a helper exists once. Not a test file 鈥?no test().
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
@@ -40,10 +40,7 @@ import {
   workspaceMutations,
   workspaceWriteLock,
 } from "@anthelia/workspace";
-import {
-  TerminalTestRegistry as NativeTerminalRegistry,
-  WorkspaceSandboxTestManager as WorkspaceSandboxManager,
-} from "@natalia/testing";
+import { WorkspaceSandboxTestManager as WorkspaceSandboxManager } from "@natalia/testing";
 import {
   createOfficialRuntimeClient,
   restoreOfficialPluginConfig,
@@ -62,7 +59,7 @@ import type { ProviderModelController } from "@anthelia/provider-model";
 // The governance-root override below is process-global, so this file restores
 // the ambient value when it ends: without the restore, every later test file's
 // runtime in the same bun process reads and writes its constitution into the
-// last workspace's ledger — cross-file state leakage the hygiene guard caught
+// last workspace's ledger 鈥?cross-file state leakage the hygiene guard caught
 // as a recreated governance directory.
 export const ambientGovernanceRoot = process.env.NATALIA_TEST_GOVERNANCE_ROOT;
 
@@ -319,35 +316,6 @@ export function interactiveTerminalProvider(): StreamingProvider {
   };
 }
 
-export function nativeTerminalFixture() {
-  let running = true;
-  return new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 71, window_id: 7, tab_id: 1 };
-    },
-    async list() {
-      return running
-        ? [{ pane_id: 71, window_id: 7, tab_id: 1, rows: 24, cols: 80 }]
-        : [];
-    },
-    async read() {
-      return "native pane output";
-    },
-    async write() {},
-    async open() {
-      return { pane_id: 71, window_id: 7, tab_id: 1, rows: 24, cols: 80 };
-    },
-    async openHub() {},
-    async focus() {},
-    async resize() {},
-    async stop() {
-      running = false;
-    },
-  });
-}
-
 export function usageProvider(): StreamingProvider {
   return {
     provider: "scripted-usage",
@@ -556,7 +524,7 @@ export function subagentCompactionProvider(): StreamingProvider & {
     async *stream(request: ProviderStreamRequest) {
       // Round 12 made the summarization call replay the span, so its
       // instruction rides as the final message rather than in a leading system
-      // message — that is what identifies this call now.
+      // message 鈥?that is what identifies this call now.
       if (
         request.messages
           .at(-1)
@@ -628,7 +596,7 @@ export function subagentCompactionProvider(): StreamingProvider & {
         // Short on purpose: it is under the result-quality gate's minimum, so
         // the gate spends one more turn asking for detail. That turn is a second
         // user message, and it is what gives this single-turn child a history
-        // worth compacting — the preserved tail always reaches back to the last
+        // worth compacting 鈥?the preserved tail always reaches back to the last
         // user message, so a child with only its task has nothing before it but
         // the protected system head.
         yield { type: "content", text: "child compacted result" };
@@ -762,7 +730,7 @@ export function subagentRawXMLToolProvider(): StreamingProvider {
  * Waits for a condition. The default budget is generous for the same
  * reason waitForAsync's is: this file's conditions routinely cross
  * process boundaries (a settle on disk, a wake that has to run), and a
- * 500ms default was a lottery under the concurrent suite — a different
+ * 500ms default was a lottery under the concurrent suite 鈥?a different
  * victim every run. The 60s per-test cap still bounds a genuine hang.
  */
 export async function waitFor(
@@ -824,7 +792,7 @@ export function isCollabMessageEvent(
  * Waits for a durable condition. The default budget is deliberately
  * generous: these conditions cross process boundaries (a settle on disk,
  * a wake that has to run), and this file runs for minutes inside a
- * concurrent suite — a 3s default was a load lottery that failed a
+ * concurrent suite 鈥?a 3s default was a load lottery that failed a
  * different test on every run. The per-test cap (60s) is what still
  * bounds a genuine hang.
  */
@@ -892,34 +860,6 @@ export function sqliteContinueProvider(): StreamingProvider {
       yield { type: "done" as const };
     },
   };
-}
-
-export function sqliteContinueRegistry() {
-  return new NativeTerminalRegistry(
-    {
-      kind: "wezterm",
-      executable: "wezterm",
-      async spawn() {
-        return { pane_id: 991, window_id: 1, tab_id: 991 };
-      },
-      async list() {
-        return [
-          { pane_id: 991, window_id: 1, tab_id: 991, rows: 24, cols: 80 },
-        ];
-      },
-      async read() {
-        return "Password: ";
-      },
-      async write() {},
-      async open() {
-        return { pane_id: 991, window_id: 1, tab_id: 991, rows: 24, cols: 80 };
-      },
-      async focus() {},
-      async resize() {},
-      async stop() {},
-    },
-    { windowMode: "windowless" },
-  );
 }
 
 export function sandboxedSubagentProvider(): StreamingProvider {
@@ -1231,7 +1171,7 @@ export function subagentCacheUsageProvider(): StreamingProvider {
         return;
       }
       // The parent spawns on its first request, then answers once the tool result
-      // is back — the same two-phase shape the other subagent tests use.
+      // is back 鈥?the same two-phase shape the other subagent tests use.
       if (!request.messages.some((message) => message.role === "tool")) {
         yield {
           type: "tool_call",

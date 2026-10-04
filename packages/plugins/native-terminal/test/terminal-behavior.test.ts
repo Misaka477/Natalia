@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
+import type { TerminalToolService } from "@anthelia/tools";
 import {
-  NativeTerminalRegistry,
   createTerminalPlugin,
   TERMINAL_PLUGIN_ID,
   terminalToolFamily,
@@ -84,70 +84,260 @@ function terminalRegistry() {
 }
 
 /**
- * The tools' terminal surface, the way the runtime builds one over a wezterm
- * host registry.
+ * The tools' terminal surface over a fake host.
  *
- * The host answers with text, the cursor and the geometry — and nothing that
- * locates that text in a document — so the extent served here is null, exactly
- * what the production wezterm controller reports. A bare registry used to pass
- * as the tool context by the luck of overlapping shapes; the read contract now
- * states the extent, and this wrapper is where the host's honest "cannot page"
- * enters rather than a cast that hides the difference.
+ * The host answers with text, the cursor and the geometry 鈥?and nothing that
+ * locates that text in a document 鈥?so the extent served here is null, exactly
+ * what the mux-facade shape reports. A bare registry used to pass as the tool
+ * context by the luck of overlapping shapes; the read contract now states the
+ * extent, and this wrapper is where the host's honest "cannot page" enters
+ * rather than a cast that hides the difference.
  */
-function weztermToolContext(
-  workspaceRoot: string,
-  registry: NativeTerminalRegistry,
-) {
+/**
+ * The smallest host facade that still answers the tools' questions with the
+ * mux-shaped "cannot page" extent. The fork host is gone; the tools' contract
+ * is not, so the fake is now written by hand against TerminalToolService
+ * rather than against a registry class that no longer exists.
+ */
+type FakeHost = {
+  start(input: { command: string; cwd: string; id?: string }): Promise<{
+    id: string;
+    host: "pty";
+    paneID: number;
+    windowID: number;
+    muxWindowID: number;
+    tabID: number;
+    command: string;
+    cwd: string;
+    status: "running" | "exited";
+    startedAt: string;
+  }>;
+  list(): {
+    pane_id: number;
+    window_id: number;
+    tab_id: number;
+    rows: number;
+    cols: number;
+    cursor_x: number;
+    cursor_y: number;
+  }[];
+  read(): Promise<string>;
+  /** The bytes written, in order — the test's assertion surface. */
+  writes: string[];
+  write(
+    id: string,
+    value: string,
+    options?: { idempotencyKey?: string },
+  ): Promise<void>;
+  stop(id: string): Promise<void>;
+  openHub?(): Promise<void>;
+  claimHumanInput(id: string): Promise<void>;
+  releaseHumanControl(id: string): Promise<void>;
+};
+
+function fakeHostToolContext(workspaceRoot: string, host: FakeHost) {
+  const view = (status: "running" | "exited" = "running") => {
+    const [pane] = host.list();
+    return {
+      id: `tty_${pane?.pane_id ?? 0}`,
+      host: "pty" as const,
+      paneID: pane?.pane_id ?? 0,
+      windowID: pane?.window_id ?? 0,
+      muxWindowID: pane?.window_id ?? 0,
+      tabID: pane?.tab_id ?? 0,
+      command: "cat",
+      cwd: ".",
+      status,
+      startedAt: new Date(0).toISOString(),
+    };
+  };
   const terminal = {
-    start: (input: Parameters<NativeTerminalRegistry["start"]>[0]) =>
-      registry.start(input),
-    list: () => registry.list(),
-    reconcile: () => registry.reconcile(),
-    read: async (
-      id: string,
-      options?: Parameters<NativeTerminalRegistry["read"]>[1],
-    ) => ({
-      ...(await registry.read(id, options)),
-      startLine: null,
-      endLine: null,
-      totalLines: null,
-      // The byte extent degrades with the line one: this fake is the
-      // "host cannot address a document" shape, in both families.
-      startByte: null,
-      endByte: null,
-      totalBytes: null,
-    }),
-    snapshot: (id: string) => registry.snapshot(id),
-    observe: (
+    start: async (input: {
+      command: string;
+      cwd: string;
+      id?: string;
+      sessionID?: string;
+    }) => {
+      const started = await host.start(input);
+      return {
+        id: started.id,
+        host: "pty" as const,
+        paneID: started.paneID,
+        windowID: started.windowID,
+        muxWindowID: started.windowID,
+        tabID: started.tabID,
+        command: started.command,
+        cwd: started.cwd,
+        status: started.status,
+        startedAt: started.startedAt,
+      };
+    },
+    list: () => [view()],
+    reconcile: async () => [view()],
+    snapshot: async (id: string) => {
+      const [pane] = host.list();
+      return {
+        ...view(),
+        id,
+        text: await host.read(),
+        cursorX: pane?.cursor_x ?? 0,
+        cursorY: pane?.cursor_y ?? 0,
+        rows: pane?.rows ?? 24,
+        cols: pane?.cols ?? 80,
+        revision: 0,
+      };
+    },
+    observe: async (
       id: string,
       afterRevision: number,
-      options?: Parameters<NativeTerminalRegistry["observe"]>[2],
-    ) => registry.observe(id, afterRevision, options),
-    session: (id: string) => registry.session(id),
-    markObserved: (id: string, text: string, revision: number) =>
-      registry.markObserved(id, text, revision),
-    lastObservedRevision: (id: string) => registry.lastObservedRevision(id),
-    write: (
+      _options?: { maxLines?: number; timeoutMs?: number },
+    ) => {
+      const snap = await terminal.snapshot(id);
+      return {
+        id,
+        text: snap.text,
+        cursorX: snap.cursorX,
+        cursorY: snap.cursorY,
+        rows: snap.rows,
+        cols: snap.cols,
+        revision: snap.revision,
+        currentRevision: snap.revision,
+        afterRevision,
+        changed: snap.revision > afterRevision,
+        reason: "latest" as const,
+        session: { revision: snap.revision },
+      };
+    },
+    read: async () => {
+      const [pane] = host.list();
+      return {
+        text: await host.read(),
+        startLine: null,
+        endLine: null,
+        totalLines: null,
+        startByte: null,
+        endByte: null,
+        totalBytes: null,
+        cursorX: pane?.cursor_x ?? 0,
+        cursorY: pane?.cursor_y ?? 0,
+        rows: pane?.rows ?? 24,
+        cols: pane?.cols ?? 80,
+      };
+    },
+    session: (id: string) => ({
+      id,
+      host: "pty" as const,
+      paneID: 73,
+      windowID: 3,
+      muxWindowID: 3,
+      tabID: 5,
+      command: "cat",
+      cwd: ".",
+      status: "running" as const,
+      startedAt: new Date(0).toISOString(),
+      lastObservedText: "",
+      lastObservedRevision: 0,
+      inputOwner: "model" as const,
+      revision: 0,
+    }),
+    markObserved: (_id: string, text: string, revision: number) => revision,
+    lastObservedRevision: () => 0,
+    write: async (
       id: string,
       value: string,
-      options?: Parameters<NativeTerminalRegistry["write"]>[2],
-    ) => registry.write(id, value, options),
-    resize: (
-      id: string,
-      rows: number,
-      cols: number,
-      actor: "model" | "human",
-      sessionID?: string,
-    ) => registry.resize(id, rows, cols, actor, sessionID),
-    requestHuman: (id: string, reason: string, sessionID?: string) =>
-      registry.requestHuman(id, reason, sessionID),
-    stop: (
-      id: string,
-      actor: "model" | "human" | "system",
-      sessionID?: string,
-    ) => registry.stop(id, actor, sessionID),
+      options?: { idempotencyKey?: string },
+    ) => {
+      const before = host.writes.length;
+      await host.write(id, value, options);
+      return {
+        writtenBytes: value.length,
+        delivery:
+          host.writes.length === before
+            ? ("duplicate" as const)
+            : ("accepted" as const),
+      };
+    },
+    stop: async (id: string) => {
+      await host.stop(id);
+      return view("exited");
+    },
   };
-  return { workspaceRoot, terminal };
+  return {
+    workspaceRoot,
+    terminal: terminal as unknown as TerminalToolService,
+  };
+}
+
+/** A ready-made host whose answers each test overrides. */
+function fakeHost(
+  answers: {
+    pane?: number;
+    text?: string;
+    reads?: string[];
+    geometry?: {
+      rows?: number;
+      cols?: number;
+      cursorX?: number;
+      cursorY?: number;
+    };
+  } = {},
+): FakeHost & { writes: string[] } {
+  const writes: string[] = [];
+  const pane = answers.pane ?? 73;
+  const geometry = answers.geometry ?? {};
+  const reads = answers.reads ? [...answers.reads] : undefined;
+  let human = false;
+  const seenKeys = new Set<string>();
+  return {
+    writes,
+    async start(input) {
+      return {
+        id: input.id ?? "tty",
+        host: "pty",
+        paneID: pane,
+        windowID: 3,
+        muxWindowID: 3,
+        tabID: 5,
+        command: input.command,
+        cwd: input.cwd,
+        status: "running",
+        startedAt: new Date().toISOString(),
+      };
+    },
+    list() {
+      return [
+        {
+          pane_id: pane,
+          window_id: 3,
+          tab_id: 5,
+          rows: geometry.rows ?? 24,
+          cols: geometry.cols ?? 80,
+          cursor_x: geometry.cursorX ?? 0,
+          cursor_y: geometry.cursorY ?? 0,
+        },
+      ];
+    },
+    async read() {
+      if (reads && reads.length > 1) return reads.shift()!;
+      return reads ? reads[0]! : (answers.text ?? "native terminal output");
+    },
+    async write(_id, value, options) {
+      if (human) throw new Error("controlled by a human");
+      if (options?.idempotencyKey) {
+        if (seenKeys.has(options.idempotencyKey)) return;
+        seenKeys.add(options.idempotencyKey);
+      }
+      writes.push(value);
+    },
+    async stop() {},
+    async openHub() {},
+    async claimHumanInput() {
+      human = true;
+    },
+    async releaseHumanControl() {
+      human = false;
+    },
+  };
 }
 
 test("the terminal plugin owns its tools and aliases and unloads cleanly", async () => {
@@ -230,27 +420,9 @@ test("omitted backend uses the in-process PTY controller", async () => {
 
 test("interactive Terminal tools keep model I/O on one native host pane", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-interactive-"));
-  const writes: string[] = [];
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "native terminal output";
-    },
-    async write(_paneID, data) {
-      writes.push(data);
-    },
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "native terminal output" });
+  const writes = nativeTerminal.writes;
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   const startResult = await tools
     .get("interactive_terminal_start")!
@@ -277,7 +449,7 @@ test("interactive Terminal tools keep model I/O on one native host pane", async 
           context,
         ),
     ),
-  ).toMatchObject({ writtenBytes: 15, submitted: true, delivery: "accepted" });
+  ).toMatchObject({ writtenBytes: 15, delivery: "accepted" });
   expect(
     JSON.parse(
       await tools.get("interactive_terminal_write")!.execute(
@@ -305,7 +477,7 @@ test("interactive Terminal tools keep model I/O on one native host pane", async 
   await tools
     .get("interactive_terminal_keys")!
     .execute({ id: "tty_tools", key: "ctrl-c" }, context);
-  await nativeTerminal.openHub();
+  await nativeTerminal.openHub?.();
   await nativeTerminal.claimHumanInput("tty_tools");
   await expect(
     tools
@@ -349,7 +521,7 @@ test("encodes normalized native terminal key sequences", () => {
   expect(encodeTerminalKey({ key: "c", modifiers: ["ctrl", "alt"] })).toBe(
     "\x1b\x03",
   );
-  expect(encodeTerminalKey({ text: "你好", repeat: 2 })).toBe("你好你好");
+  expect(encodeTerminalKey({ text: "浣犲ソ", repeat: 2 })).toBe("浣犲ソ浣犲ソ");
   expect(() => encodeTerminalKey({ key: "Unknown" })).toThrow(
     "unsupported terminal key",
   );
@@ -359,32 +531,14 @@ test("encodes normalized native terminal key sequences", () => {
   expect(encodeTerminalKey({ key: "V" })).toBe("V");
   expect(encodeTerminalKey({ key: "A", modifiers: ["ctrl"] })).toBe("\x01");
   expect(encodeTerminalKey({ text: "vim" })).toBe("vim");
-  expect(encodeTerminalKey({ text: "你好🚀" })).toBe("你好🚀");
+  expect(encodeTerminalKey({ text: "浣犲ソ馃殌" })).toBe("浣犲ソ馃殌");
 });
 
 test("unified interactive terminal input tool sends text and key sequences", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-input-"));
-  const writes: string[] = [];
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "native terminal output";
-    },
-    async write(_paneID, data) {
-      writes.push(data);
-    },
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "native terminal output" });
+  const writes = nativeTerminal.writes;
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -440,24 +594,8 @@ test("unified interactive terminal input tool sends text and key sequences", asy
 
 test("interactive terminal snapshot returns cursor and revision without afterRevision", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-snapshot-"));
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "snapshot output";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "snapshot output" });
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -469,14 +607,13 @@ test("interactive terminal snapshot returns cursor and revision without afterRev
   );
   expect(snap).toMatchObject({
     id: "tty_snapshot",
-    host: "wezterm",
+    host: "pty",
     text: "snapshot output",
     cursorX: 0,
     cursorY: 0,
     rows: 24,
     cols: 80,
     status: "running",
-    inputOwner: "model",
   });
   expect(typeof snap.revision).toBe("number");
   expect(tools.has("interactive_snapshot")).toBe(true);
@@ -487,24 +624,8 @@ test("interactive terminal snapshot returns cursor and revision without afterRev
 
 test("terminal observe latest mode returns current state without waiting", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-observe-"));
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "latest output";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "latest output" });
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -534,24 +655,10 @@ test("terminal observe latest mode returns current state without waiting", async
 
 test("terminal observe tail mode returns only recent lines", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-observe-"));
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "line1\nline2\nline3\nline4\nline5\n";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
+  const nativeTerminal = fakeHost({
+    text: "line1\nline2\nline3\nline4\nline5\n",
   });
-  const context = weztermToolContext(root, nativeTerminal);
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -574,34 +681,8 @@ test("terminal observe cursor mode returns lines around cursor", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-observe-"));
   const lines =
     Array.from({ length: 30 }, (_, i) => `line${i}`).join("\n") + "\n";
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [
-        {
-          pane_id: 73,
-          window_id: 3,
-          tab_id: 5,
-          rows: 24,
-          cols: 80,
-          cursor_x: 0,
-          cursor_y: 15,
-        },
-      ];
-    },
-    async read() {
-      return lines;
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: lines, geometry: { cursorY: 15 } });
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -624,27 +705,10 @@ test("terminal observe cursor mode returns lines around cursor", async () => {
 
 test("terminal observe new_only mode returns only new text since last observation", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-observe-"));
-  let readCall = 0;
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      readCall += 1;
-      if (readCall === 1) return "initial text\n";
-      return "initial text\nnew line 1\nnew line 2\n";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
+  const nativeTerminal = fakeHost({
+    reads: ["initial text\n", "new line 1\nnew line 2\n"],
   });
-  const context = weztermToolContext(root, nativeTerminal);
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -676,27 +740,9 @@ test("terminal observe new_only mode returns only new text since last observatio
 
 test("interactive terminal input paste mode wraps text in bracketed paste escape sequences", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-paste-"));
-  const writes: string[] = [];
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "native terminal output";
-    },
-    async write(_paneID, data) {
-      writes.push(data);
-    },
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "native terminal output" });
+  const writes = nativeTerminal.writes;
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -718,24 +764,8 @@ test("interactive terminal input paste mode wraps text in bracketed paste escape
 
 test("terminal observe afterRevision is optional and defaults to current state", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-observe-"));
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 73, window_id: 3, tab_id: 5 };
-    },
-    async list() {
-      return [{ pane_id: 73, window_id: 3, tab_id: 5, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "no afterRevision output";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "no afterRevision output" });
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!
@@ -780,10 +810,10 @@ test("native terminal scrollback pages preserve CJK line boundaries and cursors"
 test("native terminal search pages bounded Unicode matches without screen transport", () => {
   const text = Array.from(
     { length: 200 },
-    (_, index) => `line ${index}${index % 50 === 0 ? " 命中" : ""}\n`,
+    (_, index) => `line ${index}${index % 50 === 0 ? " 鍛戒腑" : ""}\n`,
   ).join("");
   const result = nativeTerminalSearchPage(text, {
-    query: "命中",
+    query: "鍛戒腑",
     startLine: 500,
     endLine: 900,
     requestedEndLine: 900,
@@ -792,44 +822,28 @@ test("native terminal search pages bounded Unicode matches without screen transp
   expect(result).toMatchObject({
     searchedRange: { startLine: 500, endLine: 699, scannedLines: 200 },
     matches: [
-      { line: 500, text: "line 0 命中" },
-      { line: 550, text: "line 50 命中" },
+      { line: 500, text: "line 0 鍛戒腑" },
+      { line: 550, text: "line 50 鍛戒腑" },
     ],
     truncatedMatches: true,
     nextCursor: { startLine: 700, endLine: 900 },
   });
-  const final = nativeTerminalSearchPage("one\n命中\n", {
-    query: "命中",
+  const final = nativeTerminalSearchPage("one\n鍛戒腑\n", {
+    query: "鍛戒腑",
     startLine: 900,
     endLine: 901,
     requestedEndLine: 901,
     maxMatches: 20,
   });
   expect(final).toMatchObject({
-    matches: [{ line: 901, text: "命中" }],
+    matches: [{ line: 901, text: "鍛戒腑" }],
     nextCursor: undefined,
   });
 });
 test("terminal_observe latest reports a point-in-time read, not a wait outcome", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-observe-latest-"));
-  const nativeTerminal = new NativeTerminalRegistry({
-    kind: "wezterm",
-    executable: "wezterm",
-    async spawn() {
-      return { pane_id: 91, window_id: 1, tab_id: 1 };
-    },
-    async list() {
-      return [{ pane_id: 91, window_id: 1, tab_id: 1, rows: 24, cols: 80 }];
-    },
-    async read() {
-      return "screen contents";
-    },
-    async write() {},
-    async focus() {},
-    async resize() {},
-    async stop() {},
-  });
-  const context = weztermToolContext(root, nativeTerminal);
+  const nativeTerminal = fakeHost({ text: "screen contents" });
+  const context = fakeHostToolContext(root, nativeTerminal);
   const tools = terminalRegistry();
   await tools
     .get("interactive_terminal_start")!

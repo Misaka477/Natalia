@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   mkdir,
   mkdtemp as createEmptyWorkspace,
@@ -36,10 +36,7 @@ import {
   workspaceMutations,
   workspaceWriteLock,
 } from "@anthelia/workspace";
-import {
-  TerminalTestRegistry as NativeTerminalRegistry,
-  WorkspaceSandboxTestManager as WorkspaceSandboxManager,
-} from "@natalia/testing";
+import { WorkspaceSandboxTestManager as WorkspaceSandboxManager } from "@natalia/testing";
 import {
   createOfficialRuntimeClient,
   restoreOfficialPluginConfig,
@@ -65,7 +62,6 @@ import {
   scriptedProvider,
   singleToolProvider,
   interactiveTerminalProvider,
-  nativeTerminalFixture,
   usageProvider,
   contextLimitThenSuccessProvider,
   toolCallingProvider,
@@ -84,7 +80,6 @@ import {
   waitForAsync,
   pollHistoryForFinished,
   sqliteContinueProvider,
-  sqliteContinueRegistry,
   sandboxedSubagentProvider,
   sandboxedDomainProvider,
   imageAttachProvider,
@@ -496,8 +491,8 @@ test("queued inputs promote in FIFO order after the active turn becomes idle", a
     sessionDir: join(root, ".natalia", "sessions"),
     sessionID: "ses_ts7_queued_promotion",
     // A session without a title makes the runtime generate one in the
-    // background — a SECOND provider request whose messages are exactly
-    // [system: "Create a concise session topic…", user: <first text>]. This
+    // background 鈥?a SECOND provider request whose messages are exactly
+    // [system: "Create a concise session topic鈥?, user: <first text>]. This
     // test counts provider requests by their last message, so that utility
     // call lands in the same bucket as the turn under test and the count
     // became a rotating flake under full-suite load (it reproduced on the
@@ -603,7 +598,7 @@ test("a queued input survives cancellation and drains on the next prompt", async
     "the queued input to drain after the next prompt",
   );
   // The CONTRACT: the queued input survived the cancel and drains only
-  // after the next admission — not the exact interleaving of the wake
+  // after the next admission 鈥?not the exact interleaving of the wake
   // turn ("resume please") and the drained input ("queued"). Those two
   // are concurrent deliveries, and under full-suite load the drain may
   // reach the provider before the wake turn's own request lands; the
@@ -1435,7 +1430,7 @@ test("restart durably rejects orphaned interactive requests from a crashed turn"
 // A real-runtime integration case: it boots a runtime and runs a provider
 // round, so its cost scales with whatever else the machine is doing. CI builds
 // the AST wasm packs and installs a toolchain in the same job, which is enough
-// to push a 60s budget over — and a hung runtime must still fail, so the budget
+// to push a 60s budget over 鈥?and a hung runtime must still fail, so the budget
 // is raised rather than the assertion loosened.
 // A real-runtime integration case: it boots a runtime and runs a provider round,
 // so its cost scales with whatever else the machine is doing. CI builds the AST
@@ -2068,7 +2063,7 @@ test("constitution rules and decisions survive replay", async () => {
   );
   // Replay must not duplicate the seeded rules: the reopened session replays
   // the original three rule_added events to the sink and the idempotent seed
-  // skips them — exactly three, not six.
+  // skips them 鈥?exactly three, not six.
   const ruleAdded = replayed.filter(
     (
       event,

@@ -2516,7 +2516,14 @@ test("releasing a pane that is not the pending one does not resume or clear stat
     sessionID: "ses_continue_negative",
     provider,
   });
-  client.start((event) => events.push(event));
+  client.start((event) => {
+    events.push(event);
+    // interactive_terminal_start is requiresApproval, so a pane the MODEL starts
+    // waits for a human answer. Without this responder the turn parks forever
+    // and the test reads as a 30s timeout rather than as what it is.
+    if (event.type === "approval.request")
+      client.respondApproval({ requestID: event.id, decision: "once" });
+  });
   try {
     await client.submitAndWait!("ask");
     expect(

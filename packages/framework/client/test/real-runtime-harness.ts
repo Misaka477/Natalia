@@ -839,7 +839,14 @@ export function sqliteContinueProvider(): StreamingProvider {
         yield { type: "done" as const };
         return;
       }
-      if (!request.messages.some((message) => message.role === "tool")) {
+      // Which step this is, counted rather than sniffed: a tool message's
+      // content is a parts array, so `String(content)` is "[object Object]" and
+      // a substring test against it is a coin flip. Counting the tool results
+      // already in the request is the same information, deterministically.
+      const toolResults = request.mesages.filter(
+        (message) => message.role === "tool",
+      ).length;
+      if (toolResults === 0) {
         // Start the pane FIRST: the pane it later asks a human about has to
         // exist. The fork registry used to pre-create it as a fixture; with the
         // host gone the runtime's own pty controller makes it here, so the id
@@ -859,13 +866,7 @@ export function sqliteContinueProvider(): StreamingProvider {
         };
         return;
       }
-      if (
-        !request.messages.some(
-          (message) =>
-            message.role === "tool" &&
-            String(message.content).includes("rh_sqlite"),
-        )
-      ) {
+      if (toolResults === 1) {
         // The pane exists now; ask the human about it.
         yield {
           type: "tool_call" as const,

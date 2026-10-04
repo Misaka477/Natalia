@@ -211,8 +211,13 @@ const proofs: Array<[string, string]> = [
     "packages/framework/object-store/native/target/release/natalia-object-store-daemon",
   ],
   ["the wasm core", "packages/framework/diff-wasm/src/natalia_diff_wasm.wasm"],
+  // Retired on this platform by decision (2026-10-04): the POSIX runtime, the
+  // release tree and the build chain no longer carry the fork's binaries. The
+  // row is annotated rather than removed because the fork itself is deleted in
+  // Phase 2 (after the ConPTY bridge flips) -- until then this line is the
+  // record of why "not built" is the correct, intended state for it.
   [
-    "wezterm (Ubuntu)",
+    "wezterm (Ubuntu) - retired",
     "packages/plugins/native-terminal/wezterm/target/release/wezterm",
   ],
   [

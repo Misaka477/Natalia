@@ -182,7 +182,8 @@ export function interactiveShellArgv(
   command: string,
   os?: NodeJS.Platform,
 ): string[] | undefined {
-  if (os !== undefined && os !== "linux" && os !== "darwin") return undefined;
+  if (os !== undefined && os !== "linux" && os !== "darwin" && os !== "win32")
+    return undefined;
   const trimmed = command.trim();
   if (trimmed.length === 0) return undefined;
   const [word, ...rest] = trimmed.split(/\s+/);
@@ -190,7 +191,9 @@ export function interactiveShellArgv(
   const integrated = integratedShellArgv(word);
   if (!integrated) return undefined;
   // The path first, then the script flags that came with it, then whatever the
-  // pane's own command line carried (`-l`, `-i`).
+  // pane's own command line carried (`-l`, `-i`). On win32 the path is already
+  // absolute in the only case that reaches here in anger (the pane's command IS
+  // a full pwsh.exe path), and resolveShellPath falls through unchanged for it.
   return [
     ...resolveShellPath(integrated.argv[0]!),
     ...integrated.argv.slice(1),

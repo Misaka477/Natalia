@@ -186,19 +186,31 @@ export function interactiveShellArgv(
     return undefined;
   const trimmed = command.trim();
   if (trimmed.length === 0) return undefined;
-  const [word, ...rest] = trimmed.split(/\s+/);
-  if (word === undefined) return undefined;
-  const integrated = integratedShellArgv(word);
-  if (!integrated) return undefined;
-  // The path first, then the script flags that came with it, then whatever the
-  // pane's own command line carried (`-l`, `-i`). On win32 the path is already
-  // absolute in the only case that reaches here in anger (the pane's command IS
-  // a full pwsh.exe path), and resolveShellPath falls through unchanged for it.
-  return [
-    ...resolveShellPath(integrated.argv[0]!),
-    ...integrated.argv.slice(1),
-    ...rest,
-  ];
+  // The whole string first, THEN the whitespace words. A Windows pane's
+  // command is a full path with spaces in it — `C:\Program
+  // Files\PowerShell\7\pwsh.exe` — and splitting on whitespace first cuts it
+  // at "C:\Program", so the pwsh row never matched and the pane fell to the
+  // POSIX login-shell wrapper (measured on the Windows runner: the pane ran
+  // `bash.exe --rcfile ... -lc "<the pwsh path>"` and died 1.7s in). Existing
+  // file first, words second: the POSIX `bash -l` spelling still splits as
+  // before, and the Windows path survives whole.
+  const words = trimmed.split(/\s+/);
+  const candidates = existsSync(trimmed) ? [trimmed] : words;
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
+    const integrated = integratedShellArgv(candidate);
+    if (!integrated) continue;
+    // The path first, then the script flags that came with it, then whatever the
+    // pane's own command line carried (`-l`, `-i`) — the remainder only applies
+    // to the word-shaped candidate; a whole-path candidate already carries all.
+    const rest = candidate === trimmed ? [] : words.slice(1);
+    return [
+      ...resolveShellPath(integrated.argv[0]!),
+      ...integrated.argv.slice(1),
+      ...rest,
+    ];
+  }
+  return undefined;
 }
 
 /**

@@ -570,31 +570,18 @@ function defaultSpawn(input?: {
 }): PtyFactory {
   return (options) => {
     if (process.platform === "win32") {
-      // The ConPTY bridge (a real byte stream, the Linux-route equivalent) is
-      // opt-in: NATALIA_TERMINAL_CONPTY=1. It rendered correctly in early
-      // runs but later began producing a mute pane (console initialized, no
-      // screen bytes) whose trigger was not found - so the default stays the
-      // WezTerm mux pane adapter, which paints the prompt, the caret and the
-      // echo through the stream diff. The bridge code stays compiled and
-      // staged; this is the runtime's choice, not the code's.
-      const conptyRequested = process.env.NATALIA_TERMINAL_CONPTY === "1";
-      if (conptyRequested) {
-        try {
-          return spawnWithConptyBridge(options);
-        } catch (error) {
-          const registry = input?.nativeTerminal?.();
-          if (registry) return spawnWithWezTermPty(registry, options);
-          throw error;
-        }
-      }
-      const registry = input?.nativeTerminal?.();
-      if (registry) return spawnWithWezTermPty(registry, options);
-      if (typeof Bun !== "undefined") return spawnWithPythonPty(options);
-      try {
-        return spawnWithNodePty(options);
-      } catch {
-        return spawnWithPythonPty(options);
-      }
+      // The ConPTY bridge is the Windows default. Not an opt-in: the mute pane
+      // it once produced (P23) is fixed and verified — the Windows CI's
+      // conpty-native drives round-trip the typed line AND the command's
+      // answer, the pane paints, and the exit frame reads the child's code —
+      // and the two alternatives on this platform are dead weights on any
+      // default build: the WezTerm mux adapter needs the fork's three natives
+      // (the retirement removed them from the build), and the Python bridge
+      // needs the POSIX pty module (a runner pane died on `fcntl` before this
+      // flip, logged verbatim in pwsh-e2e). A missing bridge binary throws with
+      // its build command in the message: loud, never a silent degrade to a
+      // pane that cannot start.
+      return spawnWithConptyBridge(options);
     }
     // POSIX: the Rust bridge is the default when it is built — the byte path
     // the user's performance decision asked for — with the Python bridge as

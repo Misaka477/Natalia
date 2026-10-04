@@ -440,7 +440,9 @@ test("P23's fix re-applies the viewport before any output can flow", () => {
   // The POSIX bridge honours the spec's env overlay; the ConPTY one does not.
   expect(controller).toContain('env.update(spec.get("env") or {})');
   expect(bridge).toContain("DIVERGENCE");
-  // The ConPTY route stays opt-in: the mute pane is not verified fixed here, so
-  // nothing may quietly change the default.
-  expect(controller).toContain('NATALIA_TERMINAL_CONPTY === "1"');
+  // The ConPTY bridge is the Windows default, and this is the pin that says so:
+  // no env request may stand between the controller and it. (The mute pane
+  // that once justified the opt-in is fixed and CI-verified on the runner.)
+  expect(controller).toContain("spawnWithConptyBridge(options)");
+  expect(controller).not.toContain("NATALIA_TERMINAL_CONPTY");
 });

@@ -205,10 +205,10 @@ target/release 那一长串路径**——解压出来的目录结构本身就长
 可执行文件缺一个，就直接抛 `missing terminal executable wezterm.exe`。
 要打 Windows 分发，就把编译好的三个文件**同时**投到这两处。
 
-**ConPTY 桥（`natalia-conpty-bridge.exe`，我们自己的原生件）**目前由
-`native-terminal:build-conpty:windows` 编到 `prebuilt/windows-x64/`，
-运行时默认**不启用**（`NATALIA_TERMINAL_CONPTY=1` 开启，mute-pane 缺陷
-见 issue #2）——它是默认翻转后整链删除 fork 的前提。
+**ConPTY 桥（`natalia-conpty-bridge.exe`，我们自己的原生件）由
+`native-terminal:build-conpty:windows` 编到 `prebuilt/windows-x64/`，运行时
+**就是\*\* Windows 的默认 PTY（P23 mute pane 已修，输入/输出/退出在 Windows CI
+的真 ConPTY 上闭环）；二进制缺失会带着构建命令明文抛错，不静默降级。
 
 ## 5. 从源码跑（Windows / Linux 通用）
 

@@ -112,6 +112,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "explicit-history",
     note: "the self-review's violations input: D1/D2's invariant.violation facts behind ensureSessionFullEvents — the study's sanctioned class",
   },
+  "packages/framework/client/src/runtime/terminal-runtime/native-terminal.ts": {
+    count: 1,
+    cls: "state-first",
+    note: "resident-default for the terminal's projection input",
+  },
   "packages/framework/client/src/runtime/provider-selection/selection.ts": {
     count: 2,
     cls: "derivation",
@@ -209,7 +214,14 @@ export async function findFullReadInventoryViolations(
         /\.(?:ts|tsx)$/u.test(entry.name) &&
         !/\.(?:test|spec)\.[cm]?tsx?$/u.test(entry.name)
       ) {
-        const rel = full.slice(repoRoot.length + 1);
+        // Forward slashes, always: `join` produces the platform's own
+        // separator, and the inventory's keys are written with `/`. On Windows
+        // the un-normalized key misses the table (every entry reads as
+        // "no inventory entry") and every table entry reads as "no such source
+        // exists" — two wrong reports from one wrong comparison, which is how a
+        // correct entry once got pruned on the strength of a Windows-only
+        // artifact. Same discipline as the release self-check's walk.
+        const rel = full.slice(repoRoot.length + 1).replaceAll("\\", "/");
         seen.add(rel);
         const text = await Bun.file(full)
           .text()

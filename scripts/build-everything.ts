@@ -130,14 +130,6 @@ const steps: Step[] = [
     run: () => command(["run", "licenses:check"]),
   },
   {
-    name: "the wezterm fork, Windows (the cross build's three .exe)",
-    skipFlag: "--skip-wezterm-windows",
-    // The colon form, not the dash one: the dash named a script package.json
-    // has never carried, so this step died with "Missing script" on any host
-    // that reached it — found while retiring the Ubuntu twin beside it.
-    run: () => command(["run", "native-terminal:build-wezterm:windows-cross"]),
-  },
-  {
     name: "the plugin distribution",
     run: () => {
       const built = command(["run", "build:distribution"], {
@@ -211,19 +203,6 @@ const proofs: Array<[string, string]> = [
     "packages/framework/object-store/native/target/release/natalia-object-store-daemon",
   ],
   ["the wasm core", "packages/framework/diff-wasm/src/natalia_diff_wasm.wasm"],
-  // Retired on this platform by decision (2026-10-04): the POSIX runtime, the
-  // release tree and the build chain no longer carry the fork's binaries. The
-  // row is annotated rather than removed because the fork itself is deleted in
-  // Phase 2 (after the ConPTY bridge flips) -- until then this line is the
-  // record of why "not built" is the correct, intended state for it.
-  [
-    "wezterm (Ubuntu) - retired",
-    "packages/plugins/native-terminal/wezterm/target/release/wezterm",
-  ],
-  [
-    "wezterm (Windows)",
-    "packages/plugins/native-terminal/wezterm/target/release/wezterm.exe",
-  ],
   ["the plugin distribution", "dist/ts/plugins"],
   ["the linux release", "dist/release"],
 ];

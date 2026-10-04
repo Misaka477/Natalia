@@ -50,22 +50,17 @@ const targets = explicit
     : [`bun-${hostTarget}` as const];
 
 /**
- * The terminal executables are per-platform, and on the way out.
+ * The terminal executables are per-platform, and there is exactly one now.
  *
- * The interactive terminal's default backend is this repo's own PTY controller
- * (an in-process document plus the platform's PTY bridge — the Rust bridge on
- * POSIX, the ConPTY helper on Windows), which needs no terminal executables at
- * all. The fork's three binaries remain in the WINDOWS release only, and only
- * because the Windows pane still runs inside the mux until the ConPTY bridge's
- * mute-pane defect (issue #2) is fixed and the default flips. A POSIX release
- * therefore carries NO wezterm directory: measured by hiding the three
- * executables and running the terminal suite green (193 tests), the Linux
- * runtime path never touches them. Shipping them anyway was 240 MB of dead
- * weight per release.
- *
- * The POSIX branch still REMOVES a staged copy if one is there (the shared
- * dist/ts carries whichever platform staged last), so the release tree states
- * the new contract rather than inheriting the old one.
+ * The interactive terminal's backend is this repo's own PTY controller (an
+ * in-process document plus the platform's PTY bridge — the Rust bridge on
+ * POSIX, the ConPTY helper on Windows), which needs no terminal executables
+ * at all: the fork's three binaries rode the WINDOWS release only while the
+ * Windows pane still ran inside the mux, and that ended when the ConPTY
+ * bridge became the default (P23 fixed, 2026-10-04). A release tree therefore
+ * carries NO wezterm directory — only the platform's own bridge, in its own
+ * `pty-bridge/` directory so no trim of another tier can take it with it
+ * (the bug that once shipped a bridge-less Windows release).
  */
 async function stageTerminalNatives(
   outDir: string,
@@ -76,7 +71,7 @@ async function stageTerminalNatives(
   // Our own bridge, in its OWN directory — and the fix for the bug that made
   // a Windows release ship with no bridge at all (measured): the ConPTY binary
   // used to ride `wezterm/` beside the fork's trio, and the retirement's
-  // POSIX trim below deleted it. Separate directories, separate owners.
+  // POSIX trim deleted it. Separate directories, separate owners.
   const bridgeDir = join(pluginDir, "pty-bridge");
   const isWindows = platformDir.startsWith("windows");
   const bridgeName = isWindows
@@ -94,22 +89,6 @@ async function stageTerminalNatives(
     );
   await mkdir(bridgeDir, { recursive: true });
   await cp(join(prebuilt, bridgeName), join(bridgeDir, bridgeName));
-  const weztermDir = join(pluginDir, "wezterm");
-  const forkRelease = join(
-    root,
-    "packages/plugins/native-terminal/wezterm/target/release",
-  );
-  await rm(weztermDir, { recursive: true, force: true });
-  if (!isWindows) return;
-  await mkdir(weztermDir, { recursive: true });
-  for (const name of ["wezterm", "wezterm-gui", "wezterm-mux-server"]) {
-    const executable = `${name}.exe`;
-    if (!(await Bun.file(join(forkRelease, executable)).exists()))
-      throw new Error(
-        `${platformDir}: the terminal's ${executable} is not built — run the Windows wezterm cross build before packaging`,
-      );
-    await cp(join(forkRelease, executable), join(weztermDir, executable));
-  }
 }
 
 /**
@@ -278,15 +257,11 @@ async function verifyRelease(
   ])
     if (await Bun.file(join(outDir, forbidden)).exists())
       problems.push(`machine-local state shipped: ${forbidden}/`);
-  // The terminal natives, and their retirement: a POSIX release carries NONE
-  // (the self-developed pty backend needs no executables — see
-  // stageTerminalNatives), and a stray directory there is the old contract
-  // coming back, which fails the build. Windows still carries its three until
-  // the ConPTY bridge flips (issue #2), with the positive-shape check: a
-  // windows release must not carry a bare binary, a posix one must not exist
-  // at all. (The old check's trap: `endsWith` against the empty suffix passes
-  // every string — which is how the first version passed a linux release full
-  // of wezterm.exe.)
+  // The terminal natives: the retired fork tier makes NO appearance in any
+  // release now — a stray wezterm/ directory is the old contract coming back
+  // and fails the build (the negative check's trap was real: `endsWith`
+  // against the empty suffix passes everything, which is how a linux release
+  // once shipped full of wezterm.exe).
   const weztermDir = join(
     outDir,
     "plugins",
@@ -294,24 +269,12 @@ async function verifyRelease(
     "wezterm",
   );
   if (await isFile(join(weztermDir, "..", "index.js"))) {
-    if (!platformDir.startsWith("windows")) {
-      if (await isDir(weztermDir))
-        problems.push(
-          "a posix release carries a wezterm/ directory — the pty backend " +
-            "needs no terminal executables, so this is the retired tier back",
-        );
-    } else {
-      const entries = await readdir(weztermDir).catch(() => []);
-      if (entries.length !== 3)
-        problems.push(
-          `the terminal carries ${entries.length} executables, expected 3`,
-        );
-      for (const entry of entries)
-        if (!entry.endsWith(".exe"))
-          problems.push(
-            `the ${platformDir} release carries a foreign terminal binary: ${entry}`,
-          );
-    }
+    if (await isDir(weztermDir))
+      problems.push(
+        "a release carries a wezterm/ directory — the fork tier is retired; " +
+          "the pty backend needs no terminal executables, so this is the old " +
+          "contract back",
+      );
   }
   // The bridge, positive shape: every release carries ITS platform's pty
   // bridge, ours, in its own directory. The negative case existed first and
@@ -358,7 +321,6 @@ async function verifyRelease(
     );
   console.log(
     `verified ${platformDir}: layout, no machine-local state, ` +
-      `${platformDir.startsWith("windows") ? "windows terminal tier" : "no terminal executables (pty backend)"}, ` +
       `pty-bridge/${expectedBridge}, ` +
       `${files.length} files checksummed`,
   );

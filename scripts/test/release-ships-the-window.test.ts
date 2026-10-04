@@ -125,40 +125,39 @@ test("a cross-platform release names the host build ITS platform needs", () => {
   expect(source).toContain("desktop:cef:build (on macOS)");
 });
 
-test("a posix release carries no terminal executables — the tier is retired", () => {
+test("no release carries the fork's executables — the tier is retired", () => {
   // The interactive terminal's default is the self-developed pty controller;
-  // the fork's three binaries were dead weight on POSIX (measured: the whole
-  // terminal suite passes with them hidden). The release now states that
-  // contract instead of shipping 240 MB nobody runs.
+  // the fork's three binaries were the Windows pane's PTY only until the
+  // ConPTY bridge became the default (P23 fixed, 2026-10-04). They are gone
+  // from every release now — measured history: 240 MB of dead weight per POSIX
+  // release, and a Windows release that once shipped with no bridge at all
+  // because the fork trim took the shared directory with it.
   const source = script();
-  // The staging skips the fork's three on POSIX after trimming whatever the
-  // shared dist carried (the bridge is staged per platform either way — see
-  // the pty-bridge pin below).
+  // The staging stages our bridge, per platform, and nothing else: no fork
+  // release dir read, no trio copy.
   const staging = source.slice(
     source.indexOf("async function stageTerminalNatives"),
     source.indexOf("async function stageDesktopHost"),
   );
-  expect(staging).toContain("if (!isWindows) return;");
+  expect(staging).not.toContain("forkRelease");
+  expect(staging).not.toContain('"wezterm"');
+  expect(staging).toContain('join(pluginDir, "pty-bridge")');
   // And the verifier treats a surviving directory as the retired tier coming
   // back, not as a platform accident: the message names the retirement.
-  expect(source).toContain("a posix release carries a wezterm/ directory");
+  expect(source).toContain("a release carries a wezterm/ directory");
   expect(source).toContain("the pty backend");
 });
 
-test("ts-build stages the fork's trio on a Windows build only", () => {
-  // Same retirement, one layer down: the distribution's plugin package must
-  // not advertise a wezterm tier on POSIX. The trio is Windows-only now.
+test("ts-build stages the pty bridge and no fork tier", () => {
+  // The distribution's plugin package must not advertise a wezterm tier on
+  // any platform — the fork staging is deleted, not gated.
   const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
-  expect(source).toContain('process.platform === "win32"');
-  // The trio is named on the Windows side of the fork condition.
-  const condition = source.slice(
-    source.indexOf("const forkExecutables = ("),
-    source.indexOf(");", source.indexOf("const forkExecutables = (")),
-  );
-  for (const name of ['"wezterm"', '"wezterm-gui"', '"wezterm-mux-server"'])
-    expect(condition, `${name} belongs on the Windows list`).toContain(name);
-  // And the empty POSIX list still trims a stale directory, so the plugin's
-  // release files can say the tier does not exist.
+  expect(source).not.toContain("forkExecutables");
+  expect(source).not.toContain('join(packageOutdir, "wezterm")');
+  expect(source).not.toContain("wezterm-command-worker");
+  // The bridge staging stays, with the honest distribution-mode message the
+  // skipNative path prints.
+  expect(source).toContain('join(packageOutdir, "pty-bridge")');
   expect(source).toContain("distribution mode — the native executables");
 });
 

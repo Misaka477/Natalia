@@ -25,20 +25,20 @@ export const timeoutSchema = z.object({
 export const terminalWindowConfigSchema = z.object({
   windowMode: z.enum(["auto", "windowless", "window"]).default("auto"),
   /**
-   * The terminal backend. `pty` — this repo's own controller (an in-process
-   * document, the platform's PTY bridge, the web panel's xterm renderer) — is
-   * the default and the only supported value.
+   * The terminal backend. The WezTerm fork is gone (the user's decision,
+   * 2026-10-04): the interactive terminal is the self-developed stack — an
+   * in-process document, the platform's PTY bridge (the Rust bridge on POSIX,
+   * the ConPTY bridge on Windows), the web panel's xterm renderer. There is
+   * one value now, and it is what the runtime always used.
    *
-   * `wezterm` is DEPRECATED as of the retirement decision: the interactive
-   * terminal is the self-developed stack, and the fork's binaries already
-   * ship in the WINDOWS release only (the Windows pane still runs in the mux
-   * until the ConPTY bridge's mute-pane defect is fixed). The value stays
-   * accepted so an old config keeps parsing; it selects a controller whose
-   * POSIX releases no longer carry executables, so on Linux it fails at pane
-   * start with the fork's own "not built" error. The value and the controller
-   * behind it are removed once the ConPTY bridge flips on Windows.
+   * The value stays in the schema rather than being dropped because an old
+   * config that says `"wezterm"` must still PARSE: a missing field on a
+   * required key is a parse error, and a user's existing config is not the
+   * place to teach them the retirement. The controller behind the value no
+   * longer exists, so anything asking for it gets the pty backend — the
+   * document is honest about there being no other answer.
    */
-  backend: z.enum(["wezterm", "pty"]).default("pty"),
+  backend: z.literal("pty").default("pty"),
 });
 
 /**

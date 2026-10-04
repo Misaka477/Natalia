@@ -118,7 +118,7 @@ test("a changed config is a different generation", async () => {
       buildGeneration({
         config: {
           ...CONFIG,
-          runtime: { terminal: { backend: "wezterm", windowMode: "auto" } },
+          runtime: { terminal: { backend: "pty", windowMode: "windowless" } },
         } as Generation["config"],
         catalog: CATALOG,
         policyRows: [],

@@ -48,7 +48,7 @@ function stubClient(): RuntimeClient {
     async nativeTerminalStart(input) {
       return {
         id: input.id ?? "term_1",
-        host: "wezterm",
+        host: "pty",
         paneID: 1,
         windowID: 1,
         muxWindowID: 1,
@@ -75,7 +75,7 @@ function stubClient(): RuntimeClient {
     async nativeTerminalResize(input) {
       return {
         id: input.id,
-        host: "wezterm",
+        host: "pty",
         paneID: 1,
         windowID: 1,
         muxWindowID: 1,

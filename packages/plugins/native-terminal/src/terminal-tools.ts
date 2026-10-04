@@ -418,7 +418,7 @@ function terminalObserveTool(): RuntimeTool {
         const snapshot = await requireNativeTerminal(context).snapshot(id);
         return JSON.stringify({
           id,
-          host: "wezterm",
+          host: "pty",
           revision: snapshot.revision,
           currentRevision: snapshot.revision,
           afterRevision,
@@ -477,7 +477,7 @@ function terminalObserveTool(): RuntimeTool {
       return JSON.stringify(
         {
           id,
-          host: "wezterm",
+          host: "pty",
           revision: observation.session.revision,
           currentRevision: observation.session.revision,
           afterRevision: observation.afterRevision,
@@ -732,7 +732,7 @@ function interactiveSnapshotTool(): RuntimeTool {
       const snapshot = await requireNativeTerminal(context).snapshot(id);
       return JSON.stringify({
         id,
-        host: "wezterm",
+        host: "pty",
         ...snapshot,
       });
     },

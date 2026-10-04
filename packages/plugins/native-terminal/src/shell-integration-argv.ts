@@ -195,7 +195,16 @@ export function interactiveShellArgv(
   // file first, words second: the POSIX `bash -l` spelling still splits as
   // before, and the Windows path survives whole.
   const words = trimmed.split(/\s+/);
-  const candidates = existsSync(trimmed) ? [trimmed] : words;
+  // The whole string first (a Windows path with spaces in it, which splitting
+  // would cut in half), and otherwise THE FIRST WORD ONLY. A pane whose command
+  // IS a shell is `bash` or `bash -l`; a command that merely CONTAINS a shell's
+  // name later on is a command, not a shell pane — `exec bash --norc
+  // --noprofile` runs under the managed `sh -lc` wrapper and must stay there.
+  // Trying every word is what turned that into `bash --rcfile <script> bash
+  // --norc --noprofile`: the outer shell integrated, then ran the inner bash as
+  // a command, and the pane exited before its first read (the CLI dev smoke
+  // failed exactly there, "terminal session has exited").
+  const candidates = existsSync(trimmed) ? [trimmed] : [words[0]];
   for (const candidate of candidates) {
     if (candidate === undefined) continue;
     const integrated = integratedShellArgv(candidate);

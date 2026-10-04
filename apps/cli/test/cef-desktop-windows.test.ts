@@ -187,14 +187,22 @@ test("the wasm builds carry no POSIX-only shell or path", () => {
   expect(textDiff).not.toContain('join(root, ".cargo-home")');
 });
 
-test("ts-build reads the wezterm executables from the fork's release dir", () => {
-  // The pin that keeps the two wezterm drop directories honest: the distribution
-  // build stages from `wezterm/target/release/` and fails loudly on a miss,
-  // while the RUNTIME resolves through the prebuilt drop. They are different
-  // consumers, so "I dropped the exe in prebuilt" does not satisfy the packager.
+test("ts-build stages the pty bridges, and says so loudly on a miss", () => {
+  // The pin that keeps the two drop directories honest. Before the fork
+  // retirement these were the wezterm executables staged from
+  // `wezterm/target/release/`; what ships now is this repo's OWN bridges — the
+  // Rust one on POSIX (`native-terminal:build-pty-bridge`), the ConPTY one on
+  // Windows (`build-conpty:windows`) — into `plugins/<terminal>/pty-bridge/`.
+  // The distribution build stages from there and fails loudly on a miss, while
+  // the RUNTIME resolves through the prebuilt drop: different consumers, so
+  // "I dropped it in prebuilt" does not satisfy the packager.
   const source = readFileSync(join(root, "scripts", "ts-build.ts"), "utf8");
-  expect(source).toContain('join(root, "wezterm/target/release")');
-  expect(source).toContain("missing terminal executable");
+  expect(source).toContain('"pty-bridge"');
+  expect(source).toContain("missing pty bridge");
+  expect(source).toContain("natalia-conpty-bridge.exe");
+  expect(source).toContain("natalia-pty-bridge");
+  // The fork makes NO appearance in the build path.
+  expect(source).not.toContain("wezterm/target/release");
   // And the skip is explicit, not an accident of a missing file.
   expect(source).toContain("NATALIA_BUILD_SKIP_NATIVE");
 });

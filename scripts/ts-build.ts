@@ -6,10 +6,11 @@ import solid from "vite-plugin-solid";
 /**
  * Two modes, one script:
  *
- * - default (the release mode): everything, including staging the WezTerm
- *   fork's native executables — which must exist because the fork is built
- *   on Ubuntu inside podman (build-wezterm-ubuntu.ts). A checkout without
- *   them (CI, a fresh clone) fails loudly here rather than shipping a
+ * - default (the release mode): everything, including staging our own PTY
+ *   bridges — the ConPTY bridge on Windows, the Rust bridge on POSIX — which
+ *   must exist because they are built by their own scripts
+ *   (`native-terminal:build-conpty:windows` / `:build-pty-bridge`). A checkout
+ *   without them (CI, a fresh clone) fails loudly here rather than shipping a
  *   plugin distribution whose terminal cannot start.
  * - `NATALIA_BUILD_SKIP_NATIVE=1` (the distribution mode, `npm run
  *   build:distribution`): everything the TEST SUITE needs — the CLI bundle

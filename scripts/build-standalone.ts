@@ -128,10 +128,10 @@ function hostBuildCommand(platformDir: string): string {
  *
  * (macOS NOTE: this has a .app-aware branch, but no macOS release exists to feed
  * it — `--all` deliberately builds only host + windows-x64, because a macOS
- * release would ship without the terminal's natives and `build-wezterm-*.ts`
- * covers ubuntu and windows only. The branch is here so the day a mac terminal
- * build lands, this step needs no change; until then it is unreachable, and that
- * is the deferral's doing rather than an oversight.)
+ * release would ship without the terminal's natives and the bridge build
+ * scripts cover ubuntu and windows only. The branch is here so the day a mac
+ * terminal build lands, this step needs no change; until then it is
+ * unreachable, and that is the deferral's doing rather than an oversight.)
  *
  * `release:build` compiles the CLI bundle and the plugins; the desktop WINDOW is
  * a separate build (`npm run desktop:cef:build`) whose output lived only in

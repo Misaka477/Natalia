@@ -39,17 +39,41 @@ test("a missing host fails the build rather than shipping an empty app", () => {
 });
 
 test("the CEF runtime travels with the binary", () => {
-  // libcef without its .pak files and locales starts and immediately dies on a
-  // missing resource, so the host build's own output is what gets copied.
+  // libcef without its .pak files, its locales and its ANGLE shader compilers
+  // starts and immediately dies (0xC0000135, no output at all), so the host
+  // build's own output is what gets copied — ALL of it.
+  //
+  // The first version of this test pinned the names in a hand-written list,
+  // which is the thing that was broken: that list held the LINUX EGL names and
+  // not the Windows ones, and `Bun.file().exists()` hid `locales/` because it is
+  // a directory. A list cannot track what CEF links against across versions, so
+  // the test now pins the shape that needs no list — a walk over the assembled
+  // output, an explicit exclusion of build-only artifacts, and a release-time
+  // guard naming the Windows hard dependencies.
   const source = script();
-  for (const required of [
-    "libcef.so",
-    "libcef.dll",
-    "libcef.dylib",
-    "icudtl.dat",
-    "locales",
-  ])
-    expect(source, `missing ${required}`).toContain(required);
+  expect(source, "the runtime is copied whole, not from a list").toContain(
+    "await readdir(built, { withFileTypes: true })",
+  );
+  expect(source, "build-only artifacts are excluded by name").toContain(
+    "const buildOnly = new Set(",
+  );
+  expect(
+    source,
+    "skipped entries are the build's, not the runtime's",
+  ).toContain('"libcef.lib"');
+  // And the guard that makes a future incomplete runtime fail the build.
+  expect(source, "the release checks the Windows hard dependencies").toContain(
+    '"d3dcompiler_47.dll"',
+  );
+  expect(source, "the software-rendering fallback is required").toContain(
+    '"vk_swiftshader.dll"',
+  );
+  expect(source, "ANGLE's shader compilers are required").toContain(
+    '"dxcompiler.dll"',
+  );
+  expect(source, "locales is checked with a stat, not Bun.file").toContain(
+    "locales/ is missing",
+  );
 });
 
 test("the web shell ships too, or the window has nothing to show", () => {

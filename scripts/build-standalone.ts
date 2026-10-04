@@ -175,25 +175,46 @@ async function stageDesktopHost(
         `which is why the command names the platform rather than assuming it).`,
     );
   await cp(source, join(outDir, `natalia-cef-desktop${suffix}`));
-  // The CEF runtime it loads, which the host build already assembled beside
-  // itself (libcef, the .pak files, locales). Without them the binary starts and
-  // immediately dies on a missing shared library, so they travel together.
-  for (const name of [
-    "libcef.so",
-    "libcef.dll",
-    "libcef.dylib",
-    "libEGL.so",
-    "libGLESv2.so",
-    "icudtl.dat",
-    "chrome_100_percent.pak",
-    "chrome_200_percent.pak",
-    "resources.pak",
-    "v8_context_snapshot.bin",
-    "locales",
-  ]) {
-    const candidate = join(built, name);
-    if (!(await Bun.file(candidate).exists())) continue;
-    await cp(candidate, join(outDir, name), { recursive: true });
+  // The CEF runtime it loads, taken WHOLE from what the host build already
+  // assembled beside itself.
+  //
+  // The hand-written subset this replaces was wrong twice over, and both were
+  // invisible until an installed copy was launched:
+  //
+  //   1. `locales` is a DIRECTORY, and the loop asked
+  //      `Bun.file(candidate).exists()` — false for a directory — so the locale
+  //      files were skipped on every platform. Same `Bun.file()` trap the
+  //      forbidden-state guard fell into.
+  //   2. The EGL/GLES entries were the LINUX names (`libEGL.so`,
+  //      `libGLESv2.so`); the Windows spellings (`libEGL.dll`,
+  //      `libGLESv2.dll`) were never listed. Neither were `d3dcompiler_47.dll`,
+  //      `dxcompiler.dll`, `dxil.dll` (ANGLE's shader compilers, which
+  //      libcef.dll links against), `vk_swiftshader.dll`, `vulkan-1.dll` (the
+  //      software-rendering fallback) or `chrome_elf.dll`.
+  //
+  // The symptom: the installed host died instantly with 0xC0000135
+  // (STATUS_DLL_NOT_FOUND) and printed nothing — "I installed it and it won't
+  // open". A hand-maintained list cannot track what CEF links against across
+  // versions, so the runtime travels as the build assembled it.
+  const buildOnly = new Set([
+    // Not runtime: the import library, CEF's own log, and the bootstrap
+    // stagers the host build uses to relaunch itself.
+    "libcef.lib",
+    "debug.log",
+    "bootstrap.exe",
+    "bootstrapc.exe",
+    // The uninstaller and installer script belong to the packaging step, and
+    // shipping them beside the app would let an installer overwrite them.
+    "unins000.dat",
+    "unins000.exe",
+    "unins000.msg",
+    "Natalia.iss",
+  ]);
+  for (const entry of await readdir(built, { withFileTypes: true })) {
+    if (buildOnly.has(entry.name)) continue;
+    await cp(join(built, entry.name), join(outDir, entry.name), {
+      recursive: true,
+    });
   }
 }
 
@@ -271,6 +292,41 @@ async function verifyRelease(
     } catch {
       // Absent, which is the only passing answer.
     }
+  }
+  // The CEF runtime's hard dependencies. An installed host died with
+  // 0xC0000135 (STATUS_DLL_NOT_FOUND) and no output at all because the release
+  // shipped a HAND-WRITTEN SUBSET of what the host build assembled — the list
+  // had the Linux EGL names and not the Windows ones, skipped `locales/` (a
+  // directory, invisible to `Bun.file().exists()`), and never mentioned ANGLE's
+  // shader compilers or the software-rendering fallback. `stageDesktopHost` now
+  // copies the whole assembled runtime; this guard is what keeps it that way,
+  // and it is checked against the Windows release because that is where the
+  // host ships.
+  if (platformDir.startsWith("windows")) {
+    for (const required of [
+      "libcef.dll",
+      "libEGL.dll",
+      "libGLESv2.dll",
+      "d3dcompiler_47.dll",
+      "dxcompiler.dll",
+      "dxil.dll",
+      "vk_swiftshader.dll",
+      "vulkan-1.dll",
+      "chrome_elf.dll",
+      "icudtl.dat",
+      "resources.pak",
+      "v8_context_snapshot.bin",
+    ])
+      if (!(await isFile(join(outDir, required))))
+        problems.push(
+          `the CEF runtime is incomplete: ${required} is missing — the window ` +
+            `host would die with STATUS_DLL_NOT_FOUND on launch`,
+        );
+    if (!(await isDir(join(outDir, "locales"))))
+      problems.push(
+        "the CEF runtime is incomplete: locales/ is missing — a stat, because " +
+          "Bun.file().exists() does not see a directory",
+      );
   }
   // The terminal natives: the retired fork tier makes NO appearance in any
   // release now — a stray wezterm/ directory is the old contract coming back

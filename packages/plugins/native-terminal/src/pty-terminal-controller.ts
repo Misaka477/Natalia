@@ -55,7 +55,7 @@ const MAX_BYTE_WINDOW = 64 * 1024;
 /**
  * A caller's geometry, or the default when it is absent or nonsense.
  *
- * A negative or zero grid is not a small terminal, it is an invalid one — and
+ * A negative or zero grid is not a small terminal, it is an invalid one 鈥?and
  * spawning at it produces a pty no program can draw into, so it falls back
  * rather than clamps up to one row. The upper bound stops a caller from
  * allocating an absurd grid for a screen that does not exist.
@@ -153,7 +153,7 @@ export type PtyTerminalControllerInput = {
   windowMode(): "auto" | "windowless" | "window";
   backend?: "wezterm" | "pty";
   /**
-   * The WezTerm host registry, when one exists — a GETTER because the registry
+   * The WezTerm host registry, when one exists 鈥?a GETTER because the registry
    * is built by the host controller's init. The PTY backend uses it on Windows
    * for its pane: the in-process PTYs it has everywhere else (node-pty, the
    * Python bridge) do not exist there, and a mux pane is a real PTY the panel
@@ -227,7 +227,7 @@ def handle_line(line):
         return False
     return True
 
-# A message can arrive in the same socket read as the startup spec — the host
+# A message can arrive in the same socket read as the startup spec 鈥?the host
 # writes its first input the instant start() returns, before this interpreter
 # has finished booting. read_line leaves such a line in pending, and the
 # select loop below only reacts to NEW bytes, so without this drain the first
@@ -371,7 +371,7 @@ function spawnWithNodePty(options: PtySpawnOptions): PtyProcess {
  * POSIX implementation is the Rust bridge (native/pty-bridge), with the Python
  * one as its fallback; the Windows one is the ConPTY helper. The controller,
  * the panel and the model see the same real byte stream from either, so the
- * bridge in use is a detail of this file — which is what makes them
+ * bridge in use is a detail of this file 鈥?which is what makes them
  * interchangeable, and what the two-bridge suite run proves.
  */
 function spawnPtyBridge(
@@ -509,9 +509,9 @@ function rustBridgeBuildDir(): string {
 /**
  * The POSIX PTY, in Rust: packages/plugins/native-terminal/native/pty-bridge.
  *
- * The same wire protocol as the Python bridge — a JSON spec line in, `{kind}
+ * The same wire protocol as the Python bridge 鈥?a JSON spec line in, `{kind}
  * {len}` frames and a `{pid}` handshake out, the same control lines, the same
- * DSR answer — so the controller cannot tell them apart. Why it exists: this
+ * DSR answer 鈥?so the controller cannot tell them apart. Why it exists: this
  * process touches every byte of every pane, and `cat`-ing a large file was
  * interpreter throughput in Python. The search mirrors the ConPTY helper's:
  * the prebuilt drop first (a downloaded Natalia's answer), then the crate's
@@ -571,10 +571,9 @@ function defaultSpawn(input?: {
   return (options) => {
     if (process.platform === "win32") {
       // The ConPTY bridge is the Windows default. Not an opt-in: the mute pane
-      // it once produced (P23) is fixed and verified — the Windows CI's
+      // it once produced (P23) is fixed and verified 鈥?the Windows CI's
       // conpty-native drives round-trip the typed line AND the command's
-      // answer, the pane paints, and the exit frame reads the child's code —
-      // and the two alternatives on this platform are dead weights on any
+      // answer, the pane paints, and the exit frame reads the child's code 鈥?      // and the two alternatives on this platform are dead weights on any
       // default build: the WezTerm mux adapter needs the fork's three natives
       // (the retirement removed them from the build), and the Python bridge
       // needs the POSIX pty module (a runner pane died on `fcntl` before this
@@ -583,8 +582,8 @@ function defaultSpawn(input?: {
       // pane that cannot start.
       return spawnWithConptyBridge(options);
     }
-    // POSIX: the Rust bridge is the default when it is built — the byte path
-    // the user's performance decision asked for — with the Python bridge as
+    // POSIX: the Rust bridge is the default when it is built 鈥?the byte path
+    // the user's performance decision asked for 鈥?with the Python bridge as
     // the fallback, so a missing binary degrades instead of failing. The env
     // var names one explicitly: "rust" THROWS when the binary is absent (a
     // run that asked for the Rust bridge must not silently measure the Python
@@ -604,147 +603,6 @@ function defaultSpawn(input?: {
     } catch {
       return spawnWithPythonPty(options);
     }
-  };
-}
-
-/**
- * The Windows pane of the PTY backend: a real pane in the WezTerm mux, which
- * is the process's own host (the runtime owns the mux connection). It exists
- * because the PTY backend has no other Windows answer — node-pty's native
- * modules cannot load under bun, and the Python bridge needs the POSIX pty
- * module (and a python3 on PATH). It is a drop-in PtyProcess: the controller's
- * output stream, screen, settlement and write paths all keep working, so the
- * web panel renders it exactly as it renders the Linux pane.
- *
- * The pane is started in the BACKGROUND: a pane the panel opened must not
- * pop a native WezTerm window (that is what the hub attach does), and the
- * background start is the registry's own windowless path.
- */
-function spawnWithWezTermPty(
-  host: NativeTerminalRegistry,
-  options: PtySpawnOptions,
-): PtyProcess {
-  // The registry's start carries no geometry (the host applies its own, and
-  // resize is the authoritative setter), so the requested grid is applied
-  // right after the pane exists.
-  const started = host.start({
-    command:
-      options.command ?? [options.file, ...options.args].join(" ").trim(),
-    cwd: options.cwd,
-    background: true,
-  });
-  void (async () => {
-    try {
-      const session = await started;
-      await host.resize(session.id, options.rows, options.cols, "human");
-    } catch {
-      /* the pane is gone; the exit path already fired */
-    }
-  })();
-  let pid = 0;
-  const dataListeners = new Set<(data: string) => void>();
-  const exitListeners = new Set<
-    (event: { exitCode: number; signal?: number }) => void
-  >();
-  let disposed = false;
-  let sent = "";
-  const pump = (view: {
-    text?: string;
-    rows?: number;
-    cols?: number;
-    cursorX?: number;
-    cursorY?: number;
-  }) => {
-    if (disposed || !view.text) return;
-    // The same new-region discipline the panel feed uses (./output-chunk),
-    // with the dump's tail trimmed so the caret never walks to the bottom of
-    // the pane: appends while the screen grows, only the new lines once it
-    // scrolls, and a full repaint solely when nothing aligns. That is the
-    // difference between "the terminal flickered on every command" and a shell
-    // that streams like the Linux PTY byte path.
-    const text = trimScreenTail(view.text);
-    const chunk = terminalOutputChunk(sent, text, view.rows);
-    if (!chunk) return;
-    sent = text;
-    for (const listener of dataListeners) listener(chunk);
-  };
-  void (async () => {
-    try {
-      const session = await started;
-      // A mux pane has no host pid; the pane id is its process identity here.
-      pid = session.paneID;
-      while (!disposed) {
-        const view = await host.observe(session.id, 0, {
-          maxLines: 200,
-          timeoutMs: 1_000,
-        });
-        if (disposed) break;
-        pump(view);
-        if (view.exited) {
-          for (const listener of exitListeners) listener({ exitCode: 0 });
-          disposed = true;
-          break;
-        }
-      }
-    } catch {
-      // The pane never started or died mid-read: an exited process with no
-      // further output is the honest shape, and the controller marks the
-      // session out.
-      for (const listener of exitListeners) listener({ exitCode: 1 });
-      disposed = true;
-    }
-  })();
-  return {
-    get pid() {
-      return pid;
-    },
-    write(data) {
-      if (disposed) return;
-      void (async () => {
-        try {
-          const session = await started;
-          await host.write(session.id, data, { actor: "human" });
-        } catch {
-          // a dead pane's write is a no-op: the exit path already fired
-        }
-      })();
-    },
-    resize(cols, rows) {
-      if (disposed) return;
-      void (async () => {
-        try {
-          const session = await started;
-          await host.resize(session.id, rows, cols, "human");
-        } catch {
-          /* the pane is gone */
-        }
-      })();
-    },
-    kill() {
-      if (disposed) return;
-      disposed = true;
-      void (async () => {
-        try {
-          const session = await started;
-          await host.stop(session.id, "system");
-        } catch {
-          /* already gone */
-        }
-      })();
-    },
-    onData(listener) {
-      dataListeners.add(listener);
-      if (sent) listener(sent);
-      return { dispose: () => dataListeners.delete(listener) };
-    },
-    onExit(listener) {
-      if (disposed) {
-        listener({ exitCode: 0 });
-        return { dispose: () => undefined };
-      }
-      exitListeners.add(listener);
-      return { dispose: () => exitListeners.delete(listener) };
-    },
   };
 }
 
@@ -919,7 +777,7 @@ export function createPtyTerminalController(
     const current = paneText(session);
     const base = session.outputBaseLines;
     // The lines the pane gained since the command started. Append-only is the
-    // normal case — a command writes, the terminal scrolls — and the prefix check
+    // normal case 鈥?a command writes, the terminal scrolls 鈥?and the prefix check
     // makes it exact.
     if (
       base &&
@@ -960,7 +818,7 @@ export function createPtyTerminalController(
     // captured then already contains the command's own output and the slice comes
     // back empty. Reading the markers first, and snapshotting when a chunk carries
     // `C`, fixes it. A fast command whose `C` and `D` arrive together is handled by
-    // the same rule — the baseline is the pane as it was BEFORE that chunk, so
+    // the same rule 鈥?the baseline is the pane as it was BEFORE that chunk, so
     // everything gained since is its output.
     //
     // Walking the markers rather than diffing the state around the fold: a real
@@ -973,7 +831,7 @@ export function createPtyTerminalController(
     const markers = parseShellMarkers(chunk);
     // OSC 7: the pane's working directory follows the shell. The spawn-time
     // cwd is stale the moment the operator types `cd`, and the model's file
-    // tools work relative to the pane — so the pane reports where the shell
+    // tools work relative to the pane 鈥?so the pane reports where the shell
     // IS, not where it was started. `publicSession` already carries the field;
     // this is what keeps it alive.
     for (const marker of markers) {
@@ -982,7 +840,7 @@ export function createPtyTerminalController(
     if (markers.some((marker) => marker.kind === "command-executed"))
       session.outputBaseLines = paneText(session);
     // The render layer: the same bytes the raw buffer keeps, applied to
-    // the virtual screen — the model's view is now the pane's rendered
+    // the virtual screen 鈥?the model's view is now the pane's rendered
     // screen, not the stream.
     applyTerminalOutput(session.screen, chunk);
     session.revision += 1;
@@ -1011,7 +869,7 @@ export function createPtyTerminalController(
   /**
    * The frame emitter (the settlement plan's block 3): when the pane goes
    * quiet for the settle window and the screen differs from the frame the
-   * model last saw, ONE notice is delivered — the model is told the
+   * model last saw, ONE notice is delivered 鈥?the model is told the
    * screen settled instead of polling for it. A fast stream resets the
    * window (the timer re-arms on every chunk), so a chatty pane emits at
    * meaningful pauses, not per keystroke.
@@ -1134,13 +992,13 @@ export function createPtyTerminalController(
     // addressing is the host's own: 0 is the oldest scrollback line and
     // negatives count from the end, so `read` and `search` page the WHOLE
     // pane, not just the viewport. Before this, the rendered read dropped
-    // startLine/endLine and the scrollback was unreachable — the history
+    // startLine/endLine and the scrollback was unreachable 鈥?the history
     // existed and nothing could read it.
     // The pane's virtual document: the archived frame (if a resize just wiped
     // the grid and the applications have not repainted yet), then the scrollback,
     // then the visible screen. The model reads this while the human watches
     // xterm.js, and a resize that leaves a blank grid would hand the model
-    // nothing — so the last frame it had is offered instead of nothing.
+    // nothing 鈥?so the last frame it had is offered instead of nothing.
     const archived = session.screen.previousFrame?.lines;
     const blank = renderScreen(session.screen).every(
       (line) => line.trim().length === 0,
@@ -1167,14 +1025,14 @@ export function createPtyTerminalController(
       if (clamped === 0) return 0;
       // The offset of line `clamped`'s first byte: the joined prefix plus the
       // separator that follows it. (For clamped === document.length this is one
-      // past the document's last byte — a virtual position, which is why the
+      // past the document's last byte 鈥?a virtual position, which is why the
       // END report below does not use it.)
       const joined = document.slice(0, clamped).join("\n");
       return Buffer.byteLength(joined, "utf8") + 1;
     };
     // The last byte the window actually served: the end of its last line,
     // WITHOUT the separator that follows it. A byte window over the reported
-    // span then serves exactly the text the line window served — the two
+    // span then serves exactly the text the line window served 鈥?the two
     // families are two addresses for one document, not two documents. (The
     // first version reported the next line's start, so the line window's byte
     // span carried a trailing separator its text did not, and a cross-window
@@ -1336,7 +1194,7 @@ export function createPtyTerminalController(
     /**
      * The grid to spawn at. Absent means the default; a human pane resizes the
      * running terminal the moment it opens, so this matters for headless
-     * (model-only) terminals — which is exactly where "too small to render a
+     * (model-only) terminals 鈥?which is exactly where "too small to render a
      * TUI" bites.
      */
     rows?: number;
@@ -1402,7 +1260,7 @@ export function createPtyTerminalController(
       output: "",
       screen: createTerminalScreen({ rows, cols }),
       // A pane starts at a prompt. If the shell inside never emits the markers,
-      // this stays atPrompt=true with every other field absent — the
+      // this stays atPrompt=true with every other field absent 鈥?the
       // command-level read says "unknown", which is honest, rather than
       // inventing a command line out of the screen.
       commandState: initialCommandState(),
@@ -1418,7 +1276,7 @@ export function createPtyTerminalController(
       rows,
       // `shellEnv` first: it carries what the pane's shell needs to be integrated
       // (zsh's ZDOTDIR). `envRecord()` then supplies the operator's own
-      // environment, so PATH, HOME and locale still reach the child — an
+      // environment, so PATH, HOME and locale still reach the child 鈥?an
       // integration that replaced them would spawn a shell that cannot find ls.
       env: { ...shellEnv, ...envRecord() },
       command: startInput.command,
@@ -1447,8 +1305,7 @@ export function createPtyTerminalController(
       /**
        * Who is typing. The model's write is refused on a human-owned
        * terminal; the human's write is refused on a secure-input pane. Both
-       * flow through this one RPC today, so the caller states which it is —
-       * without it a UI pane claimed by its human could not type at all.
+       * flow through this one RPC today, so the caller states which it is 鈥?       * without it a UI pane claimed by its human could not type at all.
        */
       actor?: "model" | "human";
     },
@@ -1535,7 +1392,7 @@ export function createPtyTerminalController(
     // The rendered screen the model reads must follow the pane, or the model's
     // window stays at the spawn-time 24x80 forever: a full-screen TUI clipped
     // to 80 columns, and a human's pane resize invisible to it. The pty
-    // resizes too, so the applications redraw for the new geometry — the grid
+    // resizes too, so the applications redraw for the new geometry 鈥?the grid
     // is re-blanked (see resizeTerminalScreen) rather than re-flowed.
     resizeTerminalScreen(session.screen, rows, cols);
     session.revision += 1;
@@ -1551,7 +1408,7 @@ export function createPtyTerminalController(
    * The human's `snapshot` says `renderScreenText` because that is the truth about
    * the human's window. But `read` consults the frame a resize archived, so a
    * model-facing surface that rendered the raw screen would DISAGREE with the
-   * model's own read in exactly the window where the grid is blank — observe would
+   * model's own read in exactly the window where the grid is blank 鈥?observe would
    * report "nothing here" while read reports the frame it just had. Both
    * model-facing surfaces share this helper so that cannot happen.
    */
@@ -1568,7 +1425,7 @@ export function createPtyTerminalController(
     const session = get(id);
     assertReadable(session);
     return {
-      // The pane, as the model sees it — the archived frame while the grid is
+      // The pane, as the model sees it 鈥?the archived frame while the grid is
       // blank, exactly like read.
       text: modelFacingText(session),
       cursorX: session.screen.cursorX,

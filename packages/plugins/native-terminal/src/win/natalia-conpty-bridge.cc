@@ -27,6 +27,30 @@ HANDLE g_pcOutputRead = nullptr;   // the console's screen -> our reads
 HPCON g_pseudoConsole = nullptr;
 HANDLE g_childProcess = nullptr;
 
+// Set when the console has produced its FIRST output bytes.
+//
+// Input is not allowed onto the console's keyboard before this. Measured
+// 2026-10-04: when the spec line and the first typed line arrive back-to-back
+// (the shipped controller's shape — conpty-native.test.ts sends them within a
+// millisecond), a WriteFile to the input pipe that lands inside the console's
+// session start-up leaves the child stuck before it ever paints its welcome
+// screen: no echo, no execution, no exit — the pane sits at the initial
+// screen-diff, forever. With the same bytes written even ~20ms later the
+// session comes up and the typed line round-trips (4/4 local runs).
+//
+// So the gate is not politeness but a measured race: the console's first
+// output bytes (its ESC[?9001h ESC[?1004h handshake, seen on every session) are
+// the on-the-wire proof that conhost is serving the session and the child is
+// attaching against a live console. Waiting for that is deterministic where
+// "sleep and hope" is not.
+//
+// The timeout is the honest bound: a console that has spoken nothing for this
+// long is not a console this write could stall, so the bytes go out anyway —
+// degrade forward rather than deadlock. It is set as an event (not a flag) so
+// the main loop can wait on console-live OR child-gone as one act.
+HANDLE g_consoleLive = nullptr;
+ULONGLONG g_consoleStartedAt = 0; // GetTickCount64 when the console's pipes came up
+
 void writeAll(const char *data, size_t length) {
   size_t written = 0;
   while (written < length) {
@@ -260,6 +284,8 @@ DWORD WINAPI pumpConsoleOutput(LPVOID) {
               (unsigned long)read, (unsigned long)GetLastError());
       break;
     }
+    // The console's first bytes are its own proof of life: input waits on this.
+    SetEvent(g_consoleLive);
     sendFrame("o", buffer, read);
   }
   return 0;
@@ -339,6 +365,9 @@ int main() {
     fprintf(stderr, "conpty-bridge: CreatePseudoConsole failed\n");
     return 3;
   }
+  // The console's age clock starts here: the first keystroke's settle floor is
+  // measured from this point (see the input branch).
+  g_consoleStartedAt = GetTickCount64();
 
   STARTUPINFOEXW startup;
   ZeroMemory(&startup, sizeof(startup));
@@ -486,6 +515,9 @@ int main() {
   // Without that, `cmd /c echo` (any short-lived command) left the bridge blocked
   // on stdin with its pane "running" and no exit frame.
   g_lineArrived = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+  // The console's proof-of-life: set by the output pump's first read. Manual
+  // reset, initially unset — input waits on it (see the input branch).
+  g_consoleLive = CreateEvent(nullptr, TRUE, FALSE, nullptr);
   InitializeCriticalSection(&g_queueLock);
   const HANDLE controlReader =
       CreateThread(nullptr, 0, pumpControlInput, nullptr, 0, nullptr);
@@ -513,15 +545,41 @@ int main() {
       std::string text;
       extractString(line, "data", &text);
       if (!text.empty()) {
+        // THE FIRST keystroke waits for the console's spin-up, bounded.
+        //
+        // Measured 2026-10-04 on the Windows desktop (bun spawns the bridge,
+        // the shipped controller's shape; spec line and first typed line
+        // back-to-back, sub-millisecond apart): a WriteFile to the console's
+        // input pipe that lands while the console's relay is still coming up
+        // freezes the relay — the child process stays ALIVE (bridleged in the
+        // process snapshot) but its screen never flows again: the pane sits at
+        // the initial paint, no echo, no command output, forever.
+        // The boundary is small and measured: 0ms freezes, 20ms round-trips,
+        // 100ms 3/3, 1500ms 3/3. The Windows CI runner (windows-latest) has
+        // never hit it — its pane came up full every run — so this is insurance
+        // against a real race, sized from its measured lower bound (20ms) plus
+        // margin, not a latency budget: the settle applies ONLY to the first
+        // write, and a human's next keystroke is still behind it when it lands.
+        //
+        // The first half of the wait is the console having spoken at all (its
+        // ESC[?9001h handshake — a console that has not spoken in 3s is not a
+        // console this write could stall), the second half is the min-age
+        // floor above. The child's exit is waited on TOO, so a pane whose child
+        // dies during start-up does not sit out the settle.
+        const HANDLE waitFor[] = {g_consoleLive, g_childProcess};
+        const DWORD which = WaitForMultipleObjects(2, waitFor, FALSE, 3000);
+        if (which == WAIT_OBJECT_0 + 1) break; // the child is gone; nothing to type at
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG age = now - g_consoleStartedAt;
+        if (age < 100) {
+          const DWORD remain = (DWORD)(100 - age);
+          const DWORD done =
+              WaitForSingleObject(g_childProcess, remain);
+          if (done == WAIT_OBJECT_0) break; // died during the settle
+        }
         DWORD written = 0;
         WriteFile(g_pcInputWrite, text.data(), (DWORD)text.size(), &written,
                   nullptr);
-        // The literal bytes that went onto the console's keyboard, on stderr.
-        // The P23 input path has now sent a fix at a phantom once (a 9001
-        // transcriber aimed at a failure this very line could not
-        // distinguish), so the next wrong theory costs a CI cycle instead of
-        // an evening: a silent start means this line is absent, not that the
-        // console was happy.
         fprintf(stderr, "conpty-bridge: input line delivered (%zu bytes)\n", text.size());
       }
       continue;

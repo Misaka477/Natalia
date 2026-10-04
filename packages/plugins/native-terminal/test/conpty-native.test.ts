@@ -136,6 +136,7 @@ async function drive(
 const count = (frames: Frame[], needle: string) =>
   frames
     .filter((f) => f.kind === "o")
+    .map((frame) => frame.payload)
     .join("")
     .split(needle).length - 1;
 
@@ -234,6 +235,19 @@ test.skipIf(!canRun)(
         await send({ type: "kill" });
       },
       (seen) => seen.some((frame) => frame.kind === "x"),
+    );
+    // Same obligation as the input drive: if the exit frame is late or absent,
+    // say so with the drive's shape attached, not just undefined.
+    console.error(
+      "CONPTY_KILL_DRIVE " +
+        JSON.stringify({
+          bridgeStderr: killed.stderr,
+          frames: killed.frames.map((f) => ({
+            kind: f.kind,
+            length: f.payload.length,
+            head: f.payload.slice(0, 48),
+          })),
+        }),
     );
     expect(killed.exit).toBeDefined();
   },

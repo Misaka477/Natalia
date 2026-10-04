@@ -237,6 +237,19 @@ std::wstring quote(const std::wstring &text) {
   return quoted;
 }
 
+/// The CreateProcessW/CommandLineToArgvW rule: an argument needs quotes only
+/// when it contains whitespace or a quote, or is empty. Quoting everything is
+/// NOT harmless: cmd.exe's tail parser treats a QUOTED `/c` differently from
+/// a bare one, and the Windows CI's first real run measured the consequence —
+/// with `"cmd.exe" "/c" "echo X"` cmd.exe tried to run `"echo X` (an
+/// unbalanced quote reported verbatim) and the pane went mute. The canonical
+/// spelling `cmd.exe /c "echo X"` is what every shell receives from every
+/// launcher, and matching it is the fix.
+bool needsQuoting(const std::wstring &text) {
+  if (text.empty()) return true;
+  return text.find_first_of(L" \t\"") != std::wstring::npos;
+}
+
 DWORD WINAPI pumpConsoleOutput(LPVOID) {
   char buffer[4096];
   for (;;) {
@@ -269,7 +282,7 @@ int main() {
   const int rows = extractNumber(spec, "rows", 24);
 
   // The command line: the executable followed by its JSON-escaped args.
-  std::wstring commandLine = quote(widen(file));
+  std::wstring commandLine = quote(widen(file)); // the exe is always quoted
   // The array's own opener is found through the same whitespace-tolerant lookup,
   // so `"args": [` behaves like `"args":[`. Doing this by raw substring search
   // was the third instance of the same assumption — the spaced spec parsed its
@@ -301,7 +314,8 @@ int main() {
         decoded.push_back(encoded[i]);
       }
       commandLine += L" ";
-      commandLine += quote(widen(decoded));
+      const std::wstring arg = widen(decoded);
+      commandLine += needsQuoting(arg) ? quote(arg) : arg;
     }
   }
 

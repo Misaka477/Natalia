@@ -200,6 +200,24 @@ test.skipIf(!canRun)(
       text,
       `frames=${JSON.stringify(frames)} bridge stderr:\n${stderr}`,
     ).toContain("CONPTY_INPUT_OK");
+    // Before the count is allowed to fail mute again: print the drive's whole
+    // shape. The count predicate cannot say whether the pane painted, whether
+    // the typed line reached the bridge (its stderr now reports the delivery),
+    // or whether the frames were dropped — and the 2026-10-04 red was exactly
+    // a failure with none of that recorded. A test that swallows its own
+    // evidence costs a CI cycle per theory.
+    console.error(
+      "CONPTY_INPUT_DRIVE " +
+        JSON.stringify({
+          inputDelivered: stderr.includes("input line delivered"),
+          bridgeStderr: stderr,
+          frames: frames.map((f) => ({
+            kind: f.kind,
+            length: f.payload.length,
+            head: f.payload.slice(0, 48),
+          })),
+        }),
+    );
     expect(count(frames, "CONPTY_INPUT_OK")).toBeGreaterThanOrEqual(2);
 
     // And the kill: a second drive whose script stops the child by protocol.

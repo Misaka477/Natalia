@@ -516,6 +516,13 @@ int main() {
         DWORD written = 0;
         WriteFile(g_pcInputWrite, text.data(), (DWORD)text.size(), &written,
                   nullptr);
+        // The literal bytes that went onto the console's keyboard, on stderr.
+        // The P23 input path has now sent a fix at a phantom once (a 9001
+        // transcriber aimed at a failure this very line could not
+        // distinguish), so the next wrong theory costs a CI cycle instead of
+        // an evening: a silent start means this line is absent, not that the
+        // console was happy.
+        fprintf(stderr, "conpty-bridge: input line delivered (%zu bytes)\n", text.size());
       }
       continue;
     }

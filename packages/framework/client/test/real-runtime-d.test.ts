@@ -2306,8 +2306,31 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
     provider: "continue-turn",
     model: "continue-turn",
     async *stream(request) {
+      // The pane is started BY THE MODEL, through the tool, so the terminal it
+      // asks the human about is one that exists. The fork host used to be
+      // injected as a fixture registry and this call referenced a pane the
+      // fixture had pre-started; with the host gone the pane has to come from
+      // the runtime's own pty controller, and the id is only known after the
+      // start tool answers — so the provider asks twice and the second call
+      // carries the id the first one produced.
       streamCalls += 1;
       if (streamCalls === 1) {
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_start",
+              name: "interactive_terminal_start",
+              arguments: JSON.stringify({
+                command: "cat",
+                id: "rh_continue_1",
+              }),
+            },
+          ],
+        };
+        return;
+      }
+      if (streamCalls === 2) {
         yield {
           type: "tool_call" as const,
           calls: [
@@ -2315,7 +2338,7 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
               id: "call_end_turn",
               name: "interactive_terminal_request_human",
               arguments: JSON.stringify({
-                id: "term_1",
+                id: "rh_continue_1",
                 reason: "needs the sudo password",
                 endTurn: true,
               }),
@@ -2324,7 +2347,7 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
         };
         return;
       }
-      if (streamCalls === 2) {
+      if (streamCalls === 3) {
         // The tool ran; the model confirms and the turn settles waiting.
         yield { type: "content" as const, text: "Waiting for the human." };
         yield { type: "done" as const };
@@ -2373,12 +2396,12 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
       ),
     ) as { metadata?: { pendingHumanTerminal?: unknown } };
     expect(persisted.metadata?.pendingHumanTerminal).toMatchObject({
-      terminalID: "term_1",
+      terminalID: "rh_continue_1",
       reason: "needs the sudo password",
     });
 
     // Releasing the pane resumes the task with a fresh turn.
-    await client.nativeTerminalReleaseHumanControl?.("term_1");
+    await client.nativeTerminalReleaseHumanControl?.("rh_continue_1");
     await waitFor(
       () =>
         events.filter(
@@ -2427,7 +2450,42 @@ test("releasing a pane that is not the pending one does not resume or clear stat
     model: "continue-negative",
     async *stream(request) {
       streamCalls += 1;
+      // Start two panes so there IS a pending one and a non-pending one to
+      // release. The fork fixture used to pre-create both; the runtime's own
+      // pty controller creates them here and the ids are therefore real.
       if (streamCalls === 1) {
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_pending",
+              name: "interactive_terminal_start",
+              arguments: JSON.stringify({
+                command: "cat",
+                id: "rh_pending",
+              }),
+            },
+          ],
+        };
+        return;
+      }
+      if (streamCalls === 2) {
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_other",
+              name: "interactive_terminal_start",
+              arguments: JSON.stringify({
+                command: "cat",
+                id: "rh_other",
+              }),
+            },
+          ],
+        };
+        return;
+      }
+      if (streamCalls === 3) {
         yield {
           type: "tool_call" as const,
           calls: [

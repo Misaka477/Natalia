@@ -55,6 +55,36 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   UNREFERENCED_PARAMETER(lpCmdLine);
   UNREFERENCED_PARAMETER(nCmdShow);
 
+  // RUNTIME bisection switch, same binary both ways. The compile-time probe
+  // could not close the last gap because two builds are two builds; this is one
+  // executable that either stops right after CefInitialize or runs the whole
+  // startup. NATALIA_CEF_PROBE=1 makes it stop, with a message box saying which
+  // way it went, so a single run answers "does this exact binary initialise".
+  const bool probe_mode = GetEnvironmentVariableW(L"NATALIA_CEF_PROBE", nullptr, 0) != 0;
+  if (probe_mode) {
+    CefMainArgs probe_args(hInstance);
+    CefSettings probe;
+    probe.no_sandbox = true;
+    wchar_t probe_cache[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
+                                   probe_cache)) &&
+        probe_cache[0] != 0) {
+      std::wstring root(probe_cache);
+      root += L"\\Natalia\\CEF";
+      CreateDirectoryW(root.c_str(), nullptr);
+      CefString(&probe.cache_path).FromWString(root);
+    }
+    CefRefPtr<SimpleApp> probe_app(new SimpleApp);
+    const int hand_off = CefExecuteProcess(probe_args, probe_app.get(), nullptr);
+    if (hand_off >= 0) return hand_off;
+    CefRefPtr<CefCommandLine> probe_line = CefCommandLine::CreateCommandLine();
+    probe_line->InitFromString(::GetCommandLineW());
+    const bool ok = CefInitialize(probe_args, probe, probe_app.get(), nullptr);
+    MessageBoxW(nullptr, ok ? L"CefInitialize OK" : L"CefInitialize FAILED",
+                L"natalia-cef runtime probe", MB_OK);
+    return ok ? 0 : static_cast<int>(CefGetExitCode());
+  }
+
 #ifdef NATALIA_CEF_PROBE_ONLY
   // BISECTION PROBE, compiled in only with -DNATALIA_CEF_PROBE_ONLY=1.
   //
@@ -70,6 +100,12 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // So the linked-in code and SimpleApp are both innocent, and what is left is
   // the pair the real host does and this probe does not.
   {
+    // BISECTION STEP 2: the cache_path is now the SAME directory the shipping
+    // host uses (%LOCALAPPDATA%\Natalia\CEF), because "CEF-probe" was one of the
+    // two remaining differences and this removes it. If the probe now fails, the
+    // fault is state in that directory; if it still succeeds, the remaining
+    // difference is the startup code after CefInitialize (command_line parsing,
+    // the rest of settings, CefRunMessageLoop).
     CefMainArgs probe_args(hInstance);
     CefSettings probe;
     probe.no_sandbox = true;
@@ -78,7 +114,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
                                    probe_cache)) &&
         probe_cache[0] != 0) {
       std::wstring root(probe_cache);
-      root += L"\\Natalia\\CEF-probe";
+      root += L"\\Natalia\\CEF";
       CreateDirectoryW(root.c_str(), nullptr);
       CefString(&probe.cache_path).FromWString(root);
     }
@@ -90,6 +126,13 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
         CefExecuteProcess(probe_args, probe_app.get(), nullptr);
     if (hand_off >= 0)
       return hand_off;
+    // BISECTION STEP 3: the one block the real host runs between the hand-off
+    // and CefInitialize — it creates the GLOBAL command line and initialises it
+    // from the process command line BEFORE CEF does. CEF initialises that same
+    // global object itself, so doing it first is a candidate for the CHECK.
+    CefRefPtr<CefCommandLine> probe_line =
+        CefCommandLine::CreateCommandLine();
+    probe_line->InitFromString(::GetCommandLineW());
     const bool ok =
         CefInitialize(probe_args, probe, probe_app.get(), nullptr);
     MessageBoxW(
@@ -208,6 +251,24 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // fails or if early exit is desired (for example, due to process singleton
   // relaunch behavior).
   trace("before CefInitialize");
+  // RUNTIME PROBE AT THE REAL CALL SITE: the greatest narrowing possible — same
+  // function, same variables, same everything, and only the message box after.
+  // If THIS fails, the arguments themselves are the fault and the message box
+  // names which one; the earlier standalone-probe block above is then only
+  // useful for the steps before this point.
+  if (probe_mode) {
+    const bool ok = CefInitialize(main_args, settings, app.get(),
+#if defined(CEF_USE_SANDBOX)
+                                  cef_sandbox_info
+#else
+                                  nullptr
+#endif
+    );
+    const wchar_t* verdict = ok ? L"CefInitialize OK at the real call site"
+                                : L"CefInitialize FAILED at the real call site";
+    MessageBoxW(nullptr, verdict, L"natalia-cef runtime probe", MB_OK);
+    return ok ? 0 : static_cast<int>(CefGetExitCode());
+  }
   const bool cef_initialized =
       CefInitialize(main_args, settings, app.get(),
 #if defined(CEF_USE_SANDBOX)

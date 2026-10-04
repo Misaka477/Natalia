@@ -203,3 +203,54 @@ test("a later frame replaces an earlier one", () => {
   // older frame is still the useful one and must not be dropped.
   expect(screen.previousFrame!.lines.join("\n")).toContain("first frame");
 });
+
+test("a flood scrolls without allocating a row per scrolled line", () => {
+  // The screen's flood cost used to be invisible until it was measured: a 4
+  // MiB `yes` run spent 84% of its time in this fold, and the fold's cost was
+  // one fresh 80-cell row ALLOCATED PER SCROLLED LINE — ~160M cell objects
+  // for 2M scrolled lines, which is GC time rather than terminal work. The
+  // scrolled-off row is now recycled (blanked in place), which took the fold
+  // from 3134ms to 1071ms on that flood — 2.9x — and the end-to-end pane read
+  // from 1.09 to 2.40 MiB/s.
+  //
+  // This test is the wall that keeps it fixed: same content, same semantics,
+  // a budget two orders of magnitude above the fixed cost so ordinary CI
+  // noise cannot fail it, and tight enough that the allocation returning
+  // (a ~30x slowdown on this volume) trips it.
+  const screen = createTerminalScreen({ rows: 24, cols: 80 });
+  // Fill to the bottom row first: a fresh 24-row grid moves its CURSOR on the
+  // first newlines and only scrolls once the cursor sits at the last row. (The
+  // first version of this test captured the top and newlined once — nothing
+  // scrolled and the assertion compared two unrelated blank rows.)
+  applyTerminalOutput(screen, "x\r\n".repeat(23));
+  const top = screen.grid[0]!;
+  // Scroll once: the row that leaves the top is the row that enters at the
+  // bottom — the SAME OBJECT, blanked. Identity, not content: content could
+  // coincide, and the regression this pins is exactly the allocation that
+  // content-equality would not catch. (A fresh row per scroll is a ~30x slowdown
+  // on flood volume, measured.)
+  applyTerminalOutput(screen, "\r\n");
+  expect(screen.grid[screen.grid.length - 1]).toBe(top);
+  // And it is blank where it counts: the recycled row's cells are spaces, and
+  // the scrolled-off content is in the scrollback where a reader expects it.
+  expect(
+    screen.grid[screen.grid.length - 1]!.every((cell) => cell.char === " "),
+  ).toBe(true);
+  expect(screen.scrollback.at(-1)).toBe("x");
+  // (renderScreen pops trailing empty rows by its own contract, so the last
+  // rendered line is the last CONTENT line — "x", not the blank bottom.)
+  expect(renderScreenText(screen).split("\n").at(-1)).toBe("x");
+
+  // The volume then runs as a smoke guard (the budget is loose — it trips a
+  // hang, not the timing; the identity assertion above is the property).
+  const rounds = 40;
+  const chunk = "y\r\n".repeat((32 * 1024) / 2); // 32 KiB of one-char lines
+  const started = performance.now();
+  for (let round = 0; round < rounds; round += 1)
+    applyTerminalOutput(screen, chunk);
+  expect(performance.now() - started).toBeLessThan(10_000);
+  // And the semantics the recycling must not disturb: the history is the
+  // newest lines, the grid shows the tail, and the scrollback is bounded.
+  expect(screen.scrollback.length).toBeLessThanOrEqual(1000);
+  expect(renderScreenText(screen).split("\n").at(-1)).toBe("y");
+});

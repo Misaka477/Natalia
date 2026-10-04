@@ -433,10 +433,12 @@ int main() {
   // apart from nothing happening is not a fix. The line also records the size,
   // because "the handshake ran with the wrong viewport" is the other way this
   // fails.
-  const HRESULT resized = ResizePseudoConsole(g_pseudoConsole, size);
-  fprintf(stderr,
-          "conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
-          (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
+  // REMOVED: the same-size resize handshake. See the experiment note in
+  // the commit — hr=0 (success) with the pane still mute on every run, and
+  // the relay delivering nothing the child writes, makes the resize the
+  // prime suspect for the breakage rather than the cure. Restoring it needs
+  // evidence, not the older note.
+  fprintf(stderr, "conpty-bridge: viewport handshake skipped (experiment)\n");
   // The command line, verbatim. The Windows CI's first native run showed
   // cmd.exe reporting `'"echo CONPTY_NATIVE_OK' is not recognized` — a command
   // line with an unbalanced leading quote, from a builder that on its face
@@ -525,9 +527,13 @@ int main() {
     WaitForSingleObject(outputPump, 5000);
     CloseHandle(outputPump);
   }
-  char exitLine[64];
-  const int exitLength = _snprintf_s(exitLine, sizeof(exitLine), _TRUNCATE,
-                                     "x %lu\n", exitCode);
-  writeAll(exitLine, (size_t)exitLength);
+  // The exit frame is a FRAME: `x <len>\n<decimal code>`, through the same
+  // sendFrame the output pump uses. The first version wrote the bare `x
+  // <code>\n`, which a protocol reader parses as kind=x, length=<code>, and
+  // then waits forever for that many bytes — the exit frame never completes
+  // on the host side. Measured on the Windows CI: the frame arrived with an
+  // EMPTY payload, the pane's exit code unreadable.
+  const std::string code = std::to_string((unsigned long)exitCode);
+  sendFrame("x", code.data(), (DWORD)code.size());
   return 0;
 }

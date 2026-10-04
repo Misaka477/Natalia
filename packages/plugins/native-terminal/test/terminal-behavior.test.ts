@@ -86,8 +86,8 @@ function terminalRegistry() {
 /**
  * The tools' terminal surface over a fake host.
  *
- * The host answers with text, the cursor and the geometry 鈥?and nothing that
- * locates that text in a document 鈥?so the extent served here is null, exactly
+ * The host answers with text, the cursor and the geometry —and nothing that
+ * locates that text in a document —so the extent served here is null, exactly
  * what the mux-facade shape reports. A bare registry used to pass as the tool
  * context by the luck of overlapping shapes; the read contract now states the
  * extent, and this wrapper is where the host's honest "cannot page" enters
@@ -521,7 +521,7 @@ test("encodes normalized native terminal key sequences", () => {
   expect(encodeTerminalKey({ key: "c", modifiers: ["ctrl", "alt"] })).toBe(
     "\x1b\x03",
   );
-  expect(encodeTerminalKey({ text: "浣犲ソ", repeat: 2 })).toBe("浣犲ソ浣犲ソ");
+  expect(encodeTerminalKey({ text: "你好", repeat: 2 })).toBe("你好你好");
   expect(() => encodeTerminalKey({ key: "Unknown" })).toThrow(
     "unsupported terminal key",
   );
@@ -531,7 +531,7 @@ test("encodes normalized native terminal key sequences", () => {
   expect(encodeTerminalKey({ key: "V" })).toBe("V");
   expect(encodeTerminalKey({ key: "A", modifiers: ["ctrl"] })).toBe("\x01");
   expect(encodeTerminalKey({ text: "vim" })).toBe("vim");
-  expect(encodeTerminalKey({ text: "浣犲ソ馃殌" })).toBe("浣犲ソ馃殌");
+  expect(encodeTerminalKey({ text: "你好🚀" })).toBe("你好🚀");
 });
 
 test("unified interactive terminal input tool sends text and key sequences", async () => {
@@ -810,10 +810,10 @@ test("native terminal scrollback pages preserve CJK line boundaries and cursors"
 test("native terminal search pages bounded Unicode matches without screen transport", () => {
   const text = Array.from(
     { length: 200 },
-    (_, index) => `line ${index}${index % 50 === 0 ? " 鍛戒腑" : ""}\n`,
+    (_, index) => `line ${index}${index % 50 === 0 ? " 命中" : ""}\n`,
   ).join("");
   const result = nativeTerminalSearchPage(text, {
-    query: "鍛戒腑",
+    query: "命中",
     startLine: 500,
     endLine: 900,
     requestedEndLine: 900,
@@ -822,21 +822,21 @@ test("native terminal search pages bounded Unicode matches without screen transp
   expect(result).toMatchObject({
     searchedRange: { startLine: 500, endLine: 699, scannedLines: 200 },
     matches: [
-      { line: 500, text: "line 0 鍛戒腑" },
-      { line: 550, text: "line 50 鍛戒腑" },
+      { line: 500, text: "line 0 命中" },
+      { line: 550, text: "line 50 命中" },
     ],
     truncatedMatches: true,
     nextCursor: { startLine: 700, endLine: 900 },
   });
-  const final = nativeTerminalSearchPage("one\n鍛戒腑\n", {
-    query: "鍛戒腑",
+  const final = nativeTerminalSearchPage("one\n命中\n", {
+    query: "命中",
     startLine: 900,
     endLine: 901,
     requestedEndLine: 901,
     maxMatches: 20,
   });
   expect(final).toMatchObject({
-    matches: [{ line: 901, text: "鍛戒腑" }],
+    matches: [{ line: 901, text: "命中" }],
     nextCursor: undefined,
   });
 });

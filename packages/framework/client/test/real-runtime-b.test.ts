@@ -1,4 +1,4 @@
-﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   mkdir,
   mkdtemp as createEmptyWorkspace,
@@ -1522,12 +1522,12 @@ test("runtime replaces a generated provider ID with a local SQLite title", async
     useSqliteStore: true,
   });
   client.start(() => undefined);
-  await client.submitAndWait!("淇浼氳瘽鏍囬");
+  await client.submitAndWait!("修复会话标题");
   await waitForAsync(async () => {
     const current = (await client.sessionList?.())?.find(
       (item) => item.id === sessionID,
     );
-    return current?.title === "淇浼氳瘽鏍囬";
+    return current?.title === "修复会话标题";
   });
   await client.dispose?.();
 
@@ -1535,7 +1535,7 @@ test("runtime replaces a generated provider ID with a local SQLite title", async
     resolveWorkspaceJournalDatabasePath(root),
   );
   expect(persisted.get(sessionID)).toMatchObject({
-    title: "淇浼氳瘽鏍囬",
+    title: "修复会话标题",
     metadata: { titleSource: "fallback" },
   });
   persisted.close();
@@ -2018,7 +2018,7 @@ test("unsupported video attachments degrade to text instead of failing the turn"
     // Title generation races this config switch: the task reads
     // exec.provider AFTER async persistence/store I/O, so an
     // updateConfig(vision) landing in that window turns the title call
-    // into a phantom "vision" request without attachments 鈥?and
+    // into a phantom "vision" request without attachments — and
     // find(vision) below would pick it. Drain the title request first
     // (its provider is resolved pre-switch), then switch. This was the
     // root of this test's long-standing rotation failures.

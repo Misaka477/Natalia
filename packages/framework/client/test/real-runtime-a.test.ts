@@ -1,4 +1,4 @@
-﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   mkdir,
   mkdtemp as createEmptyWorkspace,
@@ -354,7 +354,7 @@ test("runtime status and diagnostics expose only published safe state", async ()
   const client = createRealRuntimeClient({
     workspaceRoot: root,
     // Hermetic about the store: no migration attempt, no external-store
-    // diagnostic 鈥?this test asserts the exact diagnostics surface.
+    // diagnostic — this test asserts the exact diagnostics surface.
     checkpointDir: join(root, ".natalia", "checkpoint-store"),
     sessionID: "ses_runtime_status",
     provider: scriptedProvider("ready"),
@@ -467,7 +467,7 @@ export default (): ToolFamily => ({
       event.type === "tool.registered",
   );
   // The out-of-tree family's tool is in the catalogue, owned by the local-tools
-  // plugin like any other built-in 鈥?nothing about an external family is
+  // plugin like any other built-in — nothing about an external family is
   // special-cased once it loads. The journal scope is the plugin's workspace
   // scope, because the plugin owns every family it loads.
   expect(registered.find((event) => event.name === "extra_run")).toMatchObject({
@@ -928,7 +928,7 @@ test("workspace framework services are always present and stable across reloads"
   // The workspace subsystem is framework-internal: it is not gated by
   // plugins.enabled and is present on first boot.
   // Framework-internal services now bind through the service directory, whose
-  // owner per binding is `service:<token.id>` 鈥?still not a plugin owner.
+  // owner per binding is `service:<token.id>` — still not a plugin owner.
   expect(kernel.ownerOf("services", workspaceWriteLock.id)).toMatch(
     /^service:/u,
   );
@@ -2629,8 +2629,8 @@ test("runtime sends a baseline system prompt without configured agent instructio
   await client.submitAndWait!("who are you?");
   // A request must have been captured before its content is meaningfully
   // examined. Without this, a provider that never streamed makes every `toContain`
-  // below fail against `String(undefined)` 鈥?"expected to contain
-  // <natalia_cli_persona>, received [undefined]" 鈥?which reads like the prompt is
+  // below fail against `String(undefined)` — "expected to contain
+  // <natalia_cli_persona>, received [undefined]" — which reads like the prompt is
   // wrong rather than like no prompt ever arrived. CI failed this test once in
   // exactly that undiagnosable shape.
   expect(
@@ -2653,7 +2653,7 @@ test("runtime sends a baseline system prompt without configured agent instructio
   expect(systemPrompt).toContain(
     "Natalia is a gentle, cute, and thoughtful girl",
   );
-  expect(systemPrompt).toContain("濞滃鑾夊▍");
+  expect(systemPrompt).toContain("娜塔莉娅");
   expect(systemPrompt).toContain(
     "Do not turn a simple personal question into a detached disclaimer",
   );

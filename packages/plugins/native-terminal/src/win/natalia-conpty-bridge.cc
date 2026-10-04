@@ -495,16 +495,32 @@ int main() {
   }
   if (controlReader) CloseHandle(controlReader);
 
+  // SHUT DOWN THE CONSOLE BEFORE the exit frame, and that order is the fix.
+  //
+  // The relay (conhost) only emits its final screen state and ends the output
+  // stream when the pseudo console is CLOSED — and the final state is where
+  // the child's last output lives (the echo's text, anything painted between
+  // the last screen diff and the exit). The first version wrote the exit
+  // frame the moment the child-exit wait fired and returned, which killed the
+  // pump mid-relay: measured on the real ConPTY, `cmd /c echo X` produced the
+  // startup paint, then the exit frame, and the echo's text nowhere — the
+  // pane read as a command that ran and printed nothing.
+  //
+  // So: close the console, let the relay flush and the pump see EOF (it logs
+  // "output pump ended" when it does), wait for it, and only then report the
+  // child's exit. This is the reference samples' shutdown order.
+  ClosePseudoConsole(g_pseudoConsole);
+
   WaitForSingleObject(g_childProcess, INFINITE);
   DWORD exitCode = 0;
   GetExitCodeProcess(g_childProcess, &exitCode);
+  if (outputPump) {
+    WaitForSingleObject(outputPump, 5000);
+    CloseHandle(outputPump);
+  }
   char exitLine[64];
   const int exitLength = _snprintf_s(exitLine, sizeof(exitLine), _TRUNCATE,
                                      "x %lu\n", exitCode);
   writeAll(exitLine, (size_t)exitLength);
-  if (outputPump) {
-    WaitForSingleObject(outputPump, 2000);
-    CloseHandle(outputPump);
-  }
   return 0;
 }

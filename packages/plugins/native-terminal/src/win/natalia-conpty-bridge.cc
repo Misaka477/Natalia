@@ -594,6 +594,15 @@ int main() {
       continue;
     }
     if (type == "kill") {
+      // The only death the bridge performs is this one, and it used to be
+      // TerminateProcess — which never returns: the child of a ConPTY session
+      // is killed through ClosePseudoConsole (the reference shutdown order),
+      // and TerminateProcess leaves the console's output relay blocked in
+      // ReadFile forever, so the pane's exit frame never goes out. Measured on
+      // the Windows CI (conpty-native's kill drive): `{"pid"}` arrived, then
+      // 30s of silence, then `Received: undefined` for the exit frame.
+      ClosePseudoConsole(g_pseudoConsole);
+      g_pseudoConsole = nullptr;
       TerminateProcess(g_childProcess, 1);
       break;
     }
@@ -615,6 +624,7 @@ int main() {
   // "output pump ended" when it does), wait for it, and only then report the
   // child's exit. This is the reference samples' shutdown order.
   ClosePseudoConsole(g_pseudoConsole);
+  g_pseudoConsole = nullptr;
 
   WaitForSingleObject(g_childProcess, INFINITE);
   DWORD exitCode = 0;

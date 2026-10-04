@@ -373,7 +373,14 @@ int main() {
   // With a pseudo-console, CreateProcessW takes the command line ONLY: passing
   // lpApplicationName alongside the attribute list fails with
   // ERROR_INVALID_PARAMETER. commandLine already starts with the quoted exe.
-  if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
+  // bInheritHandles TRUE, as every ConPTY reference sample has it. The
+  // distinction is not ceremonial: the title and the initial paint arrived
+  // with FALSE (the title is a direct console-API call and the paint is
+  // conhost's own), but the CHILD's stdout writes — the echo, the command's
+  // answer — never reached the console. The std handles are what the
+  // pseudoconsole attribute hooks, and FALSE leaves the child with nothing
+  // to write through.
+  if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE,
                       EXTENDED_STARTUPINFO_PRESENT,
                       nullptr, /* DIAG: env disabled */
                       workingDirectory.empty() ? nullptr : workingDirectory.c_str(),

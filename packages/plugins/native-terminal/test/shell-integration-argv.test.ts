@@ -99,14 +99,31 @@ describe("integratedShellArgv", () => {
     expect(integratedShellArgv("/usr/bin/fish")).toBeUndefined();
   });
 
-  test("a Windows spelling matches its own entry, not the POSIX one", () => {
-    // `bash.exe` is the WSL bash, not the bash this script was written for — the
-    // mapping is by basename, so a Windows path resolves the same entry. That is
-    // intended: the entry decides the script, and a WSL pane is a real pane.
-    const integrated = integratedShellArgv("C:\\Windows\\System32\\bash.exe");
-    expect(integrated).toBeDefined();
-    expect(integrated!.argv[0]).toBe("C:\\Windows\\System32\\bash.exe");
-  });
+  // The same call, pinned per platform, because `basename` is the platform's
+  // own: POSIX splits on `/` only, so `C:\Windows\System32\bash.exe` has no
+  // separator to split at and the lookup key is the whole string — no entry,
+  // undefined. Windows splits on `\`, so the key is `bash.exe` → `bash`, which
+  // resolves. Both are the contract; the guard is the POSIX one (a POSIX build
+  // must never hand a Windows spelling a POSIX rcfile, which is worse than no
+  // integration), and CI runs on Linux so that is the branch that must hold.
+  test.skipIf(process.platform === "win32")(
+    "a Windows spelling does not match the POSIX entry",
+    () => {
+      expect(
+        integratedShellArgv("C:\\Windows\\System32\\bash.exe"),
+      ).toBeUndefined();
+    },
+  );
+
+  test.skipIf(process.platform !== "win32")(
+    "a Windows spelling resolves by basename, so its rcfile is its own",
+    () => {
+      const integrated = integratedShellArgv("C:\\Windows\\System32\\bash.exe");
+      expect(integrated).toBeDefined();
+      expect(integrated!.argv[0]).toBe("C:\\Windows\\System32\\bash.exe");
+      expect(integrated!.argv[1]).toBe("--rcfile");
+    },
+  );
 });
 
 describe("the pinned pane contract", () => {
@@ -119,10 +136,18 @@ describe("the pinned pane contract", () => {
 
   test("an interactive bash pane now carries the integration", () => {
     const argv = nativeTerminalPaneCommand("bash", "linux");
-    // The spelling is the shell seam's: POSIX resolves the name, and the
-    // integration rides whichever absolute path came back.
-    expect(argv[0]).toBe("bash");
+    // Two halves, and only the first is platform-independent: the pane IS
+    // integrated. The second — the resolved spelling — is the shell seam's
+    // answer, which is `/bin/bash` where /bin/bash exists (Linux, CI) and the
+    // bare name where it does not (this Windows checkout). Asserting only the
+    // second shape made this test a Windows-only pin that fails the moment CI
+    // runs it, which is how the first rewrite went wrong.
     expect(argv).toContain("--rcfile");
     expect(basename(argv[2]!)).toBe("shell-integration-bash.sh");
+    if (process.platform === "win32") {
+      expect(argv[0]).toBe("bash");
+    } else {
+      expect(argv[0]).toBe("/bin/bash");
+    }
   });
 });

@@ -160,7 +160,10 @@ test.skipIf(!canRun)(
     // P23 symptom: the startup paint arrives, then nothing) fails HERE, and
     // the bridge's stderr rides along so the run reports the viewport
     // handshake's HRESULT instead of just the silence.
-    expect(text, `bridge stderr:\n${stderr}`).toContain("CONPTY_NATIVE_OK");
+    expect(
+      text,
+      `frames=${JSON.stringify(frames)} bridge stderr:\n${stderr}`,
+    ).toContain("CONPTY_NATIVE_OK");
     // And the exit frame — the gap the wine test found first: a child exiting
     // on its own produced NO exit frame and the pane stayed "running".
     expect(exit).toBeDefined();
@@ -193,7 +196,10 @@ test.skipIf(!canRun)(
       },
       (seen) => count(seen, "CONPTY_INPUT_OK") >= 2,
     );
-    expect(text, `bridge stderr:\n${stderr}`).toContain("CONPTY_INPUT_OK");
+    expect(
+      text,
+      `frames=${JSON.stringify(frames)} bridge stderr:\n${stderr}`,
+    ).toContain("CONPTY_INPUT_OK");
     expect(count(frames, "CONPTY_INPUT_OK")).toBeGreaterThanOrEqual(2);
 
     // And the kill: a second drive whose script stops the child by protocol.

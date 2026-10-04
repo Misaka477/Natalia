@@ -22,6 +22,13 @@ class SimpleApp : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefClient> GetDefaultClient() override;
 
  private:
+  // The client the window's browser was created with, set in
+  // OnContextInitialized. GetDefaultClient answers with THIS, never with
+  // SimpleHandler::GetInstance(): CEF calls it during CefInitialize, before the
+  // UI thread exists, and building a handler there is the CHECK that killed
+  // every launch. Null until the first window exists is an honest answer.
+  CefRefPtr<CefClient> default_client_;
+
   // Include the default reference counting implementation.
   IMPLEMENT_REFCOUNTING(SimpleApp);
 };

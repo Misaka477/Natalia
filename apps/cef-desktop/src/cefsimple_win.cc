@@ -131,12 +131,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     // singleton's directory was not the one being cleaned between runs. CEF's
     // examples set cache_path; this does too.
     CefString(&settings.cache_path).FromWString(root);
-    // The log file, so a future failure has somewhere to say what happened
-    // instead of exiting silently. VERBOSE while the init failure is being
-    // hunted: at WARNING libcef wrote one unrelated line and nothing else, so
-    // the failing check was invisible.
-    CefString(&settings.log_file).FromWString(root + L"\\cef.log");
-    settings.log_severity = LOGSEVERITY_VERBOSE;
+    CefString(&settings.cache_path).FromWString(root);
     trace_path = root + L"\\startup-trace.txt";
   }
 

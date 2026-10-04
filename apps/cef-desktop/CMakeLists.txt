@@ -207,6 +207,25 @@ target_sources(natalia-cef-desktop PRIVATE ${NATALIA_CEF_SRCS})
 # libcef_dll_wrapper static target from the distribution's sources.
 if(WIN32)
   list(APPEND CMAKE_MODULE_PATH "${CEF_ROOT}/cmake")
+  # USE_SANDBOX must be OFF, and it must be off BEFORE find_package(CEF).
+  #
+  # CEF's own default is ON, and the comment further down this file claiming
+  # "the CEF sandbox is deliberately NOT enabled (CEF_USE_SANDBOX is absent)"
+  # was wrong about the consequence: with the default ON, CEF's variables add
+  # `-DCEF_USE_BOOTSTRAP` (and CE_API_VERSION_LAST) to every target here. An
+  # app built with CEF_USE_BOOTSTRAP is expected to be launched by bootstrap.exe;
+  # launched directly it dies inside CefInitialize with a Chromium CHECK —
+  # STATUS_BREAKPOINT, one fixed offset, exit code 38, no window, no message.
+  #
+  # The proof, measured: the same sources compiled WITHOUT that define
+  # (a minimal control app: CefInitialize + message loop + CefShutdown, no
+  # SimpleApp, no browser) reach "CefInitialize OK" and stay up. So the defect
+  # was in our compile configuration, not in libcef and not in this machine.
+  #
+  # With USE_SANDBOX=OFF the app runs directly, which is what `settings
+  # .no_sandbox = true` in cefsimple_win.cc already assumes, and cef_sandbox is
+  # never linked — so the two halves finally describe the same build.
+  set(USE_SANDBOX OFF CACHE BOOL "Enable or disable use of the sandbox." FORCE)
   find_package(CEF REQUIRED)
   # CEF's integration clears CMAKE_CXX_FLAGS* and manages everything through
   # its own variables, so the application target must opt into the same

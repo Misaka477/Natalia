@@ -282,6 +282,9 @@ void SimpleApp::OnContextInitialized() {
 
   // SimpleHandler implements browser-level callbacks.
   CefRefPtr<SimpleHandler> handler(new SimpleHandler(use_alloy_style));
+  // Remembered so GetDefaultClient can answer without building a handler at a
+  // point where building one is illegal (see simple_app.h).
+  default_client_ = handler;
 
   // Specify CEF browser settings here.
   CefBrowserSettings browser_settings;
@@ -347,5 +350,21 @@ void SimpleApp::OnContextInitialized() {
 
 CefRefPtr<CefClient> SimpleApp::GetDefaultClient() {
   // Called when a new browser window is created via Chrome style UI.
-  return SimpleHandler::GetInstance();
+  //
+  // NEVER the singleton. `SimpleHandler::GetInstance()` builds a handler the
+  // first time it is asked, and CEF asks during CefInitialize — before the UI
+  // thread, before OnContextInitialized, before anything that handler is
+  // allowed to touch. Returning it there is what made every launch of the
+  // installed host die inside CefInitialize with a Chromium CHECK:
+  // STATUS_BREAKPOINT at one fixed offset, CefGetExitCode() == 38, no window,
+  // no message.
+  //
+  // The evidence, by bisection: a minimal control app with this same interface
+  // and GetDefaultClient() returning nullptr reaches "CefInitialize OK" and
+  // stays up; this host with an EMPTY OnContextInitialized (creating nothing at
+  // all) still exits 38 — so the browser creation was never the problem, this
+  // return was. The handler that OnContextInitialized creates is the one that
+  // owns the window, and it is stored here so a later Chrome-style popup still
+  // finds a client.
+  return default_client_;
 }

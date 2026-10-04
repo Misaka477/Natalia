@@ -55,35 +55,29 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   UNREFERENCED_PARAMETER(lpCmdLine);
   UNREFERENCED_PARAMETER(nCmdShow);
 
-  // RUNTIME bisection switch, same binary both ways. The compile-time probe
-  // could not close the last gap because two builds are two builds; this is one
-  // executable that either stops right after CefInitialize or runs the whole
-  // startup. NATALIA_CEF_PROBE=1 makes it stop, with a message box saying which
-  // way it went, so a single run answers "does this exact binary initialise".
-  const bool probe_mode = GetEnvironmentVariableW(L"NATALIA_CEF_PROBE", nullptr, 0) != 0;
-  if (probe_mode) {
-    CefMainArgs probe_args(hInstance);
-    CefSettings probe;
-    probe.no_sandbox = true;
-    wchar_t probe_cache[MAX_PATH] = {0};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
-                                   probe_cache)) &&
-        probe_cache[0] != 0) {
-      std::wstring root(probe_cache);
-      root += L"\\Natalia\\CEF";
-      CreateDirectoryW(root.c_str(), nullptr);
-      CefString(&probe.cache_path).FromWString(root);
-    }
-    CefRefPtr<SimpleApp> probe_app(new SimpleApp);
-    const int hand_off = CefExecuteProcess(probe_args, probe_app.get(), nullptr);
-    if (hand_off >= 0) return hand_off;
-    CefRefPtr<CefCommandLine> probe_line = CefCommandLine::CreateCommandLine();
-    probe_line->InitFromString(::GetCommandLineW());
-    const bool ok = CefInitialize(probe_args, probe, probe_app.get(), nullptr);
-    MessageBoxW(nullptr, ok ? L"CefInitialize OK" : L"CefInitialize FAILED",
-                L"natalia-cef runtime probe", MB_OK);
-    return ok ? 0 : static_cast<int>(CefGetExitCode());
-  }
+  // RUNTIME bisection switch, same binary both ways.
+  //
+  // The FIRST version of this switch read an ENVIRONMENT VARIABLE
+  // (NATALIA_CEF_PROBE), and that produced a result too strange to leave alone:
+  // the same binary, the same call site, initialised CEF with the variable set
+  // and failed without it. So the switch is now a COMMAND-LINE ARGUMENT, which
+  // cannot be read by libcef's own startup — if the outcome still follows the
+  // flag, the flag's presence in the process environment block is what matters;
+  // if it does not, then libcef was reading that environment variable and
+  // changing its behaviour, and the fix is to stop setting it.
+  // RUNTIME bisection switch, same binary both ways. ONE flag, ONE path: the
+  // only place this acts is at the real CefInitialize call site below, so the
+  // two runs differ in nothing except whether the call's result is reported and
+  // the function returns there.
+  //
+  // (An earlier version also had an early-return probe block with its own
+  // settings, which CONFOUNDED the experiment: with the flag set it returned
+  // before ever reaching the real call site, so "the flag made it succeed" was
+  // really "a different, simpler call succeeded". That early block is deleted;
+  // this is the only probe left.)
+  const bool probe_mode =
+      ::GetCommandLineW() != nullptr &&
+      wcsstr(::GetCommandLineW(), L"--natalia-probe") != nullptr;
 
 #ifdef NATALIA_CEF_PROBE_ONLY
   // BISECTION PROBE, compiled in only with -DNATALIA_CEF_PROBE_ONLY=1.

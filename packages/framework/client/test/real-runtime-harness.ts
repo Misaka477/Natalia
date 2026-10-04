@@ -840,6 +840,33 @@ export function sqliteContinueProvider(): StreamingProvider {
         return;
       }
       if (!request.messages.some((message) => message.role === "tool")) {
+        // Start the pane FIRST: the pane it later asks a human about has to
+        // exist. The fork registry used to pre-create it as a fixture; with the
+        // host gone the runtime's own pty controller makes it here, so the id
+        // this call names is a pane the runtime really owns.
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_start",
+              name: "interactive_terminal_start",
+              arguments: JSON.stringify({
+                command: "cat",
+                id: "rh_sqlite",
+              }),
+            },
+          ],
+        };
+        return;
+      }
+      if (
+        !request.messages.some(
+          (message) =>
+            message.role === "tool" &&
+            String(message.content).includes("rh_sqlite"),
+        )
+      ) {
+        // The pane exists now; ask the human about it.
         yield {
           type: "tool_call" as const,
           calls: [

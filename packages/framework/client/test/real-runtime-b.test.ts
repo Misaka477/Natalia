@@ -433,29 +433,24 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
   await client.submitAndWait!("start terminal");
 
   expect(await client.nativeTerminalList!()).toMatchObject([
-    { id: "tty_management", status: "running", paneID: 71 },
+    { id: "tty_management", status: "running" },
   ]);
-  // The extent rides along the read, and on this backend it is null: the
-  // fixture's host answers with text and nothing that locates it in a document,
-  // so a null says "cannot page" where zeros would impersonate a one-line
-  // document. The real extent is pinned by the pty controller's own paging
-  // test; this assertion pins the degradation a wezterm-backed runtime serves.
+  // The extent rides along the read, and on the pty backend it is REAL: the
+  // pane owns a document, so lines and bytes are addressed. This used to pin the
+  // fork fixture's degradation (null everywhere, plus its canned text and its
+  // pane id 71) — a host that no longer exists. What is pinned now is what the
+  // RuntimeClient surface serves: the read reaches the pane, reports a caret and
+  // a real line/byte extent rather than nulls that impersonate a one-line
+  // document, and the stop path retires it.
   const paneRead = await client.nativeTerminalRead!("tty_management");
-  expect(paneRead).toEqual({
-    id: "tty_management",
-    text: "native pane output",
-    startLine: null,
-    endLine: null,
-    totalLines: null,
-    // The caret reads 0;0 from the fixture's pane while the extent stays null:
-    // the two are answered by different layers here, and the pins keep both
-    // honest to what this host actually serves rather than to each other.
-    cursorX: 0,
-    cursorY: 0,
-    startByte: null,
-    endByte: null,
-    totalBytes: null,
-  });
+  expect(paneRead).toMatchObject({ id: "tty_management" });
+  expect(typeof paneRead.text).toBe("string");
+  expect(paneRead.totalLines).toBeGreaterThan(0);
+  expect(paneRead.totalBytes).toBeGreaterThan(0);
+  expect(paneRead.cursorX).toBeGreaterThanOrEqual(0);
+  expect(paneRead.cursorY).toBeGreaterThanOrEqual(0);
+  expect(paneRead.startLine).toBeGreaterThanOrEqual(0);
+  expect(paneRead.endLine).toBeGreaterThanOrEqual(0);
   await client.nativeTerminalOpenHub!();
   await expect(
     client.nativeTerminalRevokeApprovalScope!("tty_management"),

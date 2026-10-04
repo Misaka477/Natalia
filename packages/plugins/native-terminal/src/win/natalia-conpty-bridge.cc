@@ -255,8 +255,11 @@ DWORD WINAPI pumpConsoleOutput(LPVOID) {
   for (;;) {
     DWORD read = 0;
     if (!ReadFile(g_pcOutputRead, buffer, sizeof(buffer), &read, nullptr) ||
-        read == 0)
+        read == 0) {
+      fprintf(stderr, "conpty-bridge: output pump ended (read=%lu err=%lu)\n",
+              (unsigned long)read, (unsigned long)GetLastError());
       break;
+    }
     sendFrame("o", buffer, read);
   }
   return 0;
@@ -381,6 +384,18 @@ int main() {
   }
   g_childProcess = process.hProcess;
   CloseHandle(process.hThread);
+  // The host's copies of the handles it passed TO the console: close them.
+  //
+  // Every ConPTY reference sample does this, and the reason is not tidiness:
+  // the console (conhost) owns those pipe ends now, and a host that keeps its
+  // own copies open leaves the console unable to signal end-of-stream when
+  // the child exits — the relay never completes, the pump stays blocked in
+  // ReadFile forever, and the pane sits there with the child gone and no exit
+  // frame. Measured shape before this: the console's first paint arrived,
+  // then total silence from both output and exit, for a child that had
+  // already finished its work.
+  CloseHandle(consoleInputRead);
+  CloseHandle(consoleOutputWrite);
 
   char pidLine[64];
   const int pidLength = _snprintf_s(pidLine, sizeof(pidLine), _TRUNCATE,

@@ -9,8 +9,15 @@ import {
   nativeTerminalPaneSpawn,
 } from "../src/index";
 
+// The override, then the WSL drop (~/.local/bin), then PATH. The third is what
+// a Windows host — and a GitHub windows-latest runner — has: pwsh ships with
+// the OS image and `Bun.which` finds it. Without it this file skipped on every
+// Windows machine, which is where the ONLY pane shell PowerShell integration
+// would ever run for real.
 const pwshPath =
-  process.env.NATALIA_PWSH ?? `${process.env.HOME}/.local/bin/pwsh`;
+  process.env.NATALIA_PWSH ??
+  Bun.which("pwsh") ??
+  `${process.env.HOME}/.local/bin/pwsh`;
 
 const havePwsh = async (): Promise<boolean> => {
   if (!existsSync(pwshPath)) return false;

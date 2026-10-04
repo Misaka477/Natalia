@@ -361,6 +361,41 @@ jobs:
       - name: Test (${{ matrix.layer }})
         run: ${{ matrix.dirs }}
 
+  # The Windows terminal, on Windows. Until this job existed the repo had
+  # ZERO Windows coverage: the ConPTY bridge was cross-compiled with mingw and
+  # exercised under wine on Linux, whose ConPTY implements the output side but
+  # not the input side — which is exactly where issue #2 (P23, the mute pane)
+  # lived, undetected by anything in CI. This job builds the bridge with the
+  # image's clang-cl and drives the REAL bridge against the REAL ConPTY: the
+  # typed-line path, the kill path, and pwsh's shell integration (PowerShell
+  # is the only pane shell whose integration runs here at all).
+  windows-terminal:
+    needs: artifacts
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install dependencies
+        run: bun install
+      - name: Build the ConPTY bridge with the image's clang-cl
+        run: bun run native-terminal:build-conpty:windows
+      - name: The bridge on the real ConPTY (input and kill paths)
+        run: >
+          bun test --timeout 120000
+          ./packages/plugins/native-terminal/test/conpty-native.test.ts
+      - name: The native terminal suite and pwsh's shell integration
+        run: >
+          bun test --max-concurrency=2 --timeout 180000
+          ./packages/plugins/native-terminal/test/pwsh-e2e.test.ts
+          ./packages/plugins/native-terminal/test/terminal-behavior.test.ts
+          ./packages/plugins/native-terminal/test/shell-integration.test.ts
+
   guards:
     needs: test
     runs-on: ubuntu-latest

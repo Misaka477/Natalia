@@ -94,8 +94,14 @@ const DEFAULT_NAME = "Natalia";
 const DEFAULT_PUBLISHER = "Natalia";
 const DEFAULT_RUNTIME = "natalia";
 const DEFAULT_CEF = "natalia-cef-desktop";
-/** The Start Menu entry's target: the stack launcher, not the bare CEF host. */
-const DEFAULT_LAUNCHER = "Natalia.cmd";
+/**
+ * The Start Menu entry's target: the launcher EXE, not the bare CEF host and
+ * not a batch script. It is the one PARENT process — it starts the runtime and
+ * the web server as job-owned children and then the window host, so the process
+ * tree is one parent with children rather than a pile of loose processes, and
+ * the children die with it instead of being orphaned.
+ */
+const DEFAULT_LAUNCHER = "natalia-launcher.exe";
 
 /** Release bookkeeping that must never be installed. */
 const EXCLUDED = new Set([

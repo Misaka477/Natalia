@@ -78,6 +78,19 @@ if(WIN32)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
   target_link_libraries(natalia-cef-desktop PRIVATE shell32)
+
+  # The Start Menu entry: a real EXE, not a batch script. A .cmd's `start /b`
+  # children share its console, so when the script ended the console closed and
+  # took both servers with it — the browser tab it had just opened then failed
+  # every API call with ERR_CONNECTION_REFUSED. This launcher starts them with
+  # DETACHED_PROCESS, so they outlive it, and it is what the shortcut runs.
+  add_executable(natalia-launcher WIN32
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/natalia_launcher_win.cc"
+  )
+  target_link_libraries(natalia-launcher PRIVATE shell32 ws2_32)
+  set_target_properties(natalia-launcher PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output"
+  )
 else()
 # The tray. Both platforms get one, and the difference is a dependency's
 # availability rather than a design choice:

@@ -245,3 +245,35 @@ test("the two windows agree on where the other one sits", async () => {
     await controller.close();
   }
 }, 40_000);
+
+test("a full-speed flood does not starve the keyboard", async () => {
+  // The question the throughput number cannot answer. `yes` at full rate is
+  // the worst producer a pane can have, and the number that gates human use
+  // is not MiB/s but this: while the flood runs, how long does a keystroke's
+  // echo take? Measured after the screen-fold fix: 14.5ms. Before the fold
+  // fix the same probe would have waited on the fold's backlog.
+  //
+  // The budget is deliberately loose (5s against a 14.5ms reality) so CI
+  // noise cannot flake it; what it catches is the real failure — the echo
+  // arriving only after the flood ends, which is what a fold that blocks the
+  // input path looks like.
+  const root = await mkdtemp(join(tmpdir(), "natalia-flood-latency-"));
+  const { controller } = await paneIn(root, "t_flood");
+  try {
+    controller.write("t_flood", "yes FLOODLINE\n");
+    await new Promise((r) => setTimeout(r, 400));
+    let echoed = false;
+    const unsub = controller.subscribeOutput!("t_flood", (chunk) => {
+      if (chunk.includes("ECHO_MARKER_XYZ")) echoed = true;
+    });
+    const started = performance.now();
+    controller.write("t_flood", "echo ECHO_MARKER_XYZ\n");
+    while (!echoed && performance.now() - started < 5_000) await Bun.sleep(5);
+    unsub();
+    expect(echoed).toBe(true);
+    // Stop the flood so the pane's exit does not wait on `yes`.
+    controller.write("t_flood", "\u0003");
+  } finally {
+    await controller.close();
+  }
+}, 30_000);

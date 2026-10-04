@@ -343,6 +343,31 @@ int main() {
   STARTUPINFOEXW startup;
   ZeroMemory(&startup, sizeof(startup));
   startup.StartupInfo.cb = sizeof(startup);
+  // STARTF_USESTDHANDLES with the hStd* left NULL. That combination is the
+  // ConPTY idiom, not a nuance: it is exactly what Windows Terminal's
+  // ConptyConnection::_LaunchAttachedClient sets before CreateProcessW, and it
+  // is what hands the child's std handles to the pseudo console instead of to
+  // whatever this bridge happens to have open.
+  //
+  // The measured history, both shapes recorded honestly:
+  //  - dwFlags = 0 + bInheritHandles TRUE (this bridge, 2026-10-04 CI): the
+  //    child's console-side calls work — the title OSC and the console's own
+  //    initial paint relay fine — but the child's stdout writes never reach the
+  //    console. The native test's frames showed why verbatim: cmd.exe's prompt
+  //    arrived in the bridge's stdout RAW and unframed — the child had
+  //    inherited the bridge's own stdout pipe and was writing through it
+  //    instead of the console.
+  //  - dwFlags = 0 + bInheritHandles FALSE: the child had nothing to write
+  //    through at all, which is what the "inherit handles" commit concluded.
+  //  - dwFlags = STARTF_USESTDHANDLES + NULL + FALSE (the reference form): the
+  //    kernel hands the child the pseudo console's own handles, so stdout
+  //    writes AND initialization both go through the console. Verified on the
+  //    Windows desktop 2026-10-04: this bridge's own frames carried
+  //    "CONPTY_NATIVE_OK" and the exit frame read 0. The mutation pair for this
+  //    fix, same machine, same drive: drop the dwFlags line (keep FALSE) →
+  //    no output at all; restore the line but flip FALSE→TRUE → no output at
+  //    all. Both halves are load-bearing.
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
   SIZE_T attributeListSize = 0;
   InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeListSize);
   startup.lpAttributeList =
@@ -373,14 +398,14 @@ int main() {
   // With a pseudo-console, CreateProcessW takes the command line ONLY: passing
   // lpApplicationName alongside the attribute list fails with
   // ERROR_INVALID_PARAMETER. commandLine already starts with the quoted exe.
-  // bInheritHandles TRUE, as every ConPTY reference sample has it. The
-  // distinction is not ceremonial: the title and the initial paint arrived
-  // with FALSE (the title is a direct console-API call and the paint is
-  // conhost's own), but the CHILD's stdout writes — the echo, the command's
-  // answer — never reached the console. The std handles are what the
-  // pseudoconsole attribute hooks, and FALSE leaves the child with nothing
-  // to write through.
-  if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE,
+  // bInheritHandles FALSE, as the ConPTY reference samples have it — Windows
+  // Terminal's ConptyConnection passes false, and the Microsoft "Creating a
+  // pseudoconsole session" sample passes FALSE as well. The earlier version of
+  // this comment claimed "every ConPTY reference sample has it TRUE"; that was
+  // false, and the TRUE experiment it excused is the one measured above: the
+  // child wrote through the bridge's inherited stdout pipe instead of the
+  // console (its prompt showed up raw in the bridge's own frame stream).
+  if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
                       EXTENDED_STARTUPINFO_PRESENT,
                       nullptr, /* DIAG: env disabled */
                       workingDirectory.empty() ? nullptr : workingDirectory.c_str(),

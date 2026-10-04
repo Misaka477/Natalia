@@ -300,10 +300,22 @@ async function verifyRelease(
   // Every file on disk is covered by the checksums. VERSION and
   // SHA256SUMS are the verification's own inputs: a checksum cannot list
   // itself, and VERSION is what install.sh reads before it verifies.
-  const listed = new Set(files.map((file) => file.file));
+  //
+  // AND THE PATHS ARE COMPARED IN ONE SPELLING. On a Windows host `outDir`
+  // is a backslash path, so `join` produces `plugins\natalia-browser\index.js`
+  // while the manifest's list — built from the same walk on a POSIX CI host —
+  // holds `plugins/natalia-browser/index.js`. Comparing them raw made every
+  // file of a Windows release "uncovered": 94 problems on a tree whose 94
+  // entries each verified against its own checksum by hand. The separator is
+  // normalized (backslash to forward) before the set lookup, which is what
+  // the manifest's own walk already emits.
+  const listed = new Set(files.map((file) => file.file.replace(/\\/g, "/")));
   const walk = async (dir: string, prefix = ""): Promise<void> => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const rel = (prefix ? `${prefix}/${entry.name}` : entry.name).replace(
+        /\\/g,
+        "/",
+      );
       if (entry.isDirectory()) {
         await walk(join(dir, entry.name), rel);
         continue;

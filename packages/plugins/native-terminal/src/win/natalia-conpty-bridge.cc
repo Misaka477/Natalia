@@ -433,12 +433,18 @@ int main() {
   // apart from nothing happening is not a fix. The line also records the size,
   // because "the handshake ran with the wrong viewport" is the other way this
   // fails.
-  // REMOVED: the same-size resize handshake. See the experiment note in
-  // the commit — hr=0 (success) with the pane still mute on every run, and
-  // the relay delivering nothing the child writes, makes the resize the
-  // prime suspect for the breakage rather than the cure. Restoring it needs
-  // evidence, not the older note.
-  fprintf(stderr, "conpty-bridge: viewport handshake skipped (experiment)\n");
+  // The same-size resize handshake. HISTORY, now with the honest record:
+  // the P23 note below claimed this was the fix; the Windows CI's native
+  // runs measured hr=0 (it succeeds) with the pane still mute, and an
+  // experiment removing it changed nothing — so it is NOT what breaks the
+  // relay, and it is NOT what fixes the mute either. The call stays (it is
+  // one ioctl and the original successful run had it) but no one should
+  // read it as the answer. The mute is open as issue #2, and the next
+  // Windows session takes it from the relay evidence, not from here.
+  const HRESULT resized = ResizePseudoConsole(g_pseudoConsole, size);
+  fprintf(stderr,
+          "conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
+          (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
   // The command line, verbatim. The Windows CI's first native run showed
   // cmd.exe reporting `'"echo CONPTY_NATIVE_OK' is not recognized` — a command
   // line with an unbalanced leading quote, from a builder that on its face

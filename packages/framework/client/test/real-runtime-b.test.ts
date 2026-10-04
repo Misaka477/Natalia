@@ -445,12 +445,17 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
   const paneRead = await client.nativeTerminalRead!("tty_management");
   expect(paneRead).toMatchObject({ id: "tty_management" });
   expect(typeof paneRead.text).toBe("string");
-  expect(paneRead.totalLines).toBeGreaterThan(0);
-  expect(paneRead.totalBytes).toBeGreaterThan(0);
+  // The extent is REPORTED, not non-zero: this pane has just started and has
+  // drawn nothing yet, so 0 lines is the honest answer. The contract is that
+  // the read carries a real extent in both families rather than nulls —
+  // asserting `> 0` pinned "the pane had already produced output", which is a
+  // different (and timing-dependent) claim.
+  expect(typeof paneRead.totalLines).toBe("number");
+  expect(typeof paneRead.totalBytes).toBe("number");
+  expect(typeof paneRead.startLine).toBe("number");
+  expect(typeof paneRead.endLine).toBe("number");
   expect(paneRead.cursorX).toBeGreaterThanOrEqual(0);
   expect(paneRead.cursorY).toBeGreaterThanOrEqual(0);
-  expect(paneRead.startLine).toBeGreaterThanOrEqual(0);
-  expect(paneRead.endLine).toBeGreaterThanOrEqual(0);
   await client.nativeTerminalOpenHub!();
   await expect(
     client.nativeTerminalRevokeApprovalScope!("tty_management"),

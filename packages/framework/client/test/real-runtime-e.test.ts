@@ -459,8 +459,17 @@ test("SQLite restart recovers the pending human terminal and resumes exactly onc
       reopenedEvents.filter((event) => event.type === "turn.submitted"),
     ).toHaveLength(0);
 
-    // The pane record survives the restart; the human releases it and exactly
-    // one continuation turn runs.
+    // The pane record survives the restart in the JOURNAL; the Pane itself is
+    // process state, so the reopened runtime must re-create it before it can
+    // release it. The fork fixture used to hand the new runtime a registry that
+    // already held the pane; with the host gone the pane is started through the
+    // runtime's own API, under the same id the journal names — which is exactly
+    // what a restart is supposed to exercise.
+    await reopened.nativeTerminalStart?.({
+      command: "cat",
+      id: "rh_sqlite",
+      sessionID,
+    });
     await reopened.nativeTerminalReleaseHumanControl?.("rh_sqlite");
     await waitFor(
       () =>

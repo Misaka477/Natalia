@@ -28,6 +28,11 @@
 #include <string>
 
 #include <windows.h>
+// NOTIFYICONDATA and Shell_NotifyIcon live in shellapi.h, which windows.h does
+// not pull in. Without this the Windows build fails at
+// `unknown type name 'NOTIFYICONDATA'` — a compile error no Linux runner ever
+// saw, because it does not compile this file.
+#include <shellapi.h>
 
 namespace natalia {
 

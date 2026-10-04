@@ -505,6 +505,28 @@ for (const target of targets) {
     await stageTerminalNatives(outDir, platformDir);
     await stageDesktopHost(outDir, platformDir);
     await stageWebShell(outDir);
+    // The Windows launcher the Start Menu entry runs. Without it the shortcut
+    // pointed at natalia-cef-desktop.exe, whose only URL is the dev server at
+    // 127.0.0.1:5178 — nothing in an install listens there, so the host exited
+    // and the user saw "it will not open". Written here, before the hash walk,
+    // so it is checksummed and the installer carries it.
+    if (platformDir.startsWith("windows")) {
+      const launcher = join(
+        root,
+        "scripts",
+        "templates",
+        "natalia-launcher.cmd",
+      );
+      if (!(await Bun.file(launcher).exists()))
+        throw new Error(
+          `the Windows launcher template is missing: ${launcher} — the Start ` +
+            `Menu entry has nothing to run`,
+        );
+      await Bun.write(
+        join(outDir, "Natalia.cmd"),
+        await Bun.file(launcher).text(),
+      );
+    }
     // The shipped composition base (P3 "base profile 随包机制"): copied
     // into the app root BEFORE the hash walk, so SHA256SUMS lists it and
     // install.sh's files loop lands it next to the binary — where the

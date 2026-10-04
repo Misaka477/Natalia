@@ -18,6 +18,10 @@ async function fakeWindowsRelease() {
   await mkdir(join(root, "resources", "plugins"), { recursive: true });
   await writeFile(join(root, "natalia.exe"), "runtime\n");
   await writeFile(join(root, "natalia-cef-desktop.exe"), "cef\n");
+  // The launcher the Start Menu entry runs: the runtime + web server + the
+  // host pointed at them. A release without it has a shortcut to a process
+  // that cannot show a window on its own.
+  await writeFile(join(root, "Natalia.cmd"), "@echo off\n");
   await writeFile(join(root, "libcef-bin", "libcef.dll"), "lib\n");
   await writeFile(join(root, "libcef-bin", "chrome_100_percent.pak"), "pak\n");
   await writeFile(join(root, "resources", "plugin.js"), "ui\n");
@@ -48,12 +52,18 @@ test("the plan lists the release's whole tree, and none of its bookkeeping", asy
   expect(targets).not.toContain("install.ps1");
 });
 
-test("the shortcut runs the process that has a window", async () => {
+test("the shortcut runs the stack, not a process that cannot show a window alone", async () => {
   const release = await fakeWindowsRelease();
   const plan = await planWindowsInstall({ releaseDir: release });
-  // The CEF host, not the compiled runtime: `natalia.exe` is what the launcher
-  // starts as a server, and a shortcut pointed at it opens nothing.
-  expect(plan.shortcut.targetRelative).toBe("natalia-cef-desktop.exe");
+  // The launcher, NOT the CEF host and NOT the compiled runtime.
+  //
+  // `natalia.exe` is a CLI: a shortcut pointed at it opens a status dump. The
+  // CEF host alone is worse than useless — its only URL is the dev server at
+  // 127.0.0.1:5178, which nothing in an install listens on, so it exits and the
+  // user sees "it will not open". The launcher starts the runtime AND the web
+  // server first and then hands the host a URL that exists, which is the only
+  // shape that produces a window.
+  expect(plan.shortcut.targetRelative).toBe("Natalia.cmd");
   expect(
     plan.files.some((f) => f.target === plan.shortcut.targetRelative),
   ).toBe(true);

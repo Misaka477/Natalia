@@ -40,6 +40,7 @@ import {
   workGraphLines,
 } from "./index";
 import { valueAfter } from "./command-helpers";
+import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 import {
   applyCompositionPatch,
   compositionRowViews,
@@ -93,8 +94,11 @@ export async function handleLocalCommands(argv: string[]) {
     ]).has(subcommand ?? "")
   )
     return false;
-  const configPath =
-    process.env.NATALIA_CONFIG ?? `${process.cwd()}/.natalia/config.json`;
+  // Resolved THROUGH the shared entry point, which also makes sure the
+  // directory and the file exist. The previous inline spelling produced the
+  // same path and then handed it to a strict reader, so a fresh install crashed
+  // on the config it was supposed to create itself.
+  const configPath = (await ensureNataliaConfigPath(nataliaConfigPath())).path;
   switch (subcommand) {
     case "uninstall": {
       // The app-level uninstall takes NO arguments — and the dead

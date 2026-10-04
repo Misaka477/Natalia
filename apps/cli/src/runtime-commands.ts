@@ -1,4 +1,4 @@
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   createRealRuntimeClient,
   createUiAdapterHost,
@@ -9,6 +9,8 @@ import {
 import { createRecordedFetch } from "@natalia/transport";
 import { createHttpTransportHost } from "./transport-host";
 import { createPluginUiResolver } from "./plugin-ui";
+import { serveStaticDirectory } from "./serve-web";
+import { ensureNataliaConfigPath } from "./config-home";
 import { promptArguments } from "./index";
 import {
   valueAfter,
@@ -23,11 +25,40 @@ import { perfLog } from "@anthelia/runtime-services";
 export async function handleRuntimeCommand(argv: string[]) {
   const command = argv[0];
   const commandStart = performance.now();
+  if (command === "serve-web") {
+    // The release's own static server for the shipped web shell. The dev flow
+    // runs `apps/cef-desktop/serve-web.ts`, which resolves a REPO-relative path;
+    // an installed copy has no repo, so this is the same job pointed at a
+    // directory the caller names.
+    // The directory arrives as `--root <dir>` from the Windows launcher. The
+    // positional form is still accepted, but `--root` is read FIRST: looking
+    // only at argv[1] made `--root <install>\web` read as "no argument given"
+    // and fall back to a cwd-relative `web`, which an install does not have.
+    const flaggedRoot = valueAfter(argv, "--root");
+    const positionalRoot =
+      argv[1] && !argv[1].startsWith("-") ? argv[1] : undefined;
+    const root = resolve(flaggedRoot ?? positionalRoot ?? "web");
+    if (!(await Bun.file(join(root, "index.html")).exists()))
+      throw new Error(
+        `serve-web: ${root} has no index.html — a release serves its own web/ ` +
+          `directory (run build:web, then pass its directory)`,
+      );
+    const port = Number(valueAfter(argv, "--port") ?? "8790");
+    if (!Number.isInteger(port) || port < 0 || port > 65535)
+      throw new Error("serve-web requires a valid port");
+    const served = await serveStaticDirectory({ root, port });
+    console.log(`[serve-web] ${served.url} -> ${root}`);
+    return true;
+  }
   if (command === "serve" || command === "--serve") {
     const port = parseServePort(argv);
     const globalConfigPath =
       process.env.NATALIA_CONFIG ??
       resolve(process.cwd(), ".natalia", "global-config.json");
+    // Created before the manager reads it. `serve` is what the Windows
+    // launcher starts first, so a strict read here is what an installed copy
+    // died on: the same ENOENT as the CLI's own faces, one layer down.
+    await ensureNataliaConfigPath(globalConfigPath);
     console.log("[serve] globalConfigPath", globalConfigPath);
     const manager = createWorkspaceManager({
       pluginStoreRoot: pluginStoreRoot(),
@@ -205,7 +236,14 @@ export async function handleRuntimeCommand(argv: string[]) {
 }
 
 export function parseServePort(argv: string[]) {
-  const port = Number(argv[1] ?? "8787");
+  // The port has always been the first positional argument (`natalia serve
+  // 8787`). `--port N` is accepted too, because the Windows launcher — and
+  // anyone reading the other subcommands — reaches for the flag form, and a
+  // `--port` that silently became the positional made `serve` throw "requires a
+  // valid port" with the flag sitting right there in the command line.
+  const flagged = valueAfter(argv, "--port");
+  const raw = flagged ?? argv[1] ?? "8787";
+  const port = Number(raw);
   if (!Number.isInteger(port) || port <= 0 || port > 65535)
     throw new Error("serve requires a valid port");
   return port;

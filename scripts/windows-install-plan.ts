@@ -94,6 +94,8 @@ const DEFAULT_NAME = "Natalia";
 const DEFAULT_PUBLISHER = "Natalia";
 const DEFAULT_RUNTIME = "natalia";
 const DEFAULT_CEF = "natalia-cef-desktop";
+/** The Start Menu entry's target: the stack launcher, not the bare CEF host. */
+const DEFAULT_LAUNCHER = "Natalia.cmd";
 
 /** Release bookkeeping that must never be installed. */
 const EXCLUDED = new Set([
@@ -204,7 +206,12 @@ export async function planWindowsInstall(
       // The CEF window, not the compiled runtime: it is the process with a
       // window. Its argument points at the bundled web server, which the
       // launcher starts before it (run-cef-desktop.cmd does the same ordering).
-      targetRelative: `${cefBinary}.exe`,
+      // The launcher, NOT the CEF host. The host alone has no URL of its own in
+      // production: its default is the dev server at 127.0.0.1:5178, which
+      // nothing in an install listens on, so a shortcut to it opened nothing.
+      // The launcher starts the runtime and the web server first, then hands
+      // the host a URL that exists.
+      targetRelative: DEFAULT_LAUNCHER,
       arguments: "",
       workingDirRelative: ".",
       // The installed path, not the source: the shortcut and the shell entry name

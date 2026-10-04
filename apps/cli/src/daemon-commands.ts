@@ -1,5 +1,6 @@
 import { createRealRuntimeClient } from "@natalia/client";
 import { pluginStoreRoot } from "./official-plugins";
+import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 import {
   createRuntimeDaemonStore,
   daemonToken,
@@ -29,8 +30,8 @@ export async function handleDaemonCommands(argv: string[]) {
     ]).has(subcommand ?? "")
   )
     return false;
-  const configPath =
-    process.env.NATALIA_CONFIG ?? `${process.cwd()}/.natalia/config.json`;
+  // The shared config home: resolved, and created if this launch is the first.
+  const configPath = await ensureNataliaConfigPath(nataliaConfigPath());
   switch (subcommand) {
     case "daemon":
     case "--daemon-serve": {

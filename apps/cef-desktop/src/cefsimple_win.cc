@@ -18,6 +18,8 @@
 #include "simple_app.h"
 
 #include <windows.h>
+#include <shlobj.h>
+#include <string>
 
 #include "include/base/cef_logging.h"
 #include "include/cef_command_line.h"
@@ -73,6 +75,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
   // Specify CEF global settings here.
   CefSettings settings;
+
+  // The cache root is PER-USER, not per-install-directory. CEF's default is
+  // derived from the executable's own location, which is exactly the case its
+  // startup warning names ("Please customize CefSettings.root_cache_path ...
+  // may lead to unintended process singleton behavior"): two installations, or
+  // an install directory a non-admin user cannot write, share one cache root
+  // and the singleton logic decides the second launcher should hand off to the
+  // first — so `CefInitialize` fails, `CefGetExitCode()` is returned, and the
+  // program exits with no window and no message. That is the exit 38 an
+  // installed copy died with.
+  //
+  // `%LOCALAPPDATA%` is per-user and always writable; the subdirectory keeps
+  // this app's cache separate from the dev build's, which still runs from a
+  // checkout and would otherwise collide on the default path.
+  wchar_t cache_root[MAX_PATH] = {0};
+  if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
+                                 cache_root)) &&
+      cache_root[0] != 0) {
+    std::wstring root(cache_root);
+    root += L"\\Natalia\\CEF";
+    CreateDirectoryW(root.c_str(), nullptr);
+    CefString(&settings.root_cache_path).FromWString(root);
+    CefString(&settings.cache_path).FromWString(root + L"\\cache");
+    // The log file, so a future failure has somewhere to say what happened
+    // instead of exiting silently.
+    CefString(&settings.log_file).FromWString(root + L"\\cef.log");
+    settings.log_severity = LOGSEVERITY_WARNING;
+  }
 
 #if !defined(CEF_USE_SANDBOX)
   settings.no_sandbox = true;

@@ -22,6 +22,7 @@ import {
   resolveConfig,
   resolveEffectiveModel,
 } from "@anthelia/config";
+import { ensureNataliaConfigPath } from "./config-home";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { ContextWindowResolver } from "@anthelia/runtime";
 import {
@@ -46,17 +47,22 @@ export async function startupDiagnostics(
   // installer cannot pre-create. The strict read is what made the installed app
   // die with ENOENT on its first launch. A dev checkout never saw it: its repo
   // root has had a `.natalia/` for as long as this path has existed.
-  const loaded = await loadOrCreateConfigFile(configPath);
+  // The path is READY when it is resolved: the directory exists and a
+  // schema-valid config sits in it. A first launch of a fresh install used to
+  // die here with ENOENT, because the app expected someone else — the installer
+  // or the user — to have made its config home.
+  const ready = await ensureNataliaConfigPath(configPath);
   return {
-    configPath,
-    migrationSummary: migrationSummaryText(loaded.summary),
+    configPath: ready.path,
+    migrationSummary: migrationSummaryText(ready.summary),
     tty,
     automation: !tty,
   };
 }
 
 export async function plainStatus(configPath: string) {
-  const loaded = await loadOrCreateConfigFile(configPath);
+  const ready = await ensureNataliaConfigPath(configPath);
+  const loaded = ready;
   const ref = loaded.config.defaultModel;
   const effective = ref ? resolveEffectiveModel(loaded.config, ref) : undefined;
   if (!ref || !effective) {

@@ -50,9 +50,15 @@ set(NATALIA_CEF_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_app.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_handler.cc"
 )
-# Without this the tray detection below has no pkg_check_modules to call: it is
-# not a built-in, it comes from CMake's own FindPkgConfig module.
-find_package(PkgConfig REQUIRED)
+# The tray detection below needs pkg_check_modules, which comes from CMake's own
+# FindPkgConfig module — on LINUX only. Windows finds its tray through
+# Shell_NotifyIcon (a Win32 call, always present) and never calls
+# pkg_check_modules, so requiring PkgConfig there made `desktop:cef:build:windows`
+# fail at configure time on a host that has no pkg-config — a POSIX build tool a
+# Windows machine has no reason to carry.
+if(NOT WIN32)
+  find_package(PkgConfig REQUIRED)
+endif()
 
 # The target is created BEFORE the tray detection because the detection calls
 # target_include_directories/target_link_libraries/target_compile_definitions on

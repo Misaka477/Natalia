@@ -2,6 +2,7 @@ import { plainStatus } from "./index";
 import { handleRuntimeCommand } from "./runtime-commands";
 import { handleDaemonCommands } from "./daemon-commands";
 import { handleLocalCommands } from "./local-commands";
+import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 
 const argv = process.argv.slice(2);
 const handled =
@@ -16,7 +17,9 @@ if (!handled) {
     process.exit(1);
   }
   if (subcommand) throw new Error(`unknown command: ${subcommand}`);
-  const configPath =
-    process.env.NATALIA_CONFIG ?? `${process.cwd()}/.natalia/config.json`;
+  // No subcommand: the default face. Its config home is created here, so the
+  // first launch of a fresh install reports its (unconfigured) state instead of
+  // dying on a file nobody was responsible for creating.
+  const configPath = (await ensureNataliaConfigPath(nataliaConfigPath())).path;
   console.log(JSON.stringify(await plainStatus(configPath), null, 2));
 }

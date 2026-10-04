@@ -55,6 +55,51 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   UNREFERENCED_PARAMETER(lpCmdLine);
   UNREFERENCED_PARAMETER(nCmdShow);
 
+#ifdef NATALIA_CEF_PROBE_ONLY
+  // BISECTION PROBE, compiled in only with -DNATALIA_CEF_PROBE_ONLY=1.
+  //
+  // Everything is linked exactly as the shipping host links it — every
+  // translation unit, every static initialiser, every constructor — and the only
+  // thing skipped is the app's own startup (the browser, the window, the message
+  // loop). So:
+  //   still exits 38  => the fault is LINKED-IN: a static initialiser or
+  //                      constructor that touches CEF state before main runs.
+  //   reaches OK      => the fault is in the startup path this skipped.
+  //
+  // Measured, in order: probe with a null app -> OK; probe with SimpleApp -> OK.
+  // So the linked-in code and SimpleApp are both innocent, and what is left is
+  // the pair the real host does and this probe does not.
+  {
+    CefMainArgs probe_args(hInstance);
+    CefSettings probe;
+    probe.no_sandbox = true;
+    wchar_t probe_cache[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
+                                   probe_cache)) &&
+        probe_cache[0] != 0) {
+      std::wstring root(probe_cache);
+      root += L"\\Natalia\\CEF-probe";
+      CreateDirectoryW(root.c_str(), nullptr);
+      CefString(&probe.cache_path).FromWString(root);
+    }
+    // The app, created before the subprocess hand-off and passed to BOTH calls,
+    // which is the documented shape. The real host passes nullptr to
+    // CefExecuteProcess and the app only to CefInitialize.
+    CefRefPtr<SimpleApp> probe_app(new SimpleApp);
+    const int hand_off =
+        CefExecuteProcess(probe_args, probe_app.get(), nullptr);
+    if (hand_off >= 0)
+      return hand_off;
+    const bool ok =
+        CefInitialize(probe_args, probe, probe_app.get(), nullptr);
+    MessageBoxW(
+        nullptr,
+        ok ? L"CefInitialize OK (probe build)" : L"CefInitialize FAILED (probe build)",
+        L"natalia-cef probe", MB_OK);
+    return ok ? 0 : static_cast<int>(CefGetExitCode());
+  }
+#endif
+
   // Provide CEF with command-line arguments. On Windows the instance handle
   // travels here (Linux passes argc/argv instead).
   CefMainArgs main_args(hInstance);
@@ -79,10 +124,22 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   };
 
   trace("entered wWinMain");
+  // The app, created BEFORE the subprocess hand-off and passed to BOTH calls.
+  //
+  // This is the fix for the exit-38 crash, and it was found by bisection, not by
+  // reading: passing `nullptr` here while passing `app.get()` to CefInitialize
+  // made CefInitialize fail with a Chromium CHECK (STATUS_BREAKPOINT at one fixed
+  // offset in libcef.dll, CefGetExitCode() == 38, no window, no message). The
+  // probe build — same sources, same link, same libcef — initialised fine the
+  // moment the app was given to this call too. A null app makes CEF install its
+  // own default app for the hand-off, and the later CefInitialize with a
+  // different one contradicts it.
+  CefRefPtr<SimpleApp> app(new SimpleApp);
+
   // CEF applications have multiple sub-processes (render, GPU, etc) that share
   // the same executable. This function checks the command-line and, if this is
   // a sub-process, executes the appropriate logic.
-  int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+  int exit_code = CefExecuteProcess(main_args, app.get(), nullptr);
   trace("CefExecuteProcess returned");
   if (exit_code >= 0) {
     // The sub-process has completed so return here.
@@ -144,8 +201,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
   // SimpleApp implements application-level callbacks for the browser process.
   // It will create the first browser instance in OnContextInitialized() after
-  // CEF has initialized.
-  CefRefPtr<SimpleApp> app(new SimpleApp);
+  // CEF has initialized. (The instance itself is created above, before
+  // CefExecuteProcess — see the comment there for why that ordering matters.)
 
   // Initialize the CEF browser process. May return false if initialization
   // fails or if early exit is desired (for example, due to process singleton

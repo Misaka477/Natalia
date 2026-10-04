@@ -43,6 +43,20 @@ else()
   set(CEF_BINARY_DIR "${CEF_ROOT}/bin")
 endif()
 
+# EXPERIMENT SWITCH, not a product option: make the host prove whether it can
+# initialise CEF AT ALL with this exact binary (the whole source list, the same
+# link, the same libcef.dll), by skipping the app's own startup. The installed
+# host dies in CefInitialize (exit 38, a Chromium CHECK inside libcef.dll) while
+# three hand-built control apps from these same headers — with a CefApp, and with
+# CefExecuteProcess — initialise fine. The difference is something LINKED into
+# this target, and this switch is the instrument that tells LINKED-IN from
+# CALLED: with -DNATALIA_CEF_PROBE_ONLY=1 the binary keeps every translation unit
+# and still exits 38, the fault is in a static initialiser or constructor that
+# runs before main; if it then reaches "CefInitialize OK", the fault is in the
+# startup path the switch skipped.
+# Removed once the question is answered.
+option(NATALIA_CEF_PROBE_ONLY "Bisection: initialise CEF, then exit." OFF)
+
 # The per-platform sources. Globbing `src/*.cc` would put BOTH entry points in
 # one binary (two `main`-family symbols) and would compile the X11 files on
 # Windows, so the selection is explicit rather than a glob.
@@ -64,11 +78,8 @@ endif()
 # target_include_directories/target_link_libraries/target_compile_definitions on
 # it, and CMake requires the target to exist at that point. The source list is
 # still being appended to below, which add_executable accepts.
-add_executable(natalia-cef-desktop)
+add_executable(natalia-cef-desktop ${NATALIA_CEF_SRCS})
 
-# The per-platform sources. Globbing `src/*.cc` would put BOTH entry points in
-# one binary (two `main`-family symbols) and would compile the X11 files on
-# Windows, so the selection is explicit rather than a glob.
 if(WIN32)
   list(APPEND NATALIA_CEF_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cefsimple_win.cc"
@@ -77,6 +88,10 @@ if(WIN32)
     # every Windows target carries.
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
+  if(NATALIA_CEF_PROBE_ONLY)
+    target_compile_definitions(natalia-cef-desktop PRIVATE
+      NATALIA_CEF_PROBE_ONLY=1)
+  endif()
   target_link_libraries(natalia-cef-desktop PRIVATE shell32)
 
   # The Start Menu entry: a real EXE, not a batch script. A .cmd's `start /b`

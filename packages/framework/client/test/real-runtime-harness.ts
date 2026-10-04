@@ -843,7 +843,7 @@ export function sqliteContinueProvider(): StreamingProvider {
       // content is a parts array, so `String(content)` is "[object Object]" and
       // a substring test against it is a coin flip. Counting the tool results
       // already in the request is the same information, deterministically.
-      const toolResults = request.mesages.filter(
+      const toolResults = request.messages.filter(
         (message) => message.role === "tool",
       ).length;
       if (toolResults === 0) {

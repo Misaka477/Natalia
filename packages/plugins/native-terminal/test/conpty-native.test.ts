@@ -49,13 +49,33 @@ async function drive(
   ) => Promise<void>,
   until: (frames: Frame[]) => boolean,
   ms = 30_000,
-): Promise<{ frames: Frame[]; text: string; exit: Frame | undefined }> {
+): Promise<{
+  frames: Frame[];
+  text: string;
+  exit: Frame | undefined;
+  stderr: string;
+}> {
   const bridge = Bun.spawn([bridgeExe], {
     cwd: await mkdtemp(join(tmpdir(), "conpty-native-")),
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
   });
+  // The bridge reports its ConPTY handshake to stderr — the P23 investigation
+  // put it there saying "a fix that cannot be told apart from nothing
+  // happening is not a fix". A mute pane must therefore carry that evidence
+  // into the failure, or the next run cannot confirm or refute the resize
+  // theory without a human attaching a debugger.
+  let stderr = "";
+  void (async () => {
+    const reader = bridge.stderr.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.value) stderr += decoder.decode(chunk.value, { stream: true });
+      if (chunk.done) break;
+    }
+  })();
   // COMPACT JSON, always: the bridge's parser looks for `"key":"value"` and a
   // space after the colon makes it miss the field. Default json.dumps emits
   // the spaced form.
@@ -105,7 +125,12 @@ async function drive(
   reader.cancel();
   bridge.kill();
   const text = frames.map((frame) => frame.payload).join("");
-  return { frames, text, exit: frames.find((frame) => frame.kind === "x") };
+  return {
+    frames,
+    text,
+    exit: frames.find((frame) => frame.kind === "x"),
+    stderr,
+  };
 }
 
 const count = (frames: Frame[], needle: string) =>
@@ -117,7 +142,7 @@ const count = (frames: Frame[], needle: string) =>
 test.skipIf(!canRun)(
   "the real bridge answers a spec with pid, output and exit",
   async () => {
-    const { frames, text, exit } = await drive(
+    const { frames, text, exit, stderr } = await drive(
       {
         file: "cmd.exe",
         args: ["/c", "echo CONPTY_NATIVE_OK"],
@@ -131,8 +156,11 @@ test.skipIf(!canRun)(
     );
     // The handshake the controller adopts the pane's pid from.
     expect(frames.some((frame) => frame.kind === "pid")).toBe(true);
-    // The child's own screen bytes, through the real ConPTY.
-    expect(text).toContain("CONPTY_NATIVE_OK");
+    // The child's own screen bytes, through the real ConPTY. A mute pane (the
+    // P23 symptom: the startup paint arrives, then nothing) fails HERE, and
+    // the bridge's stderr rides along so the run reports the viewport
+    // handshake's HRESULT instead of just the silence.
+    expect(text, `bridge stderr:\n${stderr}`).toContain("CONPTY_NATIVE_OK");
     // And the exit frame — the gap the wine test found first: a child exiting
     // on its own produced NO exit frame and the pane stayed "running".
     expect(exit).toBeDefined();
@@ -151,7 +179,7 @@ test.skipIf(!canRun)(
     // which is what "mute pane" means. Then the kill control ends the child
     // and the exit frame proves the loop observed it: the third thing wine
     // could not verify.
-    const { frames, text, exit } = await drive(
+    const { frames, text, exit, stderr } = await drive(
       {
         file: "cmd.exe",
         args: [],
@@ -165,7 +193,7 @@ test.skipIf(!canRun)(
       },
       (seen) => count(seen, "CONPTY_INPUT_OK") >= 2,
     );
-    expect(text).toContain("CONPTY_INPUT_OK");
+    expect(text, `bridge stderr:\n${stderr}`).toContain("CONPTY_INPUT_OK");
     expect(count(frames, "CONPTY_INPUT_OK")).toBeGreaterThanOrEqual(2);
 
     // And the kill: a second drive whose script stops the child by protocol.

@@ -112,11 +112,6 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "explicit-history",
     note: "the self-review's violations input: D1/D2's invariant.violation facts behind ensureSessionFullEvents — the study's sanctioned class",
   },
-  "packages/framework/client/src/runtime/terminal-runtime/native-terminal.ts": {
-    count: 1,
-    cls: "state-first",
-    note: "resident-default for the terminal's projection input",
-  },
   "packages/framework/client/src/runtime/provider-selection/selection.ts": {
     count: 2,
     cls: "derivation",

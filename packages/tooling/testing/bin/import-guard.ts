@@ -461,10 +461,75 @@ for (const dir of productionRoots)
         failures.push(`${full}: upstream trace name found`);
     }
     for (const pattern of forbiddenAccountFlowNames) {
-      if (pattern.test(text))
+      // Comments are stripped first. The ban is about CODE that speaks to a
+      // hosted identity provider; the word "login" in a comment explaining that
+      // a pane spawns a POSIX login shell is prose, not a flow. Scanning prose
+      // meant every release gate (`composition.verified` in the P2 acceptance
+      // run) failed on a sentence, which is a guard that cannot pass rather
+      // than a guard that guards.
+      if (pattern.test(stripComments(text)))
         failures.push(`${full}: forbidden hosted identity flow ${pattern}`);
     }
   });
+
+/**
+ * Source text with its comments replaced by spaces.
+ *
+ * The same length and the same newlines as the input, so a violation's position
+ * (and the file's line numbers, for the report) stay truthful. Line and block
+ * comments are removed; string literals are NOT, because a guard ban on an
+ * identifier has to see the string a module name arrives in.
+ */
+function stripComments(text: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const two = text.slice(i, i + 2);
+    if (two === "//") {
+      while (i < text.length && text[i] !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      continue;
+    }
+    if (two === "/*") {
+      while (i < text.length && text.slice(i, i + 2) !== "*/") {
+        // Newlines survive: they are the only character whose position matters
+        // to a reader of the report.
+        out += text[i] === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      if (i < text.length) {
+        out += "  ";
+        i += 2;
+      }
+      continue;
+    }
+    if (two === '"' || two === "'" || two === "`") {
+      // Skip the literal whole: a comment marker inside a string is not one.
+      const quote = text[i]!;
+      out += quote;
+      i += 1;
+      while (i < text.length && text[i] !== quote) {
+        if (text[i] === "\\" && i + 1 < text.length) {
+          out += text.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += text[i];
+        i += 1;
+      }
+      if (i < text.length) {
+        out += quote;
+        i += 1;
+      }
+      continue;
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
 
 /**
  * Report large shipped source files for review. This is deliberately advisory:

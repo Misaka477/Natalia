@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   LogService,
+  installDefaultLogExporter,
   createBufferExporter,
   getLogger,
   logLevelsFromEnv,
@@ -108,5 +109,59 @@ describe("LogService", () => {
     const log = getLogger("getlogger-smoke");
     expect(log.name).toBe("getlogger-smoke");
     expect(() => log.error("no exporter, no throw")).not.toThrow();
+  });
+});
+
+describe("installDefaultLogExporter", () => {
+  test("an error reaches stderr with no NATALIA_LOG, info stays out", () => {
+    const lines: string[] = [];
+    const dispose = installDefaultLogExporter({
+      write: (l) => lines.push(l),
+      env: {},
+    });
+    getLogger("boot-test").error("the operator must see this");
+    getLogger("boot-test").info("this one is diagnostic");
+    dispose();
+    expect(lines.join("\n")).toContain("the operator must see this");
+    expect(lines.join("\n")).not.toContain("this one is diagnostic");
+  });
+
+  test("a second boot path reuses the install instead of double-printing", () => {
+    const first: string[] = [];
+    const dispose = installDefaultLogExporter({
+      write: (l) => first.push(l),
+      env: {},
+    });
+    const second: string[] = [];
+    // The second call returns the LIVE installer's disposer and adds no sink.
+    installDefaultLogExporter({ write: (l) => second.push(l), env: {} });
+    getLogger("boot-test").error("printed once");
+    dispose();
+    expect(first.filter((l) => l.includes("printed once"))).toHaveLength(1);
+    expect(second).toEqual([]);
+  });
+
+  test("NATALIA_LOG names a subsystem, and off keeps errors", () => {
+    const lines: string[] = [];
+    const dispose = installDefaultLogExporter({
+      write: (l) => lines.push(l),
+      env: { NATALIA_LOG: "boot-verbose=debug" },
+    });
+    getLogger("boot-verbose").debug("asked for by name");
+    getLogger("boot-quiet").info("not asked for");
+    dispose();
+    expect(lines.join("\n")).toContain("asked for by name");
+    expect(lines.join("\n")).not.toContain("not asked for");
+
+    const quiet: string[] = [];
+    const off = installDefaultLogExporter({
+      write: (l) => quiet.push(l),
+      env: { NATALIA_LOG: "off" },
+    });
+    getLogger("boot-test").warn("suppressed");
+    getLogger("boot-test").error("but not this one");
+    off();
+    expect(quiet.join("\n")).not.toContain("suppressed");
+    expect(quiet.join("\n")).toContain("but not this one");
   });
 });

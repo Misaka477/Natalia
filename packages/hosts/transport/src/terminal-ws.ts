@@ -7,6 +7,7 @@ type TerminalHostClient = RuntimeClient & {
   ): () => void;
 };
 import type { ServerWebSocket } from "bun";
+import { getLogger } from "@anthelia/logging";
 import { credentialSessions, type RuntimeAuthorizationContext } from "./rpc";
 
 export type TerminalWsMessage =
@@ -65,8 +66,12 @@ function send(
   ws.send(JSON.stringify(message));
 }
 
+/** This subsystem's logger. The name is the `NATALIA_LOG` threshold key. */
+const log = getLogger("terminal-ws");
+
 function failOpen(ws: ServerWebSocket<TerminalSocketData>, message: string) {
-  console.error("[terminal-ws]", message);
+  // error is on by default: a terminal that cannot serve must never be silent.
+  log.error("%s", message);
   send(ws, { type: "error", message, fatal: true });
   ws.close(1011, "terminal unavailable");
 }
@@ -168,8 +173,10 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             },
           );
         } else {
-          console.error(
-            "[terminal-ws] subscribeTerminalOutput is missing; live output will not stream",
+          // A missing port means the client cannot stream output; say so in
+          // words the operator can act on, not a bare warn nobody greps.
+          log.error(
+            "subscribeTerminalOutput is missing; live output will not stream",
           );
         }
         send(ws, {

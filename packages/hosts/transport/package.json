@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthelia/contracts": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
+    "@anthelia/logging": "workspace:*",
     "@anthelia/runtime-services": "workspace:*"
   },
   "devDependencies": {

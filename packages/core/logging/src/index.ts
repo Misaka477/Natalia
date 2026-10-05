@@ -293,3 +293,53 @@ export function createBufferExporter(size = 1000): LogExporter & {
     },
   };
 }
+
+/**
+ * Install the process's default sink, ONCE, at boot.
+ *
+ * Without an exporter every log call is a no-op — the framework would be
+ * silently unobservable, which is the failure this whole system exists to
+ * delete. The sink is stderr (never stdout: stdout carries the wire protocol
+ * in the CLI and bridge paths), it inherits the service's threshold table, and
+ * calling it twice is a no-op so two boot paths cannot double-print.
+ *
+ * The env table is applied here too: `NATALIA_LOG` is read once at boot, so a
+ * deployment chooses verbosity without a code change.
+ */
+let installed: (() => void) | undefined;
+
+/**
+ * The boot call. Returns the disposer of THE install; a second call while one
+ * is live returns that same disposer instead of adding a second sink (two
+ * boot paths in one process must not double-print). `NATALIA_LOG=off` is not
+ * "no errors": errors are the floor, not a level — the operator asked for
+ * silence on diagnostics, not for failures to disappear.
+ */
+export function installDefaultLogExporter(options?: {
+  write?: (line: string) => void;
+  env?: Record<string, string | undefined>;
+}): () => void {
+  if (installed) return installed;
+  const env = options?.env ?? process.env;
+  const spec = env.NATALIA_LOG ?? "";
+  if (spec === "off" || spec === "none")
+    logService.setLevels({ default: "error" });
+  else {
+    const levels = logLevelsFromEnv(env);
+    if (levels) logService.setLevels(levels);
+  }
+  const write =
+    options?.write ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const remove = logService.addExporter({
+    export(message) {
+      write(
+        `${message.name} ${message.level} ${formatMessage({ maxLength: 10240 }, message)}`,
+      );
+    },
+  });
+  installed = () => {
+    remove();
+    installed = undefined;
+  };
+  return installed;
+}

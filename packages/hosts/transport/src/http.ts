@@ -1,5 +1,6 @@
 import { gzipSync } from "node:zlib";
 import { API_VERSION, runtimeEventSessionSeq } from "@anthelia/contracts";
+import { getLogger } from "@anthelia/logging";
 import type { RuntimeClient, RuntimeEvent } from "@anthelia/contracts";
 import { credentialSessions, handleRPCMessage } from "./rpc";
 import type { RuntimeAuthorizationContext } from "./rpc";
@@ -11,6 +12,8 @@ import {
   type TerminalSocketData,
 } from "./terminal-ws";
 import { perfLog } from "@anthelia/runtime-services";
+
+const log = getLogger("web-server");
 
 export type TaskDeliveryRequest = {
   taskPath?: string;
@@ -564,7 +567,10 @@ export function createRuntimeHttpServer(
     if (url.pathname === "/events" && options.events === false)
       return Response.json({ error: "event stream disabled" }, { status: 404 });
     if (url.pathname === "/events" && request.method === "GET") {
-      console.log("[web-server] sse connected");
+      // Connection lifecycle is diagnostic by default: an operator turns
+      // it on with NATALIA_LOG=web-server=info, and it stays out of the way
+      // the rest of the time.
+      log.info("sse connected");
       const requestedSession = url.searchParams.get("session") ?? undefined;
       const allowedSessions = credentialSessions(authorization);
       // A credential with a session grant may only subscribe to sessions it

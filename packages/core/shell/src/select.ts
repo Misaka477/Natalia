@@ -27,41 +27,70 @@ import { PwshLocalExecutor } from "./pwsh-local";
 import type { ShellExecutor } from "./shell";
 
 /** The shells this repository can run, by name. */
-export type ShellName = "bash" | "pwsh";
+export type ShellName = "bash" | "pwsh" | "zsh";
 
 /**
  * The shell a host runs by default, ignoring any opt-in.
  *
- * This is the mirror. It returns "pwsh" on Windows and "bash" elsewhere, which is
- * the shape that becomes the default when pwsh is verified; today it is only
- * reachable through an explicit `auto`.
+ * This is the platform's OWN shell, chosen per host rather than once for the
+ * repository:
+ *
+ *   Windows -> pwsh    PowerShell 7 is the Windows shell; bash there is WSL,
+ *                      where neither `cmd` nor the Windows-installed node/bun
+ *                      are reachable.
+ *   macOS   -> zsh     the login shell on every supported macOS.
+ *   Linux   -> bash    the shell every supported Linux ships.
+ *
+ * Anything unrecognised falls to bash, because POSIX sh is the one shell a
+ * shell-shaped caller can always speak.
  */
 export function platformShell(
   os: NodeJS.Platform = process.platform,
 ): ShellName {
-  return os === "win32" ? "pwsh" : "bash";
+  if (os === "win32") return "pwsh";
+  if (os === "darwin") return "zsh";
+  return "bash";
 }
 
 /**
  * Resolve the requested shell name.
  *
- * `bash` and `pwsh` are honoured as given. Anything else — absent, empty,
- * unknown — falls back to bash, because a typo in a shell name must not select
- * PowerShell by accident; an unknown request is a caller bug and the safe reading
- * is the shell that has always run.
+ * `bash` and `pwsh` are honoured as given. EVERYTHING ELSE — absent, empty,
+ * `auto`, or a typo — resolves to the platform's own shell, because that is the
+ * only default that cannot be wrong on the machine it runs on.
+ *
+ * It used to fall back to bash, on the reasoning that "a typo must not select
+ * PowerShell by accident". On Windows that fallback is the bug: bash there is
+ * `C:\Windows\System32\bash.exe`, which is WSL, so a Windows install with no
+ * NATALIA_SHELL set opened a WSL shell — `cmd` is not found, and `node`/`bun`
+ * (installed on the Windows side) are not on its PATH either, so every command
+ * the shell-adjacent tools run dies with "the command could not be started".
+ * Measured, not theorised: the user's terminal showed exactly that.
+ *
+ * A typo resolving to the platform shell is a smaller surprise than a typo
+ * resolving to another operating system's shell.
  */
 export function resolveShellName(
   requested: string | undefined,
   os: NodeJS.Platform = process.platform,
 ): ShellName {
+  if (requested === "bash") return "bash";
   if (requested === "pwsh") return "pwsh";
-  if (requested === "auto") return platformShell(os);
-  return "bash";
+  if (requested === "zsh") return "zsh";
+  return platformShell(os);
 }
 
-/** The executor for a shell name. */
+/**
+ * The executor for a shell name.
+ *
+ * zsh shares the POSIX executor with bash: both go through the same
+ * isolated/login `os`-parameterised spellings, and zsh's only difference from
+ * bash here is the name the caller asked for — which `shellExecutable` already
+ * carries. A separate class would exist only to differ by a constant.
+ */
 export function executorFor(name: ShellName): ShellExecutor {
-  return name === "pwsh" ? new PwshLocalExecutor() : new BashLocalExecutor();
+  if (name === "pwsh") return new PwshLocalExecutor();
+  return new BashLocalExecutor();
 }
 
 /**

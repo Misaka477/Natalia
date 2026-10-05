@@ -450,6 +450,22 @@ export type ToolOutputDefinition = {
    */
   schema: ToolSchema;
   /**
+   * Whether `execute` returns a STRUCTURED value that the schema can describe.
+   *
+   * False (the default) means the tool returns content — file bytes, command
+   * output, a page body — and the schema is a description for a client, not a
+   * contract to validate. Validating a content-returning tool is actively
+   * wrong: `read_file` returns the file's text, so `read_file` on a
+   * `package.json` hands the validator that file's JSON, and every key in it
+   * ($schema, name, version, ...) is reported as an unexpected property while
+   * the real `content` field is reported missing. That is the
+   * "returned output that does not match its declared schema" the file tools
+   * were failing every JSON read with.
+   *
+   * True is for tools whose `execute` returns JSON as its model-facing string.
+   */
+  structured?: boolean;
+  /**
    * Projects the call arguments into a card, shown while the tool runs and as
    * the call's own presentation.
    */

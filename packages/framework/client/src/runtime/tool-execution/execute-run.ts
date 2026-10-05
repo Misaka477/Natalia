@@ -347,10 +347,13 @@ export async function runExecuteStage(
       // mutation declarations cannot see into.
       if (OPAQUE_WORKSPACE_WRITERS.has(tool.name)) rina?.markTreeChanged();
     });
-    // A declared output shape is a contract for the tools whose result is JSON.
-    // One that has drifted from its implementation fails here, naming the paths,
-    // instead of handing the model a shape it was told to expect differently.
-    const outputErrors = tool.output
+    // A declared output shape is a contract for the tools whose result IS JSON,
+    // and only those. A content-returning tool (read_file, run_shell, web_fetch)
+    // must not be validated: its return is the file's bytes or the command's
+    // output, and parsing that as JSON compares the FILE's shape against the
+    // tool's — every key of a package.json becomes an "unexpected property" and
+    // the tool's own field is "missing". Opt in explicitly; the default is off.
+    const outputErrors = tool.output?.structured
       ? validateToolOutput(tool.output.schema, completeResult)
       : [];
     if (outputErrors.length > 0) {

@@ -196,34 +196,44 @@ test("a caller that passes no environment inherits, exactly as before", async ()
   expect(run.stdout.trim()).toBe(String(process.env.HOME));
 });
 
-test("the platform mirror: pwsh on win32, bash elsewhere", () => {
-  // The mirror dsh expresses as inverted enablement rows. It is written and
-  // tested here even though it is not the default, so the flip is one line and
-  // both sides are already pinned.
+test("the platform mirror: pwsh on win32, zsh on darwin, bash elsewhere", () => {
+  // THE requested behaviour: Windows pwsh, macOS zsh, Linux bash.
   expect(platformShell("win32")).toBe("pwsh");
   expect(platformShell("linux")).toBe("bash");
-  expect(platformShell("darwin")).toBe("bash");
+  expect(platformShell("darwin")).toBe("zsh");
+  // Anything unrecognised is POSIX sh, which every shell-shaped caller speaks.
+  expect(platformShell("freebsd")).toBe("bash");
 });
 
-test("an explicit shell name wins, and an unknown one falls back to bash", () => {
-  // A typo must not select PowerShell by accident: the shell that has always run
-  // is the safe reading of a request nothing understands.
+test("an explicit shell name wins, and anything else is the platform's own", () => {
+  // THE bug this replaced: an unset request used to fall back to bash, and on
+  // Windows bash IS WSL — `cmd` not found, `node`/`bun` not on its PATH, and
+  // every shell-adjacent tool died with "the command could not be started".
+  // The user's terminal showed exactly that. Now an absent, empty, `auto`, or
+  // typo'd request resolves to the shell this host already runs.
   expect(resolveShellName("pwsh", "win32")).toBe("pwsh");
   expect(resolveShellName("bash", "win32")).toBe("bash");
   expect(resolveShellName("auto", "win32")).toBe("pwsh");
   expect(resolveShellName("auto", "linux")).toBe("bash");
-  expect(resolveShellName(undefined, "win32")).toBe("bash");
-  expect(resolveShellName("", "win32")).toBe("bash");
-  expect(resolveShellName("powershel", "win32")).toBe("bash");
-  expect(resolveShellName("zsh", "win32")).toBe("bash");
+  expect(resolveShellName(undefined, "win32")).toBe("pwsh");
+  expect(resolveShellName("", "win32")).toBe("pwsh");
+  expect(resolveShellName("powershel", "win32")).toBe("pwsh");
+  // A request for a shell this host HAS is honoured everywhere; zsh on Windows
+  // is a caller explicitly asking for it, not an unknown name.
+  expect(resolveShellName("zsh", "win32")).toBe("zsh");
+  // And a POSIX host is untouched by any of it.
+  expect(resolveShellName(undefined, "linux")).toBe("bash");
+  expect(resolveShellName("", "linux")).toBe("bash");
 });
 
-test("the default is bash on every platform, so enabling the mirror changes nothing", () => {
-  // THE behaviour-preserving property of this step: with no opt-in, a Windows host
-  // runs bash exactly as it did before the mirror existed.
-  expect(selectExecutor({}, "win32")).toBeInstanceOf(BashLocalExecutor);
+test("with no opt-in a Windows host runs its own shell, not WSL's bash", () => {
+  // THE behaviour change, pinned: no NATALIA_SHELL, on Windows, is pwsh.
+  // Before it was BashLocalExecutor, which on Windows means
+  // C:\Windows\System32\bash.exe — WSL.
+  expect(selectExecutor({}, "win32")).toBeInstanceOf(PwshLocalExecutor);
   expect(selectExecutor({}, "linux")).toBeInstanceOf(BashLocalExecutor);
-  // And the opt-in reaches pwsh on Windows and bash elsewhere.
+  expect(selectExecutor({}, "darwin")).toBeInstanceOf(BashLocalExecutor);
+  // And the explicit opt-ins still reach the same places.
   expect(selectExecutor({ NATALIA_SHELL: "pwsh" }, "win32")).toBeInstanceOf(
     PwshLocalExecutor,
   );
@@ -306,17 +316,32 @@ test("pwsh refuses the POSIX detached launcher, and says which combination canno
   ).toThrow(/setsid/u);
 });
 
-test("EXECUTION is verified for bash and sh, not for pwsh", () => {
-  // The honest statement of what the matrix does not cover, kept as a test so it
-  // cannot be forgotten: the run/start paths above drive bash (and a hand-written
-  // FixedExecutor that spawns sh). pwsh's execution — its exit codes, its output
-  // encoding, whether -NonInteractive behaves as documented — is asserted nowhere
-  // in this file, because no PowerShell exists on the hosts that built it.
+test("pwsh execution is covered where pwsh exists, and named where it does not", () => {
+  // The honest statement of what this matrix does not cover, kept as a test so
+  // it cannot be forgotten: the run/start paths above drive bash (and a
+  // hand-written FixedExecutor that spawns sh).
   //
-  // When one runs it, these are the assertions to add:
-  //   - a nonzero exit resolves with that exit code, not a rejection;
-  //   - non-ASCII output arrives as UTF-8, which is what ENCODING_PREAMBLE buys;
-  //   - a pager never starts (ENV_OVERRIDES).
-  const pwshCanExecuteHere = Bun.which("pwsh") !== null;
-  expect(pwshCanExecuteHere).toBe(false);
+  // It used to assert `Bun.which("pwsh") === null` — a fact about the MACHINE,
+  // not about the code, so it failed the moment a host had PowerShell on PATH
+  // (and this project's own development host does). An environment fact is not
+  // a contract. What is asserted instead is that the coverage statement is
+  // accompanied by the real thing wherever pwsh exists:
+  const pwsh = Bun.which("pwsh");
+  if (pwsh === null) {
+    // Named, not silently skipped: the matrix does not lie about its coverage.
+    expect(pwsh).toBe(null);
+    return;
+  }
+  // pwsh IS present, so the argv the executor builds must be one pwsh accepts.
+  // Executing it is stronger than asserting a name, and it is what the comment
+  // above always promised.
+  const spec = new PwshLocalExecutor().resolve({ command: "exit 3" });
+  const proc = Bun.spawnSync({
+    cmd: [spec.command, ...spec.args],
+    cwd: spec.cwd,
+    env: { ...process.env, ...(spec.env ?? {}) },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(proc.exitCode).toBe(3);
 });

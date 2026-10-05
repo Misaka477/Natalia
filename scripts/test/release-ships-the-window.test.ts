@@ -165,7 +165,16 @@ test("no release carries the fork's executables — the tier is retired", () => 
   );
   expect(staging).not.toContain("forkRelease");
   expect(staging).not.toContain('"wezterm"');
-  expect(staging).toContain('join(pluginDir, "pty-bridge")');
+  // The bridge is staged where the RUNTIME reads it: the install's own
+  // prebuilt/<triple>/. It used to be staged to `join(pluginDir, "pty-bridge")`
+  // and that is precisely the bug — a fresh install's terminal tab died with
+  // "the ConPTY bridge is not built" because nothing read that directory.
+  // Pinned as the NEW contract, not the old one. The assertions are on the
+  // pieces rather than one formatted line, so a re-wrap by Prettier does not
+  // read as a regression.
+  expect(staging).toContain('"prebuilt"');
+  expect(staging).toContain('"windows-x64"');
+  expect(staging).not.toContain('join(pluginDir, "pty-bridge")');
   // And the verifier treats a surviving directory as the retired tier coming
   // back, not as a platform accident: the message names the retirement.
   expect(source).toContain("a release carries a wezterm/ directory");

@@ -498,14 +498,30 @@ for (const target of targets) {
     ];
     for (const specifier of wasmSpecifiers) {
       try {
-        const resolved = await Bun.resolveSync(
-          specifier,
-          join(root, "package.json"),
+        // Resolved from the MODULE that consumes it, not from the root
+        // package.json: these are not root dependencies, and resolving from the
+        // root fails with "Cannot find module" — which silently produced an
+        // empty wasm/ directory and a release whose shell tools still died.
+        const from = join(
+          root,
+          "packages",
+          "core",
+          "tools",
+          "src",
+          "wasm-paths.ts",
         );
-        if (resolved && resolved.startsWith("file:")) {
-          const source = fileURLToPath(resolved);
-          const name = source.split("/").pop() ?? "";
-          if (name) await cp(source, join(wasmDir, name));
+        const resolved = await Bun.resolveSync(specifier, from);
+        // A PLAIN path, not a file: URL — Bun.resolveSync hands back
+        // `E:\...\tree-sitter.wasm` on Windows. Guarding on a `file:` prefix
+        // therefore matched nothing and the wasm/ directory stayed empty, which
+        // is a silent failure: the build succeeded and the tools still died.
+        const source = resolved.startsWith("file:")
+          ? fileURLToPath(resolved)
+          : resolved;
+        // Windows paths: "/" alone left the whole name on POSIX-only splits.
+        const name = source.split(/[/\\]/u).pop() ?? "";
+        if (name && (await Bun.file(source).exists())) {
+          await cp(source, join(wasmDir, name));
         }
       } catch {
         // Not installed, so not needed: the grammar set is optional.

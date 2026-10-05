@@ -30,3 +30,5 @@ export function boundVerboseOutput(
   if (dropped === 0) return kept.join("\n");
   return `${kept.join("\n")}\n… (${dropped} earlier step${dropped === 1 ? "" : "s"} omitted, ${lines.length} total)`;
 }
+
+export { truncate } from "./format";

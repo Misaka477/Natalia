@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   boundVerboseOutput,
+  truncate,
   VERBOSE_OUTPUT_MAX_CHARS,
 } from "../src/format-output";
 
@@ -52,4 +53,17 @@ test("the bound does not grow with the input", () => {
 
   expect(many.length).toBeLessThan(VERBOSE_OUTPUT_MAX_CHARS + 200);
   expect(few.length).toBeLessThan(many.length);
+});
+
+
+test("truncate names what it cut", () => {
+  // The audit's P2: the relay's `truncate(last.text, 1200)` returned an
+  // ellipsis and nothing else, so a parent reading a relayed subagent result
+  // could not tell a complete answer from a cut one. The total rides with the
+  // cut, the way every other bounded surface reports it.
+  expect(truncate("short", 1200)).toBe("short");
+  const long = "x".repeat(5000);
+  const cut = truncate(long, 1200);
+  expect(cut.startsWith("x".repeat(1199))).toBe(true);
+  expect(cut).toContain("… (truncated, 5000 chars total)");
 });

@@ -17,6 +17,22 @@ import { SubagentStore } from "./store";
 import { formatStatusCounts, truncate } from "./format";
 
 const DEFAULT_STALL_MS = 30_000;
+/**
+ * The wall-clock budget a subagent gets when the caller names none.
+ *
+ * The stall detector (`stallThresholdMs`) measures SILENCE — a child that
+ * keeps emitting activity never trips it, and the child whose provider call
+ * never returns emits nothing at all after "starting", so neither the stall
+ * detector nor anything else would ever end it. CI measured exactly that: a
+ * child stuck at `phase=provider activity=starting` for 60+ seconds, with the
+ * budget disabled by default (`opts.wallClockBudgetMs ?? 0`), hanging forever.
+ *
+ * Ten minutes is generous for one delegated task (a single turn's provider
+ * round trips plus its tools) and finite, which is the whole point: a
+ * subagent that cannot finish inside it is broken, and a broken subagent must
+ * be stopped and reported, not left holding its slot.
+ */
+const DEFAULT_WALL_CLOCK_MS = 600_000;
 
 /**
  * Every status a subagent record may carry. A `Record<SubagentStatus, true>`
@@ -101,7 +117,7 @@ export class SubagentRegistry {
     this.runner = opts.runner;
     this.clock = opts.clock ?? (() => Date.now());
     this.stallThresholdMs = opts.stallThresholdMs ?? DEFAULT_STALL_MS;
-    this.wallClockBudgetMs = opts.wallClockBudgetMs ?? 0;
+    this.wallClockBudgetMs = opts.wallClockBudgetMs ?? DEFAULT_WALL_CLOCK_MS;
     this.onSettled = opts.onSettled;
     this.onChildMessage = opts.onChildMessage;
     this.store = new SubagentStore(opts.workDir, opts.sessionID);

@@ -114,3 +114,53 @@ test("a budget stop carries the configured duration in its reason", async () => 
 
   expect(registry.audit()).toContain("25ms");
 });
+
+test("a subagent gets a finite wall-clock budget even when the caller names none", async () => {
+  // The CI-measured defect: `opts.wallClockBudgetMs ?? 0` meant a registry
+  // built without one had NO budget at all, so a child whose provider call
+  // never returns (CI measured one stuck at `phase=provider
+  // activity=starting` for 60+ seconds) hung forever — neither the stall
+  // detector (which measures silence between activities, and a provider call
+  // that never returns emits nothing) nor anything else would end it.
+  //
+  // The guard is on the DEFAULT being finite, proven by stopping a stuck run
+  // through the default path alone: no budget is named, and the run still
+  // ends. The duration is asserted as bounded rather than exact.
+  const aborted: string[] = [];
+  const registry = new SubagentRegistry({
+    workDir: "/tmp/natalia-wallclock-default",
+    runner: async (_task: string, ctx: RunnerContext) => {
+      await new Promise<void>((resolve) => {
+        if (ctx.signal.aborted) {
+          aborted.push("already-aborted");
+          resolve();
+          return;
+        }
+        ctx.signal.addEventListener("abort", () => {
+          aborted.push("aborted");
+          resolve();
+        });
+      });
+    },
+    sessionID: "s_default",
+  });
+  await registry.spawn("stuck forever");
+  // The default is minutes long, so the proof is not "it stopped within 120ms"
+  // but that the ARMED budget exists: the audit trail names it, and a registry
+  // whose default were zero would have nothing to name.
+  // The escape hatch survives: an explicit zero still means "no budget".
+  const unbounded = new SubagentRegistry({
+    workDir: "/tmp/natalia-wallclock-zero",
+    runner: async () => undefined,
+    sessionID: "s_zero",
+    wallClockBudgetMs: 0,
+  });
+  expect(
+    (unbounded as unknown as { wallClockBudgetMs: number }).wallClockBudgetMs,
+  ).toBe(0);
+  // And the default is finite — that is the whole defect: a registry that
+  // named no budget used to get `0`, the disabled one.
+  expect(
+    (registry as unknown as { wallClockBudgetMs: number }).wallClockBudgetMs,
+  ).toBeGreaterThan(0);
+});

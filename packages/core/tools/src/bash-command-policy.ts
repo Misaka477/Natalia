@@ -1,5 +1,5 @@
-import { fileURLToPath } from "node:url";
 import { Language, Parser, type Node } from "web-tree-sitter";
+import { readBundledWasm, resolveBundledWasmPath } from "./wasm-paths";
 
 export type BashCommandRule = {
   command: string;
@@ -127,14 +127,17 @@ async function getParser(): Promise<Parser> {
 }
 
 async function createParser(): Promise<Parser> {
-  await Parser.init();
-  const grammar = await Language.load(
-    fileURLToPath(
-      import.meta.resolve(
-        "@vscode/tree-sitter-wasm/wasm/tree-sitter-bash.wasm",
+  // The wasm files are loaded from WHERE THEY ARE, not from an import.meta.resolve
+  // that points into Bun's embedded filesystem in an installed copy. See
+  // wasm-paths.ts: that was the difference between "the tool works in a
+  // checkout" and "run_shell fails on its first command in an install".
+  await Parser.init({
+    locateFile: (file: string) =>
+      resolveBundledWasmPath(
+        file.endsWith("tree-sitter-bash.wasm") ? "bash" : "runtime",
       ),
-    ),
-  );
+  });
+  const grammar = await Language.load(readBundledWasm("bash"));
   const parser = new Parser();
   parser.setLanguage(grammar);
   const selfCheck = parser.parse("command true");

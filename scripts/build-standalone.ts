@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { hashTreeFiles } from "../packages/hosts/platform/src/hash-tree";
 import { censusFromWorkspace } from "../apps/cli/src/layer-census";
 
@@ -68,12 +69,30 @@ async function stageTerminalNatives(
 ): Promise<void> {
   const pluginDir = join(outDir, "plugins", "natalia-tool-terminal");
   if (!(await Bun.file(join(pluginDir, "index.js")).exists())) return;
+  void pluginDir;
   // Our own bridge, in its OWN directory — and the fix for the bug that made
   // a Windows release ship with no bridge at all (measured): the ConPTY binary
   // used to ride `wezterm/` beside the fork's trio, and the retirement's
   // POSIX trim deleted it. Separate directories, separate owners.
-  const bridgeDir = join(pluginDir, "pty-bridge");
+  // The bridge is staged where the RUNTIME looks for it. prebuilt-dir.ts now
+  // resolves, in order: the install's own `prebuilt/<triple>/` (what this stages
+  // — present in every release, so an installed copy always has it) and then the
+  // plugin-relative path, which is what a checkout resolves to.
+  //
+  // It was staged under `plugins/natalia-tool-terminal/pty-bridge/`, which
+  // nothing reads: the terminal tab of a fresh install failed with "the ConPTY
+  // bridge is not built" naming a path that directory never got.
+  //
+  // It is NOT staged inside plugin-store/: that directory is the machine's own
+  // plugin state (natalia.lock, installed node_modules, the initialized marker)
+  // and the release's hygiene guard rejects it wholesale — correctly, because
+  // shipping it ties the artifact to the machine that built it.
   const isWindows = platformDir.startsWith("windows");
+  const bridgeDir = join(
+    outDir,
+    "prebuilt",
+    isWindows ? "windows-x64" : "linux-x64",
+  );
   const bridgeName = isWindows
     ? "natalia-conpty-bridge.exe"
     : "natalia-pty-bridge";
@@ -458,6 +477,41 @@ for (const target of targets) {
       results.push(result);
       continue;
     }
+    // The tree-sitter WASM files, staged under wasm/ in the release so an
+    // installed copy can find them on disk. Required, not tidy-up: the compiled
+    // binary resolves @vscode/tree-sitter-wasm and web-tree-sitter through Bun's
+    // EMBEDDED filesystem (B:\~BUN\... on Windows), where `Language.load` and
+    // `Parser.init` cannot read them, so every shell tool failed on its first
+    // command in an install. packages/core/tools/src/wasm-paths.ts reads them
+    // from here first.
+    //
+    // They are located through Bun's own resolver (resolveSync) rather than a
+    // hardcoded node_modules path, because Bun keeps the packages under
+    // node_modules/.bun/<name>@<version>/node_modules/<name>/ — a layout that
+    // changes with the lockfile and is not a public contract.
+    const wasmDir = join(outDir, "wasm");
+    await mkdir(wasmDir, { recursive: true });
+    const wasmSpecifiers = [
+      "@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm",
+      "@vscode/tree-sitter-wasm/wasm/tree-sitter-bash.wasm",
+      "web-tree-sitter/tree-sitter.wasm",
+    ];
+    for (const specifier of wasmSpecifiers) {
+      try {
+        const resolved = await Bun.resolveSync(
+          specifier,
+          join(root, "package.json"),
+        );
+        if (resolved && resolved.startsWith("file:")) {
+          const source = fileURLToPath(resolved);
+          const name = source.split("/").pop() ?? "";
+          if (name) await cp(source, join(wasmDir, name));
+        }
+      } catch {
+        // Not installed, so not needed: the grammar set is optional.
+      }
+    }
+
     // Assets beside the binary (study layout: native attachments travel
     // with the binary, probed at startup). The prebuilt js stays too —
     // which path the compiled runtime resolves its assets against is the

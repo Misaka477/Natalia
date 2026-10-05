@@ -163,29 +163,17 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // fails or if early exit is desired (for example, due to process singleton
   // relaunch behavior).
   trace("before CefInitialize");
-  // BISECTION STEP, unconditional: the runtime probe used to sit behind a
-  // command-line flag, and that flag was the ONLY thing that decided the
-  // outcome — with it, this very call initialised; without it, the same call
-  // with the same arguments failed. A flag read by our own code cannot be the
-  // cause, so the flag was removed and the block now runs for every launch.
+  // CEF's own log, because there is no usable debugger on this machine (lldb
+  // fails to start, no cdb/windbg/gdb) and stderr is empty on the failure path.
+  // This file is the only channel libcef has to say why it refused.
+  // `trace_path` already holds "<cache root>\startup-trace.txt", so its
+  // directory is the same cache root — no new scope, no duplicated path.
   //
-  // What it proves, and why it is shaped this way: it is the real call site —
-  // same function, same variables, same everything — and the only difference
-  // from the shipping path is the message box and the return. So:
-  //   succeeds now  => the fault is BELOW, in the code this returns before
-  //                   (the message loop, the shutdown, the browser creation)
-  //   fails now     => the flag was not the cause either, and the difference
-  //                   has to be something that ran before this point
-  //
-  // MEASURED (2026-10-05): it still fails. The "flag flipped it" paradox was a
-  // measurement error of mine — the failing run also showed a modal dialog, so
-  // the process looked alive. CefInitialize has never succeeded in this build.
-  //
-  // CEF's own log is enabled for the same reason: with no usable debugger on
-  // this machine (lldb fails to start, no cdb/windbg/gdb), this file is the only
-  // channel libcef has left to say why it refused. `trace_path` already holds
-  // "<cache root>\startup-trace.txt", so its directory is the same cache root —
-  // no new scope, no duplicated path.
+  // What it has already shown (2026-10-05, 369 lines): the browser really does
+  // come up — AddKeepAlive(kBrowserWindow), profile and identity managers, a
+  // GPU child process — while the process that was launched goes through
+  // RunDeElevated / ProcessSingleton.NotifyResult and returns that hand-off
+  // code. So the failure is the singleton hand-off, not a failed init.
   if (!trace_path.empty()) {
     CefString(&settings.log_file)
         .FromWString(trace_path.substr(0, trace_path.find_last_of(L"\\/")) +
@@ -202,9 +190,24 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 #endif
       );
   trace(cef_initialized ? "CefInitialize ok" : "CefInitialize FAILED");
-  const wchar_t* verdict =
-      cef_initialized ? L"CefInitialize OK at the real call site"
-                      : L"CefInitialize FAILED at the real call site";
-  MessageBoxW(nullptr, verdict, L"natalia-cef", MB_OK);
-  return cef_initialized ? 0 : static_cast<int>(CefGetExitCode());
+  if (!cef_initialized) {
+    const int code = CefGetExitCode();
+    char line[96] = {0};
+    _snprintf_s(line, sizeof(line), _TRUNCATE,
+                "CefGetExitCode=%d; returning it", code);
+    trace(line);
+    return code;
+  }
+
+  // Run the CEF message loop. This will block until CefQuitMessageLoop() is
+  // called.
+  trace("entering CefRunMessageLoop");
+  CefRunMessageLoop();
+  trace("CefRunMessageLoop returned");
+
+  // Shut down CEF.
+  CefShutdown();
+  trace("CefShutdown done");
+
+  return 0;
 }

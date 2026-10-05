@@ -12,6 +12,7 @@
  * `create` and the caller supplies the per-endpoint options.
  */
 
+import { getLogger } from "@anthelia/logging";
 import type { StreamingProvider } from "./provider";
 
 /**
@@ -189,11 +190,14 @@ export function resolveEndpointProtocol(input: {
   const declared = input.protocol?.format?.trim();
   if (declared) return { format: declared, declared: true };
   const format = providerFormatFromDriver(input.driver);
-  console.warn(
-    `[providers] endpoint "${input.driver ?? "(unnamed)"}" declares no ` +
-      `protocol.format; inferring "${format}" from its driver. Declare it so ` +
-      `the adapter is chosen by declaration rather than by a name guess:\n` +
-      `  "protocol": { "format": "${format}" }`,
+  // The inference is a guess, and the guess must be visible: a config that
+  // names no format gets the driver's format and one line saying so, with the
+  // exact snippet to make it a declaration.
+  getLogger("providers").warn(
+    'endpoint "%s" declares no protocol.format; inferring "%s" from its driver. Declare it so the adapter is chosen by declaration rather than by a name guess:\n  "protocol": { "format": "%s" }',
+    input.driver ?? "(unnamed)",
+    format,
+    format,
   );
   return { format, declared: false };
 }

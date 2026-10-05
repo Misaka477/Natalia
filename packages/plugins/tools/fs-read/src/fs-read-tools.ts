@@ -34,8 +34,7 @@ export const READ_LINE_LIMIT = 2000;
 function readFileTool(): RuntimeTool {
   return {
     name: "read_file",
-    description:
-      `Read a UTF-8 text file inside the workspace. Returns at most ${READ_LINE_LIMIT} lines per call; the result says how many lines exist and, when it stopped early, the offset to continue from.`,
+    description: `Read a UTF-8 text file inside the workspace. Returns at most ${READ_LINE_LIMIT} lines per call; the result says how many lines exist and, when it stopped early, the offset to continue from.`,
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -70,13 +69,15 @@ function readFileTool(): RuntimeTool {
       },
       presentResult(args, value) {
         const path = requireObject(args).path as string | undefined;
-        const result = value as {
+        // `value` is the tool's raw result — JSON text, the shape the kernel's
+        // string-returning contract carries (glob and grep do the same).
+        const result = JSON.parse(value) as {
           content: string;
           totalLines: number;
           truncated: boolean;
         };
         const window = result.truncated
-          ? `${result.content.split(/\r?\n/u).length} of ${result.totalLines} lines`
+          ? `lines 1-${result.content.split(/\r?\n/u).length - 2} of ${result.totalLines}`
           : `${result.totalLines} lines`;
         return {
           kind: "read",
@@ -126,16 +127,20 @@ function readFileTool(): RuntimeTool {
 
       const end = Math.min(totalLines, offset - 1 + length);
       const page = lines.slice(offset - 1, end).join("\n");
+      // The kernel's tool contract returns the model-facing STRING; the
+      // window facts ride as JSON text, the shape glob and grep already use
+      // (`search-tools.ts`). The model reads `content` (with its footer);
+      // a client reads the rest.
       if (end === totalLines)
-        return { content: page, totalLines, truncated: false };
+        return JSON.stringify({ content: page, totalLines, truncated: false });
 
       const remaining = totalLines - end;
       const next = end + 1;
-      return {
+      return JSON.stringify({
         content: `${page}\n\n... ${remaining} more line${remaining === 1 ? "" : "s"}; use offset=${next} length=${length} ...`,
         totalLines,
         truncated: true,
-      };
+      });
     },
   };
 }

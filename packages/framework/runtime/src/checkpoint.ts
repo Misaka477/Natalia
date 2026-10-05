@@ -1,5 +1,6 @@
 import { DiffCache, ObjectStore } from "@anthelia/object-store";
 import { createHash } from "node:crypto";
+import { getLogger } from "@anthelia/logging";
 import { ChunkStore } from "./chunk-store";
 import {
   CheckpointJournal,
@@ -8,6 +9,9 @@ import {
   type CheckpointContextMeta,
 } from "./checkpoint-journal";
 import { constants } from "node:fs";
+
+/** The checkpoint subsystem's name — the `NATALIA_LOG` threshold key. */
+const log = getLogger("checkpoint");
 import {
   appendFile,
   chmod,
@@ -281,8 +285,12 @@ export class CheckpointStore {
         // read resolves a chunk through the shared root.
         const chunkMigration = await this.chunks.migrateLegacyRoots();
         if (chunkMigration.roots > 0)
-          console.warn(
-            `[checkpoint] merged ${chunkMigration.moved} chunks from ${chunkMigration.roots} legacy session root(s)`,
+          // A layout change that moved durable data: once per library, and the
+          // operator can confirm it happened without opening the store.
+          log.info(
+            "merged %d chunks from %d legacy session root(s)",
+            chunkMigration.moved,
+            chunkMigration.roots,
           );
         // Fold any loose one-file-per-chunk leftovers into packs (covers the
         // shared-root layout written before packing existed).
@@ -295,8 +303,12 @@ export class CheckpointStore {
           this.chunks,
         );
         if (migration)
-          console.warn(
-            `[checkpoint] migrated ${migration.migrated} records to v3; backup at ${migration.backup}`,
+          // The journal was rewritten and a backup exists: the one line that
+          // tells a later reader where the pre-migration copy went.
+          log.info(
+            "migrated %d records to v3; backup at %s",
+            migration.migrated,
+            migration.backup,
           );
       }
       this.journal = await CheckpointJournal.load(
@@ -976,8 +988,12 @@ export class CheckpointStore {
         // A foreign/corrupt directory must never make GC unsafe: skipping it
         // can only keep payloads that might already be dead, never delete a
         // live one.
-        console.warn(
-          `[checkpoint] GC skipped unreadable journal ${journalPath}: ${error instanceof Error ? error.message : String(error)}`,
+        // GC must never delete on a journal it could not read; the skip is
+        // safe, and this says which journal and why.
+        log.warn(
+          "GC skipped unreadable journal %s: %s",
+          journalPath,
+          error instanceof Error ? error : String(error),
         );
       }
     }

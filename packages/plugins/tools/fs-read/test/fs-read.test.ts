@@ -42,9 +42,11 @@ test("read_file reads inside the workspace and rejects escapes", async () => {
     fsReadToolFamily().tools.map((tool) => [tool.name, tool]),
   );
   expect(
-    await tools
-      .get("read_file")!
-      .execute({ path: "note.txt" }, { workspaceRoot: root }),
+    JSON.parse(
+      await tools
+        .get("read_file")!
+        .execute({ path: "note.txt" }, { workspaceRoot: root }),
+    ),
   ).toEqual({ content: "hi", totalLines: 1, truncated: false });
   await expect(
     tools
@@ -78,9 +80,11 @@ test("read_file accepts offset and length for autonomous pagination", async () =
     }),
   ).toEqual([{ path: "offset", message: "must be at least 1" }]);
   expect(
-    await read.execute(
-      { path: "lines.txt", offset: 2, length: 2 },
-      { workspaceRoot: root },
+    JSON.parse(
+      await read.execute(
+        { path: "lines.txt", offset: 2, length: 2 },
+        { workspaceRoot: root },
+      ),
     ),
   ).toEqual({
     content: "two\nthree\n\n... 2 more lines; use offset=4 length=2 ...",
@@ -88,11 +92,13 @@ test("read_file accepts offset and length for autonomous pagination", async () =
     truncated: true,
   });
   expect(
-    await read.execute(
-      { path: "lines.txt", offset: 4, length: 2 },
-      { workspaceRoot: root },
+    JSON.parse(
+      await read.execute(
+        { path: "lines.txt", offset: 4, length: 2 },
+        { workspaceRoot: root },
+      ),
     ),
-  ).toBe("four\nfive");
+  ).toEqual({ content: "four\nfive", totalLines: 5, truncated: false });
   await expect(
     read.execute(
       { path: "lines.txt", offset: 0, length: 2 },
@@ -107,7 +113,11 @@ test("read_file projects a read card from its output definition", () => {
   )!;
   const intent = tool.output?.presentResult?.(
     { path: "src/index.ts" },
-    { content: "export const x = 1;", totalLines: 1, truncated: false },
+    JSON.stringify({
+      content: "export const x = 1;",
+      totalLines: 1,
+      truncated: false,
+    }),
   );
   expect(intent).toMatchObject({
     kind: "read",
@@ -133,10 +143,9 @@ test("read_file caps a windowless read at the line limit and says where to conti
   const read = fsReadToolFamily().tools.find(
     (candidate) => candidate.name === "read_file",
   )!;
-  const capped = (await read.execute(
-    { path: "big.txt" },
-    { workspaceRoot: root },
-  )) as { content: string; totalLines: number; truncated: boolean };
+  const capped = JSON.parse(
+    await read.execute({ path: "big.txt" }, { workspaceRoot: root }),
+  ) as { content: string; totalLines: number; truncated: boolean };
   expect(capped.totalLines).toBe(2005);
   expect(capped.truncated).toBe(true);
   const page = capped.content.split(/\r?\n/u);
@@ -151,7 +160,9 @@ test("read_file caps a windowless read at the line limit and says where to conti
     Array.from({ length: 3 }, (_, index) => `s${index + 1}`).join("\n") + "\n",
   );
   expect(
-    await read.execute({ path: "small.txt" }, { workspaceRoot: root }),
+    JSON.parse(
+      await read.execute({ path: "small.txt" }, { workspaceRoot: root }),
+    ),
   ).toEqual({ content: "s1\ns2\ns3", totalLines: 3, truncated: false });
 });
 

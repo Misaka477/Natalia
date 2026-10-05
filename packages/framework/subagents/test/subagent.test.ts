@@ -920,6 +920,12 @@ test("same sessionID resumes id counter across registry restarts", async () => {
     sessionID: "persistent",
   });
   await reg1.spawn("first");
+  // Poll, do not race the write. `spawn` resolves on dispatch; the registry's
+  // own record lands after it, and on a loaded CI runner the gap is long
+  // enough that `list()[0]` was undefined — the same 1ms shape that made the
+  // sibling test below flap. Local is fast enough to hide it, which is why only
+  // CI ever saw it.
+  await waitFor(() => reg1.list().length === 1);
   expect(reg1.list()[0]!.id).toBe("a1");
 
   const reg2 = new SubagentRegistry({

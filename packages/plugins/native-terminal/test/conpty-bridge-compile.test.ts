@@ -125,9 +125,9 @@ test("the control loop is woken by the child exiting, not only by stdin", () => 
   expect(source).toContain("popControlLine");
 });
 
-const source = (await Bun.file(
+const source = await Bun.file(
   join(import.meta.dir, "..", "src", "win", "natalia-conpty-bridge.cc"),
-).text());
+).text();
 
 test("the shared shutdown does not close a console the kill path already closed", () => {
   // Measured on the Windows CI: the kill drive's stderr showed the full
@@ -140,5 +140,7 @@ test("the shared shutdown does not close a console the kill path already closed"
   // The compile test cannot see it: it is a runtime behaviour, not a syntax
   // error. The guard is the shape of the code — the shared close is guarded.
   expect(source).toContain("if (g_pseudoConsole) {");
-  expect(source).not.toMatch(/\n\s*ClosePseudoConsole\(g_pseudoConsole\);\n\s*g_pseudoConsole = nullptr;\n\s*fprintf\(stderr, "conpty-bridge: console closed/);
+  expect(source).not.toMatch(
+    /\n\s*ClosePseudoConsole\(g_pseudoConsole\);\n\s*g_pseudoConsole = nullptr;\n\s*fprintf\(stderr, "conpty-bridge: console closed/,
+  );
 });

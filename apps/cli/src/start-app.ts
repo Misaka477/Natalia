@@ -38,6 +38,16 @@ const RUNTIME_PORT = 8790;
 const WEB_PORT = 8791;
 
 /**
+ * CEF's "I handed this launch to a de-elevated copy of myself" exit code.
+ *
+ * `CEF_RESULT_CODE_NORMAL_EXIT_AUTO_DE_ELEVATED = 38` in
+ * include/internal/cef_types.h, whose own comment reads "The browser process
+ * exited because it was re-launched without elevation". Treating it as a failure
+ * opened a browser tab on top of a window that had already come up.
+ */
+const CEF_EXIT_HANDED_OFF_TO_DE_ELEVATED = 38;
+
+/**
  * The install directory: every shipped executable, library and the web shell sit
  * side by side in it.
  *
@@ -177,6 +187,31 @@ export async function startApp(): Promise<number> {
   }
 
   if (hostExit === 0) return 0;
+
+  // Exit 38 is NOT a failure. It is
+  //   CEF_RESULT_CODE_NORMAL_EXIT_AUTO_DE_ELEVATED
+  // — "the browser process exited because it was re-launched without elevation"
+  // (include/internal/cef_types.h). When the launcher runs elevated, Chromium's
+  // ProcessSingleton hands the launch to a DE-ELEVATED copy of this same
+  // process, and the copy we started exits 38 while that other one puts the real
+  // window on screen.
+  //
+  // So on 38 the app IS open — in the de-elevated child. Falling back to the
+  // browser here would open a SECOND window on top of a working one, and log a
+  // failure that did not happen. Measured: the CEF log of an elevated launch
+  // carries `RunDeElevated: Started process, PID: <n>` and
+  // `AddKeepAlive(kBrowserWindow)` under that OTHER pid, while the process we
+  // spawned returns 38.
+  //
+  // The rest of the codes are real failures and still fall through.
+  if (hostExit === CEF_EXIT_HANDED_OFF_TO_DE_ELEVATED) {
+    console.error(
+      "[natalia] the window host handed its launch to a de-elevated " +
+        "instance (CEF exit 38); that instance owns the window, so no " +
+        "browser fallback is opened",
+    );
+    return 0;
+  }
 
   // The window is what the user is owed; WHICH window is a preference, and a
   // crashed host must not take the app down. The servers are detached, so they

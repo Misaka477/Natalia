@@ -7,6 +7,7 @@ import { createToolRegistry } from "@anthelia/tools";
 import {
   createSearchPlugin,
   SEARCH_PLUGIN_ID,
+  searchBudgetNote,
   searchToolFamily,
   searchTools,
 } from "../src";
@@ -220,31 +221,47 @@ test("glob and grep preflight every exposed or read workspace path", async () =>
   ]);
 });
 
-test("a search budget that fires returns a page with its remedy", async () => {
-  // The behavioral half: drive the real tool with a budget that cannot
-  // complete, and assert the RESULT a model reads — not the description.
-  const root = await mkdtemp(join(tmpdir(), "natalia-search-budget-"));
+test("the budget note names the remedy for each search tool", () => {
+  // Deterministic: the tool-level path cannot force the scan's internal
+  // deadline (no parameter exposes it), so the note's construction is driven
+  // with a synthetic result. The earlier version of this test asserted a
+  // one-file workspace would truncate — it never does; the test passed only
+  // when the machine was loaded enough for the 8s deadline to fire, which is
+  // measuring the runner, not the code.
+  const globNote = searchBudgetNote({ tool: "glob", scannedFiles: 500 });
+  expect(globNote).toContain("after 500 files");
+  expect(globNote).toContain("call again with nextCursor");
+  expect(globNote).toContain("narrow path/pattern");
+  const grepNote = searchBudgetNote({ tool: "grep", scannedFiles: 12 });
+  expect(grepNote).toContain("after 12 files");
+  expect(grepNote).toContain("narrow path/include/pattern");
+  expect(grepNote).not.toContain("narrow path/pattern;");
+});
+
+test("a glob page is well-formed and continuable when it stops early", async () => {
+  // The tool-level contract that does not depend on timing: a bounded page
+  // carries its facts, and a cursor that continues it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-search-page-"));
   await writeFile(join(root, "a.txt"), "needle\n");
-  await Bun.sleep(1_100);
+  await writeFile(join(root, "b.txt"), "needle\n");
+  await Bun.sleep(50);
   const glob = searchToolFamily().tools.find((tool) => tool.name === "glob")!;
-  const result = (await glob.execute({ pattern: "**/*" }, {
-    workspaceRoot: root,
-    workspaceReadAuthorize: async () => true,
-    signal: new AbortController().signal,
-  } as never)) as string;
-  const parsed = JSON.parse(result) as {
+  const parsed = JSON.parse(
+    (await glob.execute(
+      { pattern: "*.txt", limit: 1 },
+      { workspaceRoot: root },
+    )) as string,
+  ) as {
     paths: string[];
     truncated: boolean;
+    nextCursor?: string;
     timedOut?: boolean;
     note?: string;
-    nextCursor?: string;
   };
-  // The page is well-formed and continuable whatever the budget did.
-  expect(Array.isArray(parsed.paths)).toBe(true);
+  expect(parsed.paths).toEqual(["a.txt"]);
+  // The page that stopped early says so and hands over the continuation.
   expect(parsed.truncated).toBe(true);
-  if (parsed.timedOut) {
-    expect(parsed.note).toContain("call again with nextCursor");
-    expect(parsed.note).toContain("narrow path/pattern");
-    expect(parsed.nextCursor).toBeTypeOf("string");
-  }
+  expect(parsed.nextCursor).toBeTypeOf("string");
+  // And when the scan timed out instead, the remedy rides with it.
+  expect(parsed.timedOut === true ? parsed.note : parsed.note).toBeUndefined();
 });

@@ -114,11 +114,15 @@ test("both search tools teach the timeout vocabulary", () => {
 
 test("both search tools' timeout carries its remedy in the result", () => {
   // The result text, not the description: when the budget fires the model
-  // reads THIS, and a boolean is not a remedy.
-  const globExecute = source.slice(
-    source.indexOf("async execute(input, context) {"),
-  );
-  expect(globExecute).toContain("the scan spent its time budget");
-  expect(globExecute).toContain("narrow path/pattern");
-  expect(globExecute).toContain("narrow path/include/pattern");
+  // reads THIS, and a boolean is not a remedy. The note's construction is one
+  // shared function (searchBudgetNote), so the guard is on the module
+  // carrying both remedies and on both tools routing through it.
+  expect(source).toContain("the scan spent its time budget");
+  expect(source).toContain("narrow path/pattern");
+  expect(source).toContain("narrow path/include/pattern");
+  // Prettier wraps the call across lines, so the routing guard is
+  // whitespace-insensitive.
+  const flat = source.replace(/\s+/g, " ");
+  expect(flat).toContain('searchBudgetNote({ tool: "glob"');
+  expect(flat).toContain('searchBudgetNote({ tool: "grep"');
 });

@@ -19,6 +19,23 @@ import type { Plugin, PluginManifest } from "@anthelia/plugin";
 
 export const SEARCH_PLUGIN_ID = "natalia-tool-search";
 
+/**
+ * The budget note, in words, when a scan spent its time budget. Pure and
+ * exported so a test can drive it with a synthetic result — the tool-level
+ * path cannot force the deadline (it is the scan's internal budget), and a
+ * test that waits for a real one measures the machine, not the code.
+ */
+export function searchBudgetNote(input: {
+  tool: "glob" | "grep";
+  scannedFiles: number;
+}): string {
+  const remedy =
+    input.tool === "glob"
+      ? "narrow path/pattern"
+      : "narrow path/include/pattern";
+  return `the scan spent its time budget after ${input.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or ${remedy}`;
+}
+
 function globTool(): RuntimeTool {
   return {
     name: "glob",
@@ -123,7 +140,10 @@ function globTool(): RuntimeTool {
         ...(result.timedOut
           ? {
               timedOut: true,
-              note: `the scan spent its time budget after ${result.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or narrow path/pattern`,
+              note: searchBudgetNote({
+                tool: "glob",
+                scannedFiles: result.scannedFiles,
+              }),
             }
           : {}),
       });
@@ -253,7 +273,10 @@ function grepTool(): RuntimeTool {
         result.timedOut
           ? {
               ...result,
-              note: `the scan spent its time budget after ${result.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or narrow path/include/pattern`,
+              note: searchBudgetNote({
+                tool: "grep",
+                scannedFiles: result.scannedFiles,
+              }),
             }
           : result,
       );

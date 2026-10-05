@@ -22,6 +22,18 @@ export const DEFAULT_NATALIA_IGNORE_PATTERNS = [
   "*.log",
   "*.tmp",
   "*.swp",
+  // Session scratch and crash evidence, which is where a real checkpoint blew
+  // its byte guard: a minidump is hundreds of MB and nothing about agent work
+  // depends on it. Added after measuring `checkpoint incomplete (pre_tool)`
+  // caused by 4.68GB of them, not as speculation.
+  ".btmp/",
+  ".bmp/",
+  ".bttmp/",
+  "node-compile-cache/",
+  "*.dmp",
+  ".bun-home/",
+  ".localappdata/",
+  "npm-home/",
 ] as const;
 
 export const DEFAULT_NATALIA_IGNORE_CONTENT = `${[

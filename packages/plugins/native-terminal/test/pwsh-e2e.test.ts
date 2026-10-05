@@ -104,7 +104,10 @@ test("a PowerShell pane reports commands and exit codes", async () => {
     let command: ReturnType<typeof lastCommand> | undefined;
     for (let waited = 0; waited < 20_000; waited += 100) {
       command = lastCommand("term_pwsh");
-      if (command?.commandLine === "echo pwsh-command-level" && command?.exitCode === 0)
+      if (
+        command?.commandLine === "echo pwsh-command-level" &&
+        command?.exitCode === 0
+      )
         break;
       await Bun.sleep(100);
     }

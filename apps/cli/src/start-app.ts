@@ -9,7 +9,7 @@
 //
 // The stack, in the order it has to come up:
 //   1. the runtime     `natalia serve --port 8790`   the API the web shell calls
-//   2. the web server  `natalia serve-web ... `      the shell itself, on 8791
+//   2. the web server  `natalia serve-web ...`       the shell itself, on 8791
 //   3. the window host `natalia-cef-desktop.exe`     the native window
 //   4. the browser                                   the same URL, if 3 dies
 //
@@ -19,21 +19,53 @@
 // configure a model. The shell takes 8791 and calls 8790 cross-origin, which the
 // transport already allows (it sends access-control-allow-origin: * with POST).
 //
-// The children are detached so they outlive this process: a child sharing this
-// console dies with it, and the browser tab just opened would then find its API
-// refusing every connection (net::ERR_CONNECTION_REFUSED :8790/rpc).
+// THE SERVERS RUN IN THIS PROCESS. They were spawned as children of this same
+// executable first, and that cannot work: `natalia.exe` is a Bun single-file
+// shell, and uv_spawn refuses it with ENOENT no matter which path you hand it
+// (`process.execPath`, `process.argv[0]` — both name a file that exists, both
+// were refused). Spawning is also the wrong shape on its own, because a child
+// sharing this console dies with it and the browser tab then finds its API
+// refusing every connection (net::ERR_CONNECTION_REFUSED :8790/rpc). Only the
+// window host is spawned, because that really is a different executable.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createConnection } from "node:net";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
+import { handleRuntimeCommand } from "./runtime-commands";
 
 const RUNTIME_PORT = 8790;
 const WEB_PORT = 8791;
 
-/** Own directory: the release tree puts every executable side by side. */
+/**
+ * The install directory: every shipped executable, library and the web shell sit
+ * side by side in it.
+ *
+ * Every obvious candidate is WRONG in at least one launch mode, which is why
+ * this tries several and picks by evidence (does `web/index.html` live there)
+ * instead of trusting one:
+ *   `import.meta.dir`  -> `B:\~BUN\` — Bun's embedded filesystem, never the
+ *                         install folder. "no web shell at B:\~BUN\web" is
+ *                         exactly what that produced.
+ *   `process.execPath` -> correct when started by the shell
+ *                         (`E:\Natalia-verify\natalia.exe`), but `B:\~BUN\...`
+ *                         when started with redirected stdio. Same binary, same
+ *                         machine, different answer, so it cannot be the only
+ *                         source.
+ *   `process.argv[0]`  -> what the shell actually used, the other mode's answer.
+ * The first candidate that actually contains the web shell wins; if none does,
+ * the first non-empty one is returned so the caller can name it in its error.
+ */
 function appDir(): string {
-  return join(import.meta.dir, "..");
+  const candidates = [
+    dirname(process.argv[0] ?? ""),
+    dirname(process.execPath),
+    dirname(import.meta.dir),
+  ].filter((dir) => dir.length > 0);
+  for (const dir of candidates) {
+    if (existsSync(join(dir, "web", "index.html"))) return dir;
+  }
+  return candidates[0] ?? ".";
 }
 
 function portIsOpen(port: number): Promise<boolean> {
@@ -66,35 +98,35 @@ async function waitForPort(port: number, attempts: number): Promise<boolean> {
  */
 export async function startApp(): Promise<number> {
   const dir = appDir();
-  const self = process.execPath;
   const webUrl = `http://127.0.0.1:${WEB_PORT}/`;
+  const webRoot = join(dir, "web");
 
-  const startChild = (args: string[]): void => {
-    try {
-      const child = spawn(self, args, {
-        cwd: dir,
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      // Detached: nothing waits on it here, and it must not die with this
-      // process (see the header).
-      child.unref();
-    } catch {
-      console.error(`[natalia] could not start: ${self} ${args.join(" ")}`);
-    }
+  if (!existsSync(join(webRoot, "index.html"))) {
+    console.error(`[natalia] no web shell at ${webRoot}`);
+    return 1;
+  }
+
+  // In-process, and NOT awaited: `serve` holds the runtime for as long as the
+  // app runs, so awaiting it would mean never reaching the window below.
+  // A failure is reported, not swallowed, and it does not take the app down —
+  // the browser fallback still opens, and the reason is on stderr.
+  const startServer = (args: string[], what: string): void => {
+    void handleRuntimeCommand(args).catch((error: unknown) => {
+      console.error(
+        `[natalia] could not start the ${what}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
   };
 
   console.error(`[natalia] starting the runtime on ${RUNTIME_PORT}`);
-  startChild(["serve", "--port", String(RUNTIME_PORT)]);
+  startServer(["serve", "--port", String(RUNTIME_PORT)], "runtime");
   console.error(`[natalia] starting the web server on ${WEB_PORT}`);
-  startChild([
-    "serve-web",
-    "--root",
-    join(dir, "web"),
-    "--port",
-    String(WEB_PORT),
-  ]);
+  startServer(
+    ["serve-web", "--root", webRoot, "--port", String(WEB_PORT)],
+    "web server",
+  );
 
   // A window that loads before its listener exists never retries, so wait.
   if (await waitForPort(WEB_PORT, 40)) {

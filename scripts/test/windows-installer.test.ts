@@ -458,3 +458,26 @@ test("no release tree means no answer, not a stale one", async () => {
     ),
   ).toBeUndefined();
 });
+
+test("the wizard offers the install directory — the page exists, not just the flag", async () => {
+  // P2-1, closed by reading the generated script rather than by a Windows
+  // session. Inno's modern wizard shows the directory page UNLESS the script
+  // disables it, so the guard is on what the script does NOT contain: any
+  // DisableDirPage (or the silent-only pragmas that skip every page) would
+  // take the choice away from the user who installs by hand.
+  const release = await fakeWindowsRelease();
+  const plan = await planWindowsInstall({
+    releaseDir: release,
+    icon: "icon.ico",
+  });
+  const script = renderInnoScript(plan);
+  expect(script).toContain("WizardStyle=modern");
+  // The default is Program Files, which is what a per-machine install means.
+  expect(script).toContain("DefaultDirName={autopf}");
+  // Nothing suppresses any page: the directory page, the ready page, and the
+  // finished page all belong to the user installing by hand.
+  expect(script).not.toContain("DisableDirPage");
+  expect(script).not.toContain("DisableReadyPage");
+  expect(script).not.toContain("DisableFinishedPage");
+  expect(script).not.toContain("DisableWelcomePage");
+});

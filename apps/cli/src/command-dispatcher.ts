@@ -2,7 +2,7 @@ import { plainStatus } from "./index";
 import { handleRuntimeCommand } from "./runtime-commands";
 import { handleDaemonCommands } from "./daemon-commands";
 import { handleLocalCommands } from "./local-commands";
-import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
+import { startApp } from "./start-app";
 
 const argv = process.argv.slice(2);
 const handled =
@@ -17,9 +17,9 @@ if (!handled) {
     process.exit(1);
   }
   if (subcommand) throw new Error(`unknown command: ${subcommand}`);
-  // No subcommand: the default face. Its config home is created here, so the
-  // first launch of a fresh install reports its (unconfigured) state instead of
-  // dying on a file nobody was responsible for creating.
-  const configPath = (await ensureNataliaConfigPath(nataliaConfigPath())).path;
-  console.log(JSON.stringify(await plainStatus(configPath), null, 2));
+  // No subcommand: START THE APP. This is what a double-click runs, and it used
+  // to print a status blob and exit — so the most obvious executable in the
+  // install folder was one that never opened anything. `natalia status` is the
+  // status; bare `natalia` is the program.
+  process.exitCode = await startApp();
 }

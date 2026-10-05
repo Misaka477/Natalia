@@ -95,13 +95,22 @@ const DEFAULT_PUBLISHER = "Natalia";
 const DEFAULT_RUNTIME = "natalia";
 const DEFAULT_CEF = "natalia-cef-desktop";
 /**
- * The Start Menu entry's target: the launcher EXE, not the bare CEF host and
- * not a batch script. It is the one PARENT process — it starts the runtime and
- * the web server as job-owned children and then the window host, so the process
- * tree is one parent with children rather than a pile of loose processes, and
- * the children die with it instead of being orphaned.
+ * The Start Menu entry's target: `natalia.exe`, and nothing else.
+ *
+ * It was `natalia-cef-desktop.exe` first (development default URL, so it exited
+ * and the app never opened), then `Natalia.cmd` (a batch file, which is also a
+ * second "which of these do I run" question), then `natalia-launcher.exe` (a
+ * real parent process, but a THIRD executable the user has never heard of).
+ *
+ * The reported failure was: "I double-clicked natalia.exe and it never starts".
+ * The obvious executable — the one named after the program — did nothing,
+ * because bare `natalia` printed status JSON and exited. So the CLI now starts
+ * the whole stack when given no subcommand, and the shortcut points at it: one
+ * exe, one entry, the same thing you double-click in the install folder.
+ * `natalia-launcher.exe` stays supported for anyone who has it, but it is no
+ * longer what the shortcut names.
  */
-const DEFAULT_LAUNCHER = "natalia-launcher.exe";
+const DEFAULT_LAUNCHER = "natalia.exe";
 
 /** Release bookkeeping that must never be installed. */
 const EXCLUDED = new Set([

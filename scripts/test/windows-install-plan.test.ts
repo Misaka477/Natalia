@@ -18,11 +18,10 @@ async function fakeWindowsRelease() {
   await mkdir(join(root, "resources", "plugins"), { recursive: true });
   await writeFile(join(root, "natalia.exe"), "runtime\n");
   await writeFile(join(root, "natalia-cef-desktop.exe"), "cef\n");
-  // The launcher EXE the Start Menu entry runs: the one parent process that
-  // starts the runtime, the web server and the window host as its job-owned
-  // children. A release without it has a shortcut to a process that cannot show
-  // a window on its own.
-  await writeFile(join(root, "natalia-launcher.exe"), "launcher\n");
+  // The one entry point: `natalia.exe` with no subcommand starts the whole
+  // stack. The shortcut names exactly the binary a user double-clicks in the
+  // install folder, so there is no second question of "which of these do I run".
+  await writeFile(join(root, "natalia.exe"), "cli\n");
   await writeFile(join(root, "libcef-bin", "libcef.dll"), "lib\n");
   await writeFile(join(root, "libcef-bin", "chrome_100_percent.pak"), "pak\n");
   await writeFile(join(root, "resources", "plugin.js"), "ui\n");
@@ -64,7 +63,7 @@ test("the shortcut runs the stack, not a process that cannot show a window alone
   // user sees "it will not open". The launcher starts the runtime AND the web
   // server first and then hands the host a URL that exists, which is the only
   // shape that produces a window.
-  expect(plan.shortcut.targetRelative).toBe("natalia-launcher.exe");
+  expect(plan.shortcut.targetRelative).toBe("natalia.exe");
   expect(
     plan.files.some((f) => f.target === plan.shortcut.targetRelative),
   ).toBe(true);

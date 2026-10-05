@@ -399,6 +399,10 @@ const clientClosureAllowlist = [
   "runtime-config",
   "runtime-services",
   "runtime-status",
+  // The logging mechanism: the framework's log points (and the boot's
+  // default exporter install) import it, and it is a mechanism like
+  // diff-wasm above — the client's own boot installs the sink.
+  "logging",
   "sandbox",
   "session",
   "session-store",

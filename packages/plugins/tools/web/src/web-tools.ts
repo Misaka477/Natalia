@@ -50,7 +50,17 @@ function webFetchTool(): RuntimeTool {
         const status = Number(/status=(\d+)/u.exec(value)?.[1] ?? "0");
         const contentType =
           /content-type=([^\n]*)/u.exec(value)?.[1] ?? "unknown";
-        const body = value.split("\n").slice(2).join("\n") || "(empty body)";
+        // The header block grows by a line when the body is truncated, so the
+        // body starts after the LAST `key=...` header line — a fixed slice(2)
+        // would put `truncated=true ...` in the card's body as page text.
+        const lines = value.split("\n");
+        let bodyStart = 0;
+        while (
+          bodyStart < lines.length &&
+          /^[a-z][a-z-]*=/u.test(lines[bodyStart]!)
+        )
+          bodyStart += 1;
+        const body = lines.slice(bodyStart).join("\n") || "(empty body)";
         return {
           kind: "web",
           title: url,
@@ -59,6 +69,11 @@ function webFetchTool(): RuntimeTool {
           meta: [
             ["content-type", contentType],
             ["status", String(status)],
+            // The cap is a fact about the result, so the card shows it rather
+            // than presenting a cut page as the whole page.
+            ...(/truncated=true/u.test(value)
+              ? ([["truncated", "true"]] as Array<[string, string]>)
+              : []),
           ],
         };
       },
@@ -80,12 +95,43 @@ function webFetchTool(): RuntimeTool {
           `web_fetch failed: HTTP ${response.status} from ${url}`,
         );
       const text = await response.text();
+      const bounded = boundedWebBody(text, numberOr(args.maxBytes, 20000));
       return [
         `status=${response.status}`,
         `content-type=${response.headers.get("content-type") ?? "unknown"}`,
-        text.slice(0, numberOr(args.maxBytes, 20000)),
+        ...(bounded.truncated
+          ? [
+              `truncated=true bytes=${bounded.body.length} of ${bounded.totalBytes}`,
+            ]
+          : []),
+        bounded.body,
       ].join("\n");
     },
+  };
+}
+
+/**
+ * The byte bound, WITH its facts. A silent `slice(0, maxBytes)` told the model
+ * nothing was missing while the rest of the page — or the search results —
+ * went unread; the caller could not tell a complete result from a cut one.
+ * The header line rides the repo's own vocabulary (`truncated`, and the byte
+ * total the way `mailbox_status` reports `returned/total`).
+ */
+function boundedWebBody(
+  text: string,
+  maxBytes: number,
+): {
+  body: string;
+  truncated: boolean;
+  totalBytes: number;
+} {
+  const totalBytes = Buffer.byteLength(text, "utf8");
+  if (totalBytes <= maxBytes)
+    return { body: text, truncated: false, totalBytes };
+  return {
+    body: text.slice(0, maxBytes),
+    truncated: true,
+    totalBytes,
   };
 }
 
@@ -123,11 +169,17 @@ function webSearchTool(): RuntimeTool {
         throw new Error(
           `web_search failed: HTTP ${response.status} from ${url.origin}`,
         );
+      const bounded = boundedWebBody(text, numberOr(args.maxBytes, 20000));
       return [
         `status=${response.status}`,
         `content-type=${response.headers.get("content-type") ?? "unknown"}`,
         `source=${search.label}`,
-        text.slice(0, numberOr(args.maxBytes, 20000)),
+        ...(bounded.truncated
+          ? [
+              `truncated=true bytes=${bounded.body.length} of ${bounded.totalBytes}`,
+            ]
+          : []),
+        bounded.body,
       ].join("\n");
     },
   };

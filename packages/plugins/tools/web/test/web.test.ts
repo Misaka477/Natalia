@@ -110,3 +110,36 @@ test("web tools do not own browser tools", () => {
   expect(names).not.toContain("browser_tabs");
   expect(names).not.toContain("browser_open");
 });
+
+test("a capped fetch says it was capped, with the byte total", async () => {
+  // A silent `slice(0, maxBytes)` told the model nothing was missing. The
+  // result now names the cap and the total, and the card keeps the header
+  // line out of the page body.
+  const tool = webToolFamily().tools.find(
+    (candidate) => candidate.name === "web_fetch",
+  )!;
+  const originalFetch = globalThis.fetch;
+  const big = "<html>" + "x".repeat(4000) + "</html>";
+  globalThis.fetch = (async () =>
+    new Response(big, {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    })) as typeof fetch;
+  try {
+    const value = (await tool.execute(
+      { url: "https://example.com/big", maxBytes: 500 },
+      { workspaceRoot: "/tmp" },
+    )) as string;
+    expect(value).toContain("status=200");
+    expect(value).toContain("truncated=true bytes=500 of " + big.length);
+    const card = tool.output!.presentResult!(
+      { url: "https://example.com/big" },
+      value,
+    );
+    expect(card!.meta).toContainEqual(["truncated", "true"]);
+    expect(card!.body).not.toContain("truncated=true");
+    expect(card!.body.length).toBe(500);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

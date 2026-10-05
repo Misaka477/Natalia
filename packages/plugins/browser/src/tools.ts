@@ -226,7 +226,7 @@ function browserScanTool(): RuntimeTool {
   return {
     name: "browser_scan",
     description:
-      "Scan a browser tab and return simplified page content (text-only by default). tabId is optional; when omitted the active tab is used.",
+      "Scan a browser tab and return simplified page content (text-only by default). tabId is optional; when omitted the active tab is used. At most maxlen characters per stream per call (default 35000); the result reports the page's total lengths and whether it was cut, and offset is where the next page starts.",
     requiresApproval: false,
     timeoutSec: 20,
     parameters: {

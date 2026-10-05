@@ -205,3 +205,21 @@ test("plugin setup does not start the bridge server until a tool is used", async
   expect(lifecycle.getBaseUrl()).toBeUndefined();
   await registry.unload(BROWSER_PLUGIN_ID);
 });
+
+test("browser_scan's description teaches its paging", () => {
+  // The capability existed (offset/maxlen, truncated, total lengths) while
+  // the model-facing text never mentioned them — a page nobody knows how to
+  // turn. The description is the tool's contract with the model, so the
+  // guard is on the words, the same way fs-read's window guard is.
+  const tool = browserToolFamily().tools.find(
+    (candidate) => candidate.name === "browser_scan",
+  )!;
+  expect(tool.description).toContain("maxlen");
+  expect(tool.description).toContain("offset");
+  expect(tool.parameters).toMatchObject({
+    properties: {
+      maxlen: { type: "number" },
+      offset: { type: "number" },
+    },
+  });
+});

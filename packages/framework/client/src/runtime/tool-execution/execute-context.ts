@@ -17,6 +17,7 @@ import {
   CONFINEMENT_MODES,
 } from "@anthelia/contracts";
 import type { ConfinementMode } from "@anthelia/confinement";
+import { enforceableConfinementMode } from "@anthelia/confinement";
 import { rinaCache } from "@anthelia/rina";
 import type { RuntimeTool } from "@anthelia/tools";
 import type { RuntimeEvent } from "@anthelia/contracts";
@@ -43,10 +44,18 @@ import type { WorkLedgerController } from "@natalia/work-ledger";
  * the key back), then the schema's default. Both sources are validated
  * at their own boundary; this guard re-checks membership so a hand-built
  * profile cannot smuggle a mode past either.
+ *
+ * The last line is the platform gate, and it is why this is a function
+ * rather than a lookup: the mode a host REQUESTS and the mode it can
+ * ENFORCE are different questions, and only the enforceability one may
+ * reach an execution. Asked here so the snapshot's danger indicator and
+ * the per-turn environment block — the other two readers — degrade with
+ * it instead of advertising a sandbox this machine never had.
  */
 export function effectiveConfinementMode(input: {
   profile?: CompositionProfile | undefined;
   configMode?: string | undefined;
+  os?: NodeJS.Platform | undefined;
 }): ConfinementMode {
   const legal = (mode: string | undefined): mode is ConfinementMode =>
     typeof mode === "string" &&
@@ -57,9 +66,12 @@ export function effectiveConfinementMode(input: {
   );
   const rowMode =
     typeof row?.config?.mode === "string" ? row.config.mode : undefined;
-  if (legal(rowMode)) return rowMode;
-  if (legal(input.configMode)) return input.configMode;
-  return "workspace-write";
+  const requested = legal(rowMode)
+    ? rowMode
+    : legal(input.configMode)
+      ? input.configMode
+      : "workspace-write";
+  return enforceableConfinementMode(requested, input.os);
 }
 
 export type BuildContextInput = {

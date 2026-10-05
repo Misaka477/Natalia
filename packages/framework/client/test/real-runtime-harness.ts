@@ -934,7 +934,19 @@ export function sandboxedSubagentProvider(): StreamingProvider {
         return;
       }
       if (isChild && !childWrite) {
-        expect(contractRead?.content).toBe("shared contract\n");
+        // A fixture must not ASSERT inside the system under test: this
+        // `expect` used to run inside the provider generator, so a drift in
+        // read_file's result shape threw INSIDE the child's stream — and the
+        // retry service then re-ran the same step forever (CI measured 18
+        // identical `step 2 calling provider` calls before the 60s budget),
+        // which reads as a hang rather than as the assertion that failed.
+        // The drift is now RECORDED and the flow continues, so a shape change
+        // shows up as a visible mismatch at the next expectation, and the
+        // full content is carried in the drift record for the failure output.
+        if (contractRead?.content !== "shared contract\n")
+          (
+            globalThis as { __nataliaChildReadDrift?: unknown }
+          ).__nataliaChildReadDrift = contractRead?.content;
         yield {
           type: "tool_call",
           calls: [

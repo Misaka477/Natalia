@@ -2249,6 +2249,17 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
     ),
   ).toBe("sandbox agent test success");
   expect(existsSync(join(root, "agent-test.txt"))).toBe(false);
+  // The child's read result, as the fixture saw it. The fixture used to
+  // `expect` it inline — inside the provider generator — so a shape drift
+  // threw in the child's stream and the retry loop turned it into a hang.
+  // The drift is recorded instead, and asserted HERE, where a failure is a
+  // failure and not a timeout.
+  const drift = (globalThis as { __nataliaChildReadDrift?: unknown })
+    .__nataliaChildReadDrift;
+  (
+    globalThis as { __nataliaChildReadDrift?: unknown }
+  ).__nataliaChildReadDrift = undefined;
+  expect(drift).toBeUndefined();
 });
 
 test("a sandboxed sub-agent sees a denied write and self-corrects inside its file domain", async () => {

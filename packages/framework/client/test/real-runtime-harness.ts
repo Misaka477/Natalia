@@ -10,7 +10,7 @@ import {
   readdir,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, test } from "bun:test";
 import { createRealRuntimeClient as createRuntimeClient } from "../src";
@@ -114,7 +114,16 @@ export function createRealRuntimeClient(
   // a shared/custom governance store pass pluginStoreRoot and manage the env
   // themselves.
   if (!options.pluginStoreRoot) {
-    const suffix = workspaceRoot.split("/").pop() ?? "workspace";
+    // `basename`, NOT `workspaceRoot.split("/").pop()`.
+    //
+    // The split form assumed a POSIX separator. On Windows it does not cut at
+    // all, so `.pop()` returned the ENTIRE absolute path and the governance root
+    // became a directory whose name contained a drive letter and colons:
+    //   …\.natalia-test-governance-E:\…\client-test-workspaces\<tmpdir>
+    // which mkdir refuses (ENOENT / invalid name). Every real-runtime test that
+    // does not pass an explicit pluginStoreRoot hit it on Windows, which is the
+    // same Windows-path-separator family that has cost this project four times.
+    const suffix = basename(workspaceRoot) || "workspace";
     const governanceRoot = join(
       workspaceRoot,
       "..",

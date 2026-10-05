@@ -2209,8 +2209,16 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
     const spawns = events.filter(
       (event) => event.type === "tool.update" && event.name === "agent_spawn",
     ) as Array<{ status?: string; summary?: string; result?: unknown }>;
+    const updates2 = updates as unknown as Array<{
+      phase?: string;
+      activityDetail?: string;
+      event?: string;
+      status?: string;
+    }>;
+    const last = updates2.at(-1);
     throw new Error(
       `the sandboxed child never reached a terminal state: subagent.update events=${updates.length}` +
+        ` last={event=${String(last?.event ?? "-")} phase=${String(last?.phase ?? "-")} activity=${String(last?.activityDetail ?? "-")}}` +
         ` agent_spawn updates=${JSON.stringify(
           spawns.map((event) => ({
             status: event.status,

@@ -186,7 +186,22 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "var",
     "  Answer: Integer;",
     "begin",
+    "  // SILENT FIRST, and the ask second. This order is not cosmetic: the ask is",
+    "  // a message box, and a message box under /VERYSILENT does not show — it",
+    "  // returns a value that is NOT the user's answer. Taking that value as an",
+    "  // answer made the Cancel branch fire, `Result := False` aborted the",
+    "  // uninstall, and a silently-installed copy could not be silently removed:",
+    "  // the uninstaller exited 1 and left every file on disk, including the",
+    "  // `.natalia` the app had just created. Measured, not theorised.",
+    "  //",
+    "  // So: SILENT MEANS KEEP. Nothing is asked, nothing is deleted, the program",
+    "  // is removed. The ask exists for a user watching the wizard.",
     "  KeepData := True;",
+    "  if UninstallSilent then",
+    "  begin",
+    "    Result := True;",
+    "    Exit;",
+    "  end;",
     "  Answer := SuppressibleMsgBox(" +
       "'Natalia keeps its data in two places:' #13#10 #13#10 " +
       "'  ' + ExpandConstant('{app}') + '\\.natalia' #13#10 " +

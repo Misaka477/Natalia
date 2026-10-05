@@ -203,6 +203,47 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   expect(script).toContain("SuppressibleMsgBox");
 });
 
+test("a silent uninstall removes the program and keeps the data, without asking", async () => {
+  // MEASURED, not theorised: a silently installed copy, run once (so the app had
+  // created `.natalia` inside the install dir), uninstalled with /VERYSILENT —
+  // the uninstaller exited 1 and left all 410 files on disk.
+  //
+  // The cause was the ask. `InitializeUninstall` showed a message box and took
+  // its return value as the answer; under /VERYSILENT a message box is not shown
+  // and returns something that is not an answer, which hit the Cancel branch,
+  // returned False, and aborted the uninstall.
+  //
+  // So the guard is on ORDER: `UninstallSilent` must be tested before the box,
+  // and the silent path must not be able to reach a Cancel.
+  const release = await fakeWindowsRelease();
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir: await mkdtemp(join(tmpdir(), "win-silent-uninst-")),
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  const script = await Bun.file(result.iss!).text();
+  const hook = script.slice(
+    script.indexOf("function InitializeUninstall"),
+    script.indexOf("procedure CurUninstallStepChanged"),
+  );
+  const silentAt = hook.indexOf("UninstallSilent");
+  const askAt = hook.indexOf("SuppressibleMsgBox");
+  expect(silentAt).toBeGreaterThan(-1);
+  expect(askAt).toBeGreaterThan(-1);
+  expect(
+    silentAt < askAt,
+    "the silent test must come before the ask: a message box under /VERYSILENT " +
+      "returns a value that is not an answer, and answering it aborted the " +
+      "uninstall",
+  ).toBe(true);
+  // The silent path may not return False: that is what cancelled it.
+  const silentBlock = hook.slice(silentAt, askAt);
+  expect(silentBlock).toContain("Result := True");
+  expect(silentBlock).not.toContain("Result := False");
+});
+
 test("the Pascal section's column one carries only declarations", async () => {
   // The escape-eating bug this pins: a comment line in the renderer's source
   // held `%USERPROFILE%\.config\natalia`, and in a double-quoted TS string `\.`

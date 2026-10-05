@@ -963,9 +963,11 @@ export function sandboxedSubagentProvider(): StreamingProvider {
         // The page, with or without the file's trailing newline: the windowed
         // read joins lines (no trailing separator), the pre-window spelling
         // carried it. Both are the same page.
-        if (typeof childReadContent === "string"
-          ? childReadContent.replace(/\n$/u, "") !== "shared contract"
-          : childReadContent !== "shared contract")
+        if (
+          typeof childReadContent === "string"
+            ? childReadContent.replace(/\n$/u, "") !== "shared contract"
+            : childReadContent !== "shared contract"
+        )
           (
             globalThis as { __nataliaChildReadDrift?: unknown }
           ).__nataliaChildReadDrift = contractRead?.content;

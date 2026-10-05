@@ -90,39 +90,57 @@ async function drive(
   const reader = bridge.stdout.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (Date.now() < deadline && !until(frames)) {
-    const read = await Promise.race([
-      reader.read(),
-      new Promise<{ value: undefined }>((resolve) =>
-        setTimeout(() => resolve({ value: undefined }), 500),
-      ),
-    ]);
-    if (!read.value) continue;
-    buffer += decoder.decode(read.value, { stream: true });
-    for (;;) {
-      const newline = buffer.indexOf("\n");
-      if (newline < 0) break;
-      const line = buffer.slice(0, newline);
-      buffer = buffer.slice(newline + 1);
-      if (line.startsWith("{")) {
-        // The handshake.
-        frames.push({ kind: "pid", payload: line });
-        continue;
+  // ONE timer for the whole drive, not one per iteration.
+  //
+  // The old shape raced `reader.read()` against a fresh 500ms setTimeout on
+  // every pass and never cleared either loser. `reader.read()` on a pipe with
+  // nothing to read is a promise that stays pending indefinitely, so the race
+  // kept piling up unresolved reads AND un-cleared timers; once the deadline
+  // hit, the process could not exit until the runtime tore it down, which is
+  // why a 30s drive reported as 48s and 45s on the Windows CI. Local is fast
+  // enough to finish in three reads and never shows it.
+  //
+  // So: a single shared deadline timer, and `reader.cancel()` at the end, which
+  // settles the pending read and lets the process leave.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = new Promise<{ value: undefined }>((resolve) => {
+    timer = setTimeout(() => resolve({ value: undefined }), 500);
+  });
+  try {
+    while (Date.now() < deadline && !until(frames)) {
+      const read = await Promise.race([reader.read(), tick]);
+      if (!read.value) continue;
+      buffer += decoder.decode(read.value, { stream: true });
+      for (;;) {
+        const newline = buffer.indexOf("\n");
+        if (newline < 0) break;
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (line.startsWith("{")) {
+          // The handshake.
+          frames.push({ kind: "pid", payload: line });
+          continue;
+        }
+        const space = line.indexOf(" ");
+        if (space < 0) continue;
+        const length = Number(line.slice(space + 1));
+        if (!Number.isFinite(length)) continue;
+        // The payload may not have arrived yet: wait for the next read.
+        if (buffer.length < length) break;
+        frames.push({
+          kind: line.slice(0, space),
+          payload: buffer.slice(0, length),
+        });
+        buffer = buffer.slice(length);
       }
-      const space = line.indexOf(" ");
-      if (space < 0) continue;
-      const length = Number(line.slice(space + 1));
-      if (!Number.isFinite(length)) continue;
-      // The payload may not have arrived yet: wait for the next read.
-      if (buffer.length < length) break;
-      frames.push({
-        kind: line.slice(0, space),
-        payload: buffer.slice(0, length),
-      });
-      buffer = buffer.slice(length);
     }
+  } finally {
+    // Settle the pending read and drop the shared timer, so the drive returns
+    // as soon as its deadline passes instead of waiting for the runtime to
+    // tear the process down.
+    reader.cancel();
+    if (timer) clearTimeout(timer);
   }
-  reader.cancel();
   bridge.kill();
   const text = frames.map((frame) => frame.payload).join("");
   return {

@@ -8,6 +8,7 @@
  * loads it. The host composes families; the framework ships none.
  */
 import {
+  optionalInteger,
   requireObject,
   requireString,
   type RuntimeTool,
@@ -29,9 +30,17 @@ export const TODO_PLUGIN_ID = "natalia-tool-todo";
 function todoReadTool(): RuntimeTool {
   return {
     name: "todo_read",
-    description: "Read this session's durable todo items.",
+    description:
+      "Read this session's durable todo items. Optionally bound the result with `limit`; the result reports how many items exist in total.",
     requiresApproval: false,
-    parameters: { type: "object", properties: {}, additionalProperties: false },
+    parameters: {
+      type: "object",
+      // A bound like the other list-shaped readers carry (mailbox_status,
+      // glob, grep): the whole list used to arrive in one result, and the
+      // result says how many exist so a caller can ask for more.
+      properties: { limit: { type: "integer", minimum: 1 } },
+      additionalProperties: false,
+    },
     output: {
       schema: {
         type: "object",
@@ -48,8 +57,10 @@ function todoReadTool(): RuntimeTool {
               additionalProperties: false,
             },
           },
+          total: { type: "integer" },
+          truncated: { type: "boolean" },
         },
-        required: ["items"],
+        required: ["items", "total", "truncated"],
         additionalProperties: false,
       },
       presentCall() {
@@ -62,20 +73,36 @@ function todoReadTool(): RuntimeTool {
             content?: string;
           }> | null) ?? [];
         const done = items.filter((item) => item.status === "completed").length;
+        const parsed = JSON.parse(value) as {
+          total?: number;
+          truncated?: boolean;
+        };
+        const summary = parsed.truncated
+          ? `${items.length} of ${parsed.total} items · ${done} done`
+          : `${items.length} items · ${done} done`;
         return {
           kind: "generic",
           title: "todos",
-          summary: `${items.length} items · ${done} done`,
+          summary,
           body: value,
         };
       },
     },
-    async execute(_input, context) {
+    async execute(input, context) {
+      const limit = optionalInteger(requireObject(input).limit, "limit");
+      const items = await readTodos(
+        context.workspaceRoot,
+        requireSessionID(context.sessionID),
+      );
+      // A cap like the other list readers, and the facts with it: the whole
+      // list used to arrive in one result with nothing saying how long it was.
+      const page = limit === undefined ? items : items.slice(0, limit);
       return JSON.stringify(
-        await readTodos(
-          context.workspaceRoot,
-          requireSessionID(context.sessionID),
-        ),
+        {
+          items: page,
+          total: items.length,
+          truncated: page.length < items.length,
+        },
         null,
         2,
       );

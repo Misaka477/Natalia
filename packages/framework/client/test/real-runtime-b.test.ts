@@ -442,6 +442,15 @@ test("runtime exposes native Terminal pane management through RuntimeClient", as
   // RuntimeClient surface serves: the read reaches the pane, reports a caret and
   // a real line/byte extent rather than nulls that impersonate a one-line
   // document, and the stop path retires it.
+  // KNOWN FLAKE (recorded, not fixed here): a boot race sits at this seam.
+  // Measured 2026-10-06: the native-terminal controller is provided while the
+  // runtime is still wiring, then disposed and re-provided as the composition
+  // refresh lands — a read inside that window throws "service
+  // terminal.controller is not provided", and the pane's first paint lands a
+  // moment after `cat` starts, so an early read also sees a null extent. CI
+  // wins the race on a quiet runner; a loaded one can lose it. Whoever owns
+  // the boot sequence next should settle the plugin registration BEFORE the
+  // composition refresh, not in the test.
   const paneRead = await client.nativeTerminalRead!("tty_management");
   expect(paneRead).toMatchObject({ id: "tty_management" });
   expect(typeof paneRead.text).toBe("string");

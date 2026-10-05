@@ -110,11 +110,14 @@ test("todo tools isolate durable items by session", async () => {
       .get("todo_read")!
       .execute({}, { workspaceRoot: root, sessionID: "ses_a" }),
   ).toContain("finish migration");
+  // An empty session reports the same envelope: zero items, not a bare "[]".
   expect(
-    await tools
-      .get("todo_read")!
-      .execute({}, { workspaceRoot: root, sessionID: "ses_b" }),
-  ).toBe("[]");
+    JSON.parse(
+      await tools
+        .get("todo_read")!
+        .execute({}, { workspaceRoot: root, sessionID: "ses_b" }),
+    ),
+  ).toEqual({ items: [], total: 0, truncated: false });
   await tools
     .get("todo_write")!
     .execute(
@@ -215,4 +218,43 @@ test("last successful write wins and an empty write clears the list", () => {
     result: JSON.stringify({ saved: 0, items: [] }),
   } as Parameters<typeof applyEvent>[1]);
   expect(todoItemsFromProjection(state)).toEqual([]);
+});
+
+test("todo_read bounds its page and reports the total", async () => {
+  // The whole list used to arrive in one result. Now a limit pages it and the
+  // result says how many exist — the shape mailbox_status and the terminal
+  // readers already use.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-todo-page-"));
+  const tools = createToolRegistry(todoTools);
+  await tools.get("todo_write")!.execute(
+    {
+      items: [
+        { content: "one", status: "pending" },
+        { content: "two", status: "pending" },
+        { content: "three", status: "pending" },
+      ],
+    },
+    { workspaceRoot: root, sessionID: "ses_p" },
+  );
+  const read = tools.get("todo_read")!;
+  expect(
+    JSON.parse(
+      await read.execute(
+        { limit: 2 },
+        { workspaceRoot: root, sessionID: "ses_p" },
+      ),
+    ),
+  ).toEqual({
+    items: [
+      { content: "one", status: "pending" },
+      { content: "two", status: "pending" },
+    ],
+    total: 3,
+    truncated: true,
+  });
+  expect(
+    JSON.parse(
+      await read.execute({}, { workspaceRoot: root, sessionID: "ses_p" }),
+    ).truncated,
+  ).toBe(false);
 });

@@ -32,7 +32,10 @@ test("the RSS sampler is a no-op unless the table admits it", () => {
 test("the RSS sampler logs periodic samples when the table admits it", async () => {
   delete process.env.NATALIA_MEMORY_TRACE;
   process.env.NATALIA_LOG = "memory-trace=debug";
-  const levels = { default: "error" as const, "memory-trace": "debug" as const };
+  const levels = {
+    default: "error" as const,
+    "memory-trace": "debug" as const,
+  };
   logService.setLevels(levels);
   const seen = createBufferExporter();
   const remove = logService.addExporter(seen);
@@ -43,7 +46,9 @@ test("the RSS sampler logs periodic samples when the table admits it", async () 
     stopMemoryTraceSampler();
     const records = seen.drain();
     expect(records.length).toBeGreaterThan(0);
-    expect(records.every((record) => record.name === "memory-trace")).toBe(true);
+    expect(records.every((record) => record.name === "memory-trace")).toBe(
+      true,
+    );
     const rendered = new LogService().format({ maxLength: 10240 }, records[0]!);
     expect(rendered).toContain("rss.sample");
   } finally {

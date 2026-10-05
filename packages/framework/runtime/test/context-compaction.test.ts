@@ -831,9 +831,19 @@ test("compaction aborts when the ledger surface changes during summarization", a
     expect.objectContaining({
       type: "compaction.end",
       success: false,
-      error: "surface_changed",
+      // The kind AND the words: `surface_changed` alone is the P0-1 pattern
+      // one layer down — a failure the operator cannot act on. The message
+      // spells what changed.
+      error: expect.stringContaining("surface_changed") as string,
     }),
   );
+  expect(
+    (
+      events.find((event) => event.type === "compaction.end") as {
+        error?: string;
+      }
+    )?.error ?? "",
+  ).not.toBe("surface_changed");
 });
 
 test("recoverContextLimitOnce bounds overflow retries and reports exhaustion", async () => {

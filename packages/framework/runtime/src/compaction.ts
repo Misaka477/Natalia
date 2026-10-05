@@ -1,3 +1,4 @@
+import { providerFailureMessage } from "./errors";
 import type { CompactionTrigger, RuntimeEvent } from "@anthelia/contracts";
 import { providerError, type ProviderError } from "./errors";
 import {
@@ -310,7 +311,11 @@ export async function compactContext(
           (options.now?.() ?? new Date()).getTime() - started.getTime(),
         ),
         attempts,
-        error: "surface_changed",
+        // Same rule as the provider path below: the reason, in words. A
+        // compaction dropped because the context moved under it is a fact the
+        // operator can act on ("retry"), not a bare token.
+        error:
+          "surface_changed: the context changed while compacting; the compaction was dropped, not committed",
       });
       return { compacted: false, skipped: "surface_changed" as const };
     }
@@ -392,7 +397,10 @@ export async function compactContext(
         (options.now?.() ?? new Date()).getTime() - started.getTime(),
       ),
       attempts,
-      error: provider.kind ?? "compaction_failed",
+      // The kind AND the provider's words. `kind` alone is the P0-1 pattern
+      // one layer down: a compaction that failed reads "invalid_request" and
+      // the operator cannot tell a malformed request from a dead endpoint.
+      error: providerFailureMessage(provider),
     });
     throw error;
   }

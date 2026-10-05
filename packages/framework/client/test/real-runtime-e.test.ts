@@ -2197,7 +2197,7 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
     60_000,
   );
   const terminal = events.find(
-    (event) =>
+    (event): event is Extract<RuntimeEvent, { type: "subagent.update" }> =>
       event.type === "subagent.update" &&
       (event.status === "completed" || event.status === "failed"),
   );

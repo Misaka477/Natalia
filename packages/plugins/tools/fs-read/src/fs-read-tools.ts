@@ -70,22 +70,44 @@ function readFileTool(): RuntimeTool {
       presentResult(args, value) {
         const path = requireObject(args).path as string | undefined;
         // `value` is the tool's raw result — JSON text, the shape the kernel's
-        // string-returning contract carries (glob and grep do the same).
-        const result = JSON.parse(value) as {
-          content: string;
-          totalLines: number;
-          truncated: boolean;
-        };
-        const window = result.truncated
-          ? `lines 1-${result.content.split(/\r?\n/u).length - 2} of ${result.totalLines}`
-          : `${result.totalLines} lines`;
+        // string-returning contract carries (glob and grep do the same). The
+        // parse is DEFENSIVE: a rendering path must never be the reason a
+        // call fails. Measured on CI: a caller handed this a value that was
+        // not the envelope (an error string), JSON.parse threw, and the tool
+        // reported "JSON Parse error: Unterminated string" as its RESULT —
+        // the card's problem became the read's failure.
+        let parsed: {
+          content?: string;
+          totalLines?: number;
+          truncated?: boolean;
+        } | null = null;
+        try {
+          parsed = JSON.parse(value) as {
+            content?: string;
+            totalLines?: number;
+            truncated?: boolean;
+          } | null;
+        } catch {
+          parsed = null;
+        }
+        const content =
+          typeof parsed?.content === "string" ? parsed.content : value;
+        const totalLines =
+          typeof parsed?.totalLines === "number" ? parsed.totalLines : null;
+        const truncated = parsed?.truncated === true;
         return {
           kind: "read",
           title: typeof path === "string" ? path : "file",
           // The window is the summary: a card that shows only the char count
-          // presents a capped read as the whole file.
-          summary: window,
-          body: result.content,
+          // presents a capped read as the whole file. Without the envelope
+          // there is no window to name, and the honest summary is the read.
+          summary:
+            totalLines === null
+              ? "read"
+              : truncated
+                ? `page of ${totalLines} lines`
+                : `${totalLines} lines`,
+          body: content,
         };
       },
     },

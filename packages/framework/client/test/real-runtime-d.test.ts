@@ -1019,9 +1019,19 @@ test("durable session replay preserves tool-call pairs for the next provider tur
   const restoredTool = requests[0]?.messages.find(
     (message) => message.role === "tool",
   );
+  // The tool's result is the windowed envelope as JSON text — the kernel's
+  // string-returning contract carries the window facts that way (glob, grep
+  // and read_file all do it). The replay contract is that the RESULT SURVIVES
+  // the durable round-trip verbatim; its shape is read_file's business, and
+  // pinning the old bare string here pinned an implementation detail of a
+  // tool this test does not own.
   expect(restoredTool).toMatchObject({
     toolCallID: "call_read",
-    content: "replay-ok\n",
+    content: JSON.stringify({
+      content: "replay-ok\n",
+      totalLines: 1,
+      truncated: false,
+    }),
   });
 });
 

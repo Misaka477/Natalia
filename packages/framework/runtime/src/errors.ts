@@ -123,6 +123,37 @@ export function parseRetryAfterMs(value?: string | null, now = Date.now()) {
   return Math.max(0, date - now);
 }
 
+/**
+ * The provider failure as the operator and the model both get to read: the
+ * kind, the status, and THE PROVIDER'S OWN WORDS.
+ *
+ * The first version returned kind and status alone — `invalid_request (400)`
+ * — because the message had never been read as something the UI needs. That
+ * choice made the single most common framework failure undiagnosable: the
+ * provider says WHY (a malformed tool definition, an unknown field, a body
+ * limit), `safeResponseText` captures it, and this function deleted it. The
+ * user's report of exactly that: every tool call answering `invalid_request`
+ * with nothing behind it, in a framework where the same provider and model
+ * work elsewhere — an unfixable bug while the explanation is thrown away.
+ *
+ * The message is kept and trimmed, not redacted as a class: what it carries
+ * is the provider's description of OUR request, which is the thing that is
+ * broken and must be read. Secrets in a provider error body are the
+ * provider's problem and not ours to launder here; nothing in this process's
+ * own state (keys, tokens) is added to it.
+ */
+export function providerFailureMessage(error: ProviderError): string {
+  const head = `${error.kind}${error.statusCode ? ` (${error.statusCode})` : ""}`;
+  const body = (error.message ?? "").trim();
+  if (!body || body === head) return head;
+  return `${head}: ${body.slice(0, 1000)}`;
+}
+
+/**
+ * The previous shape, kept for its call sites' history: kind and status only.
+ * New code carries the provider's words via `providerFailureMessage`; this
+ * stays so the two spellings can be compared in one test.
+ */
 export function redactedProviderMessage(error: ProviderError) {
   return `${error.kind}${error.statusCode ? ` (${error.statusCode})` : ""}`;
 }

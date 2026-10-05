@@ -2,7 +2,7 @@ import type { RuntimeEvent, StepRetryOperation } from "@anthelia/contracts";
 import {
   asProviderError,
   providerError,
-  redactedProviderMessage,
+  providerFailureMessage,
   type ProviderError,
 } from "./errors";
 
@@ -109,7 +109,7 @@ export async function runWithRetry<T>(
             maxAttempts: policy.maxAttemptsPerStep,
             reason: cancelled.kind,
             retryable: false,
-            message: redactedProviderMessage(cancelled),
+            message: providerFailureMessage(cancelled),
           });
         throw cancelled;
       }
@@ -129,7 +129,7 @@ export async function runWithRetry<T>(
           reason: providerError.kind,
           retryable: canRetry,
           statusCode: providerError.statusCode,
-          message: redactedProviderMessage(providerError),
+          message: providerFailureMessage(providerError),
         });
         throw providerError;
       }
@@ -159,7 +159,7 @@ export async function runWithRetry<T>(
           reason: cancelled.kind,
           retryable: false,
           statusCode: cancelled.statusCode,
-          message: redactedProviderMessage(cancelled),
+          message: providerFailureMessage(cancelled),
         });
         throw cancelled;
       }

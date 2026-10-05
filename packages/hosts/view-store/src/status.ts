@@ -290,10 +290,16 @@ export function applyStatusEvent(
         event.message,
         "retry_exhausted",
       );
+      // The footer carries the MESSAGE, not the kind. The kind alone
+      // (`invalid_request`) is what the operator saw on every failing tool
+      // call while the provider's own explanation — a malformed tool
+      // definition, an unknown field, a body limit — sat in the event's
+      // message, recorded in the block and dropped from the one line that is
+      // always on screen. The message leads with the kind and keeps the body.
       state.footer =
         event.retryable === false
-          ? `not retryable: ${event.reason}`
-          : `retry exhausted: ${event.reason}`;
+          ? `not retryable: ${event.message}`
+          : `retry exhausted: ${event.message}`;
       return true;
     case "agent.selection":
       state.agentSelection = { name: event.name, pending: event.pending };

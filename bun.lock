@@ -467,6 +467,7 @@
       "version": "0.0.0-m13",
       "dependencies": {
         "@anthelia/contracts": "workspace:*",
+        "@anthelia/logging": "workspace:*",
       },
     },
     "packages/framework/session-store": {

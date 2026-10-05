@@ -1,3 +1,4 @@
+import { getLogger } from "@anthelia/logging";
 import { Database } from "bun:sqlite";
 import type {
   DurableContextCheckpointRecord,
@@ -611,9 +612,13 @@ export class SqliteSessionStore {
       if (epochs.has(row.session_id)) affected.add(row.session_id);
 
     if (affected.size === 0) return [];
-    console.warn("[session-store] compacting live-only historical events", {
-      sessions: affected.size,
-    });
+    // A bulk DELETE that only runs when live-only history exists: the count
+    // is the fact a later reader needs, and it belongs in the log where a
+    // soak can find it rather than in a console line nobody keeps.
+    getLogger("session-store").warn(
+      "compacting live-only historical events across %d sessions",
+      affected.size,
+    );
 
     this.db.transaction(() => {
       this.run(

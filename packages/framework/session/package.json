@@ -10,6 +10,7 @@
     "./browser": "./src/browser.ts"
   },
   "dependencies": {
-    "@anthelia/contracts": "workspace:*"
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/logging": "workspace:*"
   }
 }

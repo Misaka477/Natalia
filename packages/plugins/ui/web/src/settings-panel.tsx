@@ -340,6 +340,15 @@ const categories: Category[] = [
   },
 ];
 
+/** The plugin's own verbose gate — the browser console is the operator's. */
+function verboseLog(...args: unknown[]) {
+  if (
+    (globalThis as { __NATALIA_PERF_VERBOSE?: number })
+      .__NATALIA_PERF_VERBOSE === 1
+  )
+    console.log(...args);
+}
+
 export function SettingsPanel(props: {
   open: boolean;
   onClose: () => void;
@@ -411,16 +420,23 @@ export function SettingsPanel(props: {
    * compose-time row versus this process) and the value cell must show what IS.
    */
   async function writeConfig(patch: Record<string, unknown>) {
-    console.log("[settings] config write ->", patch);
+    // A diagnostic per write, so it rides the plugin's own verbose flag: the
+    // browser console is the operator's, and a write-per-click line is noise
+    // there (the plugin owns its logging, like every other UI file here).
+    verboseLog("[settings] config write ->", patch);
     try {
       await updateConfig?.(patch);
       const next = await props.runtime?.configGet?.();
-      console.log("[settings] config write <-", next);
+      // The write's own echo: verbose-only, like the request line above it.
+      verboseLog("[settings] config write <-", next);
       // Our own view first (the rows read it), then the app's snapshot.
       if (next) setOwnConfig(next as never);
       if (next) props.onConfig?.(next as never);
     } catch (error) {
-      console.log("[settings] config write FAILED", error);
+      // The failure is NOT diagnostic-only: a write that failed is shown in
+      // the panel (below) AND logged, because a settings write that silently
+      // did nothing is the defect this panel exists to surface.
+      console.warn("[settings] config write FAILED", error);
       setConfigError(
         `写入失败：${error instanceof Error ? error.message : String(error)}`,
       );

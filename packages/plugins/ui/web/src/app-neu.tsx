@@ -1743,7 +1743,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     ) {
       setState(cloneState(hydrated));
     }
-    console.log(
+    perfLog(
       "[hydrate] applied",
       JSON.stringify({
         sessionID,
@@ -2053,7 +2053,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       } catch (error) {
         // Release the in-flight guard so the history-replay-complete path can
         // retry instead of leaving the transcript with only live rows.
-        console.log(
+        perfLog(
           "[hydrate] failed",
           JSON.stringify({
             sessionID,
@@ -2067,7 +2067,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         // A reconnect/newer attach superseded this load. Do not mark the
         // session hydrated; clearing the guard lets the next attach retry the
         // page instead of leaving the transcript partial forever.
-        console.log(
+        perfLog(
           "[hydrate] stale",
           JSON.stringify({
             sessionID,
@@ -2093,7 +2093,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       ) {
         setState(cloneState(props.ctx.projection.getState()));
       }
-      console.log(
+      perfLog(
         "[hydrate] onLoad applied",
         JSON.stringify({
           sessionID,
@@ -2233,7 +2233,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         const projected = cloneState(props.ctx.projection.getState());
         const cloneStart = performance.now();
         setState(projected);
-        console.log(
+        perfLog(
           "[hydrate] ui state",
           JSON.stringify({
             selected: selectedSessionID(),
@@ -3982,7 +3982,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                             } else {
                               setRollbackNotice(undefined);
                             }
-                            console.log("[web-plugin] send", text);
+                            perfLog("[web-plugin] send", text);
                             // The Composer opts into mid-turn injection by
                             // default. The settings panel can switch a busy send
                             // to `next-turn`, which queues a separate turn.
@@ -4191,7 +4191,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     onSubmit={() => {
                       const text = chatDraft();
                       if (text.trim() || chatAttachments().length) {
-                        console.log("[navi-ui] submitting chat", {
+                        perfLog("[navi-ui] submitting chat", {
                           text,
                           attachments: chatAttachments().map(
                             (item) => item.path,
@@ -4211,10 +4211,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                         if (result && typeof result.then === "function") {
                           void result
                             .then((value) =>
-                              console.log(
-                                "[navi-ui] chatSubmit resolved",
-                                value,
-                              ),
+                              perfLog("[navi-ui] chatSubmit resolved", value),
                             )
                             .catch((cause) =>
                               console.error(
@@ -4547,14 +4544,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         registeredTools={registeredTools()}
         runtime={props.ctx.runtime}
         onUpdateConfig={async (patch) => {
-          console.log("[settings] write ->", JSON.stringify(patch));
+          perfLog("[settings] write ->", JSON.stringify(patch));
           const applied = await props.ctx.runtime.updateConfig?.({
             patch,
             scope: "global",
           });
-          console.log("[settings] write applied <-", applied);
+          perfLog("[settings] write applied <-", applied);
           const next = await props.ctx.runtime.configGet?.();
-          console.log(
+          perfLog(
             "[settings] re-read <-",
             JSON.stringify({
               compactionEnabled: next?.context?.compactionEnabled,
@@ -4568,7 +4565,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         // snapshot, and a compose-time row changes the live runtime rather than
         // that snapshot, so the re-read keeps the value cell honest.
         onConfig={(next) => {
-          console.log("[settings] onConfig ->", JSON.stringify(next));
+          perfLog("[settings] onConfig ->", JSON.stringify(next));
           setConfig(next as unknown as ConfigV3);
         }}
       />

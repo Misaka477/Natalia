@@ -55,88 +55,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   UNREFERENCED_PARAMETER(lpCmdLine);
   UNREFERENCED_PARAMETER(nCmdShow);
 
-  // RUNTIME bisection switch, same binary both ways.
-  //
-  // The FIRST version of this switch read an ENVIRONMENT VARIABLE
-  // (NATALIA_CEF_PROBE), and that produced a result too strange to leave alone:
-  // the same binary, the same call site, initialised CEF with the variable set
-  // and failed without it. So the switch is now a COMMAND-LINE ARGUMENT, which
-  // cannot be read by libcef's own startup — if the outcome still follows the
-  // flag, the flag's presence in the process environment block is what matters;
-  // if it does not, then libcef was reading that environment variable and
-  // changing its behaviour, and the fix is to stop setting it.
-  // RUNTIME bisection switch, same binary both ways. ONE flag, ONE path: the
-  // only place this acts is at the real CefInitialize call site below, so the
-  // two runs differ in nothing except whether the call's result is reported and
-  // the function returns there.
-  //
-  // (An earlier version also had an early-return probe block with its own
-  // settings, which CONFOUNDED the experiment: with the flag set it returned
-  // before ever reaching the real call site, so "the flag made it succeed" was
-  // really "a different, simpler call succeeded". That early block is deleted;
-  // this is the only probe left.)
-  const bool probe_mode =
-      ::GetCommandLineW() != nullptr &&
-      wcsstr(::GetCommandLineW(), L"--natalia-probe") != nullptr;
-
-#ifdef NATALIA_CEF_PROBE_ONLY
-  // BISECTION PROBE, compiled in only with -DNATALIA_CEF_PROBE_ONLY=1.
-  //
-  // Everything is linked exactly as the shipping host links it — every
-  // translation unit, every static initialiser, every constructor — and the only
-  // thing skipped is the app's own startup (the browser, the window, the message
-  // loop). So:
-  //   still exits 38  => the fault is LINKED-IN: a static initialiser or
-  //                      constructor that touches CEF state before main runs.
-  //   reaches OK      => the fault is in the startup path this skipped.
-  //
-  // Measured, in order: probe with a null app -> OK; probe with SimpleApp -> OK.
-  // So the linked-in code and SimpleApp are both innocent, and what is left is
-  // the pair the real host does and this probe does not.
-  {
-    // BISECTION STEP 2: the cache_path is now the SAME directory the shipping
-    // host uses (%LOCALAPPDATA%\Natalia\CEF), because "CEF-probe" was one of the
-    // two remaining differences and this removes it. If the probe now fails, the
-    // fault is state in that directory; if it still succeeds, the remaining
-    // difference is the startup code after CefInitialize (command_line parsing,
-    // the rest of settings, CefRunMessageLoop).
-    CefMainArgs probe_args(hInstance);
-    CefSettings probe;
-    probe.no_sandbox = true;
-    wchar_t probe_cache[MAX_PATH] = {0};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
-                                   probe_cache)) &&
-        probe_cache[0] != 0) {
-      std::wstring root(probe_cache);
-      root += L"\\Natalia\\CEF";
-      CreateDirectoryW(root.c_str(), nullptr);
-      CefString(&probe.cache_path).FromWString(root);
-    }
-    // The app, created before the subprocess hand-off and passed to BOTH calls,
-    // which is the documented shape. The real host passes nullptr to
-    // CefExecuteProcess and the app only to CefInitialize.
-    CefRefPtr<SimpleApp> probe_app(new SimpleApp);
-    const int hand_off =
-        CefExecuteProcess(probe_args, probe_app.get(), nullptr);
-    if (hand_off >= 0)
-      return hand_off;
-    // BISECTION STEP 3: the one block the real host runs between the hand-off
-    // and CefInitialize — it creates the GLOBAL command line and initialises it
-    // from the process command line BEFORE CEF does. CEF initialises that same
-    // global object itself, so doing it first is a candidate for the CHECK.
-    CefRefPtr<CefCommandLine> probe_line =
-        CefCommandLine::CreateCommandLine();
-    probe_line->InitFromString(::GetCommandLineW());
-    const bool ok =
-        CefInitialize(probe_args, probe, probe_app.get(), nullptr);
-    MessageBoxW(
-        nullptr,
-        ok ? L"CefInitialize OK (probe build)" : L"CefInitialize FAILED (probe build)",
-        L"natalia-cef probe", MB_OK);
-    return ok ? 0 : static_cast<int>(CefGetExitCode());
-  }
-#endif
-
   // Provide CEF with command-line arguments. On Windows the instance handle
   // travels here (Linux passes argc/argv instead).
   CefMainArgs main_args(hInstance);
@@ -245,26 +163,36 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
   // fails or if early exit is desired (for example, due to process singleton
   // relaunch behavior).
   trace("before CefInitialize");
-  // RUNTIME PROBE AT THE REAL CALL SITE: the greatest narrowing possible — same
-  // function, same variables, same everything, and only the message box after.
-  // If THIS fails, the arguments themselves are the fault and the message box
-  // names which one; the earlier standalone-probe block above is then only
-  // useful for the steps before this point.
-  if (probe_mode) {
-    const bool ok = CefInitialize(main_args, settings, app.get(),
-#if defined(CEF_USE_SANDBOX)
-                                  cef_sandbox_info
-#else
-                                  nullptr
-#endif
-    );
-    trace(ok ? "CefInitialize ok (probe)" : "CefInitialize FAILED (probe)");
-    const wchar_t* verdict =
-        ok ? L"CefInitialize OK at the real call site"
-           : L"CefInitialize FAILED at the real call site";
-    MessageBoxW(nullptr, verdict, L"natalia-cef runtime probe", MB_OK);
-    return ok ? 0 : static_cast<int>(CefGetExitCode());
+  // BISECTION STEP, unconditional: the runtime probe used to sit behind a
+  // command-line flag, and that flag was the ONLY thing that decided the
+  // outcome — with it, this very call initialised; without it, the same call
+  // with the same arguments failed. A flag read by our own code cannot be the
+  // cause, so the flag was removed and the block now runs for every launch.
+  //
+  // What it proves, and why it is shaped this way: it is the real call site —
+  // same function, same variables, same everything — and the only difference
+  // from the shipping path is the message box and the return. So:
+  //   succeeds now  => the fault is BELOW, in the code this returns before
+  //                   (the message loop, the shutdown, the browser creation)
+  //   fails now     => the flag was not the cause either, and the difference
+  //                   has to be something that ran before this point
+  //
+  // MEASURED (2026-10-05): it still fails. The "flag flipped it" paradox was a
+  // measurement error of mine — the failing run also showed a modal dialog, so
+  // the process looked alive. CefInitialize has never succeeded in this build.
+  //
+  // CEF's own log is enabled for the same reason: with no usable debugger on
+  // this machine (lldb fails to start, no cdb/windbg/gdb), this file is the only
+  // channel libcef has left to say why it refused. `trace_path` already holds
+  // "<cache root>\startup-trace.txt", so its directory is the same cache root —
+  // no new scope, no duplicated path.
+  if (!trace_path.empty()) {
+    CefString(&settings.log_file)
+        .FromWString(trace_path.substr(0, trace_path.find_last_of(L"\\/")) +
+                     L"\\cef.log");
+    settings.log_severity = LOGSEVERITY_VERBOSE;
   }
+
   const bool cef_initialized =
       CefInitialize(main_args, settings, app.get(),
 #if defined(CEF_USE_SANDBOX)
@@ -274,24 +202,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 #endif
       );
   trace(cef_initialized ? "CefInitialize ok" : "CefInitialize FAILED");
-  if (!cef_initialized) {
-    const int code = CefGetExitCode();
-    char line[96] = {0};
-    _snprintf_s(line, sizeof(line), _TRUNCATE,
-                "CefGetExitCode=%d; returning it", code);
-    trace(line);
-    return code;
-  }
-
-  // Run the CEF message loop. This will block until CefQuitMessageLoop() is
-  // called.
-  trace("entering CefRunMessageLoop");
-  CefRunMessageLoop();
-  trace("CefRunMessageLoop returned");
-
-  // Shut down CEF.
-  CefShutdown();
-  trace("CefShutdown done");
-
-  return 0;
+  const wchar_t* verdict =
+      cef_initialized ? L"CefInitialize OK at the real call site"
+                      : L"CefInitialize FAILED at the real call site";
+  MessageBoxW(nullptr, verdict, L"natalia-cef", MB_OK);
+  return cef_initialized ? 0 : static_cast<int>(CefGetExitCode());
 }

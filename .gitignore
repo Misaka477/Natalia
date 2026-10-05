@@ -117,3 +117,6 @@ apps/cef-desktop/build/
 # fail the format gate on files that were never meant to ship.
 .btmp/
 /packages/plugins/native-terminal/native/pty-bridge/target/
+
+# Machine-local runtime state: never tracked, never shipped
+.natalia/

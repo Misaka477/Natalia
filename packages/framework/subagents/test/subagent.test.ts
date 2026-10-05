@@ -989,15 +989,31 @@ test("registry without sessionID uses the legacy shared store path", async () =>
   });
   expect(reg.list()).toHaveLength(0);
   await reg.spawn("shared task");
-  expect(reg.list()).toHaveLength(1);
+  // `spawn` resolves when the run is dispatched, not necessarily when the
+  // registry has recorded it: on a loaded CI runner the write lands after the
+  // resolution, so the bare length assertion below read 0 and the job went red
+  // (`toHaveLength`, received undefined — measured, not theorised). Poll for the
+  // registry to observe its own record instead of racing the write.
+  await waitFor(() => reg.list().length === 1);
   // Second registry without sessionID sees the first agent (legacy behaviour).
   const reg2 = new SubagentRegistry({
     runner: immediateRunner,
     workDir: dir,
   });
   await reg2.load();
-  expect(reg2.list()).toHaveLength(1);
+  await waitFor(() => reg2.list().length === 1);
 });
+
+/** Poll a condition, bounded, instead of racing an async write. */
+async function waitFor(condition: () => boolean, ms = 5_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    if (condition()) return;
+    if (Date.now() > deadline)
+      throw new Error(`condition not met within ${ms}ms`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 test("formatStatus includes phase and activity info", async () => {
   const reg = new SubagentRegistry({

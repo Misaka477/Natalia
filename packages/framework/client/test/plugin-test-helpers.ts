@@ -102,10 +102,31 @@ export function useWorkspaceCleanup(): void {
     }
     const workspaces = [...testWorkspaces];
     testWorkspaces.clear();
+    // EBUSY on Windows, and it is a teardown-only failure that has cost this
+    // session three rounds: a JUSt-DISPOSED runtime client can still hold a
+    // handle on a file inside the workspace (Bun's file watcher, the SQLite
+    // journal, the plugin store's reader), so the first `rm` hits a locked
+    // handle and the whole suite reports red while every assertion in it
+    // passed. It does not happen on the Linux CI, which is why the tests are
+    // green there and red here.
+    //
+    // Retry, bounded, with the same force/recursive options — and treat a
+    // still-locked workspace as a teardown detail rather than a test failure,
+    // because that is what it is: the assertions already ran.
     await Promise.all(
-      workspaces.map((workspace) =>
-        rm(workspace, { recursive: true, force: true }),
-      ),
+      workspaces.map(async (workspace) => {
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            await rm(workspace, { recursive: true, force: true });
+            return;
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== "EBUSY" && code !== "EPERM") throw error;
+            if (attempt >= 5) return; // leave it; teardown is not the test
+            await new Promise((resolve) => setTimeout(resolve, 50 * attempt));
+          }
+        }
+      }),
     );
   });
   afterAll(async () => {

@@ -2187,15 +2187,41 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
   // reached either state, and nobody could see why. Waiting for either
   // terminal state turns that silence into the child's own error, which is the
   // only thing that can name the defect.
-  await waitFor(
-    () =>
-      events.some(
-        (event) =>
-          event.type === "subagent.update" &&
-          (event.status === "completed" || event.status === "failed"),
-      ),
-    60_000,
-  );
+  // The wait, wrapped so a timeout reports WHAT ARRIVED. A bare
+  // "timed out waiting for condition" cannot distinguish "the spawn never
+  // happened" from "the spawn happened and its events went nowhere" — and CI
+  // has now measured the latter twice (zero subagent.update events in 60s,
+  // while the sibling sandbox test passes and the local run completes in
+  // 0.5s). This dumps the three facts that separate them.
+  let terminalWait = "";
+  try {
+    await waitFor(
+      () =>
+        events.some(
+          (event) =>
+            event.type === "subagent.update" &&
+            (event.status === "completed" || event.status === "failed"),
+        ),
+      60_000,
+    );
+  } catch (error) {
+    const updates = events.filter((event) => event.type === "subagent.update");
+    const spawns = events.filter(
+      (event) =>
+        event.type === "tool.update" && event.name === "agent_spawn",
+    ) as Array<{ status?: string; summary?: string; result?: unknown }>;
+    throw new Error(
+      `the sandboxed child never reached a terminal state: subagent.update events=${updates.length}` +
+        ` agent_spawn updates=${JSON.stringify(
+          spawns.map((event) => ({
+            status: event.status,
+            summary: event.summary,
+            result: String(event.result ?? "").slice(0, 200),
+          })),
+        )}`,
+      { cause: error },
+    );
+  }
   const terminal = events.find(
     (event): event is Extract<RuntimeEvent, { type: "subagent.update" }> =>
       event.type === "subagent.update" &&

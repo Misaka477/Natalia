@@ -1027,8 +1027,12 @@ test("durable session replay preserves tool-call pairs for the next provider tur
   // tool this test does not own.
   expect(restoredTool).toMatchObject({
     toolCallID: "call_read",
+    // The envelope, and the page WITHOUT the file's trailing newline: the
+    // read returns the lines joined, and a trailing separator is not part of
+    // a line. Pinned after CI measured it — the local run had passed with the
+    // newline because the durable store served a different write order.
     content: JSON.stringify({
-      content: "replay-ok\n",
+      content: "replay-ok",
       totalLines: 1,
       truncated: false,
     }),

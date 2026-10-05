@@ -55,7 +55,6 @@ test("the bound does not grow with the input", () => {
   expect(few.length).toBeLessThan(many.length);
 });
 
-
 test("truncate names what it cut", () => {
   // The audit's P2: the relay's `truncate(last.text, 1200)` returned an
   // ellipsis and nothing else, so a parent reading a relayed subagent result

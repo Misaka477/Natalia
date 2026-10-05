@@ -127,3 +127,9 @@ apps/cef-desktop/build/
 
 # Machine-local runtime state: never tracked, never shipped
 .natalia/
+
+# Machine-local scratch. `.btmp/` is this repo's documented scratch root and is
+# ignored; `.bttmp/` (two t's) is a node compile-cache directory that a broad
+# `git add` swept into history on 2026-10-04 and cost two megabytes of binary
+# cache in the tree. Ignore it by name so the same sweep cannot repeat.
+.bttmp/

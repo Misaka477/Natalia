@@ -113,6 +113,12 @@ jobs:
     needs: artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The sandboxed subagent's provider call is logged (subagent-support.ts)
+      # and this is the job whose layers run those tests. It sits at the JOB
+      # level so every layer sees it — a step-level env on one matrix entry
+      # was the first attempt and it measured nothing.
+      NATALIA_LOG: subagents=debug
     strategy:
       fail-fast: false
       matrix:
@@ -395,17 +401,6 @@ jobs:
           ./packages/plugins/native-terminal/test/pwsh-e2e.test.ts
           ./packages/plugins/native-terminal/test/terminal-behavior.test.ts
           ./packages/plugins/native-terminal/test/shell-integration.test.ts
-      # The sandboxed-subagent hang cost five CI rounds of guessing because the
-      # child's provider call had no log point. It has one now
-      # (subagent-support.ts); this turns it on for the whole matrix so the
-      # next failing round carries its own evidence instead of another
-      # diagnostic commit.
-      - name: The client suites with the subagent log open
-        env:
-          NATALIA_LOG: subagents=debug
-        run: >
-          bun test --max-concurrency=4 --timeout 180000
-          ./packages/framework/client/test
 
   guards:
     needs: test

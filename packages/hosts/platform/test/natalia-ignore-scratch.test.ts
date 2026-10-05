@@ -47,3 +47,28 @@ test("a minidump and a temp-dir artifact are ignored, not captured", () => {
   ).toBe(false);
   expect(isSnapshotIgnored("README.md", false, rules)).toBe(false);
 });
+
+test("an install directory needs no .nataliaignore of its own", () => {
+  // THE reason the DEFAULT set carries the scratch patterns at all.
+  //
+  // A clean install has no .nataliaignore — nothing writes one there — and its
+  // workspace IS the install folder: 414 files including the CEF runtime, the
+  // .pak files, locales, and the app's own plugin store. Measured on a real
+  // silent install: one checkpoint record, complete=false 0.
+  //
+  // Before the scratch patterns went into the defaults, the only coverage a
+  // fresh directory had was the repo-shaped one (node_modules/, dist/), so an
+  // install's own bulk was counted toward the byte guard exactly as the
+  // developer workspace's 4.68GB of minidumps were.
+  const rules = parseSnapshotIgnore(DEFAULT_NATALIA_IGNORE_PATTERNS.join("\n"));
+  for (const bulk of [
+    "locales/en-US.pak",
+    "chrome_100_percent.pak",
+    "plugin-store/node_modules/.btmp/c17f4447.npm",
+    ".natalia/workspace-checkpoints/ses_1/journal.jsonl",
+  ])
+    expect(
+      isSnapshotIgnored(bulk, false, rules),
+      `${bulk} must be ignored with no ignore file present`,
+    ).toBe(true);
+});

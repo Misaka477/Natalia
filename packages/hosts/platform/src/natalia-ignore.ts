@@ -34,6 +34,17 @@ export const DEFAULT_NATALIA_IGNORE_PATTERNS = [
   ".bun-home/",
   ".localappdata/",
   "npm-home/",
+  // The CEF runtime itself, which is what an installed app's workspace is made
+  // of when the workspace IS the install directory (the shipped default: the
+  // launcher runs the runtime with the install folder as cwd). Measured there:
+  // 414 files, and none of them are the user's source. `.pak` locale bundles
+  // and the ANGLE/GLES shared libraries are all regenerable and none of them
+  // change during agent work.
+  "*.pak",
+  "*.dll",
+  "*.exe",
+  "*.dat",
+  "*.bin",
 ] as const;
 
 export const DEFAULT_NATALIA_IGNORE_CONTENT = `${[

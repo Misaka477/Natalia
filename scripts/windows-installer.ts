@@ -167,7 +167,7 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "//                        (packages/hosts/platform/src/store-paths.ts), and",
     "//                        the launcher starts the runtime with the install",
     "//                        folder as CWD, so it lands INSIDE the install.",
-    "//   {userprofile}\\.natalia  the per-user stores, sessions, logs and vault",
+    "//   {userpf}\\.natalia  the per-user stores, sessions, logs and vault",
     "//                        (store-paths.ts walks from homedir()).",
     "//",
     "// A wizard page was the first attempt and it was WRONG, which is worth",
@@ -206,7 +206,7 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
       "'Natalia keeps its data in two places:' #13#10 #13#10 " +
       "'  ' + ExpandConstant('{app}') + '\\.natalia' #13#10 " +
       "'      the configuration home: your model settings, sessions, checkpoints' #13#10 #13#10 " +
-      "'  ' + ExpandConstant('{userprofile}') + '\\.natalia' #13#10 " +
+      "'  ' + ExpandConstant('{userpf}') + '\\.natalia' #13#10 " +
       "'      the per-user stores, sessions, logs and object vault' #13#10 #13#10 " +
       "'Delete them as well as the program?' #13#10 #13#10 " +
       "'Yes    = delete them' #13#10 " +
@@ -257,7 +257,7 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "      else",
     "        Log('Natalia uninstaller: removed ' + Target);",
     "    end;",
-    "    Target := ExpandConstant('{userprofile}') + '\\.natalia';",
+    "    Target := ExpandConstant('{userpf}') + '\\.natalia';",
     "    if DirExists(Target) then",
     "    begin",
     "      if not DelTree(Target, True, True, True) then",
@@ -291,8 +291,8 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "    // delete branch above (Inno's scanner stops at the backslash).",
     "    if DirExists(ExpandConstant('{app}') + '\\.natalia') then",
     "      Kept := Kept + '  ' + ExpandConstant('{app}') + '\\.natalia' + #13#10;",
-    "    if DirExists(ExpandConstant('{userprofile}') + '\\.natalia') then",
-    "      Kept := Kept + '  ' + ExpandConstant('{userprofile}') + '\\.natalia' + #13#10;",
+    "    if DirExists(ExpandConstant('{userpf}') + '\\.natalia') then",
+    "      Kept := Kept + '  ' + ExpandConstant('{userpf}') + '\\.natalia' + #13#10;",
     "  end;",
     "  if KeepData and (Kept <> '') then",
     "    SuppressibleMsgBox('Natalia has been uninstalled.' #13#10 #13#10 " +

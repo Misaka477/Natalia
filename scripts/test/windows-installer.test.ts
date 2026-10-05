@@ -183,15 +183,17 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   //   {app}\.natalia           the config home, which is CWD-relative and the
   //                            launcher starts the runtime with the install
   //                            folder as CWD, so it lands in the install.
-  //   {userprofile}\.natalia    the per-user stores, sessions, logs and vault
+  //   {userpf}\.natalia         the per-user stores, sessions, logs and vault
   //                            (store-paths.ts walks from homedir()).
+  //                            NOT {userprofile}: Inno Setup has no such
+  //                            constant and the uninstaller died on it.
   expect(script).toContain("{app}\\.natalia");
-  expect(script).toContain("{userprofile}\\.natalia");
+  expect(script).toContain("{userpf}\\.natalia");
   // Not the conventional directory: store-paths.ts computes homedir(), and
   // guessing %APPDATA% here deletes nothing at all, the worst outcome for a
   // feature whose purpose is honesty.
   expect(script).not.toContain("{userappdata}");
-  expect(script).not.toContain("{userprofile}.natalia");
+  expect(script).not.toContain("{userprofile}");
 
   // Keeping the data must tell the user where it is, or files survive and
   // nobody is told — which reads exactly like a bug.
@@ -267,7 +269,7 @@ test("no ExpandConstant embeds a path fragment after its constant", async () => 
   // appear, and a plain includes() says so without escaping ambiguity.
   const embedded = [
     "ExpandConstant('{app}\\",
-    "ExpandConstant('{userprofile}\\",
+    "ExpandConstant('{userpf}\\",
   ].filter((pattern) => script.includes(pattern));
   expect(
     embedded,
@@ -275,7 +277,58 @@ test("no ExpandConstant embeds a path fragment after its constant", async () => 
   ).toEqual([]);
   // And the correct shape is present, so the check above is not passing vacuously.
   expect(script).toContain("ExpandConstant('{app}') + '\\.natalia'");
-  expect(script).toContain("ExpandConstant('{userprofile}') + '\\.natalia'");
+  expect(script).toContain("ExpandConstant('{userpf}') + '\\.natalia'");
+});
+
+test("every ExpandConstant names a constant Inno Setup actually defines", async () => {
+  // THE bug: `{userprofile}` is not an Inno Setup constant, and the uninstaller
+  // died on it at runtime with `Unknown constant "userprofile"` — twice, on
+  // packages that looked correct because the surrounding string shape was right.
+  // Inno's own distribution spells the user profile directory `{userpf}` (its
+  // whatsnew.htm names {usercf}/{userpf}); `{userprofile}` simply does not
+  // exist, and ExpandConstant throws on it.
+  //
+  // So the guard is not "the shape is right" but "every name is one Inno
+  // defines". The set below is the closed list this script may use.
+  const release = await fakeWindowsRelease();
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir: await mkdtemp(join(tmpdir(), "win-constants-")),
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  const script = await Bun.file(result.iss!).text();
+  const used = new Set(
+    [...script.matchAll(/ExpandConstant\('\{([a-z]+)\}'/gu)].map(
+      (match) => match[1]!,
+    ),
+  );
+  // The constants Inno Setup 6/7 define that this script is allowed to name.
+  const DEFINED = new Set([
+    "app", // {app}
+    "userpf", // {userpf}  — the user profile directory
+    "commonpf", // {commonpf}
+    "uninstallexe", // {uninstallexe}
+    "srcexe", // {srcexe}
+    "sys", // {sys}
+    "win", // {win}
+    "tmp", // {tmp}
+    "localappdata", // {localappdata}
+    "commonappdata", // {commonappdata}
+    "group", // {group}
+    "autopf", // {autopf}
+    "autocf", // {autocf}
+  ]);
+  const unknown = [...used].filter((name) => !DEFINED.has(name));
+  expect(
+    unknown,
+    `ExpandConstant names Inno does not define: ${unknown.join(", ")} — ` +
+      `the uninstaller will die at runtime on them`,
+  ).toEqual([]);
+  // And the constant that caused the failure is in the used set, so this test
+  // cannot pass by never exercising it.
+  expect(used.has("userpf")).toBe(true);
 });
 
 test("the Pascal section's column one carries only declarations", async () => {

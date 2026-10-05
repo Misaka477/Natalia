@@ -275,6 +275,7 @@
         "@anthelia/confinement": "workspace:*",
         "@anthelia/contracts": "workspace:*",
         "@anthelia/diff-wasm": "workspace:*",
+        "@anthelia/logging": "workspace:*",
         "@anthelia/object-store": "workspace:*",
         "@anthelia/operation-log": "workspace:*",
         "@anthelia/platform": "workspace:*",

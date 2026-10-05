@@ -124,3 +124,21 @@ test("the control loop is woken by the child exiting, not only by stdin", () => 
   expect(source).toContain("pumpControlInput");
   expect(source).toContain("popControlLine");
 });
+
+const source = (await Bun.file(
+  join(import.meta.dir, "..", "src", "win", "natalia-conpty-bridge.cc"),
+).text());
+
+test("the shared shutdown does not close a console the kill path already closed", () => {
+  // Measured on the Windows CI: the kill drive's stderr showed the full
+  // shutdown sequence while the host saw only `{"pid"}` — no exit frame. The
+  // kill path closes the pseudo console and nulls the handle before breaking
+  // out of the loop, and the shared sequence then closed the SAME handle
+  // again (undefined behaviour), in the window between the pump ending and
+  // the frame being written.
+  //
+  // The compile test cannot see it: it is a runtime behaviour, not a syntax
+  // error. The guard is the shape of the code — the shared close is guarded.
+  expect(source).toContain("if (g_pseudoConsole) {");
+  expect(source).not.toMatch(/\n\s*ClosePseudoConsole\(g_pseudoConsole\);\n\s*g_pseudoConsole = nullptr;\n\s*fprintf\(stderr, "conpty-bridge: console closed/);
+});

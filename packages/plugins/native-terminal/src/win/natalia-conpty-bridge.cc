@@ -624,8 +624,17 @@ int main() {
   // "output pump ended" when it does), wait for it, and only then report the
   // child's exit. This is the reference samples' shutdown order.
   fprintf(stderr, "conpty-bridge: control loop ended; closing the console\n");
-  ClosePseudoConsole(g_pseudoConsole);
-  g_pseudoConsole = nullptr;
+  // The kill path already closed the console and nulled the handle before
+  // breaking out of the loop. Closing the same HPCON twice is undefined
+  // behaviour, and measured on the Windows CI it cost the exit frame: the
+  // bridge's stderr showed the full shutdown sequence while the host saw
+  // `{"pid"}` and no `x` frame at all — the second close landed in the window
+  // between the pump ending and the frame being written. A nulled handle is
+  // simply not ours to close again.
+  if (g_pseudoConsole) {
+    ClosePseudoConsole(g_pseudoConsole);
+    g_pseudoConsole = nullptr;
+  }
   fprintf(stderr, "conpty-bridge: console closed; waiting for the child\n");
 
   WaitForSingleObject(g_childProcess, INFINITE);

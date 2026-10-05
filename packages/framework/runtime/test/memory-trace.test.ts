@@ -39,12 +39,24 @@ test("the RSS sampler logs periodic samples when the table admits it", async () 
   logService.setLevels(levels);
   const seen = createBufferExporter();
   const remove = logService.addExporter(seen);
-  process.env.NATALIA_MEMORY_TRACE_INTERVAL_MS = "200";
+  process.env.NATALIA_MEMORY_TRACE_INTERVAL_MS = "1000";
+  // Own the sampler: another file in the suite may already hold one at ITS
+  // interval, and `start` is idempotent on a live sampler — the test would
+  // then wait out someone else's 15s cadence and read the silence as a
+  // defect.
+  stopMemoryTraceSampler();
   try {
     startMemoryTraceSampler();
-    await Bun.sleep(450);
+    // A BOUNDED POLL, not a fixed sleep: the suite shares one event loop, and
+    // a synchronous neighbour can hold it past a fixed window — the sampler's
+    // tick then lands after the assertion, which is a flake and not a defect.
+    // Measured in the full runtime suite: a 450ms sleep saw zero records.
+    let records = seen.drain();
+    for (let waited = 0; waited < 5_000 && records.length === 0; waited += 25) {
+      await Bun.sleep(25);
+      records = seen.drain();
+    }
     stopMemoryTraceSampler();
-    const records = seen.drain();
     expect(records.length).toBeGreaterThan(0);
     expect(records.every((record) => record.name === "memory-trace")).toBe(
       true,

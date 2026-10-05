@@ -18,6 +18,7 @@ import {
   type ContextBudget,
 } from "@anthelia/runtime";
 import { createInitializeRuntime } from "./runtime";
+import { getLogger } from "@anthelia/logging";
 import { retryService } from "@anthelia/retry";
 import { contextLedgerFactory } from "@natalia/context-ledger";
 import { compactionService } from "@anthelia/compaction";
@@ -292,6 +293,18 @@ export async function createSubagentSupport(
             | undefined;
           const providerMessages = subagentProviderMessages(ledger);
           const toolSchemas = subagentToolSchemas(visibleTools);
+          // The child's provider call, logged at both ends. Five CI rounds
+          // measured a child stuck at `phase=provider activity=starting` with
+          // no way to see whether `stream()` was entered at all — and a
+          // five-round guessing game is what a missing log point costs. The
+          // name is the switch: NATALIA_LOG=subagents=debug.
+          getLogger("subagents").debug(
+            "step %d calling provider %s with %d messages and %d tools",
+            step,
+            activeProvider.provider,
+            providerMessages.length,
+            toolSchemas.length,
+          );
           const stream = scope.withProviderConcurrency(
             scope.providerConcurrencyLimiter,
             activeProvider.provider,
@@ -304,6 +317,7 @@ export async function createSubagentSupport(
               }),
             runner.signal,
           );
+          getLogger("subagents").debug("step %d provider stream open", step);
           const normalized = allowToolCalls
             ? scope.requireNativeToolCallProtocol(
                 scope.normalizeRawToolCallProtocol(stream),

@@ -22,11 +22,20 @@ import { relative } from "node:path";
 
 export const FS_READ_PLUGIN_ID = "natalia-tool-fs-read";
 
+/**
+ * Default and maximum number of lines one `read_file` call returns. The
+ * reference is dsh's `read` (`devref/deepseek-harness/packages/fs/tool-fs/
+ * src/read.ts`, `READ_LIMIT = 2000`): a read without a window is still a
+ * window, because the alternative is a 500MB file entering the context as
+ * one result and the model never asking for a second page.
+ */
+export const READ_LINE_LIMIT = 2000;
+
 function readFileTool(): RuntimeTool {
   return {
     name: "read_file",
     description:
-      "Read a UTF-8 text file inside the workspace. Use offset (one-based line number) and length (line count) to read part of a file.",
+      `Read a UTF-8 text file inside the workspace. Returns at most ${READ_LINE_LIMIT} lines per call; the result says how many lines exist and, when it stopped early, the offset to continue from.`,
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -43,8 +52,12 @@ function readFileTool(): RuntimeTool {
     output: {
       schema: {
         type: "object",
-        properties: { content: { type: "string" } },
-        required: ["content"],
+        properties: {
+          content: { type: "string" },
+          totalLines: { type: "integer" },
+          truncated: { type: "boolean" },
+        },
+        required: ["content", "totalLines", "truncated"],
         additionalProperties: false,
       },
       presentCall(args) {
@@ -57,11 +70,21 @@ function readFileTool(): RuntimeTool {
       },
       presentResult(args, value) {
         const path = requireObject(args).path as string | undefined;
+        const result = value as {
+          content: string;
+          totalLines: number;
+          truncated: boolean;
+        };
+        const window = result.truncated
+          ? `${result.content.split(/\r?\n/u).length} of ${result.totalLines} lines`
+          : `${result.totalLines} lines`;
         return {
           kind: "read",
           title: typeof path === "string" ? path : "file",
-          summary: `${value.length.toLocaleString()} chars`,
-          body: value,
+          // The window is the summary: a card that shows only the char count
+          // presents a capped read as the whole file.
+          summary: window,
+          body: result.content,
         };
       },
     },
@@ -81,27 +104,38 @@ function readFileTool(): RuntimeTool {
           );
         throw error;
       }
-      if (args.offset === undefined && args.length === undefined)
-        return content;
-
-      const offset = optionalInteger(args.offset, "offset") ?? 1;
-      const length = optionalInteger(args.length, "length");
-      if (offset < 1) throw new Error("offset must be a positive integer");
-      if (length !== undefined && length < 1)
-        throw new Error("length must be a positive integer");
-
       const lines = content.endsWith("\n")
         ? content.slice(0, -1).replace(/\r$/u, "").split(/\r?\n/u)
         : content.split(/\r?\n/u);
-      if (offset > lines.length)
-        throw new Error(`read_file offset is out of range: ${offset}`);
-      const end = Math.min(lines.length, offset - 1 + (length ?? lines.length));
-      const page = lines.slice(offset - 1, end).join("\n");
-      if (end === lines.length) return page;
+      const totalLines = lines.length;
 
-      const remaining = lines.length - end;
+      // NO WINDOW IS A WINDOW. Before this, `read_file` with no arguments
+      // returned the whole file: the only tool in the registry that could put
+      // an unbounded number of bytes into the context in one call, in a repo
+      // whose other readers (terminal, glob, grep, mailbox) all page. The
+      // default is the same window an explicit read gets.
+      const offset = optionalInteger(args.offset, "offset") ?? 1;
+      const length = Math.min(
+        optionalInteger(args.length, "length") ?? READ_LINE_LIMIT,
+        READ_LINE_LIMIT,
+      );
+      if (offset < 1) throw new Error("offset must be a positive integer");
+      if (length < 1) throw new Error("length must be a positive integer");
+      if (offset > totalLines)
+        throw new Error(`read_file offset is out of range: ${offset}`);
+
+      const end = Math.min(totalLines, offset - 1 + length);
+      const page = lines.slice(offset - 1, end).join("\n");
+      if (end === totalLines)
+        return { content: page, totalLines, truncated: false };
+
+      const remaining = totalLines - end;
       const next = end + 1;
-      return `${page}\n\n... ${remaining} more line${remaining === 1 ? "" : "s"}; use offset=${next}${length === undefined ? "" : ` length=${length}`} ...`;
+      return {
+        content: `${page}\n\n... ${remaining} more line${remaining === 1 ? "" : "s"}; use offset=${next} length=${length} ...`,
+        totalLines,
+        truncated: true,
+      };
     },
   };
 }

@@ -623,10 +623,13 @@ int main() {
   // So: close the console, let the relay flush and the pump see EOF (it logs
   // "output pump ended" when it does), wait for it, and only then report the
   // child's exit. This is the reference samples' shutdown order.
+  fprintf(stderr, "conpty-bridge: control loop ended; closing the console\n");
   ClosePseudoConsole(g_pseudoConsole);
   g_pseudoConsole = nullptr;
+  fprintf(stderr, "conpty-bridge: console closed; waiting for the child\n");
 
   WaitForSingleObject(g_childProcess, INFINITE);
+  fprintf(stderr, "conpty-bridge: child wait returned\n");
   DWORD exitCode = 0;
   GetExitCodeProcess(g_childProcess, &exitCode);
   if (outputPump) {

@@ -10,13 +10,14 @@
   },
   "dependencies": {
     "@anthelia/agent": "workspace:*",
-    "@anthelia/session": "workspace:*",
-    "@anthelia/tools": "workspace:*",
     "@anthelia/config": "workspace:*",
     "@anthelia/contracts": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
+    "@anthelia/logging": "workspace:*",
     "@anthelia/object-store": "workspace:*",
-    "@anthelia/platform": "workspace:*"
+    "@anthelia/platform": "workspace:*",
+    "@anthelia/session": "workspace:*",
+    "@anthelia/tools": "workspace:*"
   },
   "devDependencies": {
     "@anthelia/session": "workspace:*",

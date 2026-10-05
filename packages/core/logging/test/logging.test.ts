@@ -62,8 +62,8 @@ describe("LogService", () => {
     expect(service.thresholdFor("web")).toBe(3);
     const quiet = createBufferExporter();
     service.addExporter(quiet);
-    const loud = createBufferExporter();
-    loud.levels = { default: "debug" };
+    // A wider table at the sink, without opening the process's verbosity.
+    const loud = createBufferExporter(1000, { default: "debug" });
     service.addExporter(loud);
     service.emit("runtime", "info", ["x"]);
     expect(quiet.drain()).toEqual([]);

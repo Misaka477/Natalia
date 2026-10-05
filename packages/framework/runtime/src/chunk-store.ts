@@ -33,6 +33,7 @@
  * window before reclaiming them.
  */
 import { createHash } from "node:crypto";
+import { getLogger } from "@anthelia/logging";
 import {
   appendFile,
   copyFile,
@@ -47,6 +48,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+
+/** The chunk store's subsystem name — the `NATALIA_LOG` threshold key. */
+const log = getLogger("checkpoint");
 
 /** Ordered content-defined chunks that reconstruct one payload. */
 export type ChunkRef = {
@@ -771,17 +775,17 @@ export class ChunkStore {
         const hash = entry.name;
         if (!/^[0-9a-f]{64}$/u.test(hash)) {
           skipped += 1;
-          console.warn(
-            `[checkpoint] chunk migration skipped non-hash file ${full}`,
-          );
+          // A migration decision the operator must be able to find later: the
+          // files were skipped, not lost, and the reason is the hash check.
+          log.warn("chunk migration skipped non-hash file %s", full);
           continue;
         }
         const sourceHash = await sha256FileHex(full);
         if (sourceHash !== hash) {
           skipped += 1;
-          console.warn(
-            `[checkpoint] chunk migration skipped corrupt file ${full}`,
-          );
+          // The content did not hash to its own name: kept on disk, not
+          // migrated, and this line is how anyone finds out which.
+          log.warn("chunk migration skipped corrupt file %s", full);
           continue;
         }
 
@@ -793,8 +797,12 @@ export class ChunkStore {
             skipped += 1;
           } else {
             skipped += 1;
-            console.warn(
-              `[checkpoint] chunk migration kept ${full}: target ${target} is corrupt`,
+            // Both sides claim the same hash but differ in content: the write
+            // wins and the loose file is kept, which is only safe if it is said.
+            log.warn(
+              "chunk migration kept %s: target %s is corrupt",
+              full,
+              target,
             );
           }
           continue;
@@ -849,8 +857,11 @@ export class ChunkStore {
         if (entry.name === "packs" || /^[0-9a-f]{2}$/u.test(entry.name))
           continue;
         if (!entry.name.startsWith("ses_")) {
-          console.warn(
-            `[checkpoint] chunk migration left unknown directory untouched: ${join(this.root, entry.name)}`,
+          // Nothing is destroyed: an unknown layout is left exactly as it is,
+          // and the migration says so instead of passing over it in silence.
+          log.warn(
+            "chunk migration left unknown directory untouched: %s",
+            join(this.root, entry.name),
           );
           continue;
         }

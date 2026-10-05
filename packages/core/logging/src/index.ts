@@ -48,15 +48,19 @@ export interface LogMessage {
   readonly args: readonly unknown[];
 }
 
+/** Rendering options an exporter contributes; a formatter needs only these. */
+export interface LogFormatOptions {
+  /** Longest line emitted before `...` truncation. Default 10240. */
+  readonly maxLength?: number;
+}
+
 /**
  * A sink. `levels` maps a logger name (or `default`) to the highest severity
  * still emitted for it; a name with no entry falls back to `default`, and
  * `default` to `error`.
  */
-export interface LogExporter {
+export interface LogExporter extends LogFormatOptions {
   readonly levels?: Readonly<Record<string, LoggerLevelName>>;
-  /** Longest line emitted before `...` truncation. Default 10240. */
-  readonly maxLength?: number;
   export(message: LogMessage): void;
 }
 
@@ -159,14 +163,14 @@ export class LogService {
   }
 
   /** Rendering for one exporter; the record is already built. */
-  format(exporter: LogExporter, message: LogMessage): string {
-    return formatMessage(exporter, message);
+  format(options: LogFormatOptions, message: LogMessage): string {
+    return formatMessage(options, message);
   }
 }
 
-/** printf-style rendering for one record against one exporter's options. */
+/** printf-style rendering for one record against rendering options. */
 export function formatMessage(
-  exporter: LogExporter,
+  options: LogFormatOptions,
   message: LogMessage,
 ): string {
   const values = [...message.args];
@@ -215,7 +219,7 @@ export function formatMessage(
   }
   for (let index = next; index < values.length; index += 1)
     out += ` ${renderValue(values[index])}`;
-  const maxLength = exporter.maxLength ?? 10240;
+  const maxLength = options.maxLength ?? 10240;
   return out
     .split(/\r?\n/g)
     .map((line) =>
@@ -278,12 +282,21 @@ export function createConsoleExporter(options?: {
   };
 }
 
-/** An in-memory ring of the most recent records, for after-the-fact reads. */
-export function createBufferExporter(size = 1000): LogExporter & {
+/**
+ * An in-memory ring of the most recent records, for after-the-fact reads. The
+ * `levels` argument exists so a caller can install a WIDER table than the
+ * service's — a diagnostic sink that hears everything without opening the
+ * process's verbosity.
+ */
+export function createBufferExporter(
+  size = 1000,
+  levels?: Readonly<Record<string, LoggerLevelName>>,
+): LogExporter & {
   drain(): LogMessage[];
 } {
   const buffer: LogMessage[] = [];
   return {
+    levels,
     export(message) {
       buffer.push(message);
       if (buffer.length > size) buffer.splice(0, buffer.length - size);

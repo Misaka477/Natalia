@@ -435,7 +435,15 @@ export class ManagedProcessRegistry {
     // notice).
     await this.markReady(id, context.workspaceRoot, rawOutput);
     this.settleFromRecord(context, info);
-    return info.output;
+    // The tail is the page, and a page that does not say it is one is the
+    // audit's finding: the earlier output existed on disk (the very file we
+    // just read) and nothing in the result mentioned it. The note names the
+    // spill file, which the now-paged read_file can walk — the two compose.
+    const maxOutputBytes = info.maxOutputBytes ?? 20_000;
+    const totalBytes = Buffer.byteLength(rawOutput, "utf8");
+    if (totalBytes <= maxOutputBytes) return info.output;
+    const served = Buffer.byteLength(info.output, "utf8");
+    return `${info.output}\n[output truncated; showing the last ${served} of ${totalBytes} bytes; full output at ${info.outputPath}]`;
   }
 
   async stop(id: string, context: ToolExecutionContext) {

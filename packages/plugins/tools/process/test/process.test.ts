@@ -244,7 +244,12 @@ test("managed process output uses a UTF-8 byte budget", async () => {
   const output = await tools
     .get("process_output")!
     .execute({ id: "proc_output" }, { workspaceRoot: root });
-  expect(Buffer.byteLength(output)).toBeLessThanOrEqual(6);
+  // The budget bounds the PAGE. The truncation note is metadata about the
+  // page and rides after it — measuring the whole result would pin the note's
+  // own length into the budget, which is a different (and wrong) claim.
+  const page = output.split("\n[output truncated")[0] ?? output;
+  expect(Buffer.byteLength(page, "utf8")).toBeLessThanOrEqual(6);
+  expect(output).toContain("[output truncated");
   await tools
     .get("process_stop")!
     .execute({ id: "proc_output" }, { workspaceRoot: root });
@@ -420,4 +425,44 @@ test("unloading the process plugin terminates the processes it started", async (
     await Bun.sleep(20);
   expect(processAlive(pid)).toBe(false);
   expect(tools.has("process_start")).toBe(false);
+});
+
+test("a capped process output names its spill file", async () => {
+  // The audit's finding: process_output returned the tail and nothing else —
+  // the earlier output existed on disk (the very file the read consumes) and
+  // the result never mentioned it, so a model reading a long server log saw
+  // only the end and no way to reach the beginning. The note now names the
+  // file, which the paged read_file can walk.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-spill-"));
+  const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_spill",
+      command: "printf 'z%.0s' $(seq 1 5000); echo",
+      maxOutputBytes: 200,
+    },
+    { workspaceRoot: root },
+  );
+  // Let the child finish so the output file holds everything it wrote.
+  await Bun.sleep(600);
+  const output = await tools
+    .get("process_output")!
+    .execute({ id: "proc_spill" }, { workspaceRoot: root });
+  expect(output).toContain(
+    "[output truncated; showing the last 200 of 5001 bytes;",
+  );
+  expect(output).toContain("full output at ");
+
+  // And a small output says nothing about truncation.
+  await tools
+    .get("process_start")!
+    .execute(
+      { id: "proc_small", command: "echo hi", maxOutputBytes: 200 },
+      { workspaceRoot: root },
+    );
+  await Bun.sleep(400);
+  const small = await tools
+    .get("process_output")!
+    .execute({ id: "proc_small" }, { workspaceRoot: root });
+  expect(small).not.toContain("truncated");
 });

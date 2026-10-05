@@ -1,3 +1,4 @@
+import { installDefaultLogExporter } from "@anthelia/logging";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import {
   terminalApprovalScope,
@@ -22,6 +23,12 @@ export function createRealRuntimeClient(
   options: RealRuntimeClientOptions = {},
 ): RuntimeServiceClient {
   const ctx = createCompositionContext(options);
+  // The logger's sink, installed before anything can log. Without it every
+  // log point in the framework is a no-op — the tables are read, the record
+  // is built, and nothing is emitted — so `NATALIA_LOG` would configure a
+  // verbosity nobody could observe. Idempotent, so a second boot path (tests,
+  // workers) cannot double-print.
+  installDefaultLogExporter();
   // Periodic RSS/heap samples when NATALIA_MEMORY_TRACE=1 (no-op otherwise).
   startMemoryTraceSampler();
   wireFoundation(ctx);

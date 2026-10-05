@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   BashLocalExecutor,
   PwshLocalExecutor,
+  RUN_OUTPUT_MAX_BYTES,
   ShellExecutor,
   clampTimeout,
   platformShell,
@@ -344,4 +345,63 @@ test("pwsh execution is covered where pwsh exists, and named where it does not",
     stderr: "pipe",
   });
   expect(proc.exitCode).toBe(3);
+});
+
+test("a run's streams are bounded, and the result says what was dropped", async () => {
+  // The P0 the audit found: `run` was the one command path with NO cap. 60KB
+  // of stdout from a trivial command, against a 20KB bound — the head is
+  // dropped (the tail is the useful end), and `outputBytes` carries what was
+  // served and what existed, because a result that hides its own truncation
+  // lies about what the command produced.
+  const bash = new BashLocalExecutor();
+  const spec = bash.resolve({
+    command: "printf 'x%.0s' $(seq 1 60000)",
+  } as ShellExecSpec);
+  const run = await bash.run(spec);
+  expect(run.outcome).toBe("exited");
+  expect(run.exitCode).toBe(0);
+  expect(Buffer.byteLength(run.stdout, "utf8")).toBeLessThanOrEqual(
+    RUN_OUTPUT_MAX_BYTES,
+  );
+  // The tail was kept, not the head: the last byte produced is still here.
+  expect(run.stdout.at(-1)).toBe("x");
+  const stdout = run.outputBytes!.stdout;
+  expect(stdout.total).toBeGreaterThanOrEqual(60_000);
+  expect(stdout.served).toBeLessThan(stdout.total);
+
+  // A run inside the bound is returned whole and says nothing was dropped.
+  const small = await bash.run(
+    bash.resolve({ command: "echo small" } as ShellExecSpec),
+  );
+  expect(small.stdout).toContain("small");
+  expect(small.outputBytes!.stdout).toEqual({
+    served: small.outputBytes!.stdout.total,
+    total: small.outputBytes!.stdout.total,
+  });
+  expect(Buffer.byteLength(small.stdout, "utf8")).toBe(
+    small.outputBytes!.stdout.total,
+  );
+});
+
+test("a bounded run cuts on a UTF-8 boundary", async () => {
+  // A byte window that splits a multi-byte character produces a replacement
+  // character at the head of the page — and a model reading that page sees
+  // mojibake where the command's real output begins.
+  const bash = new BashLocalExecutor();
+  const spec = bash.resolve({
+    command: "printf '\u4f60%.0s' $(seq 1 60000)",
+  } as ShellExecSpec);
+  const run = await bash.run(spec);
+  expect(run.stdout.startsWith("\ufffd")).toBe(false);
+  // The served bytes are a whole number of characters.
+  expect([...run.stdout].length * 3).toBe(
+    Buffer.byteLength(run.stdout, "utf8"),
+  );
+  // The exact total is the command's business; the invariants are that it
+  // exceeded the bound, the page is cut on a boundary, and the served bytes
+  // are a whole number of characters.
+  expect(run.outputBytes!.stdout.total).toBeGreaterThan(180_000);
+  expect([...run.stdout].length * 3).toBe(
+    Buffer.byteLength(run.stdout, "utf8"),
+  );
 });

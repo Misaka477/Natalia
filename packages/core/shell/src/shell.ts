@@ -41,6 +41,44 @@ import {
 import { applyShellEnv } from "./shell-env";
 
 /** Where the policy lives: everything here is shell-independent. */
+/**
+ * The bound on one run's stream, in bytes. The value matches the process
+ * tool's (`process_output`'s 20KB tail) so the two command surfaces cannot
+ * drift: a caller that learned one has learned the other.
+ */
+export const RUN_OUTPUT_MAX_BYTES = 20_000;
+
+/**
+ * A stream accumulator that keeps its TAIL and counts everything. The tail is
+ * the useful end — an exit status, the last error, the final summary of a
+ * build — and dropping the head is what `process_output` has always done.
+ */
+class BoundedStream {
+  private tail = "";
+  private total = 0;
+  append(text: string) {
+    this.total += Buffer.byteLength(text, "utf8");
+    this.tail = (this.tail + text).slice(-RUN_OUTPUT_MAX_BYTES * 2);
+  }
+  /** The served text: the tail, bounded in bytes (UTF-8 safe). */
+  served(): { text: string; truncated: boolean } {
+    const bytes = Buffer.from(this.tail, "utf8");
+    if (bytes.byteLength <= RUN_OUTPUT_MAX_BYTES)
+      return { text: this.tail, truncated: false };
+    // Cut on a UTF-8 boundary: a byte window that splits a multi-byte
+    // character produces a replacement character at the head of the page.
+    let start = bytes.byteLength - RUN_OUTPUT_MAX_BYTES;
+    while (start < bytes.byteLength && (bytes[start]! & 0xc0) === 0x80) start++;
+    return { text: bytes.subarray(start).toString("utf8"), truncated: true };
+  }
+  get servedBytes() {
+    return Buffer.byteLength(this.served().text, "utf8");
+  }
+  get totalBytes() {
+    return this.total;
+  }
+}
+
 export abstract class ShellExecutor {
   /**
    * Map the caller's command text onto an argv. This is the ONLY method a shell
@@ -83,8 +121,28 @@ export abstract class ShellExecutor {
     if ("error" in spawned) return spawned.error;
     const child = spawned.child;
 
-    let stdout = "";
-    let stderr = "";
+    const stdoutStream = new BoundedStream();
+    const stderrStream = new BoundedStream();
+    const boundedRun = (): ShellRunResult => {
+      const stdout = stdoutStream.served();
+      const stderr = stderrStream.served();
+      return {
+        exitCode: null,
+        stdout: stdout.text,
+        stderr: stderr.text,
+        outcome: "timeout",
+        outputBytes: {
+          stdout: {
+            served: stdoutStream.servedBytes,
+            total: stdoutStream.totalBytes,
+          },
+          stderr: {
+            served: stderrStream.servedBytes,
+            total: stderrStream.totalBytes,
+          },
+        },
+      };
+    };
     return await new Promise<ShellRunResult>((resolveRun) => {
       let settled = false;
       const finish = (result: () => void) => {
@@ -98,31 +156,36 @@ export abstract class ShellExecutor {
       const abort = () => {
         terminateChildProcessTree(child.pid);
         finish(() =>
-          resolveRun({ exitCode: null, stdout, stderr, outcome: "aborted" }),
+          resolveRun({
+            ...boundedRun(),
+            outcome: "aborted",
+          }),
         );
       };
       const timer = setTimeout(() => {
         terminateChildProcessTree(child.pid);
         finish(() =>
-          resolveRun({ exitCode: null, stdout, stderr, outcome: "timeout" }),
+          resolveRun({
+            ...boundedRun(),
+            outcome: "timeout",
+          }),
         );
       }, spec.timeoutMs);
       request?.signal?.addEventListener("abort", abort, { once: true });
 
       childEvents(child).stdout?.on("data", (chunk) => {
-        stdout += String(chunk);
+        stdoutStream.append(String(chunk));
       });
       childEvents(child).stderr?.on("data", (chunk) => {
-        stderr += String(chunk);
+        stderrStream.append(String(chunk));
       });
       childEvents(child).on("error", (error: Error) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         resolveRun({
-          exitCode: null,
-          stdout,
-          stderr: `${stderr}${stderr ? "\n" : ""}${error.message}`,
+          ...boundedRun(),
+          stderr: `${stderrStream.served().text}${stderrStream.served().text ? "\n" : ""}${error.message}`,
           outcome: "spawn-failed",
         });
       });
@@ -144,26 +207,26 @@ export abstract class ShellExecutor {
         // misclassify: the code alone would take an ordinary exit 2 away from a
         // command that happens to use it, and the signature alone would believe a
         // command that printed a convincing line of its own.
+        const servedStderr = stderrStream.served().text;
         if (
           code === WRAPPER_REFUSAL_EXIT &&
-          stderr.startsWith(WRAPPER_FAILURE_SIGNATURE)
+          servedStderr.startsWith(WRAPPER_FAILURE_SIGNATURE)
         )
           finish(() =>
             resolveRun({
+              ...boundedRun(),
               exitCode: null,
-              stdout,
-              stderr,
+              stderr: stderrStream.served().text,
               outcome: "spawn-failed",
-              confinementRefusal: stderr.trim(),
+              confinementRefusal: stderrStream.served().text.trim(),
               sandbox: sandbox && { ...sandbox, runnerFailed: true },
             }),
           );
         else
           finish(() =>
             resolveRun({
+              ...boundedRun(),
               exitCode: code,
-              stdout,
-              stderr,
               outcome: "exited",
               sandbox,
             }),

@@ -101,3 +101,17 @@ test("a confined command's own failure still reports its output", async () => {
   expect(output).toContain("exit=3");
   expect(output).toContain("to-stderr");
 });
+
+test("a capped command's result carries its truncation note", async () => {
+  // The note is the whole point of the bound: without it the model mistakes
+  // the tail for the whole output and acts on a page it was never told was a
+  // page. The command produces far more than the 20KB bound.
+  const output = await runShell("printf 'y%.0s' $(seq 1 60000)", context(), 30);
+  expect(output).toContain("exit=0");
+  expect(output).toMatch(
+    /\[stdout truncated: showing the last \d+ of 60000 bytes; re-run narrower to see the rest\]/u,
+  );
+  // A command inside the bound says nothing about truncation.
+  const small = await runShell("echo tiny", context(), 30);
+  expect(small).not.toContain("truncated");
+});

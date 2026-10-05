@@ -122,6 +122,20 @@ export type ShellRunResult = {
   confinementRefusal?: string | undefined;
   /** What the sandbox did, when confinement was requested. */
   sandbox?: ShellSandboxInfo | undefined;
+  /**
+   * The bound on each stream and how much it actually carried. `run` was the
+   * one command path in the repo with NO cap: stdout and stderr grew for as
+   * long as the command ran, so `cat 500MB` put half a gigabyte into the
+   * context in one result — the same unbounded class the fs readers, glob,
+   * grep and the terminal had already had removed. The streams are now
+   * bounded (tail kept, like `process_output`), and this says what was
+   * dropped, because a result that hides its own truncation is a result that
+   * lies about what the command produced.
+   */
+  outputBytes?: {
+    stdout: { served: number; total: number };
+    stderr: { served: number; total: number };
+  };
 };
 
 /** A live background process. */

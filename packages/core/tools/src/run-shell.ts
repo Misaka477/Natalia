@@ -80,11 +80,42 @@ export async function runShell(
     `exit=${run.exitCode}`,
     stdout && `stdout:\n${stdout}`,
     stderr && `stderr:\n${stderr}`,
+    // The bound, said out loud. A tail that lost its head must say so: the
+    // model reads "the command produced 60KB and you are seeing the last
+    // 20KB" rather than mistaking the tail for the whole output and acting
+    // on a page it was never told was a page.
+    ...truncationNotes(run),
   ]
     .filter(Boolean)
     .join("\n");
   if (run.exitCode === 0) return output;
   throw new Error(output);
+}
+
+/**
+ * The truncation note per stream, or nothing when the stream was whole. The
+ * wording names the remedy the way the other capped readers do — re-run
+ * narrower — because this command surface has no page parameter to offer.
+ */
+function truncationNotes(run: {
+  outputBytes?: {
+    stdout: { served: number; total: number };
+    stderr: { served: number; total: number };
+  };
+}): string[] {
+  const bounds = run.outputBytes;
+  if (!bounds) return [];
+  const notes: string[] = [];
+  for (const [name, bound] of [
+    ["stdout", bounds.stdout],
+    ["stderr", bounds.stderr],
+  ] as const) {
+    if (bound.total <= bound.served) continue;
+    notes.push(
+      `[${name} truncated: showing the last ${bound.served} of ${bound.total} bytes; re-run narrower to see the rest]`,
+    );
+  }
+  return notes;
 }
 
 export { clampTimeout };

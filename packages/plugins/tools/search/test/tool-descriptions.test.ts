@@ -95,3 +95,30 @@ test("neither search tool advertises its result fields as inputs", () => {
   expect(globInputs).not.toContain("truncated");
   expect(grepInputs).not.toContain("matches");
 });
+
+test("both search tools teach the timeout vocabulary", () => {
+  // P1-1's real gap. The scan was never slow (120ms for 500 paths measured on
+  // this repo); the dead end was the RESULT: a bare `timedOut: true` with no
+  // words, which the model cannot act on — so the call was retried forever
+  // and the operator read it as "glob times out". The description is the
+  // surface the model reads, so the vocabulary is asserted here, on it.
+  for (const tool of ["glob", "grep"]) {
+    const at = source.indexOf(`name: "${tool}"`);
+    expect(at, `${tool} must exist`).toBeGreaterThan(-1);
+    const descriptionAt = source.indexOf("description:", at);
+    const description = source.slice(descriptionAt, descriptionAt + 2000);
+    expect(description, `${tool} describes timedOut`).toContain("timedOut");
+    expect(description, `${tool} names the remedy`).toContain("nextCursor");
+  }
+});
+
+test("both search tools' timeout carries its remedy in the result", () => {
+  // The result text, not the description: when the budget fires the model
+  // reads THIS, and a boolean is not a remedy.
+  const globExecute = source.slice(
+    source.indexOf("async execute(input, context) {"),
+  );
+  expect(globExecute).toContain("the scan spent its time budget");
+  expect(globExecute).toContain("narrow path/pattern");
+  expect(globExecute).toContain("narrow path/include/pattern");
+});

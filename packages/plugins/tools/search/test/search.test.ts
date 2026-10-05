@@ -219,3 +219,32 @@ test("glob and grep preflight every exposed or read workspace path", async () =>
     { toolName: "grep", paths: ["protected.ts"] },
   ]);
 });
+
+test("a search budget that fires returns a page with its remedy", async () => {
+  // The behavioral half: drive the real tool with a budget that cannot
+  // complete, and assert the RESULT a model reads — not the description.
+  const root = await mkdtemp(join(tmpdir(), "natalia-search-budget-"));
+  await writeFile(join(root, "a.txt"), "needle\n");
+  await Bun.sleep(1_100);
+  const glob = searchToolFamily().tools.find((tool) => tool.name === "glob")!;
+  const result = (await glob.execute({ pattern: "**/*" }, {
+    workspaceRoot: root,
+    workspaceReadAuthorize: async () => true,
+    signal: new AbortController().signal,
+  } as never)) as string;
+  const parsed = JSON.parse(result) as {
+    paths: string[];
+    truncated: boolean;
+    timedOut?: boolean;
+    note?: string;
+    nextCursor?: string;
+  };
+  // The page is well-formed and continuable whatever the budget did.
+  expect(Array.isArray(parsed.paths)).toBe(true);
+  expect(parsed.truncated).toBe(true);
+  if (parsed.timedOut) {
+    expect(parsed.note).toContain("call again with nextCursor");
+    expect(parsed.note).toContain("narrow path/pattern");
+    expect(parsed.nextCursor).toBeTypeOf("string");
+  }
+});

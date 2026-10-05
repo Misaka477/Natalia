@@ -26,6 +26,7 @@ function globTool(): RuntimeTool {
       "List workspace files matching a Bun glob pattern. " +
       "First call: pass ONLY `pattern` (and optionally `path`/`limit`) — do NOT pass `cursor`. " +
       "The RESULT is JSON with `paths` (the matches), `truncated`, and possibly `nextCursor`. " +
+      "`timedOut` means the scan spent its time budget before covering the tree (a very large workspace): the page is still complete and continuable — keep calling with `nextCursor`, or narrow `path`/`pattern`. " +
       "`nextCursor` is an OPAQUE token: if the result has one, call glob AGAIN with the SAME `pattern`/`path`/`limit` plus `cursor` set to that string VERBATIM, and repeat until the result has no `nextCursor`. " +
       "Never invent, truncate, or reconstruct a cursor, and never send result fields (`paths`, `truncated`) as arguments — they are outputs, not inputs.",
     requiresApproval: false,
@@ -115,7 +116,16 @@ function globTool(): RuntimeTool {
         ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
         scannedFiles: result.scannedFiles,
         scannedBytes: result.scannedBytes,
-        ...(result.timedOut ? { timedOut: true } : {}),
+        // The budget that fired, in words. A bare `timedOut: true` told the
+        // model a boolean and nothing else — and the model that cannot act on
+        // a fact reports the same dead end the operator saw: "glob timed out",
+        // over and over, when the result was a page like any other.
+        ...(result.timedOut
+          ? {
+              timedOut: true,
+              note: `the scan spent its time budget after ${result.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or narrow path/pattern`,
+            }
+          : {}),
       });
     },
   };
@@ -128,6 +138,7 @@ function grepTool(): RuntimeTool {
       "Search UTF-8 workspace files with a regular expression. " +
       "First call: pass ONLY `pattern` (and optionally `path`/`include`/`limit`) — do NOT pass `cursor`. " +
       "The RESULT is JSON with `matches` (each with path/line/text) and possibly `nextCursor`. " +
+      "`timedOut` means the scan spent its time budget before covering the tree (a very large workspace): the page is still complete and continuable — keep calling with `nextCursor`, or narrow `path`/`include`/`pattern`. " +
       "`nextCursor` is an OPAQUE token: if the result has one, call grep AGAIN with the SAME arguments plus `cursor` set to that string VERBATIM, and repeat until the result has no `nextCursor`. " +
       "Never invent, truncate, or reconstruct a cursor, and never send result fields (`matches`) as arguments — they are outputs, not inputs.",
     requiresApproval: false,
@@ -235,7 +246,17 @@ function grepTool(): RuntimeTool {
         authorize: async (authorizeInput) =>
           await context.workspaceReadAuthorize?.(authorizeInput),
       });
-      return JSON.stringify(result);
+      // The same words for grep's budget as glob's: the two tools are one
+      // family to the model, and a budget that fires on one and not the other
+      // is a difference it has to learn twice.
+      return JSON.stringify(
+        result.timedOut
+          ? {
+              ...result,
+              note: `the scan spent its time budget after ${result.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or narrow path/include/pattern`,
+            }
+          : result,
+      );
     },
   };
 }

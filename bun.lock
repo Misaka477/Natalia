@@ -89,6 +89,10 @@
         "zod": "3.25.76",
       },
     },
+    "packages/core/logging": {
+      "name": "@anthelia/logging",
+      "version": "0.0.0-m13",
+    },
     "packages/core/plugin": {
       "name": "@anthelia/plugin",
       "version": "0.0.0-m13",
@@ -900,6 +904,8 @@
     "@anthelia/diff": ["@anthelia/diff@workspace:packages/framework/diff"],
 
     "@anthelia/diff-wasm": ["@anthelia/diff-wasm@workspace:packages/framework/diff-wasm"],
+
+    "@anthelia/logging": ["@anthelia/logging@workspace:packages/core/logging"],
 
     "@anthelia/object-store": ["@anthelia/object-store@workspace:packages/framework/object-store"],
 

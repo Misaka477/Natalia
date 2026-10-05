@@ -128,9 +128,26 @@ export async function startApp(): Promise<number> {
     "web server",
   );
 
-  // A window that loads before its listener exists never retries, so wait.
+  // BOTH ports, and the runtime FIRST, because that order is the user-visible
+  // symptom: the shell (8791) comes up faster than the runtime (8790), so
+  // waiting only for the shell handed the window a page whose API was not
+  // listening yet. The window then showed "cannot reach the backend", retried,
+  // and connected a few seconds later — which reads as a slow first launch
+  // rather than as a startup-order bug.
+  //
+  // The shell's runtime client is built against 8790 (see the header), so a
+  // window opened before 8790 answers has no API to talk to, and the page does
+  // not retry on its own.
+  if (await waitForPort(RUNTIME_PORT, 40)) {
+    console.error(`[natalia] the runtime is ready on ${RUNTIME_PORT}`);
+  } else {
+    console.error(
+      `[natalia] the runtime never came up on ${RUNTIME_PORT}; the window ` +
+        `will open without a working API`,
+    );
+  }
   if (await waitForPort(WEB_PORT, 40)) {
-    console.error("[natalia] the web server is ready");
+    console.error(`[natalia] the web server is ready on ${WEB_PORT}`);
   } else {
     console.error(`[natalia] the web server never came up on ${WEB_PORT}`);
   }

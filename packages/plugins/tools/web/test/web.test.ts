@@ -124,7 +124,7 @@ test("a capped fetch says it was capped, with the byte total", async () => {
     new Response(big, {
       status: 200,
       headers: { "content-type": "text/html" },
-    })) as typeof fetch;
+    })) as unknown as typeof fetch;
   try {
     const value = (await tool.execute(
       { url: "https://example.com/big", maxBytes: 500 },
@@ -138,7 +138,7 @@ test("a capped fetch says it was capped, with the byte total", async () => {
     );
     expect(card!.meta).toContainEqual(["truncated", "true"]);
     expect(card!.body).not.toContain("truncated=true");
-    expect(card!.body.length).toBe(500);
+    expect(card!.body!.length).toBe(500);
   } finally {
     globalThis.fetch = originalFetch;
   }

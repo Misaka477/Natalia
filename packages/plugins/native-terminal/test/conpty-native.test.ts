@@ -185,7 +185,17 @@ test.skipIf(!canRun)(
     ).toContain("CONPTY_NATIVE_OK");
     // And the exit frame — the gap the wine test found first: a child exiting
     // on its own produced NO exit frame and the pane stayed "running".
-    expect(exit).toBeDefined();
+    //
+    // The stderr rides along for a reason: CI measured this frame arriving
+    // late (30s drive deadline) while the kill drive's identical sequence
+    // completed in 130ms, and the assertion without evidence could not say
+    // whether the bridge's shutdown ran at all. A bare `undefined` cost three
+    // rounds; the next one carries the shutdown lines.
+    expect(
+      exit,
+      `frames=${JSON.stringify(frames)} bridge stderr:
+${stderr}`,
+    ).toBeDefined();
   },
   60_000,
 );

@@ -943,7 +943,29 @@ export function sandboxedSubagentProvider(): StreamingProvider {
         // The drift is now RECORDED and the flow continues, so a shape change
         // shows up as a visible mismatch at the next expectation, and the
         // full content is carried in the drift record for the failure output.
-        if (contractRead?.content !== "shared contract\n")
+        // The child's read result carries the tool's window facts as an
+        // envelope (read_file returns JSON text on the kernel's string
+        // contract, the same as glob and grep). Compare the PAGE, not the
+        // spelling: parse the envelope when it is one, and compare the inner
+        // content. Measured on CI: the child's content is exactly
+        // `{"content":"shared contract","totalLines":1,"truncated":false}` —
+        // the windowed read working as designed.
+        const childReadContent = (() => {
+          const raw = contractRead?.content;
+          if (typeof raw !== "string") return raw;
+          try {
+            const parsed = JSON.parse(raw) as { content?: unknown };
+            return typeof parsed.content === "string" ? parsed.content : raw;
+          } catch {
+            return raw;
+          }
+        })();
+        // The page, with or without the file's trailing newline: the windowed
+        // read joins lines (no trailing separator), the pre-window spelling
+        // carried it. Both are the same page.
+        if (typeof childReadContent === "string"
+          ? childReadContent.replace(/\n$/u, "") !== "shared contract"
+          : childReadContent !== "shared contract")
           (
             globalThis as { __nataliaChildReadDrift?: unknown }
           ).__nataliaChildReadDrift = contractRead?.content;

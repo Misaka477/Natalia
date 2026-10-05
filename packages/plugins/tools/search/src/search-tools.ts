@@ -23,16 +23,36 @@ function globTool(): RuntimeTool {
   return {
     name: "glob",
     description:
-      "List workspace files matching a Bun glob pattern. Optionally scope the search to a workspace-relative directory with path. Results are paginated; if the response contains nextCursor, call glob again with the same pattern/path and that cursor until no nextCursor is returned.",
+      "List workspace files matching a Bun glob pattern. " +
+      "First call: pass ONLY `pattern` (and optionally `path`/`limit`) — do NOT pass `cursor`. " +
+      "The RESULT is JSON with `paths` (the matches), `truncated`, and possibly `nextCursor`. " +
+      "`nextCursor` is an OPAQUE token: if the result has one, call glob AGAIN with the SAME `pattern`/`path`/`limit` plus `cursor` set to that string VERBATIM, and repeat until the result has no `nextCursor`. " +
+      "Never invent, truncate, or reconstruct a cursor, and never send result fields (`paths`, `truncated`) as arguments — they are outputs, not inputs.",
     requiresApproval: false,
     timeoutSec: 20,
     parameters: {
       type: "object",
       properties: {
-        pattern: { type: "string" },
-        path: { type: "string" },
-        limit: { type: "number" },
-        cursor: { type: "string" },
+        pattern: {
+          type: "string",
+          description:
+            "Bun glob pattern, e.g. '**/*.ts' or 'src/**/*.test.ts'. Required on every call, including continuation calls.",
+        },
+        path: {
+          type: "string",
+          description:
+            "Optional workspace-relative directory to scope the search to. Omit to search the whole workspace.",
+        },
+        limit: {
+          type: "number",
+          description:
+            "Optional page size (default 200). Keep it the same across continuation calls.",
+        },
+        cursor: {
+          type: "string",
+          description:
+            "Opaque continuation token. OMIT on the first call. On later calls, copy the `nextCursor` string from the previous result VERBATIM — never construct, shorten, or guess one.",
+        },
       },
       required: ["pattern"],
       additionalProperties: false,
@@ -105,17 +125,41 @@ function grepTool(): RuntimeTool {
   return {
     name: "grep",
     description:
-      "Search UTF-8 workspace files with a regular expression. Optionally scope the search to a workspace-relative directory with path. Results are paginated; if the response contains nextCursor, call grep again with the same pattern/path/include and that cursor until no nextCursor is returned.",
+      "Search UTF-8 workspace files with a regular expression. " +
+      "First call: pass ONLY `pattern` (and optionally `path`/`include`/`limit`) — do NOT pass `cursor`. " +
+      "The RESULT is JSON with `matches` (each with path/line/text) and possibly `nextCursor`. " +
+      "`nextCursor` is an OPAQUE token: if the result has one, call grep AGAIN with the SAME arguments plus `cursor` set to that string VERBATIM, and repeat until the result has no `nextCursor`. " +
+      "Never invent, truncate, or reconstruct a cursor, and never send result fields (`matches`) as arguments — they are outputs, not inputs.",
     requiresApproval: false,
     timeoutSec: 20,
     parameters: {
       type: "object",
       properties: {
-        pattern: { type: "string" },
-        path: { type: "string" },
-        include: { type: "string" },
-        limit: { type: "number" },
-        cursor: { type: "string" },
+        pattern: {
+          type: "string",
+          description:
+            "Regular expression to search for. Required on every call, including continuation calls.",
+        },
+        path: {
+          type: "string",
+          description:
+            "Optional workspace-relative directory to scope the search to. Omit to search the whole workspace.",
+        },
+        include: {
+          type: "string",
+          description:
+            "Optional glob restricting which files are searched, e.g. '*.ts'. Keep it the same across continuation calls.",
+        },
+        limit: {
+          type: "number",
+          description:
+            "Optional page size (default 200). Keep it the same across continuation calls.",
+        },
+        cursor: {
+          type: "string",
+          description:
+            "Opaque continuation token. OMIT on the first call. On later calls, copy the `nextCursor` string from the previous result VERBATIM — never construct, shorten, or guess one.",
+        },
       },
       required: ["pattern"],
       additionalProperties: false,

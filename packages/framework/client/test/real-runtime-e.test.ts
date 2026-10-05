@@ -2181,20 +2181,32 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
   });
   client.start((event) => events.push(event));
   await client.submitAndWait!("delegate a sandboxed file task");
-  // The budget is the sandbox's, not the default: this child's turn creates a
-  // git worktree, spawns its own provider stream, and runs two tool calls
-  // under the sandbox's confinement. Measured locally at ~0.5s, and measured
-  // on CI at OVER the 20s default under --max-concurrency=4 across five test
-  // files — a budget that a loaded runner cannot meet is a budget that lies.
-  // 90s keeps the timeout a failure signal rather than a load signal.
+  // A TERMINAL wait, not a success wait. The old predicate looked only for
+  // `completed`, so a child that FAILED was waited on forever: CI measured the
+  // 20s default, then the 90s budget, both timing out — the child never
+  // reached either state, and nobody could see why. Waiting for either
+  // terminal state turns that silence into the child's own error, which is the
+  // only thing that can name the defect.
   await waitFor(
     () =>
       events.some(
         (event) =>
-          event.type === "subagent.update" && event.status === "completed",
+          event.type === "subagent.update" &&
+          (event.status === "completed" || event.status === "failed"),
       ),
-    90_000,
+    60_000,
   );
+  const terminal = events.find(
+    (event) =>
+      event.type === "subagent.update" &&
+      (event.status === "completed" || event.status === "failed"),
+  );
+  if (terminal?.status !== "completed")
+    throw new Error(
+      `the sandboxed child did not complete: status=${String(terminal?.status ?? "(no subagent.update at all)")} phase=${String(
+        (terminal as { phase?: string } | undefined)?.phase ?? "-",
+      )} text=${String((terminal as { text?: string } | undefined)?.text ?? "-")}`,
+    );
   // The write landed in the sub-agent's own sandbox worktree (id a1), not the
   // parent's workspace.
   expect(

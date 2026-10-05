@@ -240,7 +240,21 @@ if(WIN32)
   # With USE_SANDBOX=OFF the app runs directly, which is what `settings
   # .no_sandbox = true` in cefsimple_win.cc already assumes, and cef_sandbox is
   # never linked — so the two halves finally describe the same build.
+  #
+  # `api_version` must be explicit as well, and for a reason measured rather than
+  # guessed: a WER minidump of the dying host contains the string
+  //   "Check failed: !strcmp(api_hash, CEF_API_HASH_PLATFORM)."
+  // which is the C-API handshake refusing the client. Without an explicit
+  // version the wrapper compiles against CEF_API_VERSION_EXPERIMENTAL
+  // (cef_api_hash.h L70), whose hash is not the one libcef.dll 152 ships.
+  // 15200 is CEF_API_VERSION_LAST for this distribution (cef_api_versions.h).
+  //
+  // STATUS: with both set the wrapper and the DLL describe the same API, and the
+  // hand-built control apps initialise, but the shipping host still exits 38 in
+  // CefInitialize. Remaining difference is unresolved; see
+  // E:\Development\natalia-handoff-2026-10-04-part2.md.
   set(USE_SANDBOX OFF CACHE BOOL "Enable or disable use of the sandbox." FORCE)
+  set(api_version 15200 CACHE STRING "Explicit CEF API version." FORCE)
   find_package(CEF REQUIRED)
   # CEF's integration clears CMAKE_CXX_FLAGS* and manages everything through
   # its own variables, so the application target must opt into the same

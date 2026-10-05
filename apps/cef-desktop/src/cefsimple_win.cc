@@ -258,8 +258,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
                                   nullptr
 #endif
     );
-    const wchar_t* verdict = ok ? L"CefInitialize OK at the real call site"
-                                : L"CefInitialize FAILED at the real call site";
+    trace(ok ? "CefInitialize ok (probe)" : "CefInitialize FAILED (probe)");
+    const wchar_t* verdict =
+        ok ? L"CefInitialize OK at the real call site"
+           : L"CefInitialize FAILED at the real call site";
     MessageBoxW(nullptr, verdict, L"natalia-cef runtime probe", MB_OK);
     return ok ? 0 : static_cast<int>(CefGetExitCode());
   }

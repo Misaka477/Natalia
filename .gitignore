@@ -106,7 +106,14 @@ apps/cef-desktop/build/
 
 # Local Bun install cache (BUN_INSTALL override for sandboxed/read-only-home environments)
 /.bun-local/
-/.nataliaignore
+
+# NOT ignored: `/.nataliaignore` used to be listed here, which meant a fix to the
+# checkpoint's ignore rules silently stayed local. That is exactly what happened:
+# the measured `checkpoint incomplete (pre_tool)` fix (session scratch and
+# minidumps blowing the 512MiB byte guard) was written into the file, the commit
+# said "2 files changed", and the file itself was refused by git with
+# "The following paths are ignored by one of your .gitignore files".
+# It is a product input — the capture reads it — so it is tracked.
 
 # Downloaded build tools (the AppImage packer, ~9MB): never a repo artifact.
 .tools/

@@ -1,0 +1,47 @@
+# Natalia snapshot ignore
+# Used by checkpoint and sandbox only.
+# This file does not affect file visibility, reading, writing, search,
+# or model tool access.
+
+.git/
+.natalia/
+node_modules/
+dist/
+build/
+target/
+coverage/
+__pycache__/
+.next/
+.turbo/
+*.log
+*.tmp
+*.swp
+
+# Build/vendor artifacts the checkpoint byte guard must not count: the CEF
+# SDK the Windows fetch drops in, the drop directory for the cross-built
+# WezTerm executables, and the WezTerm host's vendored third-party dep tree
+# (freetype/cairo/libpng/harfbuzz...). None of it changes during agent work,
+# and counting it pushed the workspace past the guard's 512MiB ceiling.
+.cef-windows/
+.cef-test/
+prebuilt/
+packages/plugins/native-terminal/wezterm/deps/
+packages/plugins/native-terminal/wezterm/target/
+
+# Session scratch and crash evidence — MEASURED as the cause of a real
+# `checkpoint incomplete (pre_tool)`: one minidump under .btmp/dumps was 467MB,
+# ten of them 4.68GB, and the capture took only 146 files before it blew the
+# 512MiB byte guard. None of it is source, none of it changes during agent work,
+# and all of it is regenerable.
+.btmp/
+.bmp/
+.bttmp/
+node-compile-cache/
+*.dmp
+
+# Tool/installer homes the harness redirects into the workspace so a run stays
+# self-contained: same reasoning, and the same guard failure.
+.bun-home/
+.localappdata/
+npm-home/
+

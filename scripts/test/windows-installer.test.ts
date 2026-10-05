@@ -157,23 +157,45 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   });
   const script = await Bun.file(result.iss!).text();
 
-  // The uninstall path is offered, as ASKS rather than default: a normal
-  // uninstall must not silently take the user's history with it.
-  expect(script).toContain("CreateInputOptionPage");
+  // THE CONTRACT, agreed with the user: data stays in the install folder, and
+  // the uninstaller ASKS whether to take it, defaulting to KEEP. A plain
+  // uninstall must never silently remove the user's model configuration,
+  // sessions and checkpoints, and a keeping uninstall must SAY where they are.
+  // The ask lives in InitializeUninstall — the uninstaller's real hook. An
+  // earlier version called `InitializeWizardUninstall`, which is not an Inno
+  // event at all: the page was never built, the variable stayed nil, and the
+  // uninstall died on the nil object with "Could not call proc".
+  expect(script).toContain("function InitializeUninstall(): Boolean;");
+  // The wrong hook is not DECLARED OR CALLED. Pinning the bare string would
+  // also match the comment that records why it was wrong, and that comment is
+  // the reason nobody re-introduces it.
+  expect(script).not.toContain("procedure InitializeWizardUninstall");
+  expect(script).not.toMatch(/^\s*InitializeWizardUninstall/mu);
+  // Default keep: the dialog's default button is NO, not YES.
+  expect(script).toContain("MB_YESNOCANCEL or MB_DEFBUTTON2, IDNO");
+  // Cancel must abort the uninstall, not fall through to keeping.
+  expect(script).toContain("IDCANCEL then");
   expect(script).toContain("usPostUninstall");
   expect(script).toContain("DelTree");
 
-  // The two places the product writes. store-paths.ts computes
-  // `homedir()/.natalia`, which on Windows is %USERPROFILE%\.natalia — NOT the
-  // usual %APPDATA%. Guessing the conventional directory here deletes nothing at
-  // all, which is the worst outcome for a feature whose purpose is honesty.
+  // BOTH roots the product writes, because deleting one of them is what left
+  // `.natalia` behind after a run of the old uninstaller:
+  //   {app}\.natalia           the config home, which is CWD-relative and the
+  //                            launcher starts the runtime with the install
+  //                            folder as CWD, so it lands in the install.
+  //   {userprofile}\.natalia    the per-user stores, sessions, logs and vault
+  //                            (store-paths.ts walks from homedir()).
+  expect(script).toContain("{app}\\.natalia");
   expect(script).toContain("{userprofile}\\.natalia");
-  expect(script).toContain("{userprofile}\\.config\\natalia");
+  // Not the conventional directory: store-paths.ts computes homedir(), and
+  // guessing %APPDATA% here deletes nothing at all, the worst outcome for a
+  // feature whose purpose is honesty.
   expect(script).not.toContain("{userappdata}");
   expect(script).not.toContain("{userprofile}.natalia");
-  // The label the user reads must name the same path the code deletes.
-  expect(script).toContain("DataPage.Add('%USERPROFILE%\\.natalia");
 
+  // Keeping the data must tell the user where it is, or files survive and
+  // nobody is told — which reads exactly like a bug.
+  expect(script).toContain("Your data was left in place:");
   // A delete that reports nothing is indistinguishable from one that did nothing.
   const logs = script.match(/Log\('/gu) ?? [];
   expect(logs.length).toBeGreaterThanOrEqual(2);
@@ -197,7 +219,10 @@ test("the Pascal section's column one carries only declarations", async () => {
     icon: "icon.ico",
   });
   const script = renderInnoScript(plan);
-  const allowed = ["//", "var", "procedure", "begin", "end"];
+  // `function` belongs here too: it is a declaration exactly like `procedure`,
+  // and the uninstall hook has to be one (`InitializeUninstall` returns the
+  // Boolean that cancels the uninstall).
+  const allowed = ["//", "var", "procedure", "function", "begin", "end"];
   let inCode = false;
   for (const line of script.split("\n")) {
     if (line === "[Code]") {

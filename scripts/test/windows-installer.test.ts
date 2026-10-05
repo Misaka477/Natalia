@@ -244,6 +244,40 @@ test("a silent uninstall removes the program and keeps the data, without asking"
   expect(silentBlock).not.toContain("Result := False");
 });
 
+test("no ExpandConstant embeds a path fragment after its constant", async () => {
+  // `ExpandConstant('{app}\\.natalia')` renders as `{app}\.natalia`, and Inno's
+  // constant scanner reads the constant name only up to the backslash — so the
+  // uninstaller died at runtime with `Unknown constant "userprofile"` and deleted
+  // nothing. The user hit exactly that, right after the silent-uninstall fix
+  // shipped: the fixed branch (silent = keep) had never executed the delete
+  // paths in verification, so all six of them were dead code carrying this bug.
+  //
+  // The shape is wrong, so it is pinned: the constant and the fragment are
+  // concatenated, never embedded in one literal.
+  const release = await fakeWindowsRelease();
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir: await mkdtemp(join(tmpdir(), "win-expand-const-")),
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  const script = await Bun.file(result.iss!).text();
+  // Substring form rather than a regex: the pattern is the literal that must not
+  // appear, and a plain includes() says so without escaping ambiguity.
+  const embedded = [
+    "ExpandConstant('{app}\\",
+    "ExpandConstant('{userprofile}\\",
+  ].filter((pattern) => script.includes(pattern));
+  expect(
+    embedded,
+    `ExpandConstant must not embed a path fragment: ${embedded.join(" ; ")}`,
+  ).toEqual([]);
+  // And the correct shape is present, so the check above is not passing vacuously.
+  expect(script).toContain("ExpandConstant('{app}') + '\\.natalia'");
+  expect(script).toContain("ExpandConstant('{userprofile}') + '\\.natalia'");
+});
+
 test("the Pascal section's column one carries only declarations", async () => {
   // The escape-eating bug this pins: a comment line in the renderer's source
   // held `%USERPROFILE%\.config\natalia`, and in a double-quoted TS string `\.`

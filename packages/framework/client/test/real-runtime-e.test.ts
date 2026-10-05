@@ -861,6 +861,14 @@ test("chat tool calls surface as conversation actions", async () => {
   const events: RuntimeEvent[] = [];
   client.start((event) => events.push(event));
   await client.naviChat!.submit({ text: "do not install that dependency" });
+  // The tool-used event is published by the turn's tool step, which can settle
+  // after `submit` resolves. Reading the array immediately is a race the CI
+  // runner loses (measured: 0 events against 1 expected, while every local run
+  // saw it) — wait for the event, bounded, the way the neighbouring tests do.
+  await waitFor(
+    () => events.some((event) => event.type === "navi.chat.tool.used"),
+    10_000,
+  );
   const actions = events.filter(
     (event) => event.type === "navi.chat.tool.used",
   );

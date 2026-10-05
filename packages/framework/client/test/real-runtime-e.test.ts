@@ -2181,11 +2181,19 @@ test("a sandboxed subagent reads the checked-out base and writes only in its wor
   });
   client.start((event) => events.push(event));
   await client.submitAndWait!("delegate a sandboxed file task");
-  await waitFor(() =>
-    events.some(
-      (event) =>
-        event.type === "subagent.update" && event.status === "completed",
-    ),
+  // The budget is the sandbox's, not the default: this child's turn creates a
+  // git worktree, spawns its own provider stream, and runs two tool calls
+  // under the sandbox's confinement. Measured locally at ~0.5s, and measured
+  // on CI at OVER the 20s default under --max-concurrency=4 across five test
+  // files — a budget that a loaded runner cannot meet is a budget that lies.
+  // 90s keeps the timeout a failure signal rather than a load signal.
+  await waitFor(
+    () =>
+      events.some(
+        (event) =>
+          event.type === "subagent.update" && event.status === "completed",
+      ),
+    90_000,
   );
   // The write landed in the sub-agent's own sandbox worktree (id a1), not the
   // parent's workspace.
@@ -2209,11 +2217,16 @@ test("a sandboxed sub-agent sees a denied write and self-corrects inside its fil
   });
   client.start((event) => events.push(event));
   await client.submitAndWait!("delegate a domain task");
-  await waitFor(() =>
-    events.some(
-      (event) =>
-        event.type === "subagent.update" && event.status === "completed",
-    ),
+  // Same sandbox budget as the sibling test above: the child creates a
+  // worktree and runs under confinement, and CI's loaded runner needs more
+  // than the 20s default for it.
+  await waitFor(
+    () =>
+      events.some(
+        (event) =>
+          event.type === "subagent.update" && event.status === "completed",
+      ),
+    90_000,
   );
   // The ownership map refuses the first write, but the error is returned to the
   // child as a tool result so it can recover without restarting its context.

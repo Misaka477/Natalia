@@ -357,6 +357,24 @@ async function verifyRelease(
   // copies the whole assembled runtime; this guard is what keeps it that way,
   // and it is checked against the Windows release because that is where the
   // host ships.
+  // Nothing that only existed to debug this session may ship. A probe I built
+  // to ask libcef.dll its api_hash was dropped into the CEF distribution's
+  // Release/ directory, `stageDesktopHost` copies that whole directory, and the
+  // installer delivered it to the install folder — the user's uninstaller log
+  // showed it deleting `api_hash_probe.exe` from a real install. The dist is
+  // an input directory, not a staging area.
+  if (platformDir.startsWith("windows")) {
+    const forbidden = ["api_hash_probe.exe", "*.probe.txt"];
+    for (const pattern of forbidden) {
+      for (const entry of await readdir(outDir)) {
+        if (new Bun.Glob(pattern).match(entry))
+          problems.push(
+            `a debug artifact is shipping: ${entry} — nothing built to ` +
+              `diagnose a session belongs in a release`,
+          );
+      }
+    }
+  }
   if (platformDir.startsWith("windows")) {
     for (const required of [
       "libcef.dll",

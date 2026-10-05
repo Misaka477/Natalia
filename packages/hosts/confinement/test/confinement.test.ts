@@ -13,6 +13,8 @@ import {
   canonicalPath,
   confinementAvailable,
   confinementBinary,
+  confinementSupported,
+  enforceableConfinementMode,
   probeConfinement,
   writableRoots,
   wrapConfinedCommand,
@@ -183,4 +185,63 @@ test("the unavailable backend is reported, not faked", () => {
   // The honest-reporting discipline: capability is a fact we measured.
   if (!available) expect(probeConfinement()).toBeUndefined();
   else expect(typeof probeConfinement()!.landlockABI).toBe("number");
+});
+
+/**
+ * The platform gate: which modes a host can ENFORCE, not which it can ask for.
+ *
+ * The two questions have different answers, and the shipped code used to answer
+ * only the first. The composition base profile ships `workspace-write` for every
+ * platform, the seam fail-closed on a host with no rung, and the shell tool then
+ * threw "the command could not be started" for EVERY command on Windows and macOS.
+ * This is the half that was missing.
+ */
+test("the rung exists on Linux and nowhere else", () => {
+  expect(confinementSupported("linux")).toBe(true);
+  expect(confinementSupported("win32")).toBe(false);
+  expect(confinementSupported("darwin")).toBe(false);
+  expect(confinementSupported("freebsd")).toBe(false);
+  // And the default asks about THIS host.
+  expect(confinementSupported()).toBe(process.platform === "linux");
+});
+
+test("danger-full-access is enforceable everywhere, by definition", () => {
+  for (const os of ["linux", "win32", "darwin"] as NodeJS.Platform[])
+    expect(enforceableConfinementMode("danger-full-access", os)).toBe(
+      "danger-full-access",
+    );
+});
+
+test("a confined mode is enforceable where the rung exists", () => {
+  expect(enforceableConfinementMode("workspace-write", "linux")).toBe(
+    "workspace-write",
+  );
+  expect(enforceableConfinementMode("read-only", "linux")).toBe("read-only");
+});
+
+test("a confined mode degrades on a host with no rung — not fail-closed into nothing", () => {
+  // THE bug this gate closes: without it, every confined exec on a rung-less host
+  // reached the fail-closed branch and the shell tool reported an information-free
+  // "the command could not be started" for every command, on every platform.
+  for (const os of ["win32", "darwin", "freebsd"] as NodeJS.Platform[]) {
+    expect(enforceableConfinementMode("workspace-write", os)).toBe(
+      "danger-full-access",
+    );
+    expect(enforceableConfinementMode("read-only", os)).toBe(
+      "danger-full-access",
+    );
+  }
+  // And the degradation is a DEGRADATION, not a waiver: it does not invent a mode
+  // nobody asked for either.
+  expect(enforceableConfinementMode("workspace-write", "win32")).not.toBe(
+    "read-only",
+  );
+});
+
+test("the default asks about this host, so Linux keeps its sandbox", () => {
+  // The gate must be invisible on the platform that has the rung, or every
+  // confined run on Linux would silently lose its confinement too.
+  expect(enforceableConfinementMode("workspace-write")).toBe(
+    process.platform === "linux" ? "workspace-write" : "danger-full-access",
+  );
 });

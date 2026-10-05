@@ -66,6 +66,61 @@ export function confinementBinary(): string | undefined {
 }
 
 /**
+ * Whether this host has a confinement rung at all.
+ *
+ * The backend is landlock, which is a Linux syscall family: `native/src/main.rs`
+ * applies its rules with LANDLOCK_CREATE_RULESET/LANDLOCK_ADD_RULE and has no
+ * second implementation, so a rung exists on Linux and exists nowhere else.
+ * That is what this file's header calls "macOS/Windows rungs are not here yet".
+ *
+ * A PLATFORM predicate, deliberately NOT `confinementAvailable()`: the probe
+ * answers "is the binary here", which is a different question with a different
+ * answer. A Linux host whose binary is missing is a BROKEN INSTALL and must keep
+ * failing closed; a host whose rung was never built is the documented
+ * degradation and must not. Only a platform check can tell those two apart, and
+ * only one of them is a security event.
+ */
+export function confinementSupported(
+  os: NodeJS.Platform = process.platform,
+): boolean {
+  return os === "linux";
+}
+
+/**
+ * The mode this host can actually enforce — the input to every `mode` decision.
+ *
+ * `read-only` and `workspace-write` mean something only where the rung exists.
+ * Everywhere else they degrade to `danger-full-access`, which is the study's
+ * "honest Windows degradation" spelled out in this file's header and in the
+ * wrapper's own docs ("the Windows-degradation story keeps danger working when
+ * no backend exists"). WHAT THIS IS NOT: a silent waiver. The degradation is
+ * asked for once, here, at the one place that resolves the effective mode, so
+ * every reader of that mode — the execution that applies it, the snapshot's
+ * danger indicator, the per-turn environment block that tells the agent where
+ * it is — reads the degraded answer instead of a `workspace-write` that never
+ * held on this machine. A caller that kept its own copy of the resolution order
+ * would be back to two truths.
+ *
+ * Why the gate is here rather than in the caller's fail-closed branch: that
+ * arrangement SHIPPED, and it is the bug this closes. The composition base
+ * profile ships `anthelia.sandbox: workspace-write` for every platform, the
+ * seam fail-closed on a host with no backend, and the shell tool then threw
+ * "the command could not be started" for EVERY command — measured, not
+ * theorised: a `bun build --compile`d copy of the shell tool (the exact shape
+ * `build-standalone.ts` produces) resolves `confinementBinary()` against Bun's
+ * embedded filesystem, where no on-disk binary can live, and fails every
+ * confined run on every platform. On Windows there is nothing to find even from
+ * a source checkout, because the rung does not exist there.
+ */
+export function enforceableConfinementMode(
+  mode: ConfinementMode,
+  os: NodeJS.Platform = process.platform,
+): ConfinementMode {
+  if (mode === "danger-full-access") return mode;
+  return confinementSupported(os) ? mode : "danger-full-access";
+}
+
+/**
  * Resolve a granted root to the path the kernel actually compares
  * (dsh's `roots.ts` lesson): the native realpath follows the
  * component-by-component lookup a spawn performs, where the JS

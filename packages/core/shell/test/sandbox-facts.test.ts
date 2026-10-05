@@ -22,6 +22,22 @@ const confined = (command: string): ShellExecRequest => ({
   workspaceRoot: process.cwd(),
 });
 
+/**
+ * A request whose confinement backend cannot be found.
+ *
+ * Named rather than simulated by rewriting the resolved argv: overriding
+ * `spec.command` with a missing path only makes the DISCOVERED wrapper fail its
+ * own `exec`, which is a refusal WITH text (`confinement-exec: exec failed: ...`)
+ * and not the silent one. Reaching "no usable backend" needs the lookup itself to
+ * come back empty, which is what naming a missing binary does — the same injection
+ * `wrapConfinedCommand({ binaryPath })` already takes, one layer up. No machine
+ * state is touched, and no test has to know where the real binary lives.
+ */
+const withoutBackend = (command: string): ShellExecRequest => ({
+  ...confined(command),
+  confinementBinaryPath: "/nonexistent/confinement-exec",
+});
+
 test("a command's own exit 2 stays the command's", async () => {
   // The whole point of the change: exit 2 alone is not a refusal.
   const bash = new BashLocalExecutor();
@@ -86,17 +102,44 @@ test("an unconfined run carries no sandbox facts", async () => {
  */
 test("a missing confinement backend fails closed with a runner failure", async () => {
   const bash = new BashLocalExecutor();
-  const request = confined("echo should-not-run");
-  // A binary that does not exist is the shape "no usable backend" takes at the
-  // wrapper boundary, without needing to unset anything on this machine.
+  const request = withoutBackend("echo should-not-run");
   const spec = bash.resolve(request);
-  const run = await bash.run(
-    { ...spec, command: "/nonexistent/confinement-exec" },
-    request,
-  );
+  const run = await bash.run(spec, request);
 
   // The command did not run: whatever the wrapper said, the model must be told the
   // sandbox could not run it.
   expect(run.stdout).not.toContain("should-not-run");
+  expect(run.outcome).toBe("spawn-failed");
   expect(run.sandbox?.runnerFailed).toBe(true);
+});
+
+test("a missing backend says WHY, so the caller is not left with a bare refusal", async () => {
+  // The other half of the same case, and the one that cost a debugging session:
+  // there is no exit code, no stderr and no wrapper signature to classify here, so
+  // a refusal without words reaches the model as the information-free "the command
+  // could not be started" — no mode, no reason, no way out. The shell choice was
+  // suspected and re-fixed while the real cause sat one layer down.
+  const bash = new BashLocalExecutor();
+  const request = withoutBackend("echo should-not-run");
+  const run = await bash.run(bash.resolve(request), request);
+
+  // It names the mode that could not run, names what is missing, and says what a
+  // caller can do about it.
+  expect(run.confinementRefusal).toBeDefined();
+  expect(run.confinementRefusal).not.toBe("the command could not be started");
+  expect(run.confinementRefusal).toContain("workspace-write");
+  expect(run.confinementRefusal).toContain("confinement-exec");
+  expect(run.confinementRefusal).toContain("danger-full-access");
+});
+
+test("a missing backend refuses a background start with the same words", async () => {
+  // `start` is the other caller of that bare string, and a detached caller gets no
+  // result object at all: the refusal text is the only thing it can report.
+  const bash = new BashLocalExecutor();
+  const request = withoutBackend("echo should-not-run");
+  const spec = bash.resolve(request);
+  await expect(bash.start(spec, request)).rejects.toThrow(/confinement-exec/u);
+  await expect(bash.start(spec, request)).rejects.not.toThrow(
+    "the command could not be started",
+  );
 });

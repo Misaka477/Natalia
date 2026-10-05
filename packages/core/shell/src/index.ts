@@ -32,7 +32,9 @@ export {
   DEFAULT_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
   WRAPPER_FAILURE_SIGNATURE,
+  WRAPPER_REFUSAL_EXIT,
   clampTimeout,
+  missingConfinementRefusal,
 } from "./types";
 export type {
   ShellExecRequest,

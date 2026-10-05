@@ -57,6 +57,17 @@ export type ShellExecRequest = {
    */
   shellExecutable?: string | undefined;
   /**
+   * The confinement backend binary this run should use, overriding discovery.
+   *
+   * A valve, the same shape as {@link shellExecutable}: absent means the wrap layer
+   * discovers the backend beside this package (and in the workspace's own native
+   * build), which is what every production caller wants. A caller that ships its own
+   * backend — or a test that needs the fail-closed branch without unsetting
+   * anything on the machine it runs on — names it here. It is a PATH, not a mode:
+   * whether confinement runs at all is {@link confinement}'s decision.
+   */
+  confinementBinaryPath?: string | undefined;
+  /**
    * The harness-owned `NATALIA_*` facts for this execution.
    *
    * Merged by the executor AFTER {@link env} and after every ambient `NATALIA_*`
@@ -143,6 +154,28 @@ export const WRAPPER_FAILURE_SIGNATURE = "confinement-exec:";
  * required TOGETHER: the code without the signature is an ordinary exit 2.
  */
 export const WRAPPER_REFUSAL_EXIT = 2;
+
+/**
+ * What a run whose sandbox could not start says.
+ *
+ * The OTHER kind of runner failure, and the one that used to say nothing at all:
+ * the wrapper is missing, so there is no exit code, no stderr and no signature to
+ * classify — only the fail-closed result. `spawnSpec` fills `confinementRefusal`
+ * with this so the refusal a caller reads is a sentence rather than the bare
+ * "the command could not be started" the seam used to substitute. That bare string
+ * cost a debugging session: it names no mode, no reason and no way out, so the
+ * shell-choice was suspected and re-fixed while the real cause sat one layer down.
+ */
+export function missingConfinementRefusal(
+  mode: import("@anthelia/confinement").ConfinementMode,
+): string {
+  return (
+    `the ${mode} sandbox could not start this command: no usable ` +
+    `confinement-exec backend was found on this host, and the sandbox refuses ` +
+    `to run a command unconfined. Build the backend (bun run native:confinement) ` +
+    `or run this call under sandbox_permissions=danger-full-access.`
+  );
+}
 
 /** Default and maximum timeouts, matching the shell tool's existing caps. */
 export const DEFAULT_TIMEOUT_MS = 120_000;

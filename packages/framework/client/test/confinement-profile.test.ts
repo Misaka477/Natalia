@@ -72,6 +72,65 @@ test("membership guard: garbage in either source falls through to the chain's ne
   ).toBe("workspace-write");
 });
 
+/**
+ * The platform gate, and why it lives at the END of the chain.
+ *
+ * The three sources above name a mode the host REQUESTS. A host whose
+ * confinement rung was never built cannot enforce any of them, so the mode an
+ * execution runs under and the mode the snapshot's danger indicator shows must
+ * both be the degraded one. Gating the resolved answer — rather than each call
+ * site — is what keeps those two readers from disagreeing.
+ *
+ * Measured, not theorised: with this gate absent, the base profile's
+ * `workspace-write` reached `spawnSpec` on a rung-less host, `wrapConfinedCommand`
+ * returned nothing, and the shell tool threw the information-free "the command
+ * could not be started" for EVERY command. A `bun build --compile`d copy of the
+ * shell tool reproduces it on Linux too — the compiled module's `import.meta.dir`
+ * is Bun's embedded filesystem, where no on-disk backend can live.
+ */
+test("a host with no confinement rung runs danger-full-access, whatever the config asks for", () => {
+  for (const os of ["win32", "darwin"] as NodeJS.Platform[]) {
+    // The chain itself is unchanged: the row still wins, the config key still
+    // falls back, the schema default still closes it. Only the last step asks
+    // whether this host can enforce the answer.
+    expect(
+      effectiveConfinementMode({
+        profile: profile([row({ mode: "read-only" })]),
+        os,
+      }),
+    ).toBe("danger-full-access");
+    expect(
+      effectiveConfinementMode({
+        profile: profile([row({ mode: "read-only" })]),
+        configMode: "workspace-write",
+        os,
+      }),
+    ).toBe("danger-full-access");
+    expect(
+      effectiveConfinementMode({ configMode: "danger-full-access", os }),
+    ).toBe("danger-full-access");
+    // And the schema default, which is what an out-of-the-box install ships.
+    expect(effectiveConfinementMode({ os })).toBe("danger-full-access");
+  }
+});
+
+test("on a rung-bearing host the gate is invisible", () => {
+  // Linux keeps the sandbox it asked for; anything else would silently unconfine
+  // every confined run on the one platform that can enforce them.
+  expect(
+    effectiveConfinementMode({
+      profile: profile([row({ mode: "read-only" })]),
+      os: "linux",
+    }),
+  ).toBe("read-only");
+  expect(effectiveConfinementMode({ os: "linux" })).toBe("workspace-write");
+  // And with no `os` the question is about THIS host, which is how the three
+  // production call sites (execute-context, snapshot, turn-runner) ask it.
+  expect(effectiveConfinementMode({})).toBe(
+    process.platform === "linux" ? "workspace-write" : "danger-full-access",
+  );
+});
+
 test("an approved escalation journals the entry; a refusal and a missing seam do not", async () => {
   // Sandbox study §6b①: entering a wider mode is ONE journal fact — the
   // audit trail and the danger indicator read it, never a second state.

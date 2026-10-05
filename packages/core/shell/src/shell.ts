@@ -31,6 +31,7 @@ import { terminateChildProcessTree } from "@anthelia/platform";
 import {
   WRAPPER_FAILURE_SIGNATURE,
   WRAPPER_REFUSAL_EXIT,
+  missingConfinementRefusal,
   type ShellExecRequest,
   type ShellExecSpec,
   type ShellProcess,
@@ -243,10 +244,20 @@ export abstract class ShellExecutor {
         workspaceRoot: request?.workspaceRoot,
         command,
         args: [...args],
+        // Absent in production: the wrap layer then discovers the backend beside
+        // this package. Named, it is the caller's own backend — and it is how a
+        // test reaches the fail-closed branch below, which overriding the resolved
+        // argv cannot do (that only fails the wrapper's own exec, which is a
+        // refusal with text and not the silent one this branch produces).
+        binaryPath: request?.confinementBinaryPath,
       });
       // Fail-closed: a missing backend must not silently degrade to running the
       // command unconstrained. `runnerFailed` says the sandbox could not run rather
       // than that the command failed — the distinction an exit code cannot carry.
+      //
+      // The refusal TEXT rides with it. The wrapper never ran, so there is no
+      // signature and no stderr to classify, and a refusal with no words is what
+      // made "the command could not be started" the only thing a caller ever saw.
       if (!wrapped)
         return {
           error: {
@@ -254,6 +265,9 @@ export abstract class ShellExecutor {
             stdout: "",
             stderr: "",
             outcome: "spawn-failed",
+            confinementRefusal: missingConfinementRefusal(
+              mode as ConfinementMode,
+            ),
             sandbox: { mode: mode as ConfinementMode, runnerFailed: true },
           },
         };

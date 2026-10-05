@@ -63,6 +63,42 @@ const targets = explicit
  * `pty-bridge/` directory so no trim of another tier can take it with it
  * (the bug that once shipped a bridge-less Windows release).
  */
+/**
+ * The Natalia Browser Bridge extension, staged beside the plugin that needs it.
+ *
+ * `browser_*` cannot work without it: the plugin's purpose is to drive the
+ * user's EXISTING browser, and the only way in is an extension loaded in that
+ * browser, which talks to the local bridge server. The extension lives in the
+ * plugin's `src/extension/<chromium|firefox>` and was shipped NOWHERE — a
+ * release carried `plugins/natalia-browser/{index.js,LICENSE,manifest,package.json}`
+ * and nothing else, so every `browser_*` call failed with "the Natalia Browser
+ * Bridge extension is not installed or not enabled", forever, on every install.
+ *
+ * It is staged under the plugin's own `extension/<engine>/` so the plugin stays
+ * self-contained and the path the plugin resolves is relative to the plugin
+ * rather than to a checkout.
+ */
+async function stageBrowserExtension(outDir: string): Promise<void> {
+  const staged = join(outDir, "plugins", "natalia-browser", "index.js");
+  if (!(await Bun.file(staged).exists())) return;
+  const source = join(
+    root,
+    "packages",
+    "plugins",
+    "browser",
+    "src",
+    "extension",
+  );
+  const target = join(outDir, "plugins", "natalia-browser", "extension");
+  await rm(target, { recursive: true, force: true });
+  await mkdir(target, { recursive: true });
+  for (const engine of ["chromium", "firefox"]) {
+    const from = join(source, engine);
+    if (!(await Bun.file(join(from, "manifest.json")).exists())) continue;
+    await cp(from, join(target, engine), { recursive: true });
+  }
+}
+
 async function stageTerminalNatives(
   outDir: string,
   platformDir: string,
@@ -573,6 +609,8 @@ for (const target of targets) {
     // staged last — each release keeps only the executables its platform
     // can run (a Windows release shipping Linux wezterm was the bug).
     await stageTerminalNatives(outDir, platformDir);
+    // The browser bridge extension, for the browser_* tools (see the function).
+    await stageBrowserExtension(outDir);
     await stageDesktopHost(outDir, platformDir);
     await stageWebShell(outDir);
     // The shipped composition base (P3 "base profile 随包机制"): copied

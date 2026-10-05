@@ -94,6 +94,37 @@ export async function handleLocalCommands(argv: string[]) {
     ]).has(subcommand ?? "")
   )
     return false;
+
+  // The argument shape is validated BEFORE the config home is created, and the
+  // order is the whole point. `ensureNataliaConfigPath` CREATES `.natalia/` and
+  // its config file as a side effect, so calling it before the shape checks made
+  // every rejected form leave that directory behind — which is what
+  // apps/cli/test/cli.test.ts:511 pins ("old top-level install and uninstall no
+  // longer write tool activation"). On Linux CI that assertion failed with
+  // `Expected: false, Received: true`, i.e. the directory existed.
+  //
+  // The uninstall case's own comment already said this ("must fail before
+  // anything touches the filesystem"); the call ordering simply did not match
+  // it. Refusing first and creating only on the paths that need the config keeps
+  // the guarantee real instead of aspirational.
+  const rejectBeforeTouchingDisk = (usage: string): never => {
+    console.error(usage);
+    process.exit(1);
+  };
+
+  if (subcommand === "uninstall") {
+    // The app-level uninstall takes NO arguments — and the dead
+    // `uninstall <tool> --workspace` form must fail before anything
+    // touches the filesystem (a CLI test asserts that exit, and an
+    // argument-bearing call here would otherwise operate on the real
+    // home while "succeeding").
+    if (argv.slice(1).filter((arg) => !arg.startsWith("-")).length > 0) {
+      rejectBeforeTouchingDisk(
+        "usage: natalia uninstall (the old top-level `uninstall <tool>` form is gone)",
+      );
+    }
+  }
+
   // Resolved THROUGH the shared entry point, which also makes sure the
   // directory and the file exist. The previous inline spelling produced the
   // same path and then handed it to a strict reader, so a fresh install crashed
@@ -101,17 +132,9 @@ export async function handleLocalCommands(argv: string[]) {
   const configPath = (await ensureNataliaConfigPath(nataliaConfigPath())).path;
   switch (subcommand) {
     case "uninstall": {
-      // The app-level uninstall takes NO arguments — and the dead
-      // `uninstall <tool> --workspace` form must fail before anything
-      // touches the filesystem (a CLI test asserts that exit, and an
-      // argument-bearing call here would otherwise operate on the real
-      // home while "succeeding").
-      if (argv.slice(1).filter((arg) => !arg.startsWith("-")).length > 0) {
-        console.error(
-          "usage: natalia uninstall (the old top-level `uninstall <tool>` form is gone)",
-        );
-        process.exit(1);
-      }
+      // NO arguments — already enforced above, before the config home was
+      // created. Keeping the check here too would be dead code, and moving it
+      // back would restore the leak.
       // Study §5: uninstall removes the PROGRAM and states where the
       // rescue ring stays. Nothing under stores/ is opened for deletion.
       const home = nataliaHome();

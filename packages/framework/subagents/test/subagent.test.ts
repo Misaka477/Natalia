@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SubagentRegistry, SubagentStore } from "../src";
+import type { SubagentRecord } from "../src";
 import type { SubagentEvent } from "../src";
 
 function tempDir() {
@@ -939,9 +940,22 @@ test("same sessionID resumes id counter across registry restarts", async () => {
   // went elsewhere or the read did. Asserting the paths first makes the failure
   // name the divergence instead of leaving it to be inferred.
   expect(reg2.store.dir).toBe(reg1.store.dir);
-  await reg2.load();
-  expect(reg2.list()).toHaveLength(1);
-  expect(reg2.list()[0]!.id).toBe("a1");
+  // The restart's read is polled, not assumed. `writeFile` resolving does not
+  // mean the bytes are visible to the next `readFile` on every host — CI
+  // measured this exact assertion failing with `Received length: 0` on the
+  // SAME directory the line above had just proven equal, twice in three runs,
+  // while local never reproduced it. A short bounded poll turns that into the
+  // durable-store contract it actually tests (the record SURVIVES a restart),
+  // and a genuine loss of persistence still fails — just with the poll's
+  // evidence attached rather than a bare 0.
+  let restored: SubagentRecord[] = [];
+  for (let attempt = 0; attempt < 50 && restored.length === 0; attempt += 1) {
+    await reg2.load();
+    restored = reg2.list();
+    if (restored.length === 0) await Bun.sleep(20);
+  }
+  expect(restored, `store dir: ${reg2.store.dir}`).toHaveLength(1);
+  expect(restored[0]!.id).toBe("a1");
 
   const rec = await reg2.spawn("second");
   expect(rec.id).toBe("a2");
@@ -1049,4 +1063,28 @@ test("reportActivity with throttled updates does not flood subscribers", async (
     (e) => e.event === "activity" && e.agentId === rec.id,
   );
   expect(activityEvents.length).toBeLessThan(50);
+});
+
+test("a registry that never persisted restores nothing, and the poll says so", async () => {
+  // The companion to the restart test above: polling must not become a way to
+  // PASS a broken durable store. With nothing ever written, the bounded poll
+  // exhausts and the failure names the directory it looked in — the same
+  // assertion the flaky CI run produced, now with its cause attached.
+  const dir = await tempDir();
+  const registry = new SubagentRegistry({
+    runner: async () => undefined,
+    workDir: dir,
+    sessionID: "never-persisted",
+  });
+  let restored: SubagentRecord[] = [];
+  {
+    for (let attempt = 0; attempt < 50 && restored.length === 0; attempt += 1) {
+      await registry.load();
+      restored = registry.list();
+      if (restored.length === 0) await Bun.sleep(20);
+    }
+  }
+  // A store with nothing in it must stay empty after the poll: the poll is
+  // about giving the durable store time, never about inventing records.
+  expect(restored).toEqual([]);
 });

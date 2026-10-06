@@ -1629,17 +1629,44 @@ const markdownCache = new Map<string, string>();
 const MARKDOWN_CACHE_LIMIT = 512;
 
 /**
+ * Messages whose confirmed text has already been rendered as markdown.
+ *
+ * The flip is ONE-WAY (presentation plan P3.1): a row renders plain while
+ * it streams and markdown once the text is confirmed — but mid-stream
+ * events (a status update that momentarily empties the pending tail, a
+ * re-activation that drops the streaming flag) used to flip a row BACK to
+ * plain, and the user watched it flicker raw → rendered → raw until the
+ * stream ended. The latch records the confirmation per message id, so a
+ * row that has parsed once never returns to the degraded form.
+ */
+const confirmedMarkdown = new Set<string>();
+
+/** Test seam: forget the latches (a fresh transcript must start clean). */
+export function resetMessageTextModes(): void {
+  confirmedMarkdown.clear();
+}
+
+/**
  * The streaming-tail's render mode (the ui-performance plan's P1): a
  * streaming row renders PLAIN text — every delta used to re-parse the
  * whole prefix as markdown (O(n²) over the stream, a cache entry per
  * prefix) — and `content.done` flips `streaming` false so the full parse
  * takes over on the confirmed text. `textContent` cannot inject markup,
  * so the streaming half is also strictly safer than the parse half.
+ *
+ * The latch makes the transition monotonic: once a message id has been
+ * seen confirmed, every later render of that id is markdown even if the
+ * streaming flag flickers back on (P3.1).
  */
 export function messageTextMode(message: {
+  id?: string;
   streaming?: boolean;
 }): "plain" | "markdown" {
-  return message.streaming ? "plain" : "markdown";
+  if (message.id !== undefined && confirmedMarkdown.has(message.id))
+    return "markdown";
+  if (message.streaming) return "plain";
+  if (message.id !== undefined) confirmedMarkdown.add(message.id);
+  return "markdown";
 }
 
 function formatContent(text: string): string {

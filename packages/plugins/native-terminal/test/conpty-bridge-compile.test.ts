@@ -260,3 +260,16 @@ test("the drive's parser keeps its header across reads", async () => {
   expect(source).toContain("let pending:");
   expect(source).toContain("if (buffer.length < pending.length) break;");
 });
+
+test("the pwsh test gates on the marker capability, not just on pwsh existing", async () => {
+  // A pwsh without PSReadLine starts, prints, and emits NO command markers —
+  // measured on the Linux CI shard as a 19s burn ending in
+  // `command?.commandLine === undefined` with a bare prompt in the pane's tail.
+  // The capability probe turns that into an honest skip; this pins it in place.
+  const source = await Bun.file(
+    join(import.meta.dir, "..", "test", "pwsh-e2e.test.ts"),
+  ).text();
+  expect(source).toContain("Get-Module -ListAvailable -Name PSReadLine");
+  expect(source).toContain("if (!(await haveReadLine()))");
+  expect(source).toContain("emits no command markers");
+});

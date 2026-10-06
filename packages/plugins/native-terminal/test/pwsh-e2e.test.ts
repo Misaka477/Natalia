@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,9 +54,48 @@ const havePwsh = async (): Promise<boolean> => {
  * needs from a real user. It is set on `process.env` because the child's environment is
  * a copy of it, and restored afterwards.
  */
+/**
+ * Whether this pwsh can emit the markers the test reads.
+ *
+ * The integration script overrides `PSConsoleHostReadLine`, which the
+ * PSReadLine MODULE provides. A pwsh without it (a stripped image, a
+ * `-NoProfile`-only host) starts fine and prints fine but emits NO command
+ * markers — the pane answers nothing and the test burns its whole budget
+ * before failing on a capability that was never there. Probing the module
+ * first turns that into an honest skip.
+ */
+const haveReadLine = async (): Promise<boolean> => {
+  if (!existsSync(pwshPath)) return false;
+  const home = await mkdtemp(join(tmpdir(), "natalia-pwsh-readline-"));
+  const probe = Bun.spawnSync(
+    [
+      pwshPath,
+      "-NoLogo",
+      "-NoProfile",
+      "-Command",
+      "if (Get-Module -ListAvailable -Name PSReadLine) { 'yes' } else { 'no' }",
+    ],
+    {
+      env: { ...process.env, HOME: home, XDG_CACHE_HOME: home },
+    },
+  );
+  try {
+    rmSync(home, { recursive: true, force: true });
+  } catch {
+    // a scratch home
+  }
+  return probe.stdout.toString().trim().endsWith("yes");
+};
+
 test("a PowerShell pane reports commands and exit codes", async () => {
   if (!(await havePwsh())) {
     console.warn(`skipped: no runnable pwsh at ${pwshPath}`);
+    return;
+  }
+  if (!(await haveReadLine())) {
+    console.warn(
+      `skipped: pwsh at ${pwshPath} has no PSReadLine, so it emits no command markers`,
+    );
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "natalia-pwsh-e2e-"));

@@ -612,3 +612,76 @@ test("a natural death presents one terminal state across status, wait and audit 
   expect(waited.status).toBe("exited");
   expect(waited.timedOut).toBe(false);
 });
+
+test("the process family's read tools project generic cards (P1)", async () => {
+  // The presentation plan's P1: each family gets presenters in dsh's
+  // vocabulary. The process reads project title=the handle, summary=the
+  // state, meta=pills a reader scans without opening the card.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-card-"));
+  const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_card",
+      command: "sleep 5",
+      description: "A process for its card",
+    },
+    { workspaceRoot: root },
+  );
+  const status = tools.get("process_status")!;
+  const statusCall = status.output!.presentCall!({ id: "proc_card" });
+  expect(statusCall).toEqual({
+    kind: "generic",
+    title: "proc_card",
+    summary: "status",
+  });
+  const statusCard = status.output!.presentResult!(
+    { id: "proc_card" },
+    JSON.stringify({ id: "proc_card", status: "running", ready: true }),
+  );
+  expect(statusCard).toMatchObject({
+    kind: "generic",
+    title: "proc_card",
+    summary: "running",
+    meta: [
+      ["status", "running"],
+      ["ready", "true"],
+    ],
+  });
+  // A finished process carries its exit code as a pill.
+  const exitedCard = status.output!.presentResult!(
+    { id: "proc_card" },
+    JSON.stringify({ id: "proc_card", status: "exited", exitCode: 0 }),
+  );
+  expect(exitedCard.meta).toEqual([
+    ["status", "exited"],
+    ["exit", "0"],
+  ]);
+  // The list and audit cards count, and keep the full table as the body.
+  const list = tools.get("process_list")!;
+  const listCard = list.output!.presentResult!(
+    {},
+    JSON.stringify([
+      { id: "a", status: "running" },
+      { id: "b", status: "exited" },
+    ]),
+  );
+  expect(listCard).toMatchObject({
+    kind: "generic",
+    title: "processes",
+    summary: "2 listed · 1 running",
+    meta: [["running", "1"]],
+  });
+  const audit = tools.get("process_audit")!;
+  const auditCard = audit.output!.presentResult!(
+    {},
+    JSON.stringify({ processes: [{ id: "a", status: "running" }] }),
+  );
+  expect(auditCard).toMatchObject({
+    kind: "generic",
+    title: "processes",
+    summary: "audit · 1 listed · 1 running",
+  });
+  await tools
+    .get("process_stop")!
+    .execute({ id: "proc_card" }, { workspaceRoot: root });
+});

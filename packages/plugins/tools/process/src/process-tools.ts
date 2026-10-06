@@ -904,6 +904,29 @@ function processListTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "List managed workspace processes.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return { kind: "generic", title: "processes", summary: "list" };
+      },
+      presentResult(_args, value) {
+        const parsed = JSON.parse(value) as Array<{
+          id?: string;
+          status?: string;
+        }> | null;
+        const items = Array.isArray(parsed) ? parsed : [];
+        const running = items.filter(
+          (item) => item.status === "running",
+        ).length;
+        return {
+          kind: "generic",
+          title: "processes",
+          summary: `${items.length} listed · ${running} running`,
+          meta: [["running", String(running)]],
+          body: value,
+        };
+      },
+    },
     async execute(_input, context) {
       return JSON.stringify(await registry.list(context), null, 2);
     },
@@ -1008,6 +1031,40 @@ function processStatusTool(registry: ManagedProcessRegistry): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "status",
+        };
+      },
+      presentResult(args, value) {
+        const parsed = JSON.parse(value) as {
+          id?: string;
+          status?: string;
+          exitCode?: number | null;
+          ready?: boolean;
+          outputUpdatedAt?: string;
+        } | null;
+        const id = parsed?.id ?? requireString(requireObject(args).id, "id");
+        const meta: Array<[string, string]> = [
+          ["status", parsed?.status ?? "unknown"],
+        ];
+        if (parsed?.exitCode !== undefined && parsed?.exitCode !== null)
+          meta.push(["exit", String(parsed.exitCode)]);
+        if (parsed?.ready) meta.push(["ready", "true"]);
+        if (parsed?.outputUpdatedAt)
+          meta.push(["output", parsed.outputUpdatedAt]);
+        return {
+          kind: "generic",
+          title: id,
+          summary: parsed?.status ?? "unknown",
+          meta,
+        };
+      },
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -1152,6 +1209,28 @@ function processAuditTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "Return managed process audit state.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return { kind: "generic", title: "processes", summary: "audit" };
+      },
+      presentResult(_args, value) {
+        const parsed = JSON.parse(value) as {
+          processes?: Array<{ id?: string; status?: string }>;
+        } | null;
+        const items = parsed?.processes ?? [];
+        const running = items.filter(
+          (item) => item.status === "running",
+        ).length;
+        return {
+          kind: "generic",
+          title: "processes",
+          summary: `audit · ${items.length} listed · ${running} running`,
+          meta: [["running", String(running)]],
+          body: value,
+        };
+      },
+    },
     async execute(_input, context) {
       return JSON.stringify(await registry.audit(context), null, 2);
     },

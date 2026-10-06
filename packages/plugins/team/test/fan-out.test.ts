@@ -226,6 +226,58 @@ test("agent-team prompts carry the contract each role must follow", () => {
   expect(LEAD_REVIEWER_SYSTEM_PROMPT).toContain("outside its domain");
 });
 
+test("runFanOut forwards the parent identity onto every spawned candidate", async () => {
+  // The sub-agent runtime resolves a child's parent execution from the
+  // record's parentSessionID and refuses a child that has none, so a fan-out
+  // that spawned without it produced a batch that died at init (T-14). This
+  // pins the forwarding at the mechanical core: the tool boundary enforces
+  // presence, the core carries identity when given it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-fanout-parent-"));
+  await mkdir(join(root, ".natalia", "subagents"), { recursive: true });
+  const sandboxes = new SnapshotSandboxManager(root);
+  await sandboxes.initialize();
+  const spawnOptions: Array<Record<string, unknown>> = [];
+  const registry = new SubagentRegistry({
+    workDir: join(root, ".natalia", "subagents"),
+    runner: async (task, context) => {
+      const manifest = await sandboxes.create(context.agentId);
+      await writeFile(join(manifest.root, "out.txt"), task);
+      context.log("ok");
+      context.setStatus("running");
+    },
+  });
+  const recording = new Proxy(registry, {
+    get(target, prop) {
+      if (prop === "spawn")
+        return async (...args: Parameters<typeof registry.spawn>) => {
+          spawnOptions.push((args[1] ?? {}) as Record<string, unknown>);
+          return await (
+            target as unknown as { spawn: typeof registry.spawn }
+          ).spawn(...args);
+        };
+      return (target as unknown as Record<string, unknown>)[prop as string];
+    },
+  });
+
+  const prs = await runFanOut({
+    tasks: [
+      { id: "a", prompt: "a" },
+      { id: "b", prompt: "b" },
+    ],
+    subagents: recording as SubagentToolService,
+    sandboxes,
+    parentSessionID: "ses_parent",
+    parentAgentID: "agent_lead",
+    timeoutMs: 10_000,
+  });
+  expect(prs).toHaveLength(2);
+  expect(spawnOptions).toHaveLength(2);
+  for (const options of spawnOptions) {
+    expect(options.parentSessionID).toBe("ses_parent");
+    expect(options.parentAgentID).toBe("agent_lead");
+  }
+});
+
 test("runFanOut caps concurrent spawns with maxConcurrent", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-fanout-cap-"));
   await mkdir(join(root, ".natalia", "subagents"), { recursive: true });

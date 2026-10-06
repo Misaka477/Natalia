@@ -76,24 +76,36 @@ export function createTeamFanoutTool(input: {
       const map = validateOwnershipMap({ tasks: args.tasks });
       if (!map.ok)
         return `ERROR: ownership map is invalid:\n${map.issues.join("\n")}`;
-      const runtimeConfig = (
-        context.runtimeConfig?.() as
-          | { team?: { maxConcurrent?: number } }
-          | undefined
-      )?.team;
+      // The spawning session, recorded on every candidate: the sub-agent
+      // runtime resolves the parent execution from it and refuses a child
+      // that has none ("subagent has no parent session"), so a fan-out that
+      // spawned without it killed every candidate at init (T-14). Refuse here
+      // instead: the failure names the missing session rather than leaving a
+      // batch of dead sub-agents behind.
+      const parentSessionID = context.sessionID;
+      if (!parentSessionID)
+        throw new Error(
+          "team_fanout requires a calling session: the fan-out cannot name the parent session its sub-agents belong to",
+        );
+      const runtimeConfig = context.runtimeConfig?.() as
+        | { team?: { maxConcurrent?: number } }
+        | undefined;
       const prs = await runFanOut({
         tasks: args.tasks,
         subagents,
         sandboxes,
         buildCommand: args.buildCommand,
-        maxConcurrent: runtimeConfig?.maxConcurrent,
+        maxConcurrent: runtimeConfig?.team?.maxConcurrent,
+        parentSessionID,
+        ...(context.parentAgentID
+          ? { parentAgentID: context.parentAgentID }
+          : {}),
         // The spine's team adopter: each landed PR tells the lead now, not
         // after the batch. Session-scoped like every other adopter; absent
         // the spine (or a session) it is a silent no-op.
         onPR: (pr) => {
           const settlement = input.settlement?.();
-          const sessionID = (context as { sessionID?: string } | undefined)
-            ?.sessionID;
+          const sessionID = context.sessionID;
           if (!settlement || !sessionID) return;
           settlement.deliverForSession(sessionID, {
             subject: pr.id,

@@ -91,6 +91,15 @@ export async function runFanOut(input: {
    * waiting for the whole queue.
    */
   onPR?: (pr: FanOutPR) => void;
+  /**
+   * The session spawning this batch. Every candidate record carries it, and the
+   * sub-agent runtime refuses to start a child without one ("subagent has no
+   * parent session", subagent-runner.ts) — a fan-out that omitted it produced a
+   * batch of candidates that all died at init (T-14).
+   */
+  parentSessionID?: string;
+  /** The calling agent, recorded alongside the session for the trace. */
+  parentAgentID?: string;
 }): Promise<FanOutPR[]> {
   const cap = Math.min(
     input.maxConcurrent ?? input.tasks.length,
@@ -102,6 +111,10 @@ export async function runFanOut(input: {
       writePaths: task.writePaths,
       allowedTools: task.allowedTools,
       excludeTools: task.excludeTools,
+      ...(input.parentSessionID
+        ? { parentSessionID: input.parentSessionID }
+        : {}),
+      ...(input.parentAgentID ? { parentAgentID: input.parentAgentID } : {}),
     }),
   );
   input.publish?.({

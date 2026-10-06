@@ -101,3 +101,40 @@ test("the meta facets survive verbatim, pairs included", () => {
     ["truncated", "true"],
   ]);
 });
+
+test("an edit's marked hunk is what the card carries, marks included", () => {
+  // The colored-line renderer keys off exactly these prefixes: a tool that
+  // stops marking its hunk would silently render a diff as plain text, so the
+  // marks are pinned here (the CSS is in a template literal and cannot be
+  // unit-asserted; the contract it keys off CAN be).
+  const card = toolCallCard({
+    render: {
+      kind: "diff",
+      title: "a.txt",
+      summary: "edit",
+      body: "- one\n- two\n+ one\n+ three",
+      meta: [
+        ["removed", "2"],
+        ["added", "2"],
+      ],
+    },
+  });
+  expect(card?.kind).toBe("diff");
+  const body = card?.body ?? "";
+  expect(body.split("\n").every((line) => /^[+-] /u.test(line))).toBe(true);
+  // A create's hunk is all added lines, a delete's all removed: both must keep
+  // their marks or the renderer's coloring would miss them.
+  const created = toolCallCard({
+    render: {
+      kind: "diff",
+      title: "b.txt",
+      summary: "write",
+      body: "+ new file",
+    },
+  });
+  expect(created?.body).toBe("+ new file");
+  const deleted = toolCallCard({
+    render: { kind: "diff", title: "c.txt", summary: "edit", body: "- gone" },
+  });
+  expect(deleted?.body).toBe("- gone");
+});

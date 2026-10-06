@@ -1218,8 +1218,12 @@ function ToolKindIcon(props: { kind: string | undefined }) {
 }
 
 function ToolCallCard(props: { toolCall: ToolCall }) {
+  const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
-  const output = () => props.toolCall.output ?? "";
+  // The tool's own body wins: for a diff it is the marked hunk (the raw result
+  // string is not the same text at all), for a terminal it is the command's
+  // output. The raw result is the fallback for a tool that declared no card.
+  const output = () => card?.body ?? props.toolCall.output ?? "";
   const outputLines = () => output().split("\n");
   const collapsible = () =>
     outputLines().length > TOOL_OUTPUT_COLLAPSE_LINES ||
@@ -1228,10 +1232,26 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
     if (!collapsible() || expanded()) return output();
     return outputLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES).join("\n");
   };
+  // A diff body's lines are marked by the tool (`- ` removed, `+ ` added) so
+  // that a UI without a diff renderer still reads the hunk. We HAVE a renderer
+  // here: the marks become color, which is what makes a hunk scannable at a
+  // glance. A UI that cannot color them keeps the text verbatim.
+  const isDiff = () => card?.kind === "diff";
+  const outputLineElements = (): Array<{
+    line: string;
+    kind: "added" | "removed" | "plain";
+  }> =>
+    shownOutput()
+      .split("\n")
+      .map((line) => {
+        if (!isDiff()) return { line, kind: "plain" as const };
+        if (line.startsWith("+ ")) return { line, kind: "added" as const };
+        if (line.startsWith("- ")) return { line, kind: "removed" as const };
+        return { line, kind: "plain" as const };
+      });
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.
-  const card = props.toolCall.card;
   const heading = () => card?.title ?? props.toolCall.name;
   const summary = () => card?.summary ?? props.toolCall.summary;
   const failed = () =>
@@ -1282,7 +1302,19 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
           class="natalia-tool-output"
           data-collapsed={collapsible() && !expanded() ? "true" : undefined}
         >
-          <pre>{shownOutput()}</pre>
+          <pre>
+            <For each={outputLineElements()}>
+              {(entry) => (
+                <span
+                  class="natalia-tool-output-line"
+                  data-line-kind={entry.kind}
+                >
+                  {entry.line}
+                  {"\n"}
+                </span>
+              )}
+            </For>
+          </pre>
           <Show when={collapsible()}>
             <button
               type="button"

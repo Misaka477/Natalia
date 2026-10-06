@@ -24,6 +24,7 @@ export function toolCallCard(
     kind: intent.kind,
     title: intent.title,
     summary: intent.summary,
+    ...(intent.body === undefined ? {} : { body: intent.body }),
     ...(intent.meta ? { meta: intent.meta } : {}),
   };
 }
@@ -45,6 +46,13 @@ export interface ToolCallCard {
   summary?: string;
   /** Structured facets shown as label:value pairs (exit code, total lines...). */
   meta?: Array<[label: string, value: string]>;
+  /**
+   * The tool-written body: a command's output, a diff's marked hunk, a
+   * read's page. Carried through so a renderer shows what the TOOL wrote
+   * rather than the raw model-facing result string, which for a diff is
+   * not even the same text.
+   */
+  body?: string;
 }
 
 export interface ToolCall {

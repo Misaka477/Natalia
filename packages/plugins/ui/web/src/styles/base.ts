@@ -1102,6 +1102,20 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
+.neu-pane .natalia-tool-output-line {
+  display: block;
+}
+/* A diff body's marked lines, colored. The tool marks removed and added lines
+   itself (so a UI without a diff renderer still reads the hunk); this turns
+   those marks from readable into scannable. */
+.neu-pane .natalia-tool-output-line[data-line-kind="added"] {
+  color: var(--neu-success);
+  background: color-mix(in srgb, var(--neu-success) 10%, transparent);
+}
+.neu-pane .natalia-tool-output-line[data-line-kind="removed"] {
+  color: var(--neu-error);
+  background: color-mix(in srgb, var(--neu-error) 10%, transparent);
+}
 .neu-pane .natalia-tool-output-toggle {
   display: block;
   margin-top: 6px;

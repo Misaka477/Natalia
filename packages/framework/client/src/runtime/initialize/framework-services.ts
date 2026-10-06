@@ -101,6 +101,8 @@ import {
   createApplyGenerationTool,
   createProposeGenerationTool,
   createRollbackGenerationTool,
+  createCancelGenerationTool,
+  createListGenerationCandidatesTool,
 } from "../generation-tools";
 import { attachmentService as attachmentServiceToken } from "@anthelia/attachments";
 import {
@@ -436,6 +438,8 @@ export async function wireFrameworkServices(
     createProposeGenerationTool(ctx),
     createApplyGenerationTool(ctx),
     createRollbackGenerationTool(ctx),
+    createCancelGenerationTool(ctx),
+    createListGenerationCandidatesTool(ctx),
   ]) {
     if (ctx.state.tools.get(tool.name))
       throw new Error(`framework tool already registered: ${tool.name}`);

@@ -25,6 +25,7 @@ import {
   deriveCompositionPointer,
   guardsFace,
   loadGeneration,
+  proposedGenerations,
   storeGeneration,
   switchGeneration,
   type VerificationFace,
@@ -347,6 +348,93 @@ export function createRollbackGenerationTool(ctx: RuntimeContext): RuntimeTool {
         switched: true,
         to: target,
         from: pointer.current,
+      });
+    },
+  };
+}
+
+/**
+ * `cancel_generation` (T-22): the abandon half of the candidate surface.
+ *
+ * Before it, a proposal nobody would ever apply stayed the pointer's live
+ * candidate forever — the model had staged something, changed its mind, and
+ * had no way to say "not this one". The cancellation is a journaled fact
+ * (`composition.cancelled`), so the pointer stops carrying it and a later
+ * proposal can be the outstanding one. The CURRENT generation is not
+ * cancellable: a live composition is rolled back, not abandoned.
+ */
+export function createCancelGenerationTool(ctx: RuntimeContext): RuntimeTool {
+  return {
+    name: "cancel_generation",
+    description:
+      "Abandon a staged composition candidate so it stops being the outstanding proposal. Journals composition.cancelled with your reason. Omit candidateID to abandon the outstanding one; the current (live) generation cannot be cancelled — roll it back instead.",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {
+        candidateID: {
+          type: "string",
+          description:
+            "The candidate to abandon; defaults to the outstanding one.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "Why the candidate is abandoned (the journal records why).",
+        },
+      },
+      additionalProperties: false,
+    },
+    async execute(input) {
+      const args = input as { candidateID?: string; reason?: string };
+      const pointer = generationPointers(ctx);
+      const target = args.candidateID?.trim() || pointer.candidate;
+      if (!target)
+        return "cancel_generation: no outstanding candidate to cancel";
+      if (target === pointer.current)
+        return (
+          `cancel_generation: ${target} is the CURRENT generation — a live ` +
+          `composition is rolled back (rollback_generation), not abandoned`
+        );
+      if (pointer.candidate && target !== pointer.candidate)
+        return (
+          `cancel_generation: the outstanding candidate is ${pointer.candidate}, ` +
+          `not ${target} — pass it, or omit candidateID for the outstanding one`
+        );
+      const exec = activeExec(ctx);
+      ctx.ports.publish({
+        type: "composition.cancelled",
+        candidateID: target,
+        reason: args.reason?.trim() || "abandoned by the agent",
+        ...(exec ? { sessionID: exec.session.id } : {}),
+      });
+      return JSON.stringify({ cancelled: true, candidateID: target });
+    },
+  };
+}
+
+/**
+ * `list_generation_candidates` (T-22): what is staged, what was applied and
+ * what was abandoned — the read half that makes the abandon half aimable.
+ */
+export function createListGenerationCandidatesTool(
+  ctx: RuntimeContext,
+): RuntimeTool {
+  return {
+    name: "list_generation_candidates",
+    description:
+      "List this session's staged composition candidates with their status (outstanding / applied / cancelled) and the reason each was staged. Read-only; never changes the workspace.",
+    requiresApproval: false,
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    async execute() {
+      const pointer = generationPointers(ctx);
+      const candidates = proposedGenerations(
+        activeExec(ctx)?.session.events ?? [],
+      );
+      return JSON.stringify({
+        ...(pointer.current ? { current: pointer.current } : {}),
+        ...(pointer.candidate ? { outstanding: pointer.candidate } : {}),
+        candidates,
       });
     },
   };

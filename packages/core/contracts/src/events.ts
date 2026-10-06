@@ -2284,6 +2284,20 @@ type RuntimeEventData =
       sessionID?: SessionID;
     }
   | {
+      type: "composition.cancelled";
+      /**
+       * The candidate this abandonment is about (a content id). A candidate
+       * nobody will ever apply is a fact worth its own event: without it the
+       * pointer chain carried every proposal forever and the model had no
+       * way to say "not this one" (T-22).
+       */
+      candidateID: string;
+      /** Why it was abandoned — the journal records why, like a proposal. */
+      reason: string;
+      workspaceID?: string;
+      sessionID?: SessionID;
+    }
+  | {
       type: "composition.switched";
       /** The generation that was running before this switch, if any. */
       from?: string;

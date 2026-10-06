@@ -513,3 +513,95 @@ test("rollback with no history says so instead of inventing a target", async () 
     await client.dispose?.();
   }
 }, 60_000);
+
+test("a staged candidate can be abandoned, and the abandon is listable (T-22)", async () => {
+  // A proposal nobody would ever apply used to stay the pointer's live
+  // candidate forever: the model staged something, changed its mind, and
+  // had no way to say "not this one". The cancel journals composition.
+  // cancelled; the pointer stops carrying it; the list shows the status.
+  const root = await makeWorkspace("cancel");
+  const results: string[] = [];
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: "ses_generation_tools_cancel" as never,
+    permissionMode: "auto",
+    globalConfigPath: join(root, ".natalia", "global-config.json"),
+    provider: createScriptedProvider({
+      main: [
+        {
+          tool: () => ({
+            name: "propose_generation",
+            arguments: JSON.stringify({
+              configPatch: { checkpoint: { maxFiles: 4242 } },
+              note: "raise the checkpoint file cap",
+            }),
+          }),
+        },
+        {
+          tool: () => ({
+            name: "cancel_generation",
+            arguments: JSON.stringify({
+              reason: "wrong plan, reverting my aim",
+            }),
+          }),
+        },
+        {
+          tool: () => ({
+            name: "cancel_generation",
+            arguments: JSON.stringify({}),
+          }),
+        },
+        {
+          tool: () => ({
+            name: "list_generation_candidates",
+            arguments: JSON.stringify({}),
+          }),
+        },
+        { text: "cancelled and listed" },
+      ],
+      nia: [{ text: "standby" }],
+    }),
+  });
+  client.start((event) => {
+    if (event.type === "tool.update" && event.status === "succeeded")
+      results.push(
+        JSON.stringify({
+          name: event.name,
+          result: String((event as { result?: string }).result ?? ""),
+        }),
+      );
+  });
+  await client.sessionAttach!("ses_generation_tools_cancel" as never);
+  await client.submitAndWait!("propose, cancel, cancel again, list");
+
+  const byName = (name: string) =>
+    results
+      .filter((entry) => (JSON.parse(entry) as { name: string }).name === name)
+      .map((entry) => {
+        const raw = (JSON.parse(entry) as { result: string }).result;
+        try {
+          return JSON.parse(raw) as unknown;
+        } catch {
+          return raw;
+        }
+      });
+  const proposed = byName("propose_generation")[0] as { candidateID: string };
+  expect(proposed.candidateID).toBeString();
+  // The first cancel lands: the candidate is abandoned with its reason.
+  const cancelled = byName("cancel_generation")[0] as { cancelled: boolean };
+  expect(cancelled.cancelled).toBe(true);
+  // The second cancel refuses — nothing outstanding any more.
+  const refused = byName("cancel_generation")[1] as string;
+  expect(refused).toContain("no outstanding candidate");
+  // The list shows the proposal as cancelled, with no outstanding pointer.
+  const listed = byName("list_generation_candidates")[0] as {
+    outstanding?: string;
+    candidates: Array<{ candidateID: string; status: string }>;
+  };
+  expect(listed.outstanding).toBeUndefined();
+  expect(
+    listed.candidates.find((c) => c.candidateID === proposed.candidateID)
+      ?.status,
+  ).toBe("cancelled");
+  await client.dispose?.();
+}, 60_000);

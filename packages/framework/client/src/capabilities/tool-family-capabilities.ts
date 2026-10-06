@@ -52,6 +52,8 @@ export function runtimeToolNames(): string[] {
     "agent_wait",
     "apply_edits",
     "apply_generation",
+    "cancel_generation",
+    "list_generation_candidates",
     "ask_user",
     "browser_click",
     "browser_close",

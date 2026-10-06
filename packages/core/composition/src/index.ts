@@ -165,6 +165,46 @@ export function buildGeneration(input: {
  * without any of these has no pointer, which is a valid state: the
  * composition existed before anyone pointed at it.
  */
+/**
+ * Every staged candidate the journal shows, with its status (T-22): the
+ * abandon interface needs to be able to SAY what is outstanding before it
+ * refuses, and a proposal that was switched or cancelled is history, not
+ * a live candidate.
+ */
+export type ProposedGenerationView = {
+  candidateID: string;
+  reason: string;
+  status: "outstanding" | "applied" | "cancelled";
+};
+
+export function proposedGenerations(
+  events: Iterable<RuntimeEvent>,
+): ProposedGenerationView[] {
+  const byID = new Map<string, ProposedGenerationView>();
+  const order: string[] = [];
+  for (const event of events) {
+    if (event.type === "composition.proposed") {
+      if (!byID.has(event.candidateID)) order.push(event.candidateID);
+      byID.set(event.candidateID, {
+        candidateID: event.candidateID,
+        reason: event.reason,
+        status: "outstanding",
+      });
+      continue;
+    }
+    if (event.type === "composition.switched") {
+      const row = byID.get(event.to);
+      if (row) row.status = "applied";
+      continue;
+    }
+    if (event.type === "composition.cancelled") {
+      const row = byID.get(event.candidateID);
+      if (row) row.status = "cancelled";
+    }
+  }
+  return order.map((id) => byID.get(id)!);
+}
+
 export function deriveCompositionPointer(
   events: Iterable<RuntimeEvent>,
 ): CompositionPointer {
@@ -179,6 +219,13 @@ export function deriveCompositionPointer(
       continue;
     }
     if (event.type === "composition.proposed") candidate = event.candidateID;
+    // A cancelled candidate is no longer the live one: the pointer answers
+    // "what is outstanding", and an abandoned proposal is not (T-22).
+    if (
+      event.type === "composition.cancelled" &&
+      candidate === event.candidateID
+    )
+      candidate = undefined;
   }
   return {
     ...(current ? { current } : {}),

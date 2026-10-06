@@ -223,3 +223,96 @@ test("browser_scan's description teaches its paging", () => {
     },
   });
 });
+
+test("browser bridge 5xx failures name the broken layer, not a bare status (T-16)", async () => {
+  // The 2026-10-06 smoke run: nine browser_* tools all failed with a bare
+  // "browser bridge failed: HTTP 502", which tells the model nothing about
+  // which layer to fix. A 5xx from a server that answered means the bridge
+  // is UP and the layer behind it (the extension) is not.
+  for (const status of [502, 503]) {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({ error: "gateway cannot reach the bridge" }, { status }),
+    });
+    process.env.NATALIA_BROWSER_BRIDGE_URL = `http://127.0.0.1:${server.port}`;
+    try {
+      const tabTool = browserToolFamily().tools.find(
+        (tool) => tool.name === "browser_tabs",
+      )!;
+      const root = await mkdtemp(join(tmpdir(), "natalia-browser-5xx-"));
+      const error = await tabTool
+        .execute({}, { workspaceRoot: root } as never)
+        .then(
+          () => null,
+          (cause: unknown) => cause as Error,
+        );
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      // The reachable layer is named healthy, the missing one is named.
+      expect(message).toContain("bridgeServer=up");
+      expect(message).toContain("retryable=true");
+      expect(message).toContain(`http=${status}`);
+      // An external bridge's extension state is not observable from here.
+      expect(message).toContain("extension=unknown");
+      // The advice is actionable: connect the extension and retry.
+      expect(message).toContain("Browser Bridge extension");
+      expect(message).toContain("retry");
+    } finally {
+      delete process.env.NATALIA_BROWSER_BRIDGE_URL;
+      await server.stop(true);
+    }
+  }
+});
+
+test("browser bridge unreachable failures name the down layer and the fix (T-16)", async () => {
+  // A bridge URL the client cannot even address: the fetch itself throws
+  // before any server is involved. The diagnosis must say the SERVER is
+  // unreachable (not the extension) and how to bring it up. (A dead port
+  // would NOT do here: this sandbox's http_proxy answers dead local ports
+  // itself with a 502, which lands in the 5xx branch instead.)
+  process.env.NATALIA_BROWSER_BRIDGE_URL = "not-a-bridge-url";
+  try {
+    const tabTool = browserToolFamily().tools.find(
+      (tool) => tool.name === "browser_tabs",
+    )!;
+    const root = await mkdtemp(join(tmpdir(), "natalia-browser-down-"));
+    const error = await tabTool
+      .execute({}, { workspaceRoot: root } as never)
+      .then(
+        () => null,
+        (cause: unknown) => cause as Error,
+      );
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain("bridgeServer=down");
+    expect(message).toContain("retryable=true");
+    expect(message).toContain("NATALIA_BROWSER_BRIDGE_URL");
+  } finally {
+    delete process.env.NATALIA_BROWSER_BRIDGE_URL;
+  }
+});
+
+test("browser bridge 4xx answers pass through without retry advice (T-16)", async () => {
+  // A 4xx is the bridge's own answer (unknown action, bad input): it is not
+  // a connectivity failure, so the structured layers would be a lie and the
+  // retry advice would be wrong.
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({ error: "unknown browser action: nope" }, { status: 404 }),
+  });
+  process.env.NATALIA_BROWSER_BRIDGE_URL = `http://127.0.0.1:${server.port}`;
+  try {
+    const tabTool = browserToolFamily().tools.find(
+      (tool) => tool.name === "browser_tabs",
+    )!;
+    const root = await mkdtemp(join(tmpdir(), "natalia-browser-4xx-"));
+    await expect(
+      tabTool.execute({}, { workspaceRoot: root } as never),
+    ).rejects.toThrow("unknown browser action: nope");
+  } finally {
+    delete process.env.NATALIA_BROWSER_BRIDGE_URL;
+    await server.stop(true);
+  }
+});

@@ -56,13 +56,41 @@ async function browserBridgeCall(
   input: Record<string, unknown> = {},
   sessionID?: string,
 ): Promise<unknown> {
-  const base = sharedBrowserBase() ?? (await resolveBrowserBridgeBase());
+  const externalBase = sharedBrowserBase();
+  const base = externalBase ?? (await resolveBrowserBridgeBase());
   const payload = sessionID ? { ...input, sessionID } : input;
-  const response = await fetch(`${base.replace(/\/$/, "")}/browser/${action}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const url = `${base.replace(/\/$/, "")}/browser/${action}`;
+  // The extension state this process can observe: the local lifecycle's
+  // connected flag when the bridge is ours, unknown when a configured
+  // external bridge owns it (an external bridge's websocket state is not
+  // this process's to see, and guessing would be a lie).
+  const extensionState = () =>
+    externalBase
+      ? "unknown"
+      : getBrowserBridgeLifecycle().isConnected()
+        ? "connected"
+        : "disconnected";
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (cause) {
+    // The bridge did not answer at all: the process that owns it (the
+    // Desktop app) is not running, or the configured URL is wrong. The
+    // 2026-10-06 smoke run saw nine browser_* tools fail with a bare
+    // status line and no way to tell which layer to fix (T-16).
+    throw new Error(
+      `browser bridge unreachable for ${action} (bridgeServer=down, ` +
+        `extension=${extensionState()}, retryable=true): the bridge at ` +
+        `${base} did not answer ` +
+        `(${cause instanceof Error ? cause.message : String(cause)}). Start the ` +
+        `Natalia Desktop app so its bridge server runs, or set ` +
+        `NATALIA_BROWSER_BRIDGE_URL to a running bridge, then retry.`,
+    );
+  }
   const text = await response.text();
   let body: unknown = text;
   try {
@@ -71,11 +99,30 @@ async function browserBridgeCall(
     // keep raw text
   }
   if (!response.ok) {
-    const message =
+    const serverError =
       typeof body === "object" && body && "error" in body
         ? String((body as { error?: unknown }).error)
-        : `browser bridge failed: HTTP ${response.status}`;
-    throw new Error(message);
+        : undefined;
+    // A 5xx from a server that ANSWERED is a layered failure: the bridge is
+    // up, the layer behind it (usually the extension connection) is not, so
+    // the diagnosis names the reachable layer and the missing one instead
+    // of a bare status (T-16).
+    if (response.status >= 500) {
+      throw new Error(
+        `browser bridge layer unavailable for ${action} ` +
+          `(bridgeServer=up, extension=${extensionState()}, retryable=true, ` +
+          `http=${response.status}): ` +
+          `${serverError ?? `HTTP ${response.status}`}. The bridge answered, ` +
+          `so the bridge itself is healthy; connect or install the Natalia ` +
+          `Browser Bridge extension in Chrome/Edge, then retry.`,
+      );
+    }
+    // A 4xx is the bridge's own answer (unknown action, bad input): pass it
+    // through unchanged. It is not a connectivity failure, and "retry"
+    // advice would be wrong.
+    throw new Error(
+      serverError ?? `browser bridge failed: HTTP ${response.status}`,
+    );
   }
   return body;
 }

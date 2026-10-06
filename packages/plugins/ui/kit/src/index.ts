@@ -29,7 +29,14 @@ export type {
   TailScrollAlignment,
   TailScrollControllerOptions,
 } from "./scroll-controller";
-export type { Attachment, Message, MessageAction, ToolCall } from "./message";
+export type {
+  Attachment,
+  Message,
+  MessageAction,
+  ToolCall,
+  ToolCallCard,
+} from "./message";
+export { toolCallCard } from "./message";
 
 export { applyUiSkin, defineUiLayoutProfile, defineUiSkin } from "./skin";
 export type {

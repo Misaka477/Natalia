@@ -965,6 +965,40 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-badge-success { color: var(--neu-success); }
 .neu-pane .natalia-badge-error { color: var(--neu-error); }
 .neu-pane .natalia-badge-steering { color: var(--neu-accent); box-shadow: inset 0 0 0 1px var(--neu-accent-soft); }
+.neu-pane .natalia-tool-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--neu-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.neu-pane .natalia-tool-card[data-state="error"] .natalia-tool-title {
+  color: var(--neu-error);
+}
+.neu-pane .natalia-tool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 6px;
+}
+.neu-pane .natalia-tool-meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--neu-muted);
+}
+.neu-pane .natalia-tool-meta-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.neu-pane .natalia-tool-meta-value {
+  font-family: var(--neu-font-mono);
+  color: var(--neu-text);
+}
 .neu-pane .natalia-tool-card {
   border-radius: 12px;
   overflow: hidden;
@@ -1046,6 +1080,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   min-width: 0;
 }
 .neu-pane .natalia-tool-name,
+.neu-pane .natalia-tool-title,
 .neu-pane .natalia-tool-summary {
   min-width: 0;
   overflow-wrap: break-word;

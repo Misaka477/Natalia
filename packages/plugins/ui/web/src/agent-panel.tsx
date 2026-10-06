@@ -22,6 +22,7 @@ import {
   type TranscriptHandle,
 } from "@natalia/ui-kit";
 import type { Message } from "./types";
+import { toolCallCard } from "@natalia/ui-kit";
 import { stableRows, type RowSignature } from "./stable-rows";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 
@@ -264,6 +265,7 @@ export function AgentPanel(props: {
                       output: tool.result ?? tool.summary,
                       status: tool.status,
                       summary: tool.summary,
+                      card: toolCallCard(tool.metadata),
                     },
                   ],
                 }) satisfies Message,

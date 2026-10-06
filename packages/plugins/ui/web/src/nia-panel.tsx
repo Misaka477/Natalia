@@ -14,6 +14,7 @@ import { type AppState } from "@natalia/view-store";
 import {
   ContextMeter,
   Transcript,
+  toolCallCard,
   type PagedTranscriptState,
   type TranscriptHandle,
 } from "@natalia/ui-kit";
@@ -80,6 +81,7 @@ export function NiaPanel(props: {
                   output: tool.result ?? tool.summary,
                   status: tool.status,
                   summary: tool.summary,
+                  card: toolCallCard(tool.metadata),
                 },
               ],
             }),

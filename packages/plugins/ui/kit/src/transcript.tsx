@@ -1148,6 +1148,75 @@ function sessionTurnID(messageID: string) {
   return messageID.replace(/:(?:user|assistant|thinking|system)$/u, "");
 }
 
+/**
+ * The card family's leading glyph, the same table dsh's GenericToolCard uses
+ * (figma): a magnifier for search, a browse glyph for read, a terminal glyph
+ * for shell, a pencil for write/edit, code for code, a spark otherwise. All
+ * render at 14 inside the 16px leading box.
+ */
+function ToolKindIcon(props: { kind: string | undefined }) {
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": 1.4,
+    "stroke-linecap": "round" as const,
+    "stroke-linejoin": "round" as const,
+    style: "flex-shrink: 0;",
+    "aria-hidden": true,
+  };
+  switch (props.kind) {
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="7" cy="7" r="4.2" />
+          <path d="M10 10L14 14" />
+        </svg>
+      );
+    case "read":
+      return (
+        <svg {...common}>
+          <path d="M2 3.5h6a2 2 0 0 1 2 2V13" />
+          <path d="M8 13H2V3.5" />
+          <path d="M14 3.5H9.5a2 2 0 0 0-2 2" />
+        </svg>
+      );
+    case "terminal":
+      return (
+        <svg {...common}>
+          <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" />
+          <path d="M4.6 6.6L6.6 8.4L4.6 10.2" />
+          <path d="M8.6 10.2h3" />
+        </svg>
+      );
+    case "diff":
+      return (
+        <svg {...common}>
+          <path d="M3 2.8v10.4" />
+          <path d="M3 8h6.4" />
+          <path d="M11.6 5.6L13.8 8l-2.2 2.4" />
+        </svg>
+      );
+    case "web":
+      return (
+        <svg {...common}>
+          <circle cx="8" cy="8" r="5.6" />
+          <path d="M2.6 8h10.8" />
+          <path d="M8 2.4c1.6 1.6 2.4 3.5 2.4 5.6S9.6 12 8 13.6C6.4 12 5.6 10.1 5.6 8S6.4 4 8 2.4Z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <path d="M8 1.6L3.4 5.2L8 8.8L12.6 5.2L8 1.6Z" />
+          <path d="M3.4 8.4L8 12L12.6 8.4" />
+        </svg>
+      );
+  }
+}
+
 function ToolCallCard(props: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = createSignal(false);
   const output = () => props.toolCall.output ?? "";
@@ -1159,32 +1228,55 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
     if (!collapsible() || expanded()) return output();
     return outputLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES).join("\n");
   };
+  // The tool's own card wins over the UI's guesswork: its title is what the
+  // call IS (a command, a path, a query) and its summary is the sentence the
+  // model wrote. The tool name stays as the provenance strip, smaller.
+  const card = props.toolCall.card;
+  const heading = () => card?.title ?? props.toolCall.name;
+  const summary = () => card?.summary ?? props.toolCall.summary;
+  const failed = () =>
+    props.toolCall.status === "failed" ||
+    (card?.meta ?? []).some(
+      ([label, value]) => label === "exit" && value !== "0",
+    );
 
   return (
-    <div class="natalia-tool-card">
+    <div
+      class="natalia-tool-card"
+      data-kind={card?.kind}
+      data-state={failed() ? "error" : undefined}
+    >
       <div class="natalia-tool-header">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="none"
-          style="color: var(--accent-primary); flex-shrink: 0;"
-        >
-          <path
-            d="M7 1L3 5L7 9L11 5L7 1Z"
-            stroke="currentColor"
-            stroke-width="1.3"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <span class="natalia-tool-name">{props.toolCall.name}</span>
-        <Show when={props.toolCall.summary}>
-          <span class="natalia-tool-summary">{props.toolCall.summary}</span>
+        <ToolKindIcon kind={card?.kind} />
+        <span class="natalia-tool-title">{heading()}</span>
+        <Show when={summary()}>
+          <span class="natalia-tool-summary">{summary()}</span>
         </Show>
-        <span class="natalia-badge natalia-badge-default">
+        <span
+          classList={{
+            "natalia-badge": true,
+            "natalia-badge-error": failed(),
+            "natalia-badge-success": props.toolCall.status === "completed",
+            "natalia-badge-default":
+              !failed() && props.toolCall.status !== "completed",
+          }}
+        >
           {props.toolCall.status ?? "tool"}
         </span>
       </div>
+      {/* The tool's structured facets, as label:value pills. */}
+      <Show when={(card?.meta ?? []).length > 0}>
+        <div class="natalia-tool-meta">
+          <For each={card!.meta!}>
+            {([label, value]) => (
+              <span class="natalia-tool-meta-item">
+                <span class="natalia-tool-meta-label">{label}</span>
+                <span class="natalia-tool-meta-value">{value}</span>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
       <Show when={output()}>
         <div
           class="natalia-tool-output"

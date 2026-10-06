@@ -106,8 +106,28 @@ async function drive(
   // 2. The timer is armed once and cleared in `finally`. The pre-fix shape
   //    also leaked one uncleared timer per pass, which held the process open
   //    and made a 30s drive report as 48s on CI.
+  // A frame is `kind length\n<payload>`, and the two halves can land in
+  // DIFFERENT reads: the header arrives first and its payload follows on the
+  // next one. A parser that restarts from the next newline each time can never
+  // rejoin them — the header is consumed, then the payload arrives alone and
+  // there is no newline left to anchor it. That is exactly how the exit frame
+  // vanished while the bridge's stderr showed it written: `x 1\n` in one read,
+  // `1` in the next, and the harness waiting for a newline that never came.
+  // So the header is STASHED across reads until its payload completes the frame.
+  let pending: { kind: string; length: number } | undefined;
   const drain = () => {
     for (;;) {
+      if (pending) {
+        // The payload completes the stashed header.
+        if (buffer.length < pending.length) break;
+        frames.push({
+          kind: pending.kind,
+          payload: buffer.slice(0, pending.length),
+        });
+        buffer = buffer.slice(pending.length);
+        pending = undefined;
+        continue;
+      }
       const newline = buffer.indexOf("\n");
       if (newline < 0) break;
       const line = buffer.slice(0, newline);
@@ -121,13 +141,8 @@ async function drive(
       if (space < 0) continue;
       const length = Number(line.slice(space + 1));
       if (!Number.isFinite(length)) continue;
-      // The payload may not have arrived yet: wait for the next read.
-      if (buffer.length < length) break;
-      frames.push({
-        kind: line.slice(0, space),
-        payload: buffer.slice(0, length),
-      });
-      buffer = buffer.slice(length);
+      // The header is complete; the payload may still be in flight.
+      pending = { kind: line.slice(0, space), length };
     }
   };
   const timer = setTimeout(() => bridge.kill(), ms);

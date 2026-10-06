@@ -176,3 +176,87 @@ test("the drive checks its predicate after every drain", async () => {
   expect(source).toContain("drain();");
   expect(source).toMatch(/if \(until\(frames\)\) break;/u);
 });
+
+/**
+ * The frame parser the drive uses, restated here as a pure function so a
+ * split-across-reads header/payload pair can be exercised on any host.
+ *
+ * This is the THIRD mechanism by which a frame the bridge demonstrably wrote
+ * never reached the harness: a race that discarded a pending read's bytes, an
+ * EOF that dropped the stream's tail, and now a header whose payload arrived
+ * in the next read with no newline left to anchor it. The drive keeps its
+ * inlined copy; this pins the shape both must keep.
+ */
+function parseFrames(
+  chunks: readonly string[],
+): Array<{ kind: string; payload: string }> {
+  const frames: Array<{ kind: string; payload: string }> = [];
+  let buffer = "";
+  let pending: { kind: string; length: number } | undefined;
+  const drain = () => {
+    for (;;) {
+      if (pending) {
+        if (buffer.length < pending.length) break;
+        frames.push({
+          kind: pending.kind,
+          payload: buffer.slice(0, pending.length),
+        });
+        buffer = buffer.slice(pending.length);
+        pending = undefined;
+        continue;
+      }
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) break;
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      if (line.startsWith("{")) {
+        frames.push({ kind: "pid", payload: line });
+        continue;
+      }
+      const space = line.indexOf(" ");
+      if (space < 0) continue;
+      const length = Number(line.slice(space + 1));
+      if (!Number.isFinite(length)) continue;
+      pending = { kind: line.slice(0, space), length };
+    }
+  };
+  for (const chunk of chunks) {
+    buffer += chunk;
+    drain();
+  }
+  return frames;
+}
+
+test("a frame's header and payload may arrive in different reads", () => {
+  // The measured CI failure: `x 1\n` in one read, its payload `1` in the next.
+  // A parser that anchors on the next newline loses it — and the bridge's own
+  // stderr shows it wrote the frame, so the harness is the one at fault.
+  const frames = parseFrames(['{"pid":1}\n', "o 5\nhello", "x 1\n", "1"]);
+  expect(frames).toEqual([
+    { kind: "pid", payload: '{"pid":1}' },
+    { kind: "o", payload: "hello" },
+    { kind: "x", payload: "1" },
+  ]);
+});
+
+test("a payload split mid-frame still completes", () => {
+  // Byte-at-a-time is the worst case a pipe can produce.
+  const whole = '{"pid":9}\n' + "o 3\nabc" + "x 2\nok";
+  const frames = parseFrames(whole.split(""));
+  expect(frames).toEqual([
+    { kind: "pid", payload: '{"pid":9}' },
+    { kind: "o", payload: "abc" },
+    { kind: "x", payload: "ok" },
+  ]);
+});
+
+test("the drive's parser keeps its header across reads", async () => {
+  // The drive's inlined copy and the reference above must agree; this pins the
+  // inlined one so a future edit cannot silently revert to the newline-only
+  // shape.
+  const source = await Bun.file(
+    join(import.meta.dir, "..", "test", "conpty-native.test.ts"),
+  ).text();
+  expect(source).toContain("let pending:");
+  expect(source).toContain("if (buffer.length < pending.length) break;");
+});

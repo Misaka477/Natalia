@@ -1115,3 +1115,64 @@ function emit_cycle(
       cmdFinished(exitCode),
   );
 }
+
+test("the command-level tool names a pane that has run no command yet (T-07)", async () => {
+  // A fresh pane has no commandLine: the answer used to be a record whose
+  // command field was simply absent — a model cannot tell "no command ran"
+  // from "the backend forgot". The honest state names itself and points at
+  // the per-moment read.
+  const pane = await commandToolSetup();
+  const read = JSON.parse(await pane.call("interactive_terminal_last_command"));
+  expect(read.commandLine).toBeNull();
+  expect(read.note).toContain("no command has run in this pane yet");
+  expect(read.note).toContain("interactive_terminal_read");
+  // Once a cycle runs, the same read carries the command again.
+  emit_cycle(pane.emit, "echo hi", "hi\r\n", 0);
+  const after = JSON.parse(
+    await pane.call("interactive_terminal_last_command"),
+  );
+  expect(after.commandLine).toBe("echo hi");
+  expect(after.note).toBeUndefined();
+  await pane.dispose();
+});
+
+test("scrollback search without a starting point fails with guidance (T-08)", async () => {
+  // startLine/cursor are optional in the schema but required in fact — the
+  // schema vocabulary has no "either". The failure therefore has to teach:
+  // what to pass and what the values mean.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-search-start-"));
+  const { factory } = fakePtyForBehavior();
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "rt",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless" as const,
+    spawn: factory,
+  });
+  const context = { workspaceRoot: root, terminal: controller };
+  const tools = terminalRegistry();
+  await tools
+    .get("interactive_terminal_start")!
+    .execute({ command: "bash", cwd: root, id: "tty_nostart" }, context);
+  await expect(
+    tools
+      .get("interactive_terminal_search")!
+      .execute({ id: "tty_nostart", query: "anything" }, context),
+  ).rejects.toThrow(/starting point/);
+  // The guidance names both doors and what the numbers mean.
+  await expect(
+    tools
+      .get("interactive_terminal_search")!
+      .execute({ id: "tty_nostart", query: "anything" }, context),
+  ).rejects.toThrow(/startLine/);
+  await expect(
+    tools
+      .get("interactive_terminal_search")!
+      .execute({ id: "tty_nostart", query: "anything" }, context),
+  ).rejects.toThrow(/cursor/);
+  await tools
+    .get("interactive_terminal_stop")!
+    .execute({ id: "tty_nostart" }, context);
+});

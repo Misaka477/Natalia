@@ -65,6 +65,13 @@ export type ManagedProcessInfo = {
   startedAt: string;
   endedAt?: string;
   output: string;
+  /**
+   * When the retained `output` snapshot was last taken. `process_status`
+   * returns the snapshot as it stands — for a running process it can lag —
+   * so the timestamp is what tells a caller how old what it is reading is
+   * (T-04). `process_output` is the read that refreshes it.
+   */
+  outputUpdatedAt?: string;
   ready?: boolean;
   readyPattern?: string;
   maxOutputBytes?: number;
@@ -255,6 +262,7 @@ export class ManagedProcessRegistry {
       // because a workspace may hold several and the others did not do this work.
       startedBySessionID: context.sessionID,
       output: "",
+      outputUpdatedAt: new Date().toISOString(),
       outputPath,
       ready: false,
       readyPattern: options.readyPattern,
@@ -430,6 +438,9 @@ export class ManagedProcessRegistry {
     if (!info) throw new Error(`process not found: ${id}`);
     const rawOutput = await readOptionalFile(info.outputPath);
     info.output = truncateProcessOutput(rawOutput, info.maxOutputBytes);
+    // The snapshot's freshness is part of the answer: a status read that
+    // carries an old output without saying so is the T-04 defect.
+    info.outputUpdatedAt = new Date().toISOString();
     // The lazy ready check delegates to the sweep's writer: the flip
     // notifies whether the probe or a read found it (one writer, one
     // notice).
@@ -732,6 +743,7 @@ function publicProcessInfo(info: ManagedProcessRuntime): ManagedProcessInfo {
     startedAt: info.startedAt,
     endedAt: info.endedAt,
     output: info.output,
+    ...(info.outputUpdatedAt ? { outputUpdatedAt: info.outputUpdatedAt } : {}),
     ready: info.ready,
     readyPattern: info.readyPattern,
     maxOutputBytes: info.maxOutputBytes,
@@ -976,7 +988,8 @@ function processWaitTool(registry: ManagedProcessRegistry): RuntimeTool {
 function processStatusTool(registry: ManagedProcessRegistry): RuntimeTool {
   return {
     name: "process_status",
-    description: "Return status for a managed process.",
+    description:
+      "Return status for a managed process. The `output` field is the retained snapshot as it stands (see its `outputUpdatedAt`; call process_output for the fresh read).",
     requiresApproval: false,
     parameters: {
       type: "object",

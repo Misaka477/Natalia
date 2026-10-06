@@ -270,10 +270,29 @@ function interactiveSearchTool(): RuntimeTool {
       properties: {
         id: { type: "string" },
         query: { type: "string" },
-        startLine: { type: "number" },
-        endLine: { type: "number" },
-        cursor: { type: "number" },
-        maxMatches: { type: "number" },
+        // One of startLine / cursor is required in practice (the schema
+        // vocabulary here cannot say "either", so the descriptions and the
+        // refusal carry it): T-08 — a search with neither used to be
+        // declared-optional and then failed with no guidance.
+        startLine: {
+          type: "number",
+          description:
+            "First retained scrollback line to search (1 = the pane's first retained line). Required when cursor is absent.",
+        },
+        endLine: {
+          type: "number",
+          description:
+            "Last line to search (at most 199 lines past the start). Omit for the default page.",
+        },
+        cursor: {
+          type: "number",
+          description:
+            "The nextCursor from a previous search's result. Required when startLine is absent.",
+        },
+        maxMatches: {
+          type: "number",
+          description: "Maximum matches to return (1-20, default 20).",
+        },
       },
       required: ["id", "query"],
       additionalProperties: false,
@@ -293,7 +312,9 @@ function interactiveSearchTool(): RuntimeTool {
       const pageStartLine = startLine ?? cursor;
       if (pageStartLine === undefined)
         throw new Error(
-          "startLine or cursor is required for scrollback search",
+          "scrollback search needs a starting point: pass startLine " +
+            "(1 = the pane's first retained line) or the cursor from a " +
+            "previous search's result",
         );
       if (endLine !== undefined && endLine < pageStartLine)
         throw new Error("endLine must not be before startLine");
@@ -361,6 +382,23 @@ function terminalLastCommandTool(): RuntimeTool {
       });
       // Same shape every other terminal tool returns: text a model reads, not a
       // structure it has to introspect.
+      //
+      // A pane that has run NO command yet has no commandLine: the answer says
+      // so and names the per-moment read, instead of a record whose command
+      // field is simply absent — a model reading that cannot tell "no command
+      // ran" from "the backend forgot" (T-07).
+      if (command.commandLine === undefined)
+        return JSON.stringify(
+          {
+            id,
+            commandLine: null,
+            atPrompt: command.atPrompt,
+            revision: command.revision,
+            note: "no command has run in this pane yet; use interactive_terminal_read for what is on screen now",
+          },
+          null,
+          2,
+        );
       return JSON.stringify(
         {
           id,

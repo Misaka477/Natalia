@@ -522,3 +522,41 @@ test("a capped process output names its spill file", async () => {
     .execute({ id: "proc_small" }, { workspaceRoot: root });
   expect(small).not.toContain("truncated");
 });
+
+test("process_status output carries its freshness, and process_output refreshes it (T-04)", async () => {
+  // The status read returns the retained output snapshot as it stands; for a
+  // running process that snapshot lags, and a status without the snapshot's
+  // timestamp reads as if it were live. The marker is the honest answer.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-fresh-"));
+  const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_fresh",
+      command: "echo first; sleep 5",
+      description: "Print once then idle",
+    },
+    { workspaceRoot: root },
+  );
+  await waitForOutput(async () =>
+    tools
+      .get("process_output")!
+      .execute({ id: "proc_fresh" }, { workspaceRoot: root }),
+  );
+  // The fresh read establishes the snapshot's timestamp. (process_output
+  // returns the retained text itself, not a JSON envelope.)
+  const afterFresh = (await tools
+    .get("process_output")!
+    .execute({ id: "proc_fresh" }, { workspaceRoot: root })) as string;
+  expect(afterFresh).toContain("first");
+  // A status read carries the same timestamp the snapshot was taken at.
+  const status = JSON.parse(
+    await tools
+      .get("process_status")!
+      .execute({ id: "proc_fresh" }, { workspaceRoot: root }),
+  ) as { outputUpdatedAt?: string; output: string };
+  expect(status.outputUpdatedAt).toBeString();
+  expect(status.output).toBe(afterFresh);
+  await tools
+    .get("process_stop")!
+    .execute({ id: "proc_fresh" }, { workspaceRoot: root });
+});

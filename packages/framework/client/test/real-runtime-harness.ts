@@ -967,7 +967,15 @@ export function sandboxedSubagentProvider(): StreamingProvider {
           if (typeof raw !== "string") return raw;
           try {
             const parsed = JSON.parse(raw) as { content?: unknown };
-            return typeof parsed.content === "string" ? parsed.content : raw;
+            const inner =
+              typeof parsed.content === "string" ? parsed.content : raw;
+            // The three-state footer rides INSIDE the page as trailing
+            // parenthesised lines; a fixture compares the file's page, not the
+            // tool's own bookkeeping about the window.
+            return inner.replace(
+              /\n*\((?:End of file - total \d+ lines|Showing lines \d+-\d+ of \d+\. Use offset=\d+ to continue\.)\)\n*$/u,
+              "",
+            );
           } catch {
             return raw;
           }

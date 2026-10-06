@@ -144,3 +144,23 @@ test("the shared shutdown does not close a console the kill path already closed"
     /\n\s*ClosePseudoConsole\(g_pseudoConsole\);\n\s*g_pseudoConsole = nullptr;\n\s*fprintf\(stderr, "conpty-bridge: console closed/,
   );
 });
+
+test("the drive drains the stream's tail on EOF instead of dropping it", async () => {
+  // A frame is a frame, and EOF is not the end of the bytes: the bridge
+  // writes its exit frame and then EXITS, so `read()` returning `done` finds
+  // the last frame still in the pipe. CI measured exactly this: the bridge's
+  // stderr showed the complete shutdown (exit frame written) while the
+  // harness reported `exit: undefined` — the frame was read and thrown away
+  // with the stream's tail, and the run failed in 46ms rather than timing
+  // out, because `done` breaks the loop immediately.
+  const source = await Bun.file(
+    join(import.meta.dir, "..", "test", "conpty-native.test.ts"),
+  ).text();
+  expect(source).toContain("if (read.done) {");
+  expect(source).toContain("drain();");
+  // The pre-fix shape broke on done with the buffer unread.
+  expect(source).not.toContain("if (read.done) break;");
+  // And the timeout never races a read (that was the earlier fix: a losing
+  // read consumes bytes).
+  expect(source).not.toContain("Promise.race([reader.read()");
+});

@@ -1032,7 +1032,11 @@ test("durable session replay preserves tool-call pairs for the next provider tur
     // a line. Pinned after CI measured it — the local run had passed with the
     // newline because the durable store served a different write order.
     content: JSON.stringify({
-      content: "replay-ok",
+      // The page AND its three-state footer: the replay contract is that the
+      // RESULT SURVIVES the durable round-trip verbatim, and the footer is
+      // part of what read_file returns now (a whole small file says "end of
+      // file - total N lines" instead of leaving a reader guessing).
+      content: "replay-ok\n\n(End of file - total 1 lines)",
       totalLines: 1,
       truncated: false,
     }),

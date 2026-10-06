@@ -686,7 +686,13 @@ test("a tool with an output definition projects its result into the event", asyn
   expect(update!.metadata?.render).toMatchObject({
     kind: "read",
     title: "note.txt",
-    body: "projected content",
+    // The three-state footer rides INSIDE the card's body: a whole small file
+    // is the "end of file" state, and it says so rather than leaving a reader
+    // to wonder whether the read was cut. The window's own facts are card
+    // facets (totalLines), derived from the same numbers as the text.
+    body: "projected content\n\n(End of file - total 1 lines)",
+    meta: [["totalLines", "1"]],
+    summary: "1 lines",
   });
   // The running event carried the call card the tool projected, so the running
   // card is the call's presentation (a file path), not a raw argument dump.

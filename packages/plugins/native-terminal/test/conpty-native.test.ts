@@ -106,34 +106,47 @@ async function drive(
   // 2. The timer is armed once and cleared in `finally`. The pre-fix shape
   //    also leaked one uncleared timer per pass, which held the process open
   //    and made a 30s drive report as 48s on CI.
+  const drain = () => {
+    for (;;) {
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) break;
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      if (line.startsWith("{")) {
+        // The handshake.
+        frames.push({ kind: "pid", payload: line });
+        continue;
+      }
+      const space = line.indexOf(" ");
+      if (space < 0) continue;
+      const length = Number(line.slice(space + 1));
+      if (!Number.isFinite(length)) continue;
+      // The payload may not have arrived yet: wait for the next read.
+      if (buffer.length < length) break;
+      frames.push({
+        kind: line.slice(0, space),
+        payload: buffer.slice(0, length),
+      });
+      buffer = buffer.slice(length);
+    }
+  };
   const timer = setTimeout(() => bridge.kill(), ms);
   try {
     for (;;) {
       const read = await reader.read();
-      if (read.done) break;
-      buffer += decoder.decode(read.value, { stream: true });
-      for (;;) {
-        const newline = buffer.indexOf("\n");
-        if (newline < 0) break;
-        const line = buffer.slice(0, newline);
-        buffer = buffer.slice(newline + 1);
-        if (line.startsWith("{")) {
-          // The handshake.
-          frames.push({ kind: "pid", payload: line });
-          continue;
-        }
-        const space = line.indexOf(" ");
-        if (space < 0) continue;
-        const length = Number(line.slice(space + 1));
-        if (!Number.isFinite(length)) continue;
-        // The payload may not have arrived yet: wait for the next read.
-        if (buffer.length < length) break;
-        frames.push({
-          kind: line.slice(0, space),
-          payload: buffer.slice(0, length),
-        });
-        buffer = buffer.slice(length);
+      if (read.done) {
+        // EOF means the WRITE end closed, not that the bytes are gone: the
+        // bridge writes its exit frame and then exits, so the last frame is
+        // sitting in the pipe when `done` arrives. Dropping the remaining
+        // buffer here is how CI measured a complete shutdown (the bridge's
+        // own stderr shows the exit frame written) with the harness reporting
+        // `exit: undefined` — the frame was read and thrown away with the
+        // stream's tail.
+        drain();
+        break;
       }
+      buffer += decoder.decode(read.value, { stream: true });
+      drain();
     }
   } finally {
     // Settle the pending read and drop the shared timer, so the drive returns

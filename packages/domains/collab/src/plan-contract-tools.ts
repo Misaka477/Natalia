@@ -21,6 +21,7 @@ import {
 } from "@anthelia/session";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import { targetDriftAbsorbedByScope } from "@natalia/work-ledger";
+import { collabOutput } from "./collab-presenters";
 import {
   checkContractAgainstConstitution,
   constitutionDenyAnchoredRules,
@@ -152,6 +153,12 @@ export function createPlanProposeTool(ctx: RuntimeContext): RuntimeTool {
       required: ["planID"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "contract",
+      callSummary: "propose",
+      resultTitle: "contract",
+      resultSummary: "proposed",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         planID?: string;
@@ -312,6 +319,12 @@ export function createWorkContractReadTool(ctx: RuntimeContext): RuntimeTool {
       required: ["planID"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "contract",
+      callSummary: "read",
+      resultTitle: "contract",
+      resultSummary: "read",
+    }),
     async execute(parsed, context) {
       const args = parsed as { planID?: string };
       const exec = resolveExec(ctx, context.sessionID);
@@ -400,6 +413,12 @@ export function createDetourDeclareTool(ctx: RuntimeContext): RuntimeTool {
       required: ["planID", "currentVersion", "reason", "scopeDelta"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "detour",
+      callSummary: "declare",
+      resultTitle: "detour",
+      resultSummary: "requested",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         planID?: string;
@@ -666,6 +685,12 @@ export function createConstitutionProposeTool(
       required: ["statement", "enforcement"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "rule",
+      callSummary: "propose",
+      resultTitle: "rule",
+      resultSummary: "proposed",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         statement?: string;
@@ -794,6 +819,12 @@ export function createDetourReviewTool(ctx: RuntimeContext): RuntimeTool {
       required: ["detourID", "verdict"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "detour",
+      callSummary: "review",
+      resultTitle: "detour",
+      resultSummary: "reviewed",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         detourID?: string;
@@ -871,6 +902,12 @@ export function createConstitutionRuleReadTool(
       required: ["ruleID"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "rule",
+      callSummary: "read",
+      resultTitle: "rule",
+      resultSummary: "read",
+    }),
     async execute(parsed, context) {
       const args = parsed as { ruleID?: string };
       const ruleID = args.ruleID?.trim();
@@ -961,6 +998,12 @@ export function createConstitutionRuleRevokeTool(
       required: ["ruleID"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "rule",
+      callSummary: "revoke",
+      resultTitle: "rule",
+      resultSummary: "revoked",
+    }),
     async execute(parsed, context) {
       const args = parsed as { ruleID?: string; reason?: string };
       const ruleID = args.ruleID?.trim();

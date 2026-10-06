@@ -26,6 +26,7 @@ import {
   type CollaborationService,
 } from "@natalia/collaboration";
 import { chatToolSummary } from "./chat-summary";
+import { collabOutput } from "./collab-presenters";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
@@ -193,6 +194,13 @@ export function planDocWriteTool(
       required: ["path", "content"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "plan",
+      callSummary: "write",
+      resultTitle: "plan",
+      resultSummary: "written",
+      meta: [["planID", "planID"]],
+    }),
     async execute(parsed) {
       const args = parsed as {
         path?: string;
@@ -235,6 +243,13 @@ export function planDocMarkTool(
       required: ["path"],
       additionalProperties: false,
     },
+    output: collabOutput({
+      callTitle: "plan",
+      callSummary: "mark",
+      resultTitle: "plan",
+      resultSummary: "marked",
+      meta: [["planID", "planID"]],
+    }),
     async execute(parsed) {
       const args = parsed as { path?: string; title?: string };
       if (typeof args.path !== "string") return "plan_doc_mark requires path";
@@ -296,6 +311,12 @@ export function createChatTools(ctx: RuntimeContext) {
           properties: {},
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "session",
+          callSummary: "snapshot",
+          resultTitle: "session",
+          resultSummary: "snapshot",
+        }),
         async execute() {
           if (!exec) return JSON.stringify({ agentStatus: "unknown" });
           await ensureCompleteSessionFactState(ctx, exec);
@@ -320,6 +341,16 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "mailbox",
+          callSummary: "status",
+          resultTitle: "mailbox",
+          resultSummary: "read",
+          meta: [
+            ["total", "total"],
+            ["returned", "returned"],
+          ],
+        }),
         async execute(parsed) {
           if (!exec)
             return JSON.stringify({
@@ -351,6 +382,13 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["suggestion"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "suggestion",
+          callSummary: "send",
+          resultTitle: "suggestion",
+          resultSummary: "sent",
+          meta: [["messageID", "messageID"]],
+        }),
         async execute(parsed, context) {
           const args = parsed as {
             suggestion?: string;
@@ -408,6 +446,13 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["questionID", "answer"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "answer",
+          callSummary: "reply",
+          resultTitle: "answer",
+          resultSummary: "sent",
+          meta: [["messageID", "messageID"]],
+        }),
         async execute(parsed, context) {
           const args = parsed as {
             questionID?: string;
@@ -470,6 +515,13 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["intent", "text"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "mailbox",
+          callSummary: "send",
+          resultTitle: "mailbox",
+          resultSummary: "queued",
+          meta: [["messageID", "messageID"]],
+        }),
         async execute(parsed) {
           const args = parsed as {
             intent?: string;
@@ -512,6 +564,13 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["messageID"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "mailbox",
+          callSummary: "cancel",
+          resultTitle: "mailbox",
+          resultSummary: "cancelled",
+          meta: [["cancelled", "cancelled"]],
+        }),
         async execute(parsed) {
           const args = parsed as { messageID?: string; reason?: string };
           if (typeof args.messageID !== "string")
@@ -538,6 +597,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["path"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "file",
+          callSummary: "read",
+          resultTitle: "file",
+          resultSummary: "read",
+        }),
         async execute(parsed) {
           const args = parsed as {
             path?: string;
@@ -577,6 +642,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["pattern"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "files",
+          callSummary: "glob",
+          resultTitle: "files",
+          resultSummary: "matched",
+        }),
         async execute(parsed, context) {
           const args = parsed as {
             pattern?: string;
@@ -623,6 +694,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["pattern"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "matches",
+          callSummary: "grep",
+          resultTitle: "matches",
+          resultSummary: "found",
+        }),
         async execute(parsed, context) {
           const args = parsed as {
             pattern?: string;
@@ -663,6 +740,12 @@ export function createChatTools(ctx: RuntimeContext) {
           properties: {},
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "plans",
+          callSummary: "list",
+          resultTitle: "plans",
+          resultSummary: "listed",
+        }),
         async execute() {
           return JSON.stringify(await ctx.ports.planDocRuntime.planDocList());
         },
@@ -682,6 +765,13 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "plan",
+          callSummary: "read",
+          resultTitle: "plan",
+          resultSummary: "read",
+          meta: [["planID", "planID"]],
+        }),
         async execute(parsed) {
           const args = parsed as { planID?: string; path?: string };
           if (!args.planID && !args.path)
@@ -761,6 +851,12 @@ export function createChatTools(ctx: RuntimeContext) {
           properties: {},
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "session",
+          callSummary: "snapshot",
+          resultTitle: "session",
+          resultSummary: "snapshot",
+        }),
         async execute() {
           if (!exec) return JSON.stringify({ agentStatus: "unknown" });
           await ensureCompleteSessionFactState(ctx, exec);
@@ -785,6 +881,16 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "mailbox",
+          callSummary: "status",
+          resultTitle: "mailbox",
+          resultSummary: "read",
+          meta: [
+            ["total", "total"],
+            ["returned", "returned"],
+          ],
+        }),
         async execute(parsed) {
           if (!exec)
             return JSON.stringify({
@@ -807,6 +913,12 @@ export function createChatTools(ctx: RuntimeContext) {
           properties: {},
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "plans",
+          callSummary: "list",
+          resultTitle: "plans",
+          resultSummary: "listed",
+        }),
         async execute() {
           return JSON.stringify(await ctx.ports.planDocRuntime.planDocList());
         },
@@ -823,6 +935,13 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "plan",
+          callSummary: "read",
+          resultTitle: "plan",
+          resultSummary: "read",
+          meta: [["planID", "planID"]],
+        }),
         async execute(parsed) {
           const args = parsed as { planID?: string; path?: string };
           if (!args.planID && !args.path)
@@ -874,6 +993,16 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["planID", "verdict"],
           additionalProperties: false,
         },
+        output: collabOutput({
+          callTitle: "audit",
+          callSummary: "report",
+          resultTitle: "audit",
+          resultSummary: "reported",
+          meta: [
+            ["verdict", "verdict"],
+            ["round", "round"],
+          ],
+        }),
         async execute(parsed, context) {
           const args = parsed as {
             planID?: string;
@@ -1047,6 +1176,12 @@ export function createChatTools(ctx: RuntimeContext) {
         required: ["target"],
         additionalProperties: false,
       },
+      output: collabOutput({
+        callTitle: "workspace",
+        callSummary: "diff",
+        resultTitle: "workspace",
+        resultSummary: "diffed",
+      }),
       async execute(parsed, context) {
         const args = parsed as {
           target?: string;

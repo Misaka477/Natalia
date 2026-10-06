@@ -380,6 +380,28 @@ export function createSkillLoadTool(options: {
       required: ["name"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const name = (args as { name?: unknown }).name;
+        return {
+          kind: "generic",
+          title: typeof name === "string" ? name : "skill",
+          summary: "load",
+        };
+      },
+      presentResult(args, value) {
+        // The loaded skill's model-facing text is the value; the card names
+        // the skill and keeps the whole body (P1.4).
+        const name = (args as { name?: unknown }).name;
+        return {
+          kind: "generic",
+          title: typeof name === "string" ? name : "skill",
+          summary: "loaded",
+          body: value,
+        };
+      },
+    },
     async execute(input, context) {
       if (!input || typeof input !== "object" || Array.isArray(input))
         throw new Error("skill_load arguments must be an object");

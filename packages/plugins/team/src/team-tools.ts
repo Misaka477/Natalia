@@ -19,6 +19,7 @@ import {
   type SettlementService,
 } from "@natalia/collaboration";
 import { prSettlementReason } from "./fan-out";
+import { requireObject } from "@anthelia/tools";
 import type {
   RuntimeTool,
   SandboxToolService,
@@ -57,6 +58,41 @@ export function createTeamFanoutTool(input: {
       },
       required: ["tasks"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const tasks = (requireObject(args).tasks as unknown[]) ?? [];
+        return {
+          kind: "generic",
+          title: "fan-out",
+          summary: `${tasks.length} task${tasks.length === 1 ? "" : "s"}`,
+        };
+      },
+      presentResult(_args, value) {
+        // The PR queue is the value: ready/total is the one-line state, and
+        // the full queue rides as the body. Malformed degrades.
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          // degrade, never throw
+        }
+        const prs = Array.isArray(parsed) ? parsed : [];
+        const done = prs.filter(
+          (pr) =>
+            Boolean(pr) &&
+            typeof pr === "object" &&
+            (pr as { status?: unknown }).status === "completed",
+        ).length;
+        return {
+          kind: "generic",
+          title: "fan-out",
+          summary: `${done}/${prs.length} PR${prs.length === 1 ? "" : "s"} ready`,
+          meta: [["ready", String(done)]],
+          body: value,
+        };
+      },
     },
     async execute(toolInput, context) {
       const args = toolInput as {
@@ -191,6 +227,39 @@ export function createTeamReviewTool(input: {
       },
       required: ["prs", "decisions"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const decisions = (requireObject(args).decisions as unknown[]) ?? [];
+        return {
+          kind: "generic",
+          title: "review",
+          summary: `${decisions.length} decision${decisions.length === 1 ? "" : "s"}`,
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          // degrade, never throw
+        }
+        const outcomes = Array.isArray(parsed) ? parsed : [];
+        const approved = outcomes.filter(
+          (outcome) =>
+            Boolean(outcome) &&
+            typeof outcome === "object" &&
+            (outcome as { decision?: unknown }).decision === "approve",
+        ).length;
+        return {
+          kind: "generic",
+          title: "review",
+          summary: `${approved}/${outcomes.length} approved`,
+          meta: [["approved", String(approved)]],
+          body: value,
+        };
+      },
     },
     async execute(toolInput, context) {
       const args = toolInput as {

@@ -312,3 +312,61 @@ test("apply_edits description is a structured model-facing batch editor", () => 
   expect(applyEdits.description).toContain("delete");
   expect(applyEdits.description).toContain("Do not use unified diff");
 });
+
+test("write_file projects a diff card carrying the new text", () => {
+  // A create has no prior content (dsh's FileDiff uses oldText: null for that
+  // case), so the card IS the new text — a UI renders it as the whole-file
+  // change. Before this the family used a generic card, so a write looked like
+  // any other tool call and no diff renderer ever saw it.
+  const tool = writeFileTools.find((t) => t.name === "write_file")!;
+  expect(
+    tool.output?.presentCall?.({ path: "a.txt", content: "x\ny" }),
+  ).toEqual({
+    kind: "diff",
+    title: "a.txt",
+    summary: "write",
+    body: "x\ny",
+  });
+  expect(
+    tool.output?.presentResult?.({ path: "a.txt" }, "wrote a.txt"),
+  ).toEqual({
+    kind: "diff",
+    title: "a.txt",
+    summary: "wrote",
+    body: "wrote a.txt",
+  });
+});
+
+test("edit_file projects the marked hunk and its line counts", () => {
+  const tool = writeFileTools.find((t) => t.name === "edit_file")!;
+  const intent = tool.output?.presentCall?.({
+    path: "a.txt",
+    oldText: "one\ntwo",
+    newText: "one\nthree",
+  });
+  expect(intent).toEqual({
+    kind: "diff",
+    title: "a.txt",
+    summary: "edit",
+    // Removed lines first, then added: the shape a diff renderer reads, so
+    // every UI agrees and none re-derives a diff it may get wrong.
+    body: "- one\n- two\n+ one\n+ three",
+    meta: [
+      ["removed", "2"],
+      ["added", "2"],
+    ],
+  });
+  // A create-style edit (empty oldText) is all added lines; a delete is all
+  // removed. Neither may produce an empty hunk that reads as "nothing".
+  expect(
+    tool.output?.presentCall?.({
+      path: "a.txt",
+      oldText: "",
+      newText: "brand new",
+    })?.body,
+  ).toBe("+ brand new");
+  expect(
+    tool.output?.presentCall?.({ path: "a.txt", oldText: "gone", newText: "" })
+      ?.body,
+  ).toBe("- gone");
+});

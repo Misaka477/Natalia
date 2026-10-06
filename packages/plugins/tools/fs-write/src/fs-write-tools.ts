@@ -8,12 +8,34 @@
  * nothing about the runtime or the capability kernel.
  */
 import {
+  optionalString,
   requireObject,
   requireString,
   workspacePath,
   type RuntimeTool,
   type ToolFamily,
 } from "@anthelia/tools";
+
+/** Count the lines a hunk touches, so the card's facets are real counts. */
+function countLines(text: string): number {
+  return text === "" ? 0 : text.split("\n").length;
+}
+
+/**
+ * Renders an edit hunk as the marked text a diff renderer reads: every removed
+ * line prefixed `-`, every added line prefixed `+`, unchanged ordering kept.
+ *
+ * Computed by the tool, not by each UI, so every renderer agrees and none has
+ * to re-derive a diff it may get subtly wrong. A UI that has a real diff
+ * renderer can ignore this and diff the texts itself; one that does not gets
+ * a readable hunk for free.
+ */
+function unifiedHunk(oldText: string, newText: string): string {
+  const removed =
+    oldText === "" ? [] : oldText.split("\n").map((l) => `- ${l}`);
+  const added = newText === "" ? [] : newText.split("\n").map((l) => `+ ${l}`);
+  return [...removed, ...added].join("\n");
+}
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
@@ -45,17 +67,23 @@ function writeFileTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        // A write is a diff card: a create has no prior text (dsh's
+        // FileDiff uses oldText: null for exactly that), and an overwrite
+        // cannot know the old content at call time — so the card carries the
+        // new text and a UI renders it as the whole-file change.
         return {
-          kind: "generic",
+          kind: "diff",
           title: requireObject(args).path as string,
           summary: "write",
+          body: optionalString((args as { content?: unknown }).content) ?? "",
         };
       },
       presentResult(args, value) {
         return {
-          kind: "generic",
+          kind: "diff",
           title: requireObject(args).path as string,
-          summary: value,
+          summary: "wrote",
+          body: value,
         };
       },
     },
@@ -101,17 +129,30 @@ function editFileTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        const parsed = requireObject(args);
+        const oldText = optionalString(parsed.oldText) ?? "";
+        const newText = optionalString(parsed.newText) ?? "";
         return {
           kind: "diff",
-          title: requireObject(args).path as string,
+          title: parsed.path as string,
           summary: "edit",
+          // The hunk the model asked for, in the shape a diff renderer
+          // reads: the removed lines, then the added ones, each marked.
+          // Same text a UI would derive, computed HERE so every renderer
+          // agrees and none has to.
+          body: unifiedHunk(oldText, newText),
+          meta: [
+            ["removed", String(countLines(oldText))],
+            ["added", String(countLines(newText))],
+          ],
         };
       },
       presentResult(args, value) {
         return {
           kind: "diff",
           title: requireObject(args).path as string,
-          summary: value,
+          summary: "edited",
+          body: value,
         };
       },
     },

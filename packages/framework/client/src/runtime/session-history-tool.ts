@@ -43,6 +43,48 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const cursor = (args as { cursor?: unknown }).cursor;
+        return {
+          kind: "search",
+          title: "session history",
+          summary:
+            typeof cursor === "string" && cursor ? "page" : "recent window",
+        };
+      },
+      presentResult(_args, value) {
+        // dsh's SearchResultView shape for the transcript: the page carries
+        // `data` rows plus both cursors, so the card is the row count and
+        // the paging truth (has previous / has next) as pills.
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const rows = Array.isArray(parsed?.data) ? parsed!.data! : [];
+        const cursor =
+          parsed?.cursor && typeof parsed.cursor === "object"
+            ? (parsed.cursor as Record<string, unknown>)
+            : {};
+        const meta: Array<[string, string]> = [];
+        if (typeof cursor.previous === "string" && cursor.previous)
+          meta.push(["older", "yes"]);
+        if (typeof cursor.next === "string" && cursor.next)
+          meta.push(["newer", "yes"]);
+        return {
+          kind: "search",
+          title: "session history",
+          summary: `${rows.length} row${rows.length === 1 ? "" : "s"}`,
+          ...(meta.length ? { meta } : {}),
+          body: value,
+        };
+      },
+    },
     async execute(parsed, context) {
       await ctx.ports.getReady();
       const sessionID = (context.sessionID ?? ctx.ports.getSessionID()) as

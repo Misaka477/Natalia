@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import type { SessionID } from "@anthelia/contracts";
 import type { ProviderStreamRequest } from "@anthelia/runtime";
-import { createRealRuntimeClient } from "../src";
 import {
+  createOfficialRuntimeClient as createRealRuntimeClient,
   officialPluginWorkspace,
   useWorkspaceCleanup,
 } from "./plugin-test-helpers";
@@ -311,5 +311,150 @@ test("Phase 3 E2E: an unfiltered work_graph_query defaults to the active plan's 
   expect(byKind.nodes.some((node) => node.kind === "decision")).toBe(true);
   // ...but the unfiltered query defaults to the active plan and excludes it.
   expect(unfiltered.nodes.some((node) => node.kind === "decision")).toBe(false);
+  await client.dispose?.();
+}, 30_000);
+
+test("Phase 3 E2E: work_graph_query answers a FILE path with the file's chain, not an unknown-planID error (T-19)", async () => {
+  const root = await officialPluginWorkspace("workgraph-query-file-path");
+  const sessionID = "ses_e2e_wgq_file_path" as SessionID;
+  const results: string[] = [];
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "auto",
+    provider: {
+      provider: "test",
+      model: "test",
+      async *stream(request: ProviderStreamRequest) {
+        const messages = (
+          request as {
+            messages: Array<{
+              role: string;
+              content: string;
+              toolCallID?: string;
+            }>;
+          }
+        ).messages;
+        const graphResult = messages
+          .filter(
+            (message) =>
+              message.role === "tool" &&
+              String(message.toolCallID ?? "").startsWith("call_graph"),
+          )
+          .at(-1);
+        if (graphResult) {
+          results.push(String(graphResult.content ?? ""));
+          if (results.length === 1) {
+            // Then: a plan-directory path that names no plan document.
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_graph",
+                  name: "work_graph_query",
+                  arguments: JSON.stringify({
+                    path: ".natalia/plans/does-not-exist.md",
+                  }),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          if (results.length === 2) {
+            // Then: a file path no node references — the documented empty
+            // chain, not an error.
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_graph",
+                  name: "work_graph_query",
+                  arguments: JSON.stringify({ path: "never-touched.txt" }),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          yield { type: "content" as const, text: "queried" };
+          yield { type: "done" as const };
+          return;
+        }
+        const writeResult = messages
+          .filter(
+            (message) =>
+              message.role === "tool" &&
+              String(message.toolCallID ?? "") === "call_write",
+          )
+          .at(-1);
+        if (writeResult) {
+          // The write landed: its workspace_change node is in the graph. Now
+          // the file path precise query.
+          yield {
+            type: "tool_call" as const,
+            calls: [
+              {
+                id: "call_graph",
+                name: "work_graph_query",
+                arguments: JSON.stringify({ path: "changed-by-graph.md" }),
+              },
+            ],
+          };
+          yield { type: "done" as const };
+          return;
+        }
+        // First: write a file, so the graph holds a workspace_change node.
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_write",
+              name: "write_file",
+              arguments: JSON.stringify({
+                path: "changed-by-graph.md",
+                content: "# changed\n",
+              }),
+            },
+          ],
+        };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start(() => undefined);
+  await client.sessionAttach!(sessionID);
+  await client.submitAndWait!("write the file and query its chain");
+
+  expect(results.length).toBeGreaterThanOrEqual(3);
+  // 1. The file path resolves to the file's causal chain: the
+  // workspace_change node that records the write, reached as a precise query
+  // (the old code answered this with "unknown planID: changed-by-graph.md").
+  const byFile = JSON.parse(results[0]!) as {
+    path: string;
+    total: number;
+    nodes: Array<{ kind: string; target?: string }>;
+    truncated: boolean;
+  };
+  expect(byFile.path).toBe("changed-by-graph.md");
+  expect(byFile.truncated).toBe(false);
+  expect(
+    byFile.nodes.some(
+      (node) =>
+        node.kind === "workspace_change" &&
+        node.target === "changed-by-graph.md",
+    ),
+  ).toBe(true);
+  // 2. A plan-directory path that names no plan document is the one case that
+  // is an error — and the error names what the path can be.
+  expect(results[1]).toContain("unknown_plan_or_path");
+  expect(results[1]).toContain(".natalia/plans/does-not-exist.md");
+  // 3. A file path with no referencing node is an empty chain, not an error.
+  const byMissingFile = JSON.parse(results[2]!) as GraphResult;
+  expect(byMissingFile).toMatchObject({
+    total: 0,
+    truncated: false,
+    nodes: [],
+  });
   await client.dispose?.();
 }, 30_000);

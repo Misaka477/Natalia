@@ -47,7 +47,7 @@ export function createWorkGraphQueryTool(
         path: {
           type: "string",
           description:
-            "Precise query: a file path or plan-document path (resolved to its planID). Mutually exclusive with findingID.",
+            "Precise query: a plan-document path (resolved to its planID) or a workspace file path (the nodes that reference it — the file's causal chain). A .natalia/plans/ path that names no plan document is an error; a file path with no referencing node is an empty chain, not an error. Mutually exclusive with findingID.",
         },
         findingID: {
           type: "string",
@@ -128,6 +128,12 @@ export function createWorkGraphQueryTool(
       if (path && findingID)
         return "fill exactly one precise query: path or findingID, not both";
       let planID = args.planID?.trim();
+      // A path that resolved to no plan is a FILE path unless it is shaped
+      // like a plan document: `.natalia/plans/...` names the plan directory
+      // and nothing else. Treating every unmatched path as an unknown planID
+      // answered "the causal chain of src/foo.ts" with "unknown planID:
+      // src/foo.ts" — wrong in both halves (T-19).
+      let filePath: string | undefined;
       if (path) {
         const plans = ctx.ports.planDocRuntime.planDocSnapshot();
         const normalized = path.replace(/^\.?\/?natalia\/plans\//u, "");
@@ -137,8 +143,22 @@ export function createWorkGraphQueryTool(
             plan.documentPath.endsWith(normalized) ||
             plan.planID === normalized,
         );
-        if (!match) return `unknown planID: ${path}`;
-        planID = match.planID;
+        if (match) {
+          planID = match.planID;
+        } else if (/^\.?\/?natalia\/plans\//u.test(path)) {
+          return (
+            `unknown_plan_or_path: ${path} — no plan document matches that ` +
+            `path. A .natalia/plans/ path must name an existing plan document; ` +
+            `pass a workspace file path (the nodes that reference it), or omit ` +
+            `path for the active plan's chain.`
+          );
+        } else {
+          // A workspace file path: the causal chain is the nodes that
+          // reference it (a workspace_change records the path in `target`).
+          // No match is an empty chain, which this tool documents as an
+          // empty result rather than an error.
+          filePath = normalized.replace(/^\.?\/+/u, "");
+        }
       }
       // EI §3.9: an unfiltered query means the ACTIVE plan's whole chain, not
       // every node in the session. A precise query or an explicit range filter
@@ -168,6 +188,15 @@ export function createWorkGraphQueryTool(
       let filtered = nodes;
       if (findingID)
         filtered = filtered.filter((node) => matchesID(node, findingID));
+      if (filePath)
+        // A file path matches a node that records it: `target` is the
+        // workspace-relative path (a workspace_change node). The segment
+        // boundary keeps "oo.ts" from matching "foo.ts".
+        filtered = filtered.filter(
+          (node) =>
+            node.target === filePath ||
+            node.target?.endsWith(`/${filePath}`) === true,
+        );
       if (planID) filtered = filtered.filter((node) => matchesID(node, planID));
       if (args.goalID?.trim())
         filtered = filtered.filter((node) =>
@@ -230,6 +259,7 @@ export function createWorkGraphQueryTool(
       return JSON.stringify({
         ...(planID ? { planID } : {}),
         ...(findingID ? { findingID } : {}),
+        ...(filePath ? { path: filePath } : {}),
         total: expanded.length,
         truncated: hasMore,
         nodes: page,
@@ -238,6 +268,7 @@ export function createWorkGraphQueryTool(
       } satisfies {
         planID?: string;
         findingID?: string;
+        path?: string;
         total: number;
         truncated: boolean;
         nodes: WorkGraphNode[];

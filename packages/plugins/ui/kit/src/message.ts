@@ -78,6 +78,26 @@ export function toolRowLabel(toolName: string): string {
 }
 
 /**
+ * Relativize a path for display (presentation plan P3.3, dsh's
+ * `relativizeToCwd` + `abbreviateHomePath`): a path under the session's
+ * cwd becomes relative to it, one under the user's home folds to `~`, and
+ * everything else passes through. A reader scanning a row wants the short
+ * form; the full path stays in the expanded card's body.
+ */
+export function relativizePath(path: string, cwd?: string): string {
+  if (!path) return path;
+  const home = globalThis.process?.env?.HOME;
+  if (home && path === home) return "~";
+  if (home && path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`;
+  if (cwd && path === cwd) return ".";
+  if (cwd && path.startsWith(`${cwd}/`)) {
+    const relative = path.slice(cwd.length + 1);
+    return relative.length > 0 ? relative : ".";
+  }
+  return path;
+}
+
+/**
  * The tools with a keyed toolview (presentation plan P2.1): a keyed hit
  * REPLACES the generic card, the same dispatch dsh's ToolCallTree performs.
  * A name absent from this set falls through to the generic card — the

@@ -13,6 +13,7 @@ import {
   hasKeyedToolview,
   parseAskTranscript,
   shouldCollapseToolOutput,
+  relativizePath,
   todoItemsFromBody,
   toolRowLabel,
   type Attachment,
@@ -1296,10 +1297,16 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   const titleExtra = () => {
     const title = card?.title;
     if (!title) return "";
-    if (title === rowLabel()) return "";
-    if (title.startsWith(`${rowLabel()} `))
-      return title.slice(rowLabel().length + 1);
-    return title;
+    // A path title is relativized for the row (P3.3): the short form is
+    // what a scanner reads; the full path stays in the card body.
+    const relativized =
+      title.startsWith("/") || title.startsWith("~")
+        ? relativizePath(title, sessionCwd())
+        : title;
+    if (relativized === rowLabel()) return "";
+    if (relativized.startsWith(`${rowLabel()} `))
+      return relativized.slice(rowLabel().length + 1);
+    return relativized;
   };
   // The tool's own body wins: for a diff it is the marked hunk (the raw result
   // string is not the same text at all), for a terminal it is the command's
@@ -1308,6 +1315,11 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   const outputLines = () => output().split("\n");
   // The collapse criterion is the model layer's (P0.2): it knows the
   // single-line-JSON shape that the old line/char count missed.
+  // The session's cwd, for path relativization (P3.3). The host publishes
+  // it on the window when it attaches; absent means no base to relativize
+  // against, which passes paths through unchanged.
+  const sessionCwd = () =>
+    (globalThis as { __nataliaSessionCwd?: string }).__nataliaSessionCwd;
   const collapsible = () => shouldCollapseToolOutput(output());
   const shownOutput = () => {
     if (!collapsible() || expanded()) return output();

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   hasKeyedToolview,
+  relativizePath,
+  relativizePath,
   parseAskTranscript,
   todoItemsFromBody,
   toolCallCard,
@@ -218,4 +220,28 @@ test("the todo checklist decodes the shared envelope (P2.3)", () => {
   ]);
   // A prose result has no checklist, not a crash.
   expect(todoItemsFromBody("no items")).toEqual([]);
+});
+test("a path title is relativized for the row (P3.3)", () => {
+  // dsh's relativizeToCwd + abbreviateHomePath: the row shows the short
+  // form, the full path stays in the card's body. The home fold uses the
+  // environment's real HOME, so the cases are built from it.
+  const home = process.env.HOME ?? "";
+  const cwd = "/repo/workspace";
+  expect(relativizePath("/repo/workspace/src/main.ts", cwd)).toBe(
+    "src/main.ts",
+  );
+  // The cwd itself becomes "." rather than an empty fragment.
+  expect(relativizePath(cwd, cwd)).toBe(".");
+  // A path under neither passes through.
+  expect(relativizePath("/var/log/syslog", cwd)).toBe("/var/log/syslog");
+  if (home && home !== cwd) {
+    // Home folds to ~ (checked against the real home).
+    expect(relativizePath(`${home}/notes.md`, cwd)).toBe("~/notes.md");
+    // The home itself folds to "~".
+    expect(relativizePath(home, cwd)).toBe("~");
+    // No cwd: only the home fold applies.
+    expect(relativizePath(`${home}/project/src/main.ts`)).toBe(
+      "~/project/src/main.ts",
+    );
+  }
 });

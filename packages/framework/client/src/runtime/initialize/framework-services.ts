@@ -90,6 +90,8 @@ import {
 } from "../plan-doc-tools";
 import {
   createConstitutionProposeTool,
+  createConstitutionRuleReadTool,
+  createConstitutionRuleRevokeTool,
   createPlanProposeTool,
   createWorkContractReadTool,
   createDetourDeclareTool,
@@ -426,6 +428,8 @@ export async function wireFrameworkServices(
     createRecordCompletionTool(ctx),
     createRecordDecisionTool(ctx),
     createConstitutionProposeTool(ctx),
+    createConstitutionRuleReadTool(ctx),
+    createConstitutionRuleRevokeTool(ctx),
     createDriftAcknowledgeTool(ctx),
     // NGM §4.4: the L2 generation tools (propose -> apply through the
     // four-face gate -> rollback, always allowed).

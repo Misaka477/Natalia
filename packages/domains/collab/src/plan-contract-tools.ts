@@ -27,7 +27,12 @@ import {
 } from "./contract-constitution-check";
 import {} from "@anthelia/runtime-services";
 import { workLedgerController } from "@natalia/work-ledger";
-import { governanceLedgerController } from "@natalia/governance-ledger";
+import {
+  appendInstanceEvent,
+  governanceLedgerController,
+  governanceViews,
+  resolveGovernanceRoot,
+} from "@natalia/governance-ledger";
 import { providerModelController } from "@anthelia/provider-model";
 import type { RuntimeTool } from "@anthelia/substrate";
 import type {
@@ -690,7 +695,7 @@ export function createConstitutionProposeTool(
       });
       if (problems.length)
         return JSON.stringify({
-          proposed: false,
+          status: "invalid",
           problems,
           reason:
             "the proposal failed validation; fix the problems and re-propose",
@@ -712,26 +717,46 @@ export function createConstitutionProposeTool(
       });
       if (!response || response.decision === "reject")
         return JSON.stringify({
-          proposed: false,
+          status: "rejected",
           reason: `rejected${response?.feedback ? `: ${response.feedback}` : ""}`,
           feedback: response?.feedback,
         });
       const ruleID = `P-AGENT-${Date.now().toString(36)}`;
-      ctx.ports.publishForSession(
-        exec,
-        governanceLedger.buildProposedConstitutionRule({
-          id: `constitution:rule:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
-          ruleID,
-          proposal: {
-            statement: args.statement,
-            enforcement: args.enforcement,
-            ...(args.appliesTo ? { appliesTo: args.appliesTo } : {}),
-            ...(args.scope ? { scope: args.scope } : {}),
-          },
-          ...(args.priority ? { priority: args.priority } : {}),
-        }),
+      const event = governanceLedger.buildProposedConstitutionRule({
+        id: `constitution:rule:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
+        ruleID,
+        proposal: {
+          statement: args.statement,
+          enforcement: args.enforcement,
+          ...(args.appliesTo ? { appliesTo: args.appliesTo } : {}),
+          ...(args.scope ? { scope: args.scope } : {}),
+        },
+        ...(args.priority ? { priority: args.priority } : {}),
+      });
+      ctx.ports.publishForSession(exec, event);
+      // The rule is workspace-tier by nature (scope project/package), so the
+      // durable instance store gets the same fact the session journal just
+      // recorded — otherwise an approved rule is invisible to the CLI face
+      // and to every later session's rule_read (T-21).
+      appendInstanceEvent(
+        resolveGovernanceRoot(ctx.ports.getWorkspaceRoot()),
+        "constitution.jsonl",
+        event,
       );
-      return JSON.stringify({ proposed: true, ruleID });
+      return JSON.stringify({
+        status: "active",
+        ruleID,
+        rule: {
+          statement: event.statement,
+          enforcement: event.enforcement,
+          scope: event.scope,
+          priority: event.priority,
+          source: event.source,
+          proposedBy: event.proposedBy,
+          approvedBy: event.approvedBy,
+          ...(event.appliesTo ? { appliesTo: event.appliesTo } : {}),
+        },
+      });
     },
   };
 }
@@ -808,6 +833,213 @@ export function createDetourReviewTool(ctx: RuntimeContext): RuntimeTool {
         detourID,
         verdict: args.verdict,
       });
+    },
+  };
+}
+
+/**
+ * `constitution_rule_read` (T-21): the read half of the proposal lifecycle.
+ *
+ * The proposal tool used to answer `{proposed: true, ruleID}` and leave the
+ * model unable to ask the obvious follow-up — "is that rule actually in the
+ * check chain?" This tool answers from the same fold the check chain reads
+ * (the session fact state) plus the durable instance store's tombstones, so a
+ * rule revoked in an earlier session still answers `removed` rather than
+ * `unknown`.
+ *
+ * Statuses: `active` (in the effective set the checks execute against),
+ * `disabled` (a reversible `rule_updated(enabled:false)` hides it), `removed`
+ * (the tombstone), `unknown` (no such rule in this workspace's ledger).
+ */
+export function createConstitutionRuleReadTool(
+  ctx: RuntimeContext,
+): RuntimeTool {
+  return {
+    name: "constitution_rule_read",
+    description:
+      "Read one constitution rule by its ruleID and report its lifecycle status: active (the checks execute against it), disabled (reversibly hidden), removed (revoked; the journal keeps the tombstone), or unknown. The rule's statement, enforcement, scope, priority and provenance (source / proposedBy / approvedBy) ride along.",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {
+        ruleID: {
+          type: "string",
+          description:
+            "The ruleID from constitution_propose_rule or the rules list.",
+        },
+      },
+      required: ["ruleID"],
+      additionalProperties: false,
+    },
+    async execute(parsed, context) {
+      const args = parsed as { ruleID?: string };
+      const ruleID = args.ruleID?.trim();
+      if (!ruleID) return "constitution_rule_read requires ruleID";
+      const exec = resolveExec(ctx, context.sessionID);
+      if (!exec) return "no session";
+      await ensureCompleteSessionFactState(ctx, exec);
+      const rules = exec.factState
+        ? sessionFactConstitutionRules(exec.factState)
+        : projectedConstitutionRules(exec.session.events);
+      const active = rules.find((rule) => rule.ruleID === ruleID);
+      if (active)
+        return JSON.stringify({
+          status: "active",
+          rule: {
+            ruleID: active.ruleID,
+            statement: active.statement,
+            enforcement: active.enforcement,
+            scope: active.scope,
+            priority: active.priority,
+            source: active.source,
+            proposedBy: active.proposedBy,
+            approvedBy: active.approvedBy,
+            ...(active.appliesTo ? { appliesTo: active.appliesTo } : {}),
+          },
+        });
+      // The disabled face is not in the effective projection, so the fold's
+      // own state is consulted directly.
+      const factState = exec.factState;
+      if (factState?.constitution.disabled.has(ruleID))
+        return JSON.stringify({
+          status: "disabled",
+          rule: factState.constitution.rules.get(ruleID)
+            ? {
+                ruleID,
+                statement: factState.constitution.rules.get(ruleID)!.statement,
+                enforcement:
+                  factState.constitution.rules.get(ruleID)!.enforcement,
+                scope: factState.constitution.rules.get(ruleID)!.scope,
+                priority: factState.constitution.rules.get(ruleID)!.priority,
+                source: factState.constitution.rules.get(ruleID)!.source,
+              }
+            : undefined,
+        });
+      const views = governanceViews(ctx.ports.getWorkspaceRoot());
+      const removed = views.removed.find((entry) => entry.ruleID === ruleID);
+      if (removed)
+        return JSON.stringify({
+          status: "removed",
+          ruleID,
+          removedAt: removed.at,
+          removedBy: removed.removedBy,
+        });
+      return JSON.stringify({ status: "unknown", ruleID });
+    },
+  };
+}
+
+/**
+ * `constitution_rule_revoke` (T-21): the model proposes removing a rule it
+ * proposed (or the user asks it to); the human confirms through the same
+ * explicit gate a proposal uses, and only then does the tombstone land.
+ *
+ * The model never removes a rule on its own — the ledger's own invariant
+ * ("a critical/high rule marked forbidden may not be removed") is checked
+ * BEFORE the gate, so a protected rule is refused by name rather than
+ * asked about. `removedBy` on the tombstone is `user` by the builder's
+ * contract: the human is the remover; this tool only carries the request.
+ */
+export function createConstitutionRuleRevokeTool(
+  ctx: RuntimeContext,
+): RuntimeTool {
+  return {
+    name: "constitution_rule_revoke",
+    description:
+      "Propose revoking an existing constitution rule. The user confirms through the same explicit gate a proposal uses; on Allow the rule leaves the effective set with a durable tombstone (revocable rules only — a critical/high rule marked forbidden is refused by name, and a rule already removed answers removed).",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {
+        ruleID: {
+          type: "string",
+          description: "The ruleID to revoke.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "Why the rule should be revoked — shown in the approval request.",
+        },
+      },
+      required: ["ruleID"],
+      additionalProperties: false,
+    },
+    async execute(parsed, context) {
+      const args = parsed as { ruleID?: string; reason?: string };
+      const ruleID = args.ruleID?.trim();
+      if (!ruleID) return "constitution_rule_revoke requires ruleID";
+      const exec = resolveExec(ctx, context.sessionID);
+      if (!exec) return "no session";
+      const governanceLedger = ctx.state.serviceDirectory.getOptional(
+        governanceLedgerController,
+      );
+      if (!governanceLedger) return "governance ledger unavailable";
+      await ensureCompleteSessionFactState(ctx, exec);
+      const rules = exec.factState
+        ? sessionFactConstitutionRules(exec.factState)
+        : projectedConstitutionRules(exec.session.events);
+      const rule = rules.find((candidate) => candidate.ruleID === ruleID);
+      if (!rule) {
+        const views = governanceViews(ctx.ports.getWorkspaceRoot());
+        if (views.removed.some((entry) => entry.ruleID === ruleID))
+          return JSON.stringify({ status: "removed", ruleID });
+        return JSON.stringify({
+          status: "unknown",
+          ruleID,
+          reason: "no rule with that ruleID is in the effective set",
+        });
+      }
+      // The ledger's non-rollback invariant, checked before the gate: asking
+      // a human to approve a removal the ledger itself must refuse would be
+      // a question with no correct answer.
+      if (
+        (rule.priority === "critical" || rule.priority === "high") &&
+        rule.overridePolicy === "forbidden"
+      )
+        return JSON.stringify({
+          status: "refused",
+          ruleID,
+          reason:
+            `rule ${ruleID} is ${rule.priority}/forbidden: the constitution's ` +
+            `non-rollback rule forbids its removal, so it cannot be revoked`,
+        });
+      const interactive = ctx.ports.getInteractive();
+      const response = await interactive.requirePlanAcceptance({
+        approvalID: `constitution_rule_revoke:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
+        planID: "constitution_rule_revoke",
+        title: `Approve revoking rule ${ruleID}`,
+        preview: `${rule.enforcement} · ${rule.statement.slice(0, 80)}`,
+        detail: args.reason
+          ? `${args.reason}\n\n${rule.statement}`
+          : rule.statement,
+        scope: "constitution_rule_revoke",
+        sessionID: exec.session.id,
+        signal: context.signal,
+        // The same EI §3.7.1/§3.7.2 discipline as a proposal: a rule change
+        // is confirmed per item by the human, never auto-granted.
+        requireExplicit: true,
+      });
+      if (!response || response.decision === "reject")
+        return JSON.stringify({
+          status: "rejected",
+          ruleID,
+          feedback: response?.feedback,
+        });
+      const removedAt = new Date().toISOString();
+      const event = governanceLedger.buildConstitutionRuleRemoved({
+        id: `constitution:rule:removed:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
+        ruleID,
+        removedAt,
+      });
+      ctx.ports.publishForSession(exec, event);
+      // The tombstone is workspace-tier too: the durable store is what makes
+      // "removed" answerable in a later session's rule_read.
+      appendInstanceEvent(
+        resolveGovernanceRoot(ctx.ports.getWorkspaceRoot()),
+        "constitution.jsonl",
+        event,
+      );
+      return JSON.stringify({ status: "removed", ruleID, removedAt });
     },
   };
 }

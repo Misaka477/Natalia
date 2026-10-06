@@ -67,6 +67,8 @@ export function runtimeToolNames(): string[] {
     "collab_inbox",
     "collab_respond",
     "constitution_propose_rule",
+    "constitution_rule_read",
+    "constitution_rule_revoke",
     "context_history",
     "context_list",
     "context_pack",

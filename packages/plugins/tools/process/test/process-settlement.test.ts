@@ -44,6 +44,7 @@ async function seed(root: string, id: string, pid = 0x7fffffff) {
         {
           id,
           command: "sleep 999",
+          description: "Sleep for 999 seconds",
           cwd: root,
           status: "running",
           pid,

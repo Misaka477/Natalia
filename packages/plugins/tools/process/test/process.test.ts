@@ -76,6 +76,8 @@ test("default process tools execute real commands", async () => {
       {
         id: "proc_test",
         command: "echo ready; sleep 0.2",
+        description: "Start the managed process",
+
         readyPattern: "ready",
         maxOutputBytes: 100,
       },
@@ -125,12 +127,14 @@ test("managed process registry reports live workspace process counts", async () 
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-count-"));
   const registry = new ManagedProcessRegistry();
   const tools = processRegistryTools(registry);
-  await tools
-    .get("process_start")!
-    .execute(
-      { id: "proc_count", command: "sleep 30" },
-      { workspaceRoot: root },
-    );
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_count",
+      command: "sleep 30",
+      description: "Sleep for thirty seconds",
+    },
+    { workspaceRoot: root },
+  );
   expect(await registry.runningCount({ workspaceRoot: root })).toBe(1);
   await tools
     .get("process_stop")!
@@ -141,12 +145,14 @@ test("managed process registry reports live workspace process counts", async () 
 test("managed process registry persists state for restart and background aliases", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-persist-"));
   const first = processRegistryTools();
-  await first
-    .get("background_start")!
-    .execute(
-      { id: "proc_persist", command: "echo persisted; sleep 0.2" },
-      { workspaceRoot: root },
-    );
+  await first.get("background_start")!.execute(
+    {
+      id: "proc_persist",
+      command: "echo persisted; sleep 0.2",
+      description: "Echo persisted then sleep",
+    },
+    { workspaceRoot: root },
+  );
   await waitForOutput(async () =>
     first
       .get("background_output")!
@@ -175,6 +181,8 @@ test("managed process restart preserves readiness configuration", async () => {
     {
       id: "proc_restart",
       command: "echo ready; sleep 1",
+      description: "Start the managed process",
+
       readyPattern: "ready",
       maxOutputBytes: 91,
       stopTimeoutMs: 77,
@@ -208,6 +216,7 @@ test("managed process stop terminates the owned process group", async () => {
       {
         id: "proc_group",
         command: "sleep 30 & echo $! > child.pid; wait",
+        description: "Start the managed process",
         stopTimeoutMs: 50,
       },
       { workspaceRoot: root },
@@ -230,6 +239,7 @@ test("managed process output uses a UTF-8 byte budget", async () => {
     {
       id: "proc_output",
       command: "printf 'abc界界'; sleep 1",
+      description: "Start the managed process",
       maxOutputBytes: 6,
     },
     { workspaceRoot: root },
@@ -263,6 +273,7 @@ test("managed process max runtime stops the owned process group", async () => {
       {
         id: "proc_deadline",
         command: "sleep 30 & echo $! > child.pid; wait",
+        description: "Start the managed process",
         maxRuntimeMs: 100,
       },
       { workspaceRoot: root },
@@ -294,6 +305,7 @@ test("reopened managed process registry restores a durable deadline", async () =
     {
       id: "proc_reopen_deadline",
       command: "sleep 30",
+      description: "Start the managed process",
       maxRuntimeMs: 150,
     },
     { workspaceRoot: root },
@@ -317,12 +329,15 @@ test("reopened registry immediately stops an overdue durable deadline", async ()
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-overdue-"));
   const first = processRegistryTools();
   const started = JSON.parse(
-    await first
-      .get("process_start")!
-      .execute(
-        { id: "proc_overdue", command: "sleep 30", maxRuntimeMs: 10_000 },
-        { workspaceRoot: root },
-      ),
+    await first.get("process_start")!.execute(
+      {
+        id: "proc_overdue",
+        command: "sleep 30",
+        description: "Run the command",
+        maxRuntimeMs: 10_000,
+      },
+      { workspaceRoot: root },
+    ),
   ) as { pid?: number };
   const manifest = join(root, ".natalia", "processes", "processes.json");
   const parsed = JSON.parse(await readFile(manifest, "utf8")) as {
@@ -344,20 +359,24 @@ test("managed process resource limits require positive values", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-limits-"));
   const tools = processRegistryTools();
   await expect(
-    tools
-      .get("process_start")!
-      .execute(
-        { command: "sleep 1", maxOutputBytes: 0 },
-        { workspaceRoot: root },
-      ),
+    tools.get("process_start")!.execute(
+      {
+        command: "sleep 1",
+        description: "Sleep with a zero byte budget",
+        maxOutputBytes: 0,
+      },
+      { workspaceRoot: root },
+    ),
   ).rejects.toThrow("value must be a positive number");
   await expect(
-    tools
-      .get("process_start")!
-      .execute(
-        { command: "sleep 1", stopTimeoutMs: -1 },
-        { workspaceRoot: root },
-      ),
+    tools.get("process_start")!.execute(
+      {
+        command: "sleep 1",
+        description: "Run the command",
+        stopTimeoutMs: -1,
+      },
+      { workspaceRoot: root },
+    ),
   ).rejects.toThrow("value must be a positive number");
 });
 
@@ -369,16 +388,19 @@ test("managed process IDs and deadlines are isolated by workspace", async () => 
     join(tmpdir(), "natalia-tools-process-second-"),
   );
   const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_same",
+      command: "sleep 30",
+      description: "Run the command",
+      maxRuntimeMs: 100,
+    },
+    { workspaceRoot: firstRoot },
+  );
   await tools
     .get("process_start")!
     .execute(
-      { id: "proc_same", command: "sleep 30", maxRuntimeMs: 100 },
-      { workspaceRoot: firstRoot },
-    );
-  await tools
-    .get("process_start")!
-    .execute(
-      { id: "proc_same", command: "sleep 30" },
+      { id: "proc_same", command: "sleep 30", description: "Run the command" },
       { workspaceRoot: secondRoot },
     );
   await Bun.sleep(250);
@@ -405,12 +427,14 @@ test("unloading the process plugin terminates the processes it started", async (
   const pluginRegistry = createPluginRegistry({ tools });
   await pluginRegistry.load(createProcessPlugin());
   const started = JSON.parse(
-    await tools
-      .get("process_start")!
-      .execute(
-        { id: "proc_dispose", command: "sleep 30" },
-        { workspaceRoot: root },
-      ),
+    await tools.get("process_start")!.execute(
+      {
+        id: "proc_dispose",
+        command: "sleep 30",
+        description: "Run the command",
+      },
+      { workspaceRoot: root },
+    ),
   ) as { id: string; pid?: number };
   expect(typeof started.pid).toBe("number");
   const pid = started.pid!;
@@ -439,6 +463,7 @@ test("a capped process output names its spill file", async () => {
     {
       id: "proc_spill",
       command: "printf 'z%.0s' $(seq 1 5000); echo",
+      description: "Start the managed process",
       maxOutputBytes: 200,
     },
     { workspaceRoot: root },
@@ -454,12 +479,15 @@ test("a capped process output names its spill file", async () => {
   expect(output).toContain("full output at ");
 
   // And a small output says nothing about truncation.
-  await tools
-    .get("process_start")!
-    .execute(
-      { id: "proc_small", command: "echo hi", maxOutputBytes: 200 },
-      { workspaceRoot: root },
-    );
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_small",
+      command: "echo hi",
+      description: "Run the command",
+      maxOutputBytes: 200,
+    },
+    { workspaceRoot: root },
+  );
   await Bun.sleep(400);
   const small = await tools
     .get("process_output")!

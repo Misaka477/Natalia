@@ -244,6 +244,7 @@ test("runtime status counts managed background processes", async () => {
                     arguments: JSON.stringify({
                       id: "proc_status",
                       command: "sleep 30",
+                      description: "Sleep for thirty seconds",
                     }),
                   }
                 : {

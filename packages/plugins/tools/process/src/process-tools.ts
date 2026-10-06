@@ -803,13 +803,23 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
       type: "object",
       properties: {
         command: { type: "string" },
+        // The row's human-facing label, the same contract run_shell declares:
+        // a long-running command is even harder to read from its command line
+        // than a one-shot one, because it sits in the transcript for minutes.
+        description: {
+          type: "string",
+          description:
+            "Clear, concise description of what this process does in active voice, 5-10 words " +
+            '(shown in the UI). Examples: "npm run dev" → "Start the dev server"; ' +
+            '"python -m http.server" → "Serve the workspace over HTTP".',
+        },
         id: { type: "string" },
         readyPattern: { type: "string" },
         maxOutputBytes: { type: "number" },
         stopTimeoutMs: { type: "number" },
         maxRuntimeMs: { type: "number" },
       },
-      required: ["command"],
+      required: ["command", "description"],
       additionalProperties: false,
     },
     output: {
@@ -820,10 +830,11 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        const parsed = requireObject(args);
         return {
           kind: "terminal",
-          title: requireObject(args).command as string,
-          summary: "start",
+          title: parsed.command as string,
+          summary: optionalString(parsed.description) ?? "start",
         };
       },
       presentResult(args, value) {
@@ -839,6 +850,9 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       return JSON.stringify(
         await registry.start(
           requireString(args.command, "command"),

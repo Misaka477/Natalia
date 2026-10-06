@@ -299,3 +299,48 @@ test("Phase 7's context_recall: the priority order, the isolation rule, the hone
   expect(unavailable.error).toBe("knowledge_unavailable");
   memory.close();
 });
+
+test("a bad recordID is classified, not lumped into cross-session (T-17)", async () => {
+  // The by-id faces used to answer cross_session_forbidden for EVERY id
+  // that did not start with this session — so a fabricated or mistyped id
+  // told the model to fix a session problem that did not exist, and a
+  // remembered-session id naming no record was reported the same way as
+  // another session's private record. Three problems, three answers:
+  // another session's id, a malformed id, and a missing record.
+  const { byName, vault } = harness();
+  vault.remember({
+    id: `${CURRENT}:real`,
+    workspaceID: "w",
+    sessionID: CURRENT,
+    recordType: "decision",
+    entityKey: "gen-2",
+    summary: "switched to gen-2",
+  });
+  // A fabricated id with no session segment is malformed, not a session
+  // violation.
+  for (const name of ["context_read", "context_history"]) {
+    const malformed = await run(byName, name, { recordID: "totally-made-up" });
+    expect(malformed.error).toBe("invalid_record_id");
+  }
+  // A real other-session id is the genuine isolation refusal.
+  const cross = await run(byName, "context_history", {
+    recordID: `${OTHER}:1`,
+  });
+  expect(cross.error).toBe("cross_session_forbidden");
+  // This session's id for a record that was never remembered is a missing
+  // record — the same answer context_read has always given.
+  const missingRead = await run(byName, "context_read", {
+    recordID: `${CURRENT}:never-remembered`,
+  });
+  expect(missingRead.error).toBe("not_found");
+  const missingHistory = await run(byName, "context_history", {
+    recordID: `${CURRENT}:never-remembered`,
+  });
+  expect(missingHistory.error).toBe("not_found");
+  // And the real record still answers.
+  const present = await run(byName, "context_history", {
+    recordID: `${CURRENT}:real`,
+  });
+  expect(present.error).toBeUndefined();
+  expect(Array.isArray(present.data)).toBe(true);
+});

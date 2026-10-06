@@ -274,11 +274,23 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         if ("error" in session) return JSON.stringify(session);
         if (typeof args.recordID !== "string" || !args.recordID)
           return JSON.stringify({ error: "record_id_required" });
-        if (!args.recordID.startsWith(`${session.sessionID}:`))
+        if (!args.recordID.startsWith(`${session.sessionID}:`)) {
+          // The same three-way classification context_history gained
+          // (T-17): another session's id, a malformed id, and this
+          // session's id for a record that was never remembered are three
+          // different problems, and one lumped refusal made the model fix
+          // the wrong one.
+          const firstSegment = args.recordID.split(":", 1)[0] ?? "";
+          if (firstSegment.startsWith("ses_") && firstSegment.length > 4)
+            return JSON.stringify({
+              error: "cross_session_forbidden",
+              note: `record ${args.recordID} belongs to ${firstSegment}; queries answer ${session.sessionID} only — the study's isolation rule`,
+            });
           return JSON.stringify({
-            error: "cross_session_forbidden",
-            note: "record ids carry their session — a read cannot cross it",
+            error: "invalid_record_id",
+            note: `"${args.recordID}" is not a record id (ids start with the owning session, e.g. ${session.sessionID}:…)`,
           });
+        }
         const vault = ctx.state.serviceDirectory.getOptional(rinaVault);
         if (!vault)
           return JSON.stringify({
@@ -390,16 +402,39 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         if ("error" in session) return JSON.stringify(session);
         if (typeof args.recordID !== "string" || !args.recordID)
           return JSON.stringify({ error: "record_id_required" });
-        if (!args.recordID.startsWith(`${session.sessionID}:`))
+        const prefix = `${session.sessionID}:`;
+        if (!args.recordID.startsWith(prefix)) {
+          // A record id carries its session as its first segment, so the
+          // refusal used to say cross_session_forbidden for EVERY id that
+          // did not start with this session — a fabricated or mistyped id
+          // therefore told the model to fix a session problem that did not
+          // exist (T-17). The three cases are different problems:
+          // another session's id, a malformed id, and this session's id
+          // for a record that was never remembered.
+          const firstSegment = args.recordID.split(":", 1)[0] ?? "";
+          if (firstSegment.startsWith("ses_") && firstSegment.length > 4)
+            return JSON.stringify({
+              error: "cross_session_forbidden",
+              note: `record ${args.recordID} belongs to ${firstSegment}; queries answer ${session.sessionID} only — the study's isolation rule`,
+            });
           return JSON.stringify({
-            error: "cross_session_forbidden",
-            note: "record ids carry their session — a history cannot cross it",
+            error: "invalid_record_id",
+            note: `"${args.recordID}" is not a record id (ids start with the owning session, e.g. ${prefix}…)`,
           });
+        }
         const vault = ctx.state.serviceDirectory.getOptional(rinaVault);
         if (!vault)
           return JSON.stringify({
             error: "vault_unavailable",
             note: "the context vault service is not provided",
+          });
+        // An id with the right prefix that names no record is a missing
+        // record, not a session problem — and the vault's own answer for
+        // "no such id" is undefined, distinct from an empty history.
+        if (!vault.get(args.recordID, { sessionID: session.sessionID }))
+          return JSON.stringify({
+            error: "not_found",
+            note: `no remembered record ${args.recordID} in this session's vault`,
           });
         const data = vault.history(args.recordID, {
           sessionID: session.sessionID,

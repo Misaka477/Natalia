@@ -97,13 +97,11 @@ test("every presenter-less JSON tool's result is flattened, never raw", async ()
   );
   // Anti-vacuity: the sweep must actually see the surface it claims.
   expect(presenterlessJSON.length).toBeGreaterThan(20);
-  // Pinned members: known presenter-less JSON tools the plan listed.
-  for (const name of [
-    "browser_tabs",
-    "team_fanout",
-    "record_decision",
-    "plan_pause",
-  ])
+  // Pinned members: known presenter-less JSON tools the plan listed. (The
+  // families P1 wired — collab/terminal/browser/mcp/team/skills/process —
+  // correctly left this set; the record tools and the work-graph read are
+  // what the floor still carries.)
+  for (const name of ["record_decision", "plan_pause", "work_graph_query"])
     expect(
       presenterlessJSON.some((tool) => tool.tool === name),
       `${name} was not swept`,

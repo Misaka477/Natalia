@@ -605,7 +605,10 @@ test("agent permissions block configured file and command execution at tool boun
               {
                 id: "shell",
                 name: "run_shell",
-                arguments: JSON.stringify({ command: "rm secret.txt" }),
+                arguments: JSON.stringify({
+                  command: "rm secret.txt",
+                  description: "Delete the secret file",
+                }),
               },
             ],
           };
@@ -775,7 +778,10 @@ test("C-REL-001 forces git approval even in auto mode without a session grant", 
               {
                 id: "commit",
                 name: "run_shell",
-                arguments: JSON.stringify({ command: "git commit -m x" }),
+                arguments: JSON.stringify({
+                  command: "git commit -m x",
+                  description: "Commit the staged change",
+                }),
               },
             ],
           };
@@ -1000,6 +1006,7 @@ test("agent permissions apply network, environment, and output redaction boundar
                 arguments: JSON.stringify({
                   command:
                     "printf 'token=visible\\nsecret=$NATALIA_AGENT_BOUNDARY_SECRET'",
+                  description: "Print the boundary secret",
                 }),
               },
             ],
@@ -2352,7 +2359,10 @@ test("run_shell constitution checks allow ordinary cat commands", async () => {
               {
                 id: "call_cat",
                 name: "run_shell",
-                arguments: JSON.stringify({ command: "cat input.txt" }),
+                arguments: JSON.stringify({
+                  command: "cat input.txt",
+                  description: "Print the input file",
+                }),
               },
             ],
           };

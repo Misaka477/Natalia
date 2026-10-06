@@ -46,6 +46,18 @@ function runShellTool(): RuntimeTool {
       type: "object",
       properties: {
         command: { type: "string" },
+        // A required, human-facing one-liner the model writes per call. Its
+        // whole job is the UI row: a collapsed tool row shows this sentence,
+        // never the raw command — the same contract dsh's bash/pwsh tools
+        // declare. The examples are part of the schema so the shape is not
+        // left to chance.
+        description: {
+          type: "string",
+          description:
+            "Clear, concise description of what this command does in active voice, 5-10 words " +
+            '(shown in the UI). Examples: "ls" → "List files in current directory"; ' +
+            '"git status" → "Show working tree status"; "npm install" → "Install package dependencies".',
+        },
         timeoutSec: {
           type: "number",
           description:
@@ -63,7 +75,7 @@ function runShellTool(): RuntimeTool {
             "Optional. One sentence explaining why the wider mode is needed. Travels with sandbox_permissions: both or neither.",
         },
       },
-      required: ["command"],
+      required: ["command", "description"],
       additionalProperties: false,
     },
     // The pilot output definition: the result is a terminal session card, so a
@@ -80,11 +92,15 @@ function runShellTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        const command = requireObject(args).command as string | undefined;
+        const parsed = requireObject(args);
+        const command = parsed.command as string | undefined;
+        const description = parsed.description as string | undefined;
         return {
           kind: "terminal",
           title: typeof command === "string" ? command : "command",
-          summary: "run",
+          // The model's sentence is the collapsed row's resident label; the
+          // command is what the expanded card shows.
+          summary: typeof description === "string" ? description : "run",
         };
       },
       presentResult(args, value) {
@@ -106,6 +122,11 @@ function runShellTool(): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      // The description is required, so a model that omits it gets a complete
+      // error naming the field — never a silently label-less card.
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       const timeoutSec =
         context.timeoutSec ??
         timeoutSecOr(

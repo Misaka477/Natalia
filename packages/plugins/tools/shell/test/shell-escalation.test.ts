@@ -76,7 +76,11 @@ test("the schema advertises the escalation fields", () => {
 test("sandbox_permissions without justification is refused before running", async () => {
   await expect(
     tool.execute(
-      { command: "echo hi", sandbox_permissions: "danger-full-access" },
+      {
+        command: "echo hi",
+        description: "Print a greeting",
+        sandbox_permissions: "danger-full-access",
+      },
       context(),
     ),
   ).rejects.toThrow(/requires a justification/u);
@@ -89,6 +93,7 @@ test("repeating the current mode runs without asking", async () => {
   const output = await tool.execute(
     {
       command: `echo ok > "${target}"`,
+      description: "Write a probe file",
       sandbox_permissions: "workspace-write",
       justification: "same as current",
     },
@@ -105,6 +110,7 @@ test("a granted wider mode applies to this call only", async () => {
   const output = await tool.execute(
     {
       command: `echo ok > "${target}"`,
+      description: "Write a probe file",
       sandbox_permissions: "danger-full-access",
       justification:
         "the audit pass must write its report outside the workspace",
@@ -128,6 +134,7 @@ test("a refusal surfaces the reference wording and does not run", async () => {
     tool.execute(
       {
         command: `echo ok > "${target}"`,
+        description: "Write a probe file",
         sandbox_permissions: "danger-full-access",
         justification: "trust me",
       },
@@ -143,7 +150,13 @@ test("a kernel denial names the mode and offers the sanctioned retry", async () 
   if (!available) return;
   const blocked = join(outside, "denied.txt");
   const error = await tool
-    .execute({ command: `echo bad > "${blocked}"` }, context())
+    .execute(
+      {
+        command: `echo bad > "${blocked}"`,
+        description: "Write outside the workspace",
+      },
+      context(),
+    )
     .then(
       () => undefined,
       (thrown: Error) => thrown.message,

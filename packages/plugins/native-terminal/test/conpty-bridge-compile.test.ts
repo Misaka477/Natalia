@@ -164,3 +164,15 @@ test("the drive drains the stream's tail on EOF instead of dropping it", async (
   // read consumes bytes).
   expect(source).not.toContain("Promise.race([reader.read()");
 });
+
+test("the drive checks its predicate after every drain", async () => {
+  // A drive whose `until` is never checked reads to EOF and back. On a loaded
+  // runner that lag was measured as the exit frame never arriving, while the
+  // bridge's own stderr showed the complete shutdown — the frame WAS written,
+  // the harness just never looked for it before the stream ended.
+  const source = await Bun.file(
+    join(import.meta.dir, "..", "test", "conpty-native.test.ts"),
+  ).text();
+  expect(source).toContain("drain();");
+  expect(source).toMatch(/if \(until\(frames\)\) break;/u);
+});

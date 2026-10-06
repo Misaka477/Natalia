@@ -147,6 +147,11 @@ async function drive(
       }
       buffer += decoder.decode(read.value, { stream: true });
       drain();
+      // The predicate decides when we have what we came for. It is checked
+      // AFTER every drain, so a frame that arrives in this read is seen
+      // immediately — and the drive returns without waiting for the stream's
+      // end, which on a Windows runner can lag the frame by seconds.
+      if (until(frames)) break;
     }
   } finally {
     // Settle the pending read and drop the shared timer, so the drive returns

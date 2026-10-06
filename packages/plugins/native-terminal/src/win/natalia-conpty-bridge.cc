@@ -51,14 +51,30 @@ HANDLE g_childProcess = nullptr;
 HANDLE g_consoleLive = nullptr;
 ULONGLONG g_consoleStartedAt = 0; // GetTickCount64 when the console's pipes came up
 
+/**
+ * Writes the whole buffer to stdout, or reports the failure.
+ *
+ * A partial write that used to `return` silently is how the exit frame
+ * disappeared on the Windows CI: the bridge's stderr showed the complete
+ * shutdown (the frame WAS handed to WriteFile) while the host never saw it,
+ * and nothing named the failure. Now the exit code travels to stderr, so a
+ * lost frame is diagnosable instead of a mystery `exit: undefined`.
+ */
 void writeAll(const char *data, size_t length) {
   size_t written = 0;
   while (written < length) {
     DWORD chunk = 0;
     if (!WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), data + written,
-                   (DWORD)(length - written), &chunk, nullptr))
+                   (DWORD)(length - written), &chunk, nullptr)) {
+      fprintf(stderr, "conpty-bridge: stdout write failed (err=%lu) after %zu/%zu bytes\n",
+              (unsigned long)GetLastError(), written, length);
       return;
-    if (chunk == 0) return;
+    }
+    if (chunk == 0) {
+      fprintf(stderr, "conpty-bridge: stdout write returned 0 bytes at %zu/%zu\n",
+              written, length);
+      return;
+    }
     written += chunk;
   }
 }

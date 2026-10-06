@@ -46,7 +46,6 @@ const TOOL_ROW_LABELS: Record<string, string> = {
   grep: "Grep",
   web_fetch: "Fetch",
   web_search: "Search",
-  web_search: "Search",
   todo_read: "Todo",
   todo_write: "Todo",
   ask_user: "Question",

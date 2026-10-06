@@ -276,7 +276,11 @@ function grepTool(): RuntimeTool {
         const parsed2 = (() => {
           try {
             return JSON.parse(value) as {
-              matches?: Array<{ path?: unknown; line?: unknown }>;
+              matches?: Array<{
+                path?: unknown;
+                line?: unknown;
+                text?: unknown;
+              }>;
             };
           } catch {
             return null;

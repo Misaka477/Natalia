@@ -31,6 +31,18 @@ export const FS_READ_PLUGIN_ID = "natalia-tool-fs-read";
  */
 export const READ_LINE_LIMIT = 2000;
 
+/**
+ * The `read_media_file` result envelope `presentResult` decodes: the four
+ * facets the model-facing JSON carries, plus the detected media kind.
+ */
+type MediaReadResult = {
+  path?: string;
+  size?: number;
+  mode?: string;
+  sha256?: string;
+  kind?: string;
+};
+
 function readFileTool(): RuntimeTool {
   return {
     name: "read_file",
@@ -250,15 +262,14 @@ function readMediaFileTool(): RuntimeTool {
         // The metadata IS the read: a card that shows the raw JSON text makes a
         // reader parse five quoted keys to learn the size and the digest. The
         // same envelope the model reads is decoded here into facets.
-        let parsed: {
-          path?: string;
-          size?: number;
-          mode?: string;
-          sha256?: string;
-          kind?: string;
-        } | null = null;
+        //
+        // The cast names the envelope rather than `typeof parsed`: inside the
+        // try the variable's narrowed type is still the initializer's `null`,
+        // so a self-referential `as typeof parsed` casts to `null` and every
+        // later field read lands on `never`.
+        let parsed: MediaReadResult | null = null;
         try {
-          parsed = JSON.parse(value) as typeof parsed;
+          parsed = JSON.parse(value) as MediaReadResult | null;
         } catch {
           parsed = null;
         }

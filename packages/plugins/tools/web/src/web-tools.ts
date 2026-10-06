@@ -23,7 +23,18 @@ function webFetchTool(): RuntimeTool {
     timeoutSec: 30,
     parameters: {
       type: "object",
-      properties: { url: { type: "string" }, maxBytes: { type: "number" } },
+      properties: {
+        url: {
+          type: "string",
+          description: "The HTTP(S) URL to fetch.",
+        },
+        maxBytes: {
+          type: "number",
+          description:
+            "Maximum decoded bytes to return. The result says when the body was cut, " +
+            "so a caller can fetch a narrower resource instead of re-reading the same cap.",
+        },
+      },
       required: ["url"],
       additionalProperties: false,
     },
@@ -144,7 +155,17 @@ function webSearchTool(): RuntimeTool {
     timeoutSec: 30,
     parameters: {
       type: "object",
-      properties: { query: { type: "string" }, maxBytes: { type: "number" } },
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query, in the provider's own syntax.",
+        },
+        maxBytes: {
+          type: "number",
+          description:
+            "Maximum decoded bytes to return. The result says when the body was cut.",
+        },
+      },
       required: ["query"],
       additionalProperties: false,
     },

@@ -52,9 +52,20 @@ function writeFileTool(): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string" },
-        content: { type: "string" },
-        mode: { type: "number" },
+        path: {
+          type: "string",
+          description:
+            "Path of the file to write, relative to the workspace or absolute inside it.",
+        },
+        content: {
+          type: "string",
+          description: "Full UTF-8 text content to write.",
+        },
+        mode: {
+          type: "number",
+          description:
+            "Optional file mode, as an octal literal (for example 0o644).",
+        },
       },
       required: ["path", "content"],
       additionalProperties: false,
@@ -114,9 +125,21 @@ function editFileTool(): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string" },
-        oldText: { type: "string" },
-        newText: { type: "string" },
+        path: {
+          type: "string",
+          description:
+            "Path of the file to edit, relative to the workspace or absolute inside it.",
+        },
+        oldText: {
+          type: "string",
+          description:
+            "Literal text to replace. Must match exactly and occur exactly once.",
+        },
+        newText: {
+          type: "string",
+          description:
+            "Literal replacement text. Use an empty string to delete the match.",
+        },
       },
       required: ["path", "oldText", "newText"],
       additionalProperties: false,
@@ -219,16 +242,30 @@ function applyEditsTool(): RuntimeTool {
       properties: {
         edits: {
           type: "array",
+          description:
+            "The complete replacement list of edits, applied in order. Pass [] to clear.",
           items: {
             type: "object",
             properties: {
-              path: { type: "string" },
+              path: {
+                type: "string",
+                description: "Path of the file this edit touches.",
+              },
               operation: {
                 type: "string",
                 enum: [...APPLY_EDIT_OPERATIONS],
+                description:
+                  "replace (oldText must occur exactly once), create (the file must not exist), or delete (it must exist).",
               },
-              oldText: { type: "string" },
-              newText: { type: "string" },
+              oldText: {
+                type: "string",
+                description: "Required for replace: the literal text to find.",
+              },
+              newText: {
+                type: "string",
+                description:
+                  "Required for replace and create: the literal text to put in its place.",
+              },
             },
             required: ["path", "operation"],
             additionalProperties: false,

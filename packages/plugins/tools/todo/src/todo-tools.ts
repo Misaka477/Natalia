@@ -38,7 +38,14 @@ function todoReadTool(): RuntimeTool {
       // A bound like the other list-shaped readers carry (mailbox_status,
       // glob, grep): the whole list used to arrive in one result, and the
       // result says how many exist so a caller can ask for more.
-      properties: { limit: { type: "integer", minimum: 1 } },
+      properties: {
+        limit: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "How many items to return in this page. The result says how many exist in total, so a caller can ask for the rest.",
+        },
+      },
       additionalProperties: false,
     },
     output: {

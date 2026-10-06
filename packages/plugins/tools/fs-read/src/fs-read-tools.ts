@@ -39,9 +39,22 @@ function readFileTool(): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string" },
-        offset: { type: "integer", minimum: 1 },
-        length: { type: "integer", minimum: 1 },
+        path: {
+          type: "string",
+          description:
+            "Path of an existing regular file, relative to the workspace or absolute inside it.",
+        },
+        offset: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "1-based first line to return. Defaults to 1; the result names the next offset when the window stops early.",
+        },
+        length: {
+          type: "integer",
+          minimum: 1,
+          description: `Page size in lines (default ${READ_LINE_LIMIT}, the maximum). A smaller page reads a slice; the result says how many lines exist in total.`,
+        },
       },
       required: ["path"],
       additionalProperties: false,

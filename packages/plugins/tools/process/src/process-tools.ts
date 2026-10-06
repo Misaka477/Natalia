@@ -756,7 +756,12 @@ function processControlTool(
     requiresApproval,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" } },
+      properties: {
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
@@ -802,7 +807,11 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        command: { type: "string" },
+        command: {
+          type: "string",
+          description:
+            "The shell command to run. The shell is bash-compatible on every platform (Git Bash on Windows).",
+        },
         // The row's human-facing label, the same contract run_shell declares:
         // a long-running command is even harder to read from its command line
         // than a one-shot one, because it sits in the transcript for minutes.
@@ -813,11 +822,31 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
             '(shown in the UI). Examples: "npm run dev" → "Start the dev server"; ' +
             '"python -m http.server" → "Serve the workspace over HTTP".',
         },
-        id: { type: "string" },
-        readyPattern: { type: "string" },
-        maxOutputBytes: { type: "number" },
-        stopTimeoutMs: { type: "number" },
-        maxRuntimeMs: { type: "number" },
+        id: {
+          type: "string",
+          description:
+            "Caller-chosen handle for this process, used by every other process tool. Omit to let the registry assign one.",
+        },
+        readyPattern: {
+          type: "string",
+          description:
+            "Regular expression that marks the process READY when its output first matches it. Omit to treat the spawn itself as ready.",
+        },
+        maxOutputBytes: {
+          type: "number",
+          description:
+            "Per-stream output budget. Output past it spills to a file the tools name, so nothing is silently lost.",
+        },
+        stopTimeoutMs: {
+          type: "number",
+          description:
+            "Grace period between the stop signal and the kill, in milliseconds.",
+        },
+        maxRuntimeMs: {
+          type: "number",
+          description:
+            "Wall-clock budget after which the registry stops this process itself. Omit for no limit.",
+        },
       },
       required: ["command", "description"],
       additionalProperties: false,
@@ -893,8 +922,16 @@ function processWaitTool(registry: ManagedProcessRegistry): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        id: { type: "string" },
-        timeoutMs: { type: "number", minimum: 0 },
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+        timeoutMs: {
+          type: "number",
+          minimum: 0,
+          description:
+            "How long to wait before returning the current state instead of hanging. Defaults to the configured wait timeout.",
+        },
       },
       required: ["id"],
       additionalProperties: false,
@@ -965,7 +1002,12 @@ function processStatusTool(registry: ManagedProcessRegistry): RuntimeTool {
     requiresApproval: false,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" } },
+      properties: {
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
@@ -987,7 +1029,12 @@ function processOutputTool(registry: ManagedProcessRegistry): RuntimeTool {
     requiresApproval: false,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" } },
+      properties: {
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
@@ -1006,7 +1053,17 @@ function processReadyTool(registry: ManagedProcessRegistry): RuntimeTool {
     requiresApproval: false,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" }, timeoutMs: { type: "number" } },
+      properties: {
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+        timeoutMs: {
+          type: "number",
+          description:
+            "How long to wait for a terminal state before returning the current one. Defaults to the configured wait timeout.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
@@ -1032,7 +1089,12 @@ function processStopTool(registry: ManagedProcessRegistry): RuntimeTool {
     requiresApproval: true,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" } },
+      properties: {
+        id: {
+          type: "string",
+          description: "The process handle returned by process_start.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },

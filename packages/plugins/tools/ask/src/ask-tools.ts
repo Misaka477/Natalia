@@ -29,10 +29,26 @@ function askUserTool(): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        title: { type: "string" },
-        question: { type: "string" },
-        options: { type: "array", items: { type: "string" } },
-        multiple: { type: "boolean" },
+        title: {
+          type: "string",
+          description:
+            'Short heading for the question, such as "Confirm" or "Choose Mode".',
+        },
+        question: {
+          type: "string",
+          description: "The specific question to put to the user.",
+        },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'The choices to offer. Put the recommended one first and append "(Recommended)" to its label.',
+        },
+        multiple: {
+          type: "boolean",
+          description:
+            "Whether the user may select more than one option. Defaults to false.",
+        },
       },
       required: ["question", "options"],
       additionalProperties: false,

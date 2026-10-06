@@ -45,7 +45,10 @@ function runShellTool(): RuntimeTool {
     parameters: {
       type: "object",
       properties: {
-        command: { type: "string" },
+        command: {
+          type: "string",
+          description: "The shell command to execute.",
+        },
         // A required, human-facing one-liner the model writes per call. Its
         // whole job is the UI row: a collapsed tool row shows this sentence,
         // never the raw command — the same contract dsh's bash/pwsh tools

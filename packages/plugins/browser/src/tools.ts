@@ -20,6 +20,51 @@ import { getBrowserBridgeLifecycle } from "./browser-bridge-lifecycle";
 export const BROWSER_BRIDGE_EXTENSION_MISSING_ERROR =
   "Natalia Browser Bridge 扩展未安装或未启用。请告诉用户安装该扩展。";
 
+/**
+ * The browser-family card (presentation plan P1.3): every browser_* tool
+ * answers with the bridge's JSON envelope, so the card is the URL (or the
+ * tab id when there is no URL) and the outcome rides as the summary/pill.
+ * A malformed result degrades to the generic card rather than throwing.
+ */
+function browserCard(input: {
+  callSummary: string;
+}): NonNullable<
+  import("@anthelia/tools").ToolOutputDefinition["presentResult"]
+> {
+  return (_args, value) => {
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+        parsed = decoded as Record<string, unknown>;
+    } catch {
+      // degrade, never throw
+    }
+    const url = typeof parsed?.url === "string" ? parsed.url : undefined;
+    const tabId = parsed?.tabId ?? parsed?.activeId;
+    const title =
+      url ??
+      (typeof tabId === "string" || typeof tabId === "number"
+        ? String(tabId)
+        : "browser");
+    const ok = parsed?.ok;
+    const summary =
+      ok === false ? `${input.callSummary} · failed` : input.callSummary;
+    const meta: Array<[string, string]> = [];
+    if (url) meta.push(["url", url]);
+    if (tabId !== undefined && tabId !== null)
+      meta.push(["tab", String(tabId)]);
+    if (typeof parsed?.status === "number")
+      meta.push(["status", String(parsed.status)]);
+    return {
+      kind: "generic",
+      title,
+      summary,
+      ...(meta.length ? { meta } : {}),
+    };
+  };
+}
+
 function sharedBrowserBase(): string | undefined {
   return process.env.NATALIA_BROWSER_BRIDGE_URL || undefined;
 }
@@ -145,6 +190,17 @@ function browserScreenshotTool(): RuntimeTool {
       required: ["path"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "screenshot",
+          summary: "screenshot",
+        };
+      },
+      presentResult: browserCard({ callSummary: "screenshot" }),
+    },
     async execute(input, context) {
       if (context.settings?.browserEnabled === false)
         throw new Error("browser tools are disabled by runtime configuration");
@@ -204,6 +260,17 @@ function browserOpenTool(): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "open",
+        };
+      },
+      presentResult: browserCard({ callSummary: "open" }),
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const url = optionalString(args.url);
@@ -230,6 +297,17 @@ function browserCloseTool(): RuntimeTool {
         tabId: { type: ["string", "number"] },
       },
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "close",
+        };
+      },
+      presentResult: browserCard({ callSummary: "close" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -259,6 +337,39 @@ function browserTabsTool(): RuntimeTool {
       properties: {},
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return { kind: "generic", title: "browser", summary: "tabs" };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const tabs = Array.isArray(parsed?.tabs) ? parsed!.tabs! : [];
+        const active = tabs.filter(
+          (tab) =>
+            Boolean(tab) &&
+            typeof tab === "object" &&
+            (tab as { active?: unknown }).active === true,
+        ).length;
+        return {
+          kind: "generic",
+          title: "browser",
+          summary: `${tabs.length} tab${tabs.length === 1 ? "" : "s"} · ${active} active`,
+          meta: [
+            ["tabs", String(tabs.length)],
+            ["active", String(active)],
+          ],
+          body: value,
+        };
+      },
+    },
     async execute(_input, context) {
       return JSON.stringify(
         await browserBridgeCall("tabs", {}, context?.sessionID),
@@ -285,6 +396,17 @@ function browserScanTool(): RuntimeTool {
         offset: { type: "number" },
       },
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "scan",
+        };
+      },
+      presentResult: browserCard({ callSummary: "scan" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -323,6 +445,17 @@ function browserExecuteJsTool(): RuntimeTool {
       required: ["script"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "execute js",
+        };
+      },
+      presentResult: browserCard({ callSummary: "execute js" }),
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const tabId = optionalTabId(args.tabId);
@@ -355,6 +488,17 @@ function browserNavigateTool(): RuntimeTool {
       },
       required: ["url"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "navigate",
+        };
+      },
+      presentResult: browserCard({ callSummary: "navigate" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -390,6 +534,17 @@ function browserClickTool(): RuntimeTool {
       required: ["x", "y"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "click",
+        };
+      },
+      presentResult: browserCard({ callSummary: "click" }),
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const tabId = optionalTabId(args.tabId);
@@ -421,6 +576,17 @@ function browserInputTool(): RuntimeTool {
       },
       required: ["text"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: optionalString(requireObject(args).url) ?? "browser",
+          summary: "input",
+        };
+      },
+      presentResult: browserCard({ callSummary: "input" }),
     },
     async execute(input, context) {
       const args = requireObject(input);

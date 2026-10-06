@@ -475,13 +475,38 @@ export function mcpToolToRuntimeTool(
   options: { serverName?: string; readOnly?: boolean; timeoutMs?: number } = {},
 ): RuntimeTool {
   const prefix = options.serverName ? `mcp_${options.serverName}_` : "mcp_";
+  const label = `${options.serverName ?? "server"}/${tool.name}`;
   return {
     name: `${prefix}${tool.name}`,
-    description:
-      tool.description ??
-      `MCP tool ${options.serverName ?? "server"}/${tool.name}`,
+    description: tool.description ?? `MCP tool ${label}`,
     requiresApproval: !options.readOnly,
     parameters: tool.inputSchema as RuntimeTool["parameters"],
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return { kind: "generic", title: label, summary: "call" };
+      },
+      presentResult(_args, value) {
+        // The MCP result envelope: isError is the outcome fact, content the
+        // payload. A malformed result degrades to the generic card.
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const failed = parsed?.isError === true;
+        return {
+          kind: "generic",
+          title: label,
+          summary: failed ? "error" : "done",
+          meta: failed ? [["error", "true"]] : [],
+          body: value,
+        };
+      },
+    },
     async execute(input) {
       return formatMCPToolResult(
         await client.callTool(
@@ -690,6 +715,24 @@ function mcpPromptRuntimeTool(
       required: ["name"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: `${server}/${requireStringArgument(requireArguments(args).name, "name")}`,
+          summary: "prompt",
+        };
+      },
+      presentResult(_args, value) {
+        return {
+          kind: "generic",
+          title: `${server} prompt`,
+          summary: "loaded",
+          body: value,
+        };
+      },
+    },
     async execute(input) {
       const args = requireArguments(input);
       const name = requireStringArgument(args.name, "name");
@@ -713,6 +756,24 @@ function mcpResourceRuntimeTool(
       properties: { uri: { type: "string" } },
       required: ["uri"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "generic",
+          title: `${server}/${requireStringArgument(requireArguments(args).uri, "uri")}`,
+          summary: "resource",
+        };
+      },
+      presentResult(_args, value) {
+        return {
+          kind: "generic",
+          title: `${server} resource`,
+          summary: "read",
+          body: value,
+        };
+      },
     },
     async execute(input) {
       const args = requireArguments(input);

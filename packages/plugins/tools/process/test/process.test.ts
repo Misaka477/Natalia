@@ -651,7 +651,7 @@ test("the process family's read tools project generic cards (P1)", async () => {
   const exitedCard = status.output!.presentResult!(
     { id: "proc_card" },
     JSON.stringify({ id: "proc_card", status: "exited", exitCode: 0 }),
-  );
+  ) as { meta: Array<[string, string]> };
   expect(exitedCard.meta).toEqual([
     ["status", "exited"],
     ["exit", "0"],

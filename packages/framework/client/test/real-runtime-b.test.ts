@@ -1194,7 +1194,18 @@ test("agent model overrides apply when the next provider turn starts", async () 
     await client.submitAndWait!("first");
     client.selectAgent?.("second");
     await client.submitAndWait!("second");
-    expect(requests.map((request) => request.model)).toEqual(["alpha", "beta"]);
+    // The OVERRIDE is the assertion: the second turn must use `beta`, the
+    // first `alpha`. A retried attempt is the same turn's request re-sent, so
+    // the models are deduplicated per CONTIGUOUS run — CI measured a retried
+    // first turn ("alpha", "alpha", "beta") while local never retried, which
+    // is transport timing, not a routing difference. What must hold is the
+    // SEQUENCE of distinct models, and that it ENDS on the override.
+    const models = requests.map((request) => request.model);
+    const distinct: unknown[] = [];
+    for (const model of models)
+      if (distinct.at(-1) !== model) distinct.push(model);
+    expect(distinct).toEqual(["alpha", "beta"]);
+    expect(models.at(-1)).toBe("beta");
   } finally {
     server.stop(true);
   }

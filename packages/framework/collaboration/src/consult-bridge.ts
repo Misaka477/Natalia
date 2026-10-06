@@ -13,13 +13,29 @@
  * but now the tool call waits for it and returns the advice as the tool
  * result. The wait is process-local (a consult lives inside a turn; a
  * killed turn's wait dies with it — the speculative heat discipline)
- * and never unbounded: a timeout or the turn's abort answers
- * `unavailable`, which the model can act on.
+ * and never unbounded: a timeout, the turn's abort or the advisor's
+ * turn ending each answer with their own state (see {@link ConsultReply}),
+ * which the model can act on.
  */
 
+/**
+ * The consult's outcome as the model must act on it.
+ *
+ * The three non-answers used to collapse into one `unavailable` with a
+ * prose `reason`, so a timeout (re-ask or continue), a cancelled turn
+ * (the whole turn is gone) and an advisor whose wake turn ended without
+ * answering (she may answer on a re-ask) were indistinguishable to the
+ * caller — the model's own four-way taxonomy, which this union now is
+ * (T-15). The states are what the wait can actually end on, one producer
+ * each: resolveConsult → `answered`, the dead-man's switch →
+ * `timeout`, the turn's abort → `cancelled`, the advisor's turn ending →
+ * `advisor_ended`.
+ */
 export type ConsultReply =
   | { state: "answered"; advice: string; answeredAt: string }
-  | { state: "unavailable"; reason: string };
+  | { state: "timeout"; reason: string }
+  | { state: "cancelled"; reason: string }
+  | { state: "advisor_ended"; reason: string };
 
 type PendingConsult = {
   resolve: (reply: ConsultReply) => void;
@@ -71,20 +87,20 @@ export function waitForConsult(
     // cancelled while the ask was still sending) never fires the listener
     // — check it up front or the wait would hang to the timeout.
     if (options.signal?.aborted) {
-      settle({ state: "unavailable", reason: "the turn was cancelled" });
+      settle({ state: "cancelled", reason: "the turn was cancelled" });
       return;
     }
     timer = setTimeout(
       () =>
         settle({
-          state: "unavailable",
+          state: "timeout",
           reason: `no advisor answer within ${timeoutMs}ms`,
         }),
       timeoutMs,
     );
     options.signal?.addEventListener(
       "abort",
-      () => settle({ state: "unavailable", reason: "the turn was cancelled" }),
+      () => settle({ state: "cancelled", reason: "the turn was cancelled" }),
       { once: true },
     );
     pending.set(questionMessageID, {
@@ -137,7 +153,7 @@ export function expireSessionConsults(
   let expired = 0;
   for (const waiter of [...pending.values()])
     if (waiter.sessionID === sessionID) {
-      waiter.resolve({ state: "unavailable", reason });
+      waiter.resolve({ state: "advisor_ended", reason });
       expired += 1;
     }
   return expired;

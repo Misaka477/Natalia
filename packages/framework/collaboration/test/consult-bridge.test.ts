@@ -40,14 +40,18 @@ test("an answer resolves the pending consult with its advice", async () => {
   expect(resolveConsult("collab:q:bridge", "late", "t")).toBe(false);
 });
 
-test("a timeout answers unavailable and cleans up", async () => {
+test("a timeout answers timeout and cleans up", async () => {
+  // T-15: the model's taxonomy separates "she did not answer inside the
+  // budget" from "this turn is gone" from "her turn ended without
+  // answering" — three different follow-ups. The state is the machine-
+  // readable half; the reason stays for the human reading a log.
   const reply = await waitForConsult("collab:q:timeout", { timeoutMs: 10 });
-  expect(reply.state).toBe("unavailable");
+  expect(reply.state).toBe("timeout");
   expect((reply as { reason: string }).reason).toContain("10ms");
   expect(pendingConsultSession("collab:q:timeout")).toBeUndefined();
 });
 
-test("the turn's abort answers unavailable", async () => {
+test("the turn's abort answers cancelled", async () => {
   const controller = new AbortController();
   const waiting = waitForConsult("collab:q:abort", {
     timeoutMs: 60_000,
@@ -55,7 +59,7 @@ test("the turn's abort answers unavailable", async () => {
   });
   controller.abort();
   expect(await waiting).toEqual({
-    state: "unavailable",
+    state: "cancelled",
     reason: "the turn was cancelled",
   });
 });
@@ -178,7 +182,7 @@ test("collab_ask returns the advisor's answer as its tool result", async () => {
   expect(result.advice).toBe("approach A");
 });
 
-test("the advisor's turn ending settles its session's consults unavailable", async () => {
+test("the advisor's turn ending settles its session's consults advisor_ended", async () => {
   // The truncated-id flow's shape: navi's turn ran and never answered.
   // Waiting the full timeout would stall the main turn for minutes after
   // the advisor is gone — the turn's end settles it instead.
@@ -190,7 +194,7 @@ test("the advisor's turn ending settles its session's consults unavailable", asy
   });
   expect(expireSessionConsults("ses_gone", "turn ended")).toBe(1);
   expect(await waiting).toEqual({
-    state: "unavailable",
+    state: "advisor_ended",
     reason: "turn ended",
   });
   // Another session's consults are untouched.
@@ -199,7 +203,7 @@ test("the advisor's turn ending settles its session's consults unavailable", asy
   expect((await other).state).toBe("answered");
 });
 
-test("collab_ask reports unavailable when the turn is cancelled", async () => {
+test("collab_ask reports cancelled when the turn is cancelled", async () => {
   const { ask } = askToolHarness();
   const controller = new AbortController();
   const pending = ask.execute({ question: "stuck on a recurring error" }, {
@@ -211,6 +215,25 @@ test("collab_ask reports unavailable when the turn is cancelled", async () => {
     consult: string;
     reason?: string;
   };
-  expect(result.consult).toBe("unavailable");
+  expect(result.consult).toBe("cancelled");
   expect(result.reason).toContain("cancelled");
+});
+
+test("collab_ask reports advisor_ended when her turn ends without answering", async () => {
+  // The fourth state's tool surface: the wake's runBody wrapper expires
+  // the session's consults, and the ask's own result names that cause —
+  // distinct from a timeout (re-ask) and from a cancellation (the turn is
+  // gone).
+  const { ask } = askToolHarness();
+  const pending = ask.execute({ question: "second opinion on the schema" }, {
+    sessionID,
+  } as never) as Promise<string>;
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(expireSessionConsults(sessionID, "navi turn ended")).toBe(1);
+  const result = JSON.parse(await pending) as {
+    consult: string;
+    reason?: string;
+  };
+  expect(result.consult).toBe("advisor_ended");
+  expect(result.reason).toContain("navi turn ended");
 });

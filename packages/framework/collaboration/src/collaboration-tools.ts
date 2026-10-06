@@ -198,7 +198,7 @@ export function collaborationTools(
       "or a difficult decision — not only after an error. " +
       "The tool WAITS for her answer and returns it as its result, so a consult informs the same step (her answer or her turn ending ends the wait; a wedged advisor is cut off at ten minutes); " +
       "her guidance is an input, not a command — when your own evidence contradicts it, surface the conflict. " +
-      "If no answer arrives in time the result says unavailable and you continue without it.",
+      "The result names which happened: answered (the advice), timeout (no answer inside the budget — continue without it or re-ask), cancelled (this turn was aborted), advisor_ended (her turn ended without answering — re-ask if the advice still matters).",
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -240,10 +240,14 @@ export function collaborationTools(
         signal: context.signal,
         ...(sessionID ? { sessionID } : {}),
       });
+      // The four states are the model's own taxonomy (T-15): answered,
+      // timeout (no answer inside the budget), cancelled (this turn is
+      // gone — nothing to decide), advisor_ended (her wake turn finished
+      // without answering; a re-ask may still land).
       return JSON.stringify(
         reply.state === "answered"
           ? { consult: "answered", advice: reply.advice }
-          : { consult: "unavailable", reason: reply.reason },
+          : { consult: reply.state, reason: reply.reason },
       );
     },
   };

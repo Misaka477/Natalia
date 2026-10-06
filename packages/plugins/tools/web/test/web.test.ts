@@ -143,3 +143,35 @@ test("a capped fetch says it was capped, with the byte total", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("web_search projects a card naming the status and the byte cap", () => {
+  // web_search had NO output definition at all: the only web tool whose card
+  // the UI could not draw, so a search turn showed a raw JSON blob. Its card
+  // is the fetch card's twin — same header block, same two facets.
+  const tool = webTools.find((t) => t.name === "web_search")!;
+  expect(tool.output?.presentCall?.({ query: "natalia cli" })).toEqual({
+    kind: "web",
+    title: "natalia cli",
+    summary: "search",
+  });
+  const card = tool.output?.presentResult?.(
+    { query: "natalia cli" },
+    "status=200\ncontent-type=text/html\ntruncated=true bytes=500 of 9000\n<body>",
+  );
+  expect(card).toEqual({
+    kind: "web",
+    title: "natalia cli",
+    summary: "status 200",
+    body: "<body>",
+    meta: [
+      ["status", "200"],
+      ["truncated", "true"],
+    ],
+  });
+  // An uncapped result carries no truncation facet — a UI must not invent one.
+  const whole = tool.output?.presentResult?.(
+    { query: "natalia cli" },
+    "status=200\ncontent-type=text/html\n<body>",
+  );
+  expect(whole?.meta).toEqual([["status", "200"]]);
+});

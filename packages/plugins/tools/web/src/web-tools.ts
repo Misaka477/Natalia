@@ -148,6 +148,49 @@ function webSearchTool(): RuntimeTool {
       required: ["query"],
       additionalProperties: false,
     },
+    output: {
+      schema: {
+        type: "object",
+        properties: { status: { type: "integer" } },
+        required: ["status"],
+        additionalProperties: false,
+      },
+      presentCall(args) {
+        return {
+          kind: "web",
+          title: requireObject(args).query as string,
+          summary: "search",
+        };
+      },
+      presentResult(args, value) {
+        const query = requireObject(args).query as string;
+        // The result's header block is `status=..`, then the body. The
+        // facets say what came back and whether the byte cap cut it — the
+        // same two facts the fetch card carries, so both web tools read
+        // alike.
+        const status = Number(/status=(\d+)/u.exec(value)?.[1] ?? "0");
+        const truncated = /truncated=true/u.test(value);
+        const lines = value.split("\n");
+        let bodyStart = 0;
+        while (
+          bodyStart < lines.length &&
+          /^[a-z][a-z-]*=/u.test(lines[bodyStart]!)
+        )
+          bodyStart += 1;
+        return {
+          kind: "web",
+          title: query,
+          summary: `status ${status}`,
+          body: lines.slice(bodyStart).join("\n") || "(empty body)",
+          meta: [
+            ["status", String(status)],
+            ...(truncated
+              ? ([["truncated", "true"]] as Array<[string, string]>)
+              : []),
+          ],
+        };
+      },
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const search = selectWebSearchSource({

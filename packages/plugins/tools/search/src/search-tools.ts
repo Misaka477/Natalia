@@ -95,6 +95,7 @@ function globTool(): RuntimeTool {
       },
       presentResult(args, value) {
         let summary = "glob";
+        let meta: Array<[string, string]> = [];
         try {
           const parsed = JSON.parse(value) as {
             paths?: unknown[];
@@ -103,6 +104,14 @@ function globTool(): RuntimeTool {
           const count = parsed.paths?.length ?? 0;
           summary = count === 0 ? "no matches" : `${count} matches`;
           if (parsed.nextCursor) summary += " · more";
+          // A capped result must never read as a complete one: dsh's
+          // SearchResultView carries `truncated` and `total` as separate
+          // facts, so a UI can show "3 of 200" instead of a bare "3".
+          if (parsed.nextCursor)
+            meta = [
+              ["returned", String(count)],
+              ["truncated", "true"],
+            ];
         } catch {
           summary = "glob";
         }
@@ -110,6 +119,7 @@ function globTool(): RuntimeTool {
           kind: "search",
           title: requireObject(args).pattern as string,
           summary,
+          meta,
           body: value,
         };
       },
@@ -225,6 +235,7 @@ function grepTool(): RuntimeTool {
       },
       presentResult(args, value) {
         let summary = "grep";
+        let meta: Array<[string, string]> = [];
         try {
           const parsed = JSON.parse(value) as {
             matches?: unknown[];
@@ -233,6 +244,13 @@ function grepTool(): RuntimeTool {
           const count = parsed.matches?.length ?? 0;
           summary = count === 0 ? "no matches" : `${count} matches`;
           if (parsed.nextCursor) summary += " · more";
+          // The same two facts as glob: the kept count and whether the cap
+          // cut the rest.
+          if (parsed.nextCursor)
+            meta = [
+              ["returned", String(count)],
+              ["truncated", "true"],
+            ];
         } catch {
           summary = value === "no matches" ? "no matches" : "matches";
         }
@@ -240,6 +258,7 @@ function grepTool(): RuntimeTool {
           kind: "search",
           title: requireObject(args).pattern as string,
           summary,
+          meta,
           body: value,
         };
       },

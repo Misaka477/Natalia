@@ -10,7 +10,10 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
+  hasKeyedToolview,
+  parseAskTranscript,
   shouldCollapseToolOutput,
+  todoItemsFromBody,
   toolRowLabel,
   type Attachment,
   type Message,
@@ -1221,7 +1224,70 @@ function ToolKindIcon(props: { kind: string | undefined }) {
   }
 }
 
+/**
+ * The keyed toolviews (P2): ask_user's Q&A transcript and the todo
+ * checklist. Both read the tool's own projected card — the transcript
+ * lines and the envelope items are parsed by the pure helpers in
+ * message.ts, so the rendering here has no parsing to get wrong.
+ */
+function KeyedToolCard(props: { toolCall: ToolCall }) {
+  if (props.toolCall.name === "ask_user") {
+    const lines = () =>
+      parseAskTranscript(
+        props.toolCall.card?.body ?? props.toolCall.output ?? "",
+      );
+    return (
+      <div class="natalia-tool-output natalia-keyed-qa">
+        <pre>
+          <For each={lines()}>
+            {(entry) => (
+              <span
+                class="natalia-tool-output-line"
+                data-line-kind={
+                  entry.kind === "answer"
+                    ? "added"
+                    : entry.kind === "question"
+                      ? "removed"
+                      : "plain"
+                }
+              >
+                {entry.text}
+                {"\n"}
+              </span>
+            )}
+          </For>
+        </pre>
+      </div>
+    );
+  }
+  // todo_read / todo_write: the checklist.
+  const items = () =>
+    todoItemsFromBody(props.toolCall.card?.body ?? props.toolCall.output ?? "");
+  return (
+    <div class="natalia-tool-output natalia-keyed-todo">
+      <Show when={items().length > 0} fallback={<pre>(no items)</pre>}>
+        <For each={items()}>
+          {(item) => (
+            <span
+              class="natalia-tool-output-line"
+              data-line-kind={item.status === "completed" ? "added" : "plain"}
+            >
+              {`${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`}
+              {"\n"}
+            </span>
+          )}
+        </For>
+      </Show>
+    </div>
+  );
+}
+
 function ToolCallCard(props: { toolCall: ToolCall }) {
+  // The keyed dispatch (presentation plan P2.1): a keyed toolview REPLACES
+  // the generic card, the same dispatch dsh's ToolCallTree performs. The
+  // keyed set lives in message.ts beside the other tool tables.
+  if (hasKeyedToolview(props.toolCall.name))
+    return <KeyedToolCard toolCall={props.toolCall} />;
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
   const rowLabel = () => toolRowLabel(props.toolCall.name);

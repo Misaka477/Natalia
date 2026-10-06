@@ -73,11 +73,37 @@ function askUserTool(): RuntimeTool {
         };
       },
       presentResult(args, value) {
+        // The Q&A transcript the keyed UI card renders (P2.2): the model
+        // asked, the user answered — a reader should see both halves with
+        // the offered choices, not a JSON envelope of picked indexes.
+        const parsed = requireObject(args);
+        const options = Array.isArray(parsed.options)
+          ? parsed.options.map(String)
+          : [];
+        let answers: string[] = [];
+        try {
+          const decoded = JSON.parse(value) as { answers?: unknown };
+          if (Array.isArray(decoded?.answers))
+            answers = decoded.answers.map((answer) =>
+              Array.isArray(answer)
+                ? answer.map(String).join(", ")
+                : String(answer),
+            );
+        } catch {
+          // The envelope is the fallback text.
+        }
+        const transcript = [
+          `Q: ${String(parsed.question ?? "")}`,
+          ...(options.length ? [`Options: ${options.join(" · ")}`] : []),
+          answers.length
+            ? `A: ${answers.join("; ")}`
+            : "A: (no answer recorded)",
+        ].join("\n");
         return {
           kind: "generic",
-          title: requireObject(args).question as string,
+          title: parsed.question as string,
           summary: "answered",
-          body: value,
+          body: answers.length ? transcript : value,
         };
       },
     },

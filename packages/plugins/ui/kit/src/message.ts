@@ -77,6 +77,77 @@ export function toolRowLabel(toolName: string): string {
   return TOOL_ROW_LABELS[toolName] ?? toolName;
 }
 
+/**
+ * The tools with a keyed toolview (presentation plan P2.1): a keyed hit
+ * REPLACES the generic card, the same dispatch dsh's ToolCallTree performs.
+ * A name absent from this set falls through to the generic card — the
+ * honest answer for a tool nobody has keyed yet.
+ */
+const KEYED_TOOLVIEW_NAMES: ReadonlySet<string> = new Set([
+  // dsh's AskQuestionCard: the Q&A transcript.
+  "ask_user",
+  // The todo checklist (P2.3), both halves of the surface.
+  "todo_read",
+  "todo_write",
+]);
+
+export function hasKeyedToolview(toolName: string): boolean {
+  return KEYED_TOOLVIEW_NAMES.has(toolName);
+}
+
+/** One Q&A transcript line: the question, a choice line, or the answer. */
+export type QATranscriptLine = {
+  text: string;
+  kind: "question" | "choices" | "answer" | "plain";
+};
+
+/**
+ * Parses the ask_user card's transcript body into its lines.
+ *
+ * The tool writes `Q:` / `Options:` / `A:` lines (ask-tools.ts); this reads
+ * them back for the keyed card. A body that is not that transcript yields
+ * its lines verbatim as `plain` — the card shows what the tool wrote.
+ */
+export function parseAskTranscript(body: string): QATranscriptLine[] {
+  return body
+    .split(String.fromCharCode(10))
+    .filter((line) => line.length > 0)
+    .map((line) => ({
+      text: line,
+      kind: line.startsWith("Q:")
+        ? ("question" as const)
+        : line.startsWith("Options:")
+          ? ("choices" as const)
+          : line.startsWith("A:")
+            ? ("answer" as const)
+            : ("plain" as const),
+    }));
+}
+
+/** One checklist row, decoded from a todo result envelope. */
+export type TodoChecklistItem = { content: string; status: string };
+
+/**
+ * The todo items a tool's result envelope carries, or an empty list when
+ * the body is not the envelope. Both todo tools answer with it after the
+ * T-01 envelope alignment; a prose result simply has no checklist.
+ */
+export function todoItemsFromBody(body: string): TodoChecklistItem[] {
+  try {
+    const parsed = JSON.parse(body) as {
+      items?: Array<{ content?: unknown; status?: unknown }>;
+    };
+    if (Array.isArray(parsed.items))
+      return parsed.items.map((item) => ({
+        content: String(item.content ?? ""),
+        status: String(item.status ?? "pending"),
+      }));
+  } catch {
+    // Not the envelope.
+  }
+  return [];
+}
+
 export function toolCallCard(
   metadata: Record<string, unknown> | undefined,
 ): ToolCallCard | undefined {

@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { toolCallCard, toolRowLabel } from "../src/message";
+import {
+  hasKeyedToolview,
+  parseAskTranscript,
+  todoItemsFromBody,
+  toolCallCard,
+  toolRowLabel,
+} from "../src/message";
 
 /**
  * The bridge from a tool's self-projected card to the UI's card model.
@@ -159,4 +165,57 @@ test("toolRowLabel gives every tool its family label", () => {
   expect(toolRowLabel("process_start")).toBe("Process");
   // An unclassified tool keeps its own name: the honest answer, not "other".
   expect(toolRowLabel("some_new_tool")).toBe("some_new_tool");
+});
+
+test("the keyed toolview table names exactly the keyed tools (P2.1)", () => {
+  // A keyed hit REPLACES the generic card (dsh's ToolCallTree dispatch);
+  // every other name falls through to the generic card.
+  expect(hasKeyedToolview("ask_user")).toBe(true);
+  expect(hasKeyedToolview("todo_read")).toBe(true);
+  expect(hasKeyedToolview("todo_write")).toBe(true);
+  // A tool nobody has keyed falls through — the honest default.
+  expect(hasKeyedToolview("run_shell")).toBe(false);
+  expect(hasKeyedToolview("read_file")).toBe(false);
+});
+
+test("the Q&A transcript parses into its three line kinds (P2.2)", () => {
+  const lines = parseAskTranscript(
+    [
+      "Q: which database wins?",
+      "Options: sqlite (Recommended) · postgres",
+      "A: sqlite",
+    ].join(String.fromCharCode(10)),
+  );
+  expect(lines.map((line) => line.kind)).toEqual([
+    "question",
+    "choices",
+    "answer",
+  ]);
+  expect(lines.map((line) => line.text)).toEqual([
+    "Q: which database wins?",
+    "Options: sqlite (Recommended) · postgres",
+    "A: sqlite",
+  ]);
+  // A body that is not the transcript still shows its lines (as plain).
+  const fallback = parseAskTranscript("some raw result text");
+  expect(fallback).toEqual([{ text: "some raw result text", kind: "plain" }]);
+});
+
+test("the todo checklist decodes the shared envelope (P2.3)", () => {
+  const items = todoItemsFromBody(
+    JSON.stringify({
+      items: [
+        { content: "write the parser", status: "completed" },
+        { content: "add tests", status: "in_progress" },
+      ],
+      total: 2,
+      truncated: false,
+    }),
+  );
+  expect(items).toEqual([
+    { content: "write the parser", status: "completed" },
+    { content: "add tests", status: "in_progress" },
+  ]);
+  // A prose result has no checklist, not a crash.
+  expect(todoItemsFromBody("no items")).toEqual([]);
 });

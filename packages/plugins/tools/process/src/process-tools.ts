@@ -114,14 +114,20 @@ export class ManagedProcessRegistry {
         [...this.processes.entries()].flatMap(([workspaceRoot, byID]) =>
           [...byID.values()].map((info) => ({ ...info, workspaceRoot })),
         ),
-      settle: ({ id, status }) => {
+      settle: async ({ id }) => {
         for (const [workspaceRoot, byID] of this.processes) {
           const info = byID.get(id);
           if (!info || info.status !== "running") continue;
-          return this.markTerminal(
+          // The one classifier, not a second opinion: settleFromRecord is
+          // what every other reader already runs — a natural death is
+          // `exited`, and a PID whose start-ticks no longer match (the
+          // process died and its id was reused) is `failed`. The sweep used
+          // to settle every death `exited` directly, so the same PID-reuse
+          // death presented as two different terminal states depending on
+          // which path noticed it first (T-03).
+          return await this.settleFromRecord(
             { workspaceRoot } as unknown as ToolExecutionContext,
             info,
-            status,
           );
         }
         return undefined;
@@ -301,7 +307,7 @@ export class ManagedProcessRegistry {
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
     if (info.status !== "running") {
-      const settled = this.settleFromRecord(context, info);
+      const settled = await this.settleFromRecord(context, info);
       if (settled) return settled;
       return {
         kind: "settled" as const,
@@ -316,6 +322,12 @@ export class ManagedProcessRegistry {
           : {}),
       };
     }
+    // The observer sweeps on an interval, so a process that exited just
+    // before this wait may not have been noticed yet: the one classifier
+    // runs once BEFORE the promise, where await is legal, rather than
+    // inside its executor where it is not (T-03).
+    const alreadySettled = await this.settleFromRecord(context, info);
+    if (alreadySettled) return alreadySettled;
     return await new Promise<ManagedProcessSettledEvent | undefined>(
       (resolve) => {
         let unsubscribe = () => {};
@@ -334,14 +346,6 @@ export class ManagedProcessRegistry {
             return;
           finish(event);
         });
-        // The observer sweeps on an interval, so a process that exited just
-        // before this wait may not have been noticed yet: check once on entry
-        // rather than waiting a whole poll for it.
-        const settled = this.settleFromRecord(context, info);
-        if (settled) {
-          finish(settled);
-          return;
-        }
         timer = setTimeout(() => finish(undefined), Math.max(0, timeoutMs));
         timer.unref();
         // The observer must be armed for the subscription above to ever fire.
@@ -357,10 +361,18 @@ export class ManagedProcessRegistry {
    * still marked running. Re-checking liveness here closes that window for a
    * caller who is about to block on it.
    */
-  private settleFromRecord(
+  /**
+   * The ONE liveness classifier: not running -> nothing; alive -> nothing;
+   * dead -> `exited`; alive but fingerprinted to a DIFFERENT process (the
+   * pid died and the OS reused it) -> `failed`, an ownership loss. The
+   * fingerprint branch used to live only in the restore path, so the same
+   * reuse death presented `failed` after a reopen and `exited` through the
+   * sweep or a lazy read (T-03).
+   */
+  private async settleFromRecord(
     context: ToolExecutionContext,
     info: ManagedProcessRuntime,
-  ): ManagedProcessSettledEvent | undefined {
+  ): Promise<ManagedProcessSettledEvent | undefined> {
     if (info.status !== "running") return undefined;
     let alive = true;
     try {
@@ -368,8 +380,16 @@ export class ManagedProcessRegistry {
     } catch {
       alive = false;
     }
-    if (alive) return undefined;
-    return this.markTerminal(context, info, "exited");
+    if (!alive) return this.markTerminal(context, info, "exited");
+    if (info.pid && info.pidStartTicks) {
+      const current = await processFingerprint(info.pid);
+      if (current.pidStartTicks !== info.pidStartTicks) {
+        info.output =
+          `${info.output}\nmanaged process ownership lost: PID ${info.pid} no longer matches its persisted process fingerprint`.trim();
+        return this.markTerminal(context, info, "failed");
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -410,25 +430,29 @@ export class ManagedProcessRegistry {
 
   async list(context: ToolExecutionContext) {
     await this.load(context);
-    return [...this.workspaceProcesses(context).values()].map((info) => {
-      this.settleFromRecord(context, info);
-      return publicProcessInfo(info);
-    });
+    const listed: ManagedProcessInfo[] = [];
+    for (const info of this.workspaceProcesses(context).values()) {
+      await this.settleFromRecord(context, info);
+      listed.push(publicProcessInfo(info));
+    }
+    return listed;
   }
 
   async runningCount(context: ToolExecutionContext): Promise<number> {
     await this.load(context);
-    return [...this.workspaceProcesses(context).values()].filter((info) => {
-      this.settleFromRecord(context, info);
-      return info.status === "running";
-    }).length;
+    let running = 0;
+    for (const info of this.workspaceProcesses(context).values()) {
+      await this.settleFromRecord(context, info);
+      if (info.status === "running") running += 1;
+    }
+    return running;
   }
 
   async get(id: string, context: ToolExecutionContext) {
     await this.load(context);
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
-    this.settleFromRecord(context, info);
+    await this.settleFromRecord(context, info);
     return publicProcessInfo(info);
   }
 
@@ -445,7 +469,7 @@ export class ManagedProcessRegistry {
     // notifies whether the probe or a read found it (one writer, one
     // notice).
     await this.markReady(id, context.workspaceRoot, rawOutput);
-    this.settleFromRecord(context, info);
+    await this.settleFromRecord(context, info);
     // The tail is the page, and a page that does not say it is one is the
     // audit's finding: the earlier output existed on disk (the very file we
     // just read) and nothing in the result mentioned it. The note names the
@@ -495,7 +519,7 @@ export class ManagedProcessRegistry {
     if (!info) throw new Error(`process not found: ${id}`);
     info.attached = true;
     await this.save(context);
-    this.settleFromRecord(context, info);
+    await this.settleFromRecord(context, info);
     return publicProcessInfo(info);
   }
 
@@ -505,7 +529,7 @@ export class ManagedProcessRegistry {
     if (!info) throw new Error(`process not found: ${id}`);
     info.attached = false;
     await this.save(context);
-    this.settleFromRecord(context, info);
+    await this.settleFromRecord(context, info);
     return publicProcessInfo(info);
   }
 
@@ -514,7 +538,7 @@ export class ManagedProcessRegistry {
     let removed = 0;
     const processes = this.workspaceProcesses(context);
     for (const [id, info] of processes) {
-      this.settleFromRecord(context, info);
+      await this.settleFromRecord(context, info);
       if (info.status !== "running") {
         processes.delete(id);
         this.clearDeadline(this.deadlineKey(context, id));
@@ -527,13 +551,12 @@ export class ManagedProcessRegistry {
 
   async audit(context: ToolExecutionContext) {
     await this.load(context);
-    return {
-      root: resolve(context.workspaceRoot),
-      processes: [...this.workspaceProcesses(context).values()].map((info) => {
-        this.settleFromRecord(context, info);
-        return publicProcessInfo(info);
-      }),
-    };
+    const processes: ManagedProcessInfo[] = [];
+    for (const info of this.workspaceProcesses(context).values()) {
+      await this.settleFromRecord(context, info);
+      processes.push(publicProcessInfo(info));
+    }
+    return { root: resolve(context.workspaceRoot), processes };
   }
 
   /**
@@ -697,26 +720,10 @@ export class ManagedProcessRegistry {
     context: ToolExecutionContext,
     info: ManagedProcessRuntime,
   ): Promise<ManagedProcessRuntime> {
-    if (info.status !== "running") return info;
-    let alive = true;
-    try {
-      if (info.pid) process.kill(info.pid, 0);
-    } catch {
-      alive = false;
-    }
-    if (!alive) {
-      this.markTerminal(context, info, "exited");
-      return info;
-    }
-    if (info.pid && info.pidStartTicks) {
-      const current = await processFingerprint(info.pid);
-      if (current.pidStartTicks !== info.pidStartTicks) {
-        info.output =
-          `${info.output}\nmanaged process ownership lost: PID ${info.pid} no longer matches its persisted process fingerprint`.trim();
-        this.markTerminal(context, info, "failed");
-        return info;
-      }
-    }
+    // The one classifier answers for the restore path too — its doc comment
+    // above is the restore's original contract, now shared rather than
+    // duplicated (T-03).
+    await this.settleFromRecord(context, info);
     return info;
   }
 }
@@ -1338,8 +1345,7 @@ export class ManagedProcessObserver {
       settle(input: {
         id: string;
         workspaceRoot: string;
-        status: "exited" | "failed";
-      }): ManagedProcessSettledEvent | undefined;
+      }): Promise<ManagedProcessSettledEvent | undefined>;
       /** Mark a record ready when its pattern matches; report the flip. */
       ready?(input: { id: string; workspaceRoot: string }): Promise<boolean>;
     },
@@ -1425,10 +1431,9 @@ export class ManagedProcessObserver {
           alive = false;
         }
         if (alive) continue;
-        const settled = this.source.settle({
+        const settled = await this.source.settle({
           id: info.id,
           workspaceRoot: info.workspaceRoot,
-          status: "exited",
         });
         if (settled) this.emit(settled);
       }

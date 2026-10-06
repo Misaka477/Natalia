@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   ManagedProcessObserver,
+  ManagedProcessRegistry,
   type ManagedProcessReadyEvent,
   type ManagedProcessSettledEvent,
 } from "../src/process-tools";
@@ -35,24 +36,27 @@ function source(
     },
     settled,
     snapshot: () => records,
-    settle(input: { id: string; status: "exited" | "failed" }) {
+    // T-03: the sweep no longer names the status — the registry's one
+    // classifier (settleFromRecord) decides, so this stub settles what the
+    // sweep observed (a dead pid) as the registry would.
+    async settle(input: { id: string }) {
       const info = records.find((candidate) => candidate.id === input.id);
       if (!info || info.status !== "running") return undefined;
       records = records.map((candidate) =>
         candidate.id === input.id
           ? {
               ...candidate,
-              status: input.status,
+              status: "exited",
               endedAt: "2026-01-01T00:00:01.000Z",
             }
           : candidate,
       );
-      settled.push({ id: input.id, status: input.status });
+      settled.push({ id: input.id, status: "exited" });
       return {
         kind: "settled" as const,
         id: input.id,
         command: info.command,
-        status: input.status,
+        status: "exited" as const,
         workspaceRoot: info.workspaceRoot,
         startedAt: info.startedAt,
         endedAt: "2026-01-01T00:00:01.000Z",
@@ -136,9 +140,8 @@ test("the sweep is armed only while something is running", async () => {
 
   // Nothing left running disarms it, so a session with no processes carries no
   // timer nobody needs.
-  harness.src.snapshot().forEach((info) => {
-    harness.src.settle({ id: info.id, status: "exited" });
-  });
+  for (const info of harness.src.snapshot())
+    await harness.src.settle({ id: info.id });
   harness.observer.sync();
   expect(harness.observer.armed).toBe(false);
 });
@@ -253,4 +256,85 @@ test("a second sweep does not re-notice a settled process", async () => {
   await harness.observer.sweep();
 
   expect(seen).toEqual(["proc_1"]);
+});
+
+test("the sweep never names the terminal status — the registry's one classifier does (T-03)", async () => {
+  // The observer used to settle every death `exited` itself, so a PID-reuse
+  // death (settleFromRecord's `failed`) presented as two different terminal
+  // states depending on which path noticed it first. The sweep now carries
+  // only the identity; the status is the registry's to decide.
+  const live = new Set([1]);
+  const harness = observerFor({ live });
+  const settleCalls: Array<Record<string, unknown>> = [];
+  const originalSettle = harness.src.settle.bind(harness.src);
+  (harness.src as unknown as { settle: (input: unknown) => unknown }).settle = (
+    input: unknown,
+  ) => {
+    settleCalls.push(input as Record<string, unknown>);
+    return originalSettle(input as { id: string });
+  };
+  live.delete(1);
+  await harness.observer.sweep();
+  expect(settleCalls.length).toBeGreaterThan(0);
+  for (const call of settleCalls) {
+    expect(Object.keys(call).sort()).toEqual(["id", "workspaceRoot"]);
+  }
+});
+
+test("the sweep's settle delegates to the registry's one classifier (T-03)", async () => {
+  // The PID-reuse death is where the two paths could disagree: settleFromRecord
+  // classifies it `failed`, and the sweep used to settle every death `exited`
+  // itself. The guard drives the SWEEP's own settle entry (the callback the
+  // registry handed the observer) with a record whose fingerprint is stale,
+  // and pins the classification it returns.
+  const registry = new ManagedProcessRegistry();
+  const internals = registry as unknown as {
+    processes: Map<
+      string,
+      Map<
+        string,
+        {
+          id: string;
+          command: string;
+          status: string;
+          workspaceRoot: string;
+          startedAt: string;
+          pid?: number;
+          pidStartTicks?: string;
+        }
+      >
+    >;
+  };
+  const workspaceRoot = "/tmp";
+  internals.processes.set(workspaceRoot, new Map());
+  internals.processes.get(workspaceRoot)!.set("proc_reuse", {
+    id: "proc_reuse",
+    command: "sleep 30",
+    status: "running",
+    workspaceRoot,
+    startedAt: "2026-01-01T00:00:00.000Z",
+    // A live pid with a fingerprint that cannot match it: the process this
+    // record names died and its id was taken by something else — exactly
+    // what settleFromRecord's fingerprint branch exists to catch.
+    pid: process.pid,
+    pidStartTicks: "stale-start-ticks",
+  });
+  const observer = (
+    registry as unknown as {
+      observer: {
+        source?: {
+          settle(input: {
+            id: string;
+            workspaceRoot: string;
+          }): { status: string } | undefined;
+        };
+      };
+    }
+  ).observer;
+  const settled = await observer.source?.settle({
+    id: "proc_reuse",
+    workspaceRoot,
+  });
+  // The sweep's entry returned the classifier's answer, not a second opinion.
+  expect(settled?.status).toBe("failed");
 });

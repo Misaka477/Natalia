@@ -560,3 +560,55 @@ test("process_status output carries its freshness, and process_output refreshes 
     .get("process_stop")!
     .execute({ id: "proc_fresh" }, { workspaceRoot: root });
 });
+
+test("a natural death presents one terminal state across status, wait and audit (T-03)", async () => {
+  // Two terminal states, one producer each: an explicit stop (or the
+  // deadline) is `stopped`, a natural death is `exited` — and the sweep,
+  // the poll and every reading face must agree, because the sweep used to
+  // settle deaths itself while the poll classified them, and the two could
+  // disagree about the same process.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-death-"));
+  const tools = processRegistryTools();
+  const started = JSON.parse(
+    await tools.get("process_start")!.execute(
+      {
+        id: "proc_dies",
+        command: "sleep 30",
+        description: "A process that will be killed",
+      },
+      { workspaceRoot: root },
+    ),
+  ) as { pid?: number };
+  expect(started.pid).toBeNumber();
+  // Kill it from outside: a natural death, no registry call involved.
+  process.kill(started.pid!, "SIGKILL");
+  // Wait for the sweep to notice (its cadence stretches under load, so the
+  // window outlives the poll interval with room).
+  let status = { status: "running" };
+  for (let elapsed = 0; elapsed < 6_000; elapsed += 50) {
+    status = JSON.parse(
+      await tools
+        .get("process_status")!
+        .execute({ id: "proc_dies" }, { workspaceRoot: root }),
+    ) as { status: string };
+    if (status.status !== "running") break;
+    await Bun.sleep(50);
+  }
+  expect(status.status).toBe("exited");
+  // The audit face agrees.
+  const audit = JSON.parse(
+    await tools.get("process_audit")!.execute({}, { workspaceRoot: root }),
+  ) as { processes: Array<{ id: string; status: string }> };
+  expect(audit.processes.find((p) => p.id === "proc_dies")?.status).toBe(
+    "exited",
+  );
+  // The wait face agrees: an already-terminal process returns its terminal
+  // state at once (no timeout flag).
+  const waited = JSON.parse(
+    await tools
+      .get("process_wait")!
+      .execute({ id: "proc_dies", timeoutMs: 2_000 }, { workspaceRoot: root }),
+  ) as { status: string; timedOut: boolean };
+  expect(waited.status).toBe("exited");
+  expect(waited.timedOut).toBe(false);
+});

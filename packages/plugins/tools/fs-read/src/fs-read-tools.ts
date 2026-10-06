@@ -95,18 +95,39 @@ function readFileTool(): RuntimeTool {
         const totalLines =
           typeof parsed?.totalLines === "number" ? parsed.totalLines : null;
         const truncated = parsed?.truncated === true;
+        // The window, named from the SAME numbers the footer uses, so the
+        // card and the text can never disagree: `offset` is where this page
+        // starts (arguments, available while the call runs) and the page's
+        // own line count closes the range. A reader sees "lines 2-3 of 5" —
+        // the window read, not a char count that presents a capped page as
+        // the whole file.
+        const offset = optionalInteger(
+          (requireObject(args) as { offset?: unknown }).offset,
+          "offset",
+        );
+        const pageLines = content.split("\n").length;
+        const window =
+          offset !== undefined && totalLines !== null
+            ? `lines ${offset}-${offset + pageLines - 1} of ${totalLines}`
+            : totalLines === null
+              ? "read"
+              : `${totalLines} lines`;
         return {
           kind: "read",
           title: typeof path === "string" ? path : "file",
-          // The window is the summary: a card that shows only the char count
-          // presents a capped read as the whole file. Without the envelope
-          // there is no window to name, and the honest summary is the read.
-          summary:
-            totalLines === null
-              ? "read"
-              : truncated
-                ? `page of ${totalLines} lines`
-                : `${totalLines} lines`,
+          summary: window,
+          // The window facts ride as card facets too, so a UI without a
+          // read-specific card still shows them.
+          meta: [
+            ...(totalLines === null
+              ? []
+              : ([["totalLines", String(totalLines)]] as Array<
+                  [string, string]
+                >)),
+            ...(truncated
+              ? ([["truncated", "true"]] as Array<[string, string]>)
+              : []),
+          ],
           body: content,
         };
       },
@@ -153,13 +174,28 @@ function readFileTool(): RuntimeTool {
       // window facts ride as JSON text, the shape glob and grep already use
       // (`search-tools.ts`). The model reads `content` (with its footer);
       // a client reads the rest.
+      //
+      // The footer is the three-state form dsh's read uses, because a MODEL
+      // reads it and a page it cannot resume is a page it must guess at:
+      //   capped by this call's window  -> "Showing lines A-B of N", with the
+      //     next offset named, so the next call needs no arithmetic;
+      //   the window reached the end     -> "End of file - total N lines", so
+      //     the model knows NOT to ask again;
+      //   the window is empty (a byte or line cap below the first selected
+      //     line) -> the start line is still named, so a continuation knows
+      //     where to resume from.
+      // The card's `totalLines`/`truncated` come from the same two numbers, so
+      // the text and the UI can never disagree about the window.
       if (end === totalLines)
-        return JSON.stringify({ content: page, totalLines, truncated: false });
+        return JSON.stringify({
+          content: `${page}\n\n(End of file - total ${totalLines} lines)`,
+          totalLines,
+          truncated: false,
+        });
 
-      const remaining = totalLines - end;
       const next = end + 1;
       return JSON.stringify({
-        content: `${page}\n\n... ${remaining} more line${remaining === 1 ? "" : "s"}; use offset=${next} length=${length} ...`,
+        content: `${page}\n\n(Showing lines ${offset}-${end} of ${totalLines}. Use offset=${next} to continue.)`,
         totalLines,
         truncated: true,
       });

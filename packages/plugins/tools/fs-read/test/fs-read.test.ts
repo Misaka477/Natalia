@@ -47,7 +47,12 @@ test("read_file reads inside the workspace and rejects escapes", async () => {
         .get("read_file")!
         .execute({ path: "note.txt" }, { workspaceRoot: root }),
     ),
-  ).toEqual({ content: "hi", totalLines: 1, truncated: false });
+  ).toEqual({
+    // A one-line file is the end state too.
+    content: "hi\n\n(End of file - total 1 lines)",
+    totalLines: 1,
+    truncated: false,
+  });
   await expect(
     tools
       .get("read_file")!
@@ -87,7 +92,10 @@ test("read_file accepts offset and length for autonomous pagination", async () =
       ),
     ),
   ).toEqual({
-    content: "two\nthree\n\n... 2 more lines; use offset=4 length=2 ...",
+    // The three-state footer: the window's own range, the file's total, and
+    // the ONE offset a continuation needs (no arithmetic for the model).
+    content:
+      "two\nthree\n\n(Showing lines 2-3 of 5. Use offset=4 to continue.)",
     totalLines: 5,
     truncated: true,
   });
@@ -98,7 +106,12 @@ test("read_file accepts offset and length for autonomous pagination", async () =
         { workspaceRoot: root },
       ),
     ),
-  ).toEqual({ content: "four\nfive", totalLines: 5, truncated: false });
+  ).toEqual({
+    // Reaching the end says so, so the model does not ask again.
+    content: "four\nfive\n\n(End of file - total 5 lines)",
+    totalLines: 5,
+    truncated: false,
+  });
   await expect(
     read.execute(
       { path: "lines.txt", offset: 0, length: 2 },
@@ -125,7 +138,29 @@ test("read_file projects a read card from its output definition", () => {
     // The window, not the char count: a card that shows only the size
     // presents a capped read as the whole file.
     summary: "1 lines",
+    // The same two numbers the footer's text carries, as card facets, so a UI
+    // without a read-specific card still shows them.
+    meta: [["totalLines", "1"]],
     body: "export const x = 1;",
+  });
+  // With an offset the card names the RANGE, from the same numbers the footer
+  // uses — the page starts at the argument, and the page's own line count
+  // closes it.
+  const windowed = tool.output?.presentResult?.(
+    { path: "src/index.ts", offset: 2 },
+    JSON.stringify({
+      content: "line two\nline three",
+      totalLines: 5,
+      truncated: true,
+    }),
+  );
+  expect(windowed).toMatchObject({
+    kind: "read",
+    summary: "lines 2-3 of 5",
+    meta: [
+      ["totalLines", "5"],
+      ["truncated", "true"],
+    ],
   });
 });
 
@@ -153,7 +188,9 @@ test("read_file caps a windowless read at the line limit and says where to conti
   expect(page[1999]).toBe("line 2000");
   // The continuation is spelled out in the text the model reads, and the
   // offset it names is the first line of the next page.
-  expect(page.at(-1)).toContain("5 more lines; use offset=2001 length=2000");
+  expect(page.at(-1)).toContain(
+    "Showing lines 1-2000 of 2005. Use offset=2001 to continue.",
+  );
 
   await writeFile(
     join(root, "small.txt"),
@@ -163,7 +200,12 @@ test("read_file caps a windowless read at the line limit and says where to conti
     JSON.parse(
       await read.execute({ path: "small.txt" }, { workspaceRoot: root }),
     ),
-  ).toEqual({ content: "s1\ns2\ns3", totalLines: 3, truncated: false });
+  ).toEqual({
+    // A whole small file is the "end of file" state, and it says so.
+    content: "s1\ns2\ns3\n\n(End of file - total 3 lines)",
+    totalLines: 3,
+    truncated: false,
+  });
 });
 
 test("read_media_file reports native metadata without injecting bytes", async () => {

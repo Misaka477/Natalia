@@ -47,7 +47,10 @@ async function runTouchTurn(options: {
         {
           tool: () => ({
             name: "run_shell",
-            arguments: { command: `touch "${probe}"` },
+            arguments: {
+              command: `touch "${probe}"`,
+              description: "Create a scratch file",
+            },
           }),
         },
         { text: "done" },

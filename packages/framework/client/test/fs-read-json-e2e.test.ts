@@ -90,9 +90,21 @@ test("read_file on a JSON document succeeds instead of failing its output schema
     done!.status,
     `read_file ended as ${done!.status}: ${done!.summary ?? ""}`,
   ).toBe("succeeded");
-  // And the document's own content came back, which is what read_file returns.
-  expect(done!.result).toContain('"@probe/fixture"');
-  expect(done!.result).toContain('"workspaces"');
+  // And the document's own content came back. read_file returns the kernel's
+  // string contract, and since the windowing round its text IS a JSON envelope
+  // carrying the page plus the window facts (`content`, `totalLines`,
+  // `truncated`) — the same shape glob and grep use. Pinning the bare document
+  // here pinned an implementation detail of a tool this test does not own;
+  // what it does own is that the document's text survives the round trip.
+  const envelope = JSON.parse(done!.result) as {
+    content?: string;
+    totalLines?: number;
+    truncated?: boolean;
+  };
+  expect(envelope.content).toContain('"@probe/fixture"');
+  expect(envelope.content).toContain('"workspaces"');
+  expect(envelope.totalLines).toBe(20);
+  expect(envelope.truncated).toBe(false);
 
   await client.dispose?.();
 });

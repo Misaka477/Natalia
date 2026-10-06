@@ -104,7 +104,9 @@ function runShellTool(): RuntimeTool {
         };
       },
       presentResult(args, value) {
-        const command = requireObject(args).command as string | undefined;
+        const parsed = requireObject(args);
+        const command = parsed.command as string | undefined;
+        const description = parsed.description as string | undefined;
         const stdout =
           value.match(/stdout:\n([\s\S]*?)(?:\nstderr:|\n?$)/u)?.[1] ?? "";
         const stderr = value.match(/stderr:\n([\s\S]*?)$/u)?.[1] ?? "";
@@ -112,7 +114,10 @@ function runShellTool(): RuntimeTool {
         return {
           kind: "terminal",
           title: typeof command === "string" ? command : "command",
-          summary: `exit ${exitCode}`,
+          // The sentence the model wrote survives the completed state — the
+          // exit status is a PILL, not prose, so it must not evict the label.
+          summary:
+            typeof description === "string" ? description : "shell command",
           body: [stdout, stderr && `stderr:\n${stderr}`]
             .filter(Boolean)
             .join("\n"),

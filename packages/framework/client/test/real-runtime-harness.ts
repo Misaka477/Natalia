@@ -507,7 +507,10 @@ export function subagentProvider(): StreamingProvider {
             {
               id: "call_subagent",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child task" }),
+              arguments: JSON.stringify({
+                task: "child task",
+                description: "Run the child task",
+              }),
             },
           ],
         };
@@ -619,7 +622,10 @@ export function subagentCompactionProvider(): StreamingProvider & {
             {
               id: "call_spawn_compacted_child",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child compaction task" }),
+              arguments: JSON.stringify({
+                task: "child compaction task",
+                description: "Compact the child",
+              }),
             },
           ],
         };
@@ -672,7 +678,10 @@ export function subagentToolProvider(): StreamingProvider {
             {
               id: "call_subagent_tools",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child file task" }),
+              arguments: JSON.stringify({
+                task: "child file task",
+                description: "Run the child file task",
+              }),
             },
           ],
         };
@@ -722,7 +731,10 @@ export function subagentRawXMLToolProvider(): StreamingProvider {
             {
               id: "call_subagent_raw_xml",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child raw XML file task" }),
+              arguments: JSON.stringify({
+                task: "child raw XML file task",
+                description: "Run the XML child task",
+              }),
             },
           ],
         };
@@ -1004,6 +1016,7 @@ export function sandboxedSubagentProvider(): StreamingProvider {
               name: "agent_spawn",
               arguments: JSON.stringify({
                 task: "child sandbox file task",
+                description: "Run the sandboxed file task",
                 mode: "sandbox",
               }),
             },
@@ -1086,6 +1099,7 @@ export function sandboxedDomainProvider(): StreamingProvider {
               name: "agent_spawn",
               arguments: JSON.stringify({
                 task: "child domain task",
+                description: "Run the domain child task",
                 mode: "sandbox",
                 writePaths: ["allowed"],
               }),
@@ -1192,7 +1206,10 @@ export function subagentPlanPointerProvider(): StreamingProvider {
             {
               id: "call_subagent_plan",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child plan task" }),
+              arguments: JSON.stringify({
+                task: "child plan task",
+                description: "Run the child plan task",
+              }),
             },
           ],
         };
@@ -1252,7 +1269,10 @@ export function subagentCacheUsageProvider(): StreamingProvider {
             {
               id: "call_spawn_cache",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child cache task" }),
+              arguments: JSON.stringify({
+                task: "child cache task",
+                description: "Run the child cache task",
+              }),
             },
           ],
         };

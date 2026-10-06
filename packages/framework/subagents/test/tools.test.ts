@@ -38,11 +38,16 @@ test("every agent_* tool declares presentCall and presentResult", () => {
 
 test("agent_spawn projects task title and spawns taskID in result meta", () => {
   const spawn = agentTools().find((t) => t.name === "agent_spawn")!;
-  const call = spawn.output!.presentCall!({ task: "Inspect renderer" });
+  const call = spawn.output!.presentCall!({
+    task: "Inspect renderer",
+    description: "Inspect the renderer",
+  });
   expect(call).toEqual({
     kind: "generic",
     title: "Inspect renderer",
-    summary: "spawn",
+    // The 3-5 word sentence is the resident label: a spawn's task is a whole
+    // brief, and the collapsed row shows the sentence, not the brief.
+    summary: "Inspect the renderer",
   });
   const result = spawn.output!.presentResult!(
     {},
@@ -214,7 +219,11 @@ test("spawning as a type applies its tool restrictions", async () => {
     | undefined;
   const spawn = agentTools(AGENT_TYPES).find((t) => t.name === "agent_spawn")!;
   await spawn.execute(
-    { task: "find it", type: "explore" },
+    {
+      task: "find it",
+      description: "Find the renderer bug",
+      type: "explore",
+    },
     {
       workspaceRoot: "/tmp",
       subagents: {
@@ -238,6 +247,7 @@ test("an explicit allow-list overrides the type's restrictions", async () => {
   await spawn.execute(
     {
       task: "fix it",
+      description: "Fix the renderer bug",
       type: "explore",
       allowedTools: ["read_file", "write_file"],
     },
@@ -264,7 +274,11 @@ test("an unknown type is rejected instead of spawning a general subagent", async
 
   await expect(
     spawn.execute(
-      { task: "go", type: "nope" },
+      {
+        task: "go",
+        description: "Try the unknown type",
+        type: "nope",
+      },
       {
         workspaceRoot: "/tmp",
         subagents: {
@@ -283,7 +297,10 @@ test("omitting the type spawns a general subagent", async () => {
   let spawned: { agentType?: string } | undefined;
   const spawn = agentTools(AGENT_TYPES).find((t) => t.name === "agent_spawn")!;
   await spawn.execute(
-    { task: "just work" },
+    {
+      task: "just work",
+      description: "Just do the work",
+    },
     {
       workspaceRoot: "/tmp",
       subagents: {
@@ -314,7 +331,11 @@ test("spawning with fork threads the choice through to the record", async () => 
   let spawned: { context?: string } | undefined;
   const spawn = agentTools().find((t) => t.name === "agent_spawn")!;
   await spawn.execute(
-    { task: "continue the work", context: "fork" },
+    {
+      task: "continue the work",
+      description: "Continue the work",
+      context: "fork",
+    },
     {
       workspaceRoot: "/tmp",
       subagents: {
@@ -336,7 +357,10 @@ test("omitting context leaves the subagent fresh", async () => {
   let spawned: { context?: string } | undefined;
   const spawn = agentTools().find((t) => t.name === "agent_spawn")!;
   await spawn.execute(
-    { task: "start over" },
+    {
+      task: "start over",
+      description: "Start the work over",
+    },
     {
       workspaceRoot: "/tmp",
       subagents: {
@@ -371,7 +395,11 @@ test("a stranger session cannot steer another session's subagent", async () => {
   const message = agentTools().find((t) => t.name === "agent_message")!;
   await expect(
     message.execute(
-      { id: "a1", message: "do something else" },
+      {
+        id: "a1",
+        message: "do something else",
+        description: "Redirect the running child",
+      },
       {
         workspaceRoot: "/tmp",
         sessionID: "ses_stranger",

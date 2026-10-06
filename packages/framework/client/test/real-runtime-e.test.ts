@@ -2361,7 +2361,10 @@ test("a subagent keeps retrying transient failures without respawn", async () =>
             {
               id: "call_retry_spawn",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child transient task" }),
+              arguments: JSON.stringify({
+                task: "child transient task",
+                description: "Run the transient child",
+              }),
             },
           ],
         };
@@ -2918,7 +2921,10 @@ test("a settled subagent's outcome lands in the spawning session's context", asy
             {
               id: "call_spawn_notice",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child task" }),
+              arguments: JSON.stringify({
+                task: "child task",
+                description: "Run the child task",
+              }),
             },
           ],
         };
@@ -2999,7 +3005,10 @@ test("a settled notice is not duplicated when the same subagent re-settles", asy
               {
                 id: "call_spawn_dedupe",
                 name: "agent_spawn",
-                arguments: JSON.stringify({ task: "child task" }),
+                arguments: JSON.stringify({
+                  task: "child task",
+                  description: "Run the child task",
+                }),
               },
             ],
           };
@@ -3072,6 +3081,7 @@ test("a forked subagent inherits its parent's completed turns", async () => {
                 name: "agent_spawn",
                 arguments: JSON.stringify({
                   task: "continue the renderer work",
+                  description: "Continue the renderer work",
                   context: "fork",
                 }),
               },
@@ -3170,6 +3180,7 @@ test("a fresh subagent does not inherit the parent's conversation", async () => 
                 name: "agent_spawn",
                 arguments: JSON.stringify({
                   task: "start from scratch",
+                  description: "Start the task fresh",
                   context: "fresh",
                 }),
               },
@@ -3279,7 +3290,10 @@ test("a parent can steer a running subagent at its nearest step", async () => {
               {
                 id: "call_spawn_steer",
                 name: "agent_spawn",
-                arguments: JSON.stringify({ task: "read the config" }),
+                arguments: JSON.stringify({
+                  task: "read the config",
+                  description: "Read the config file",
+                }),
               },
             ],
           };
@@ -3296,6 +3310,7 @@ test("a parent can steer a running subagent at its nearest step", async () => {
                 name: "agent_message",
                 arguments: JSON.stringify({
                   id: "a1",
+                  description: "Redirect the running child",
                   message: "read renderer.ts instead",
                 }),
               },
@@ -3481,7 +3496,10 @@ test("runtime.maxAttemptsPerStep caps the retry policy the runtime uses", async 
             {
               id: "call_retry_cap",
               name: "agent_spawn",
-              arguments: JSON.stringify({ task: "child transient task" }),
+              arguments: JSON.stringify({
+                task: "child transient task",
+                description: "Run the transient child",
+              }),
             },
           ],
         };

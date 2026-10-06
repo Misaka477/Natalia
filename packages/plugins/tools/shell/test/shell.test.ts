@@ -81,14 +81,33 @@ test("run_shell projects a terminal card from its output definition", () => {
     (candidate) => candidate.name === "run_shell",
   )!;
   const intent = tool.output?.presentResult?.(
-    { command: "make build" },
+    { command: "make build", description: "Build the workspace" },
     "exit=0\nstdout:\nbuilt ok\nstderr:\nwarn",
   );
   expect(intent).toMatchObject({
     kind: "terminal",
+    // The model's sentence survives the completed state: the exit status is a
+    // pill, and letting it evict the label cost the row its only human-facing
+    // text the moment the command finished.
     title: "make build",
-    summary: "exit 0",
+    summary: "Build the workspace",
     meta: [["exit", "0"]],
   });
   expect(intent?.body).toContain("built ok");
+  // A caller with no description still projects a readable card rather than
+  // the literal "undefined".
+  const bare = tool.output?.presentResult?.(
+    { command: "make build" },
+    "exit=0\nstdout:\nbuilt ok",
+  );
+  expect(bare).toMatchObject({ summary: "shell command" });
+  // And a non-zero exit is the pill's job to say, not the summary's.
+  const failed = tool.output?.presentResult?.(
+    { command: "make build", description: "Build the workspace" },
+    "exit=3\nstdout:\nerr\nstderr:\nboom",
+  );
+  expect(failed).toMatchObject({
+    summary: "Build the workspace",
+    meta: [["exit", "3"]],
+  });
 });

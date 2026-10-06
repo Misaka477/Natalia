@@ -1449,7 +1449,10 @@ test("subagent honors configured step limits above twenty", async () => {
               {
                 id: "spawn_long_child",
                 name: "agent_spawn",
-                arguments: JSON.stringify({ task: "perform many reads" }),
+                arguments: JSON.stringify({
+                  task: "perform many reads",
+                  description: "Read many files",
+                }),
               },
             ],
           };

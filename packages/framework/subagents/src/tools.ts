@@ -57,6 +57,17 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
       type: "object",
       properties: {
         task: { type: "string" },
+        // The row's human-facing label. `task` is the child's full brief — the
+        // thing it reads; `description` is the 3-5 word line a human scanning
+        // the transcript reads, the same contract dsh's `agent` declares. Both
+        // are required: a spawn without one shows a wall of prompt text where
+        // a sentence belongs.
+        description: {
+          type: "string",
+          description:
+            "A short (3-5 word) description of the delegated task, for display. " +
+            'Examples: "Audit the tool contracts" · "Find the flaky test" · "Write the handoff doc".',
+        },
         // A configured agent type; its tool restrictions apply unless the call
         // overrides them explicitly.
         type: { type: "string" },
@@ -69,7 +80,7 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
         excludeTools: { type: "array", items: { type: "string" } },
         writePaths: { type: "array", items: { type: "string" } },
       },
-      required: ["task"],
+      required: ["task", "description"],
       additionalProperties: false,
     },
     output: {
@@ -80,10 +91,11 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        // The sentence is the resident label; the task is the expanded body.
         return {
           kind: "generic",
           title: requireObject(args).task as string,
-          summary: "spawn",
+          summary: requireString(args.description, "description"),
         };
       },
       presentResult(_args, value) {
@@ -102,6 +114,14 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      // The registry check comes FIRST: a caller that has no subagent runtime
+      // needs to hear about the runtime, not about a field it could not have
+      // used anyway. Validating arguments against a runtime that does not
+      // exist reports the wrong defect.
+      const subagents = requireSubagents(context);
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       const array = (value: unknown) =>
         Array.isArray(value) ? value.map((item) => String(item)) : undefined;
       // An unknown type throws rather than falling back to a general subagent:
@@ -111,34 +131,31 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
       const agentType = requestedType
         ? resolveSubagentType(requestedType, agentTypes)
         : undefined;
-      const record = await requireSubagents(context).spawn(
-        requireString(args.task, "task"),
-        {
-          mode: optionalString(args.mode),
-          ...(agentType ? { agentType: agentType.name } : {}),
-          context:
-            args.context === "fork"
-              ? "fork"
-              : args.context === "fresh"
-                ? "fresh"
-                : undefined,
-          modelProfile: optionalString(args.modelProfile),
-          // The type's restrictions are the default; an explicit argument still
-          // wins, so a caller can widen a type deliberately.
-          allowedTools:
-            array(args.allowedTools) ?? agentType?.allowedTools?.slice(),
-          excludeTools:
-            array(args.excludeTools) ??
-            (agentType?.excludedTools
-              ? agentType.excludedTools.slice()
-              : undefined),
-          writePaths: array(args.writePaths),
-          signal: context.signal,
-          parentSessionID: context.parentSessionID,
-          parentAgentID: context.parentAgentID,
-          maxDepth: context.maxSubagentDepth,
-        },
-      );
+      const record = await subagents.spawn(requireString(args.task, "task"), {
+        mode: optionalString(args.mode),
+        ...(agentType ? { agentType: agentType.name } : {}),
+        context:
+          args.context === "fork"
+            ? "fork"
+            : args.context === "fresh"
+              ? "fresh"
+              : undefined,
+        modelProfile: optionalString(args.modelProfile),
+        // The type's restrictions are the default; an explicit argument still
+        // wins, so a caller can widen a type deliberately.
+        allowedTools:
+          array(args.allowedTools) ?? agentType?.allowedTools?.slice(),
+        excludeTools:
+          array(args.excludeTools) ??
+          (agentType?.excludedTools
+            ? agentType.excludedTools.slice()
+            : undefined),
+        writePaths: array(args.writePaths),
+        signal: context.signal,
+        parentSessionID: context.parentSessionID,
+        parentAgentID: context.parentAgentID,
+        maxDepth: context.maxSubagentDepth,
+      });
       // Only the id: that is what the declared output says, and it is all the
       // caller needs to act on the spawn. Returning the whole record instead
       // would make the declaration false, and the execution boundary checks it.
@@ -433,6 +450,9 @@ function agentWaitTool(): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       const ids = ((args.ids as unknown[]) ?? []).map((id) => String(id));
       if (ids.length === 0) throw new Error("ids is required");
       const until =
@@ -492,9 +512,17 @@ function agentMessageTool(): RuntimeTool {
       type: "object",
       properties: {
         id: { type: "string" },
+        // The row's human-facing label, the same contract agent_spawn
+        // declares: the message is what the parent reads, the description is
+        // what a human scanning the transcript reads.
+        description: {
+          type: "string",
+          description:
+            "A short (3-5 word) description of what this message reports, for display.",
+        },
         message: { type: "string" },
       },
-      required: ["id", "message"],
+      required: ["id", "description", "message"],
       additionalProperties: false,
     },
     output: {
@@ -505,15 +533,22 @@ function agentMessageTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        const { id, message } = requireObject(args) as {
+        const { id, message, description } = requireObject(args) as {
           id?: string;
           message?: string;
+          description?: string;
         };
         return {
           kind: "generic",
           title: typeof id === "string" ? id : "subagent",
+          // The sentence leads; the message's head is the expanded body's
+          // job, not the collapsed row's.
           summary:
-            typeof message === "string" ? message.slice(0, 80) : "message",
+            typeof description === "string"
+              ? description
+              : typeof message === "string"
+                ? message.slice(0, 80)
+                : "message",
         };
       },
       presentResult(_args, value) {
@@ -527,9 +562,14 @@ function agentMessageTool(): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      // The registry first, for the same reason as agent_spawn: the missing
+      // runtime is the more fundamental defect to report.
+      const subagents = requireSubagents(context);
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       const id = requireString(args.id, "id");
       const message = requireString(args.message, "message");
-      const subagents = requireSubagents(context);
       const record = subagents.get(id);
       if (!record) return JSON.stringify({ route: "not_found" });
       // Only the parent may steer. The caller's session is the authority: a
@@ -640,6 +680,9 @@ function agentRegistryTool(
     },
     async execute(input, context) {
       const args = requireObject(input);
+      const description = requireString(args.description, "description");
+      if (description.trim().length === 0)
+        throw new Error("invalid description: expected a non-empty string");
       return await action(requireSubagents(context), args);
     },
   };

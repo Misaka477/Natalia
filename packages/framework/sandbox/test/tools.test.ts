@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   SnapshotSandboxManager,
+  detectPromoteCommand,
   sandboxToolFamily,
   sandboxTools,
   WorkspaceSandboxManager,
@@ -278,4 +279,109 @@ test("a second candidate from the same base is refused and the first survives", 
   ).rejects.toThrow(/conflicts with changes already on the host/);
   // The first candidate's work survived the refusal.
   expect(await readFile(join(root, "shared.ts"), "utf8")).toBe("ONE\n");
+});
+
+test("detectPromoteCommand reads the workspace's own project markers", async () => {
+  const npmRoot = await mkdtemp(join(tmpdir(), "natalia-promote-npm-"));
+  await writeFile(join(npmRoot, "package.json"), "{}\n");
+  expect(detectPromoteCommand(npmRoot)).toEqual({
+    command: "npm run typecheck",
+    marker: "package.json",
+  });
+
+  const cmakeRoot = await mkdtemp(join(tmpdir(), "natalia-promote-cmake-"));
+  await writeFile(join(cmakeRoot, "CMakeLists.txt"), "project(x)\n");
+  expect(detectPromoteCommand(cmakeRoot)).toEqual({
+    command: "cmake -S . -B build && cmake --build build",
+    marker: "CMakeLists.txt",
+  });
+
+  const rustRoot = await mkdtemp(join(tmpdir(), "natalia-promote-rust-"));
+  await writeFile(join(rustRoot, "Cargo.toml"), "[package]\n");
+  expect(detectPromoteCommand(rustRoot)).toEqual({
+    command: "cargo check",
+    marker: "Cargo.toml",
+  });
+
+  const pyRoot = await mkdtemp(join(tmpdir(), "natalia-promote-py-"));
+  await writeFile(join(pyRoot, "pyproject.toml"), "[project]\n");
+  expect(detectPromoteCommand(pyRoot)).toEqual({
+    command: "python -m compileall .",
+    marker: "pyproject.toml",
+  });
+
+  // The first marker wins: a workspace carrying several declares its primary
+  // build by which file sits at its root.
+  const bothRoot = await mkdtemp(join(tmpdir(), "natalia-promote-both-"));
+  await writeFile(join(bothRoot, "CMakeLists.txt"), "project(x)\n");
+  await writeFile(join(bothRoot, "Cargo.toml"), "[package]\n");
+  expect(detectPromoteCommand(bothRoot)?.marker).toBe("CMakeLists.txt");
+
+  // No recognizable marker: the caller must ask, not guess.
+  const bareRoot = await mkdtemp(join(tmpdir(), "natalia-promote-bare-"));
+  expect(detectPromoteCommand(bareRoot)).toBeUndefined();
+});
+
+test("sandbox_merge validates with the marker's command, the config's, or refuses (T-09)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-cmake-"));
+  await writeFile(join(root, "CMakeLists.txt"), "project(merge)\n");
+  // A manager that records the command instead of running it: the assertion
+  // is which command the merge chose, not whether cmake exists here.
+  const commands: string[] = [];
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const contextFor = (runtimeConfig?: () => unknown) =>
+    ({
+      workspaceRoot: root,
+      sandboxes: {
+        async promoteWithValidation(_id: string, input: { command: string }) {
+          commands.push(input.command);
+          return { changedFiles: [] };
+        },
+        updateEvent: () => ({}),
+        auditEvent: () => ({}),
+      },
+      ...(runtimeConfig ? { runtimeConfig } : {}),
+      onSandboxEvent: () => undefined,
+      onWorkspaceChange: () => undefined,
+      sandboxMergeAuthorize: async () => undefined,
+    }) as never;
+
+  await tools.get("sandbox_merge")!.execute({ id: "sb.1" }, contextFor());
+  // The CMake project is validated by its own toolchain, not npm.
+  expect(commands).toEqual(["cmake -S . -B build && cmake --build build"]);
+
+  await tools.get("sandbox_merge")!.execute(
+    { id: "sb.2" },
+    contextFor(() => ({ sandbox: { promoteCommand: "  true  " } })),
+  );
+  // The configured command wins over the marker (and its whitespace is trimmed).
+  expect(commands[1]).toBe("true");
+});
+
+test("sandbox_merge refuses a workspace with no marker and no configured command", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-bare-"));
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  await expect(
+    tools.get("sandbox_merge")!.execute({ id: "sb.x" }, {
+      workspaceRoot: root,
+      sandboxes: {},
+      onSandboxEvent: () => undefined,
+      onWorkspaceChange: () => undefined,
+      sandboxMergeAuthorize: async () => undefined,
+    } as never),
+  ).rejects.toThrow(/sandbox_merge needs a validation command/u);
+  // The refusal names every marker it looked for and the setting to use.
+  await expect(
+    tools.get("sandbox_merge")!.execute({ id: "sb.x" }, {
+      workspaceRoot: root,
+      sandboxes: {},
+      onSandboxEvent: () => undefined,
+      onWorkspaceChange: () => undefined,
+      sandboxMergeAuthorize: async () => undefined,
+    } as never),
+  ).rejects.toThrow(/sandbox\.promoteCommand/u);
 });

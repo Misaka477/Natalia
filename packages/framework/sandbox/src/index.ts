@@ -25,4 +25,4 @@ export {
   type IndexedFile,
   type SnapshotIndex,
 } from "./snapshot-store";
-export { sandboxToolFamily, sandboxTools } from "./tools";
+export { detectPromoteCommand, sandboxToolFamily, sandboxTools } from "./tools";

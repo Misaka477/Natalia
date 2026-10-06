@@ -11,6 +11,8 @@
  * "isolation was unavailable" must never be indistinguishable from "isolation
  * happened".
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { optionalString, requireObject, requireString } from "@anthelia/tools";
 import type {
   RuntimeTool,
@@ -22,6 +24,43 @@ import type {
 function requireSandboxes(context: ToolExecutionContext) {
   if (!context.sandboxes) throw new Error("sandbox runtime unavailable");
   return context.sandboxes;
+}
+
+/**
+ * The project markers a promotion's validation command can be derived from,
+ * with the check each one runs. Ordered: the first marker found wins, so a
+ * workspace carrying several declares its primary build by which file sits at
+ * its root.
+ *
+ * The command speaks the project's own vocabulary — `npm run typecheck` for a
+ * package.json workspace, cmake's configure+build for a CMake one — because a
+ * merge validated by the WRONG toolchain's command proves nothing about the
+ * merged tree. The 2026-10-06 smoke run merged a CMake project and watched it
+ * validated by `npm run typecheck` (T-09).
+ */
+const PROMOTE_MARKERS: ReadonlyArray<{ file: string; command: string }> = [
+  { file: "package.json", command: "npm run typecheck" },
+  {
+    file: "CMakeLists.txt",
+    command: "cmake -S . -B build && cmake --build build",
+  },
+  { file: "Cargo.toml", command: "cargo check" },
+  { file: "pyproject.toml", command: "python -m compileall ." },
+];
+
+/**
+ * The validation command a workspace's own project markers imply, or
+ * `undefined` when none is recognized. Pure over the filesystem: the caller
+ * (sandbox_merge) treats `undefined` as "ask for an explicit command" rather
+ * than guessing one.
+ */
+export function detectPromoteCommand(
+  workspaceRoot: string,
+): { command: string; marker: string } | undefined {
+  for (const marker of PROMOTE_MARKERS)
+    if (existsSync(join(workspaceRoot, marker.file)))
+      return { command: marker.command, marker: marker.file };
+  return undefined;
 }
 
 function sandboxCreateTool(): RuntimeTool {
@@ -164,12 +203,30 @@ function sandboxMergeTool(): RuntimeTool {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
       const manager = requireSandboxes(context);
+      // The validation command, in one honest order: the configured
+      // `sandbox.promoteCommand` wins; otherwise the workspace's own project
+      // markers decide; a workspace with neither gets a refusal that says
+      // what to set, because a blind fallback validates the merge against
+      // the wrong toolchain (T-09: a CMake project checked by
+      // `npm run typecheck`).
+      const configured = (
+        context.runtimeConfig?.() as
+          | { sandbox?: { promoteCommand?: string } }
+          | undefined
+      )?.sandbox?.promoteCommand?.trim();
       const command =
-        (
-          context.runtimeConfig?.() as
-            | { sandbox?: { promoteCommand?: string } }
-            | undefined
-        )?.sandbox?.promoteCommand?.trim() || "npm run typecheck";
+        configured ?? detectPromoteCommand(context.workspaceRoot)?.command;
+      if (!command)
+        throw new Error(
+          "sandbox_merge needs a validation command for this workspace: " +
+            "no project marker (" +
+            PROMOTE_MARKERS.map((marker) => marker.file).join(", ") +
+            ") was found under " +
+            context.workspaceRoot +
+            ", and `sandbox.promoteCommand` is not configured. " +
+            "Set sandbox.promoteCommand to the command that verifies this " +
+            "project (it runs in the workspace root before the merge lands).",
+        );
       const promotion = await manager.promoteWithValidation(id, {
         command,
         hostRoot: context.workspaceRoot,

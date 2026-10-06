@@ -7,10 +7,14 @@
  * same pure builders the surfaces use — the event vocabulary stays the
  * journal-face one and no prompt ever carries the正文.
  */
-import { workLedgerController } from "@natalia/work-ledger";
+import {
+  validationClassesFor,
+  workLedgerController,
+} from "@natalia/work-ledger";
 import { governanceLedgerController } from "@natalia/governance-ledger";
 import {
   sessionFactDriftFindings,
+  sessionFactEvidenceRecords,
   projectedDriftFindings,
 } from "@anthelia/session";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -23,6 +27,7 @@ import type {
 import { redactToolOutput } from "@natalia/engineering-intelligence";
 import { runValidationCommand } from "@natalia/engineering-intelligence";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
+import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import type {
   RuntimeContext,
   SessionExecutionState,
@@ -65,7 +70,7 @@ export function createRecordValidationTool(
   return {
     name: "record_validation",
     description:
-      "Run a validation command (test runner, typechecker, linter) in the workspace and record the result as durable evidence. Use it after implementing a step so the work has evidence, not claims. Returns passed/failed and a bounded safe summary. The command runs with the same approval boundary as run_shell.",
+      "Run a validation command (test runner, typechecker, linter) in the workspace and record the result as durable evidence. Use it after implementing a step so the work has evidence, not claims. Returns passed/failed, a bounded safe summary, and the evidenceID — pass that evidenceID to record_completion's evidenceIDs so the completion card is judge-able. The command runs with the same approval boundary as run_shell.",
     requiresApproval: true,
     parameters: {
       type: "object",
@@ -111,6 +116,12 @@ export function createRecordValidationTool(
         return "record_validation requires taskID, objective and command";
       const startedAt = performance.now();
       const recordedAt = new Date().toISOString();
+      // The evidence identity is minted BEFORE the run and returned with the
+      // result: `record_completion`'s evidenceIDs ask for exactly this string,
+      // and a validation whose id the caller cannot learn leaves the
+      // completion card permanently judgeable:false / missing
+      // validation:test (T-02).
+      const evidenceID = `evidence:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`;
       let result: "passed" | "failed" | "skipped" = "failed";
       let safeSummary = "validation command did not run";
       let artifactRef: string | undefined;
@@ -158,7 +169,7 @@ export function createRecordValidationTool(
       ctx.ports.publishForSession(
         exec,
         ledger.buildEvidenceRecorded({
-          id: `evidence:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`,
+          id: evidenceID,
           taskID: args.taskID.trim(),
           objective: args.objective.trim(),
           status: result === "passed" ? "validated" : "failed",
@@ -171,8 +182,11 @@ export function createRecordValidationTool(
       );
       return JSON.stringify({
         recorded: true,
+        evidenceID,
+        taskID: args.taskID.trim(),
         result,
         safeSummary: outcome.safeSummary,
+        ...(artifactRef ? { artifactRef } : {}),
       });
     },
   };
@@ -316,10 +330,33 @@ export function createRecordCompletionTool(
       // EI §8.8: the completion card judges the claim against the task-kind
       // evidence matrix — the missing-evidence answer travels back with the
       // record so the model can close the gaps instead of claiming done.
+      //
+      // The cited evidenceIDs are resolved HERE, against the completed fact
+      // fold (state-first: no events read, so the full-read inventory is
+      // untouched), into the classes their records' validations satisfy. A
+      // cited id that resolves to nothing contributes nothing — the matrix
+      // still reports the class missing (T-02).
+      await ensureCompleteSessionFactState(ctx, exec);
+      const evidenceRecords = exec.factState
+        ? sessionFactEvidenceRecords(exec.factState)
+        : [];
+      const cited = new Set(args.evidenceIDs ?? []);
+      const resolvedClasses: string[] = [];
+      for (const record of evidenceRecords) {
+        if (!cited.has(record.id)) continue;
+        if (record.status !== "validated") continue;
+        for (const validation of record.validations ?? [])
+          for (const cls of validationClassesFor(
+            validation.command,
+            validation.result === "passed",
+          ))
+            resolvedClasses.push(cls);
+      }
       const card = requireWorkLedger(ctx)!.evaluateCompletionCard({
         objective: args.objective.trim(),
         ...(args.changePaths?.length ? { changes: args.changePaths } : {}),
         evidenceRefs: args.evidenceIDs ?? [],
+        resolvedEvidenceClasses: resolvedClasses,
         validations: args.validations ?? [],
       });
       return JSON.stringify({
@@ -329,8 +366,11 @@ export function createRecordCompletionTool(
         ...(card.missing.length
           ? {
               missingEvidence: card.missing,
-              hint: `${card.note}; record the missing validation with record_validation before claiming done`,
+              hint: `${card.note}; record the missing validation with record_validation (then cite its evidenceID) before claiming done`,
             }
+          : {}),
+        ...(args.evidenceIDs?.length
+          ? { citedEvidence: args.evidenceIDs }
           : {}),
       });
     },

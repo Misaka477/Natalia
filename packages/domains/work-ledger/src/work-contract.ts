@@ -337,6 +337,34 @@ export function classifyTaskKind(
 }
 
 /**
+ * The evidence classes a validation command satisfies, by its command text.
+ *
+ * One home for the command vocabulary the completion card judges against:
+ * `evaluateCompletionCard` maps the caller-declared validations through this,
+ * and the `record_completion` tool maps the evidence records its cited
+ * evidenceIDs point at through the SAME function — a class listed in one
+ * place and matched in another would drift, and the drift would show up as a
+ * completion card that cannot be satisfied.
+ */
+export function validationClassesFor(
+  command: string | undefined,
+  passed: boolean,
+): string[] {
+  if (!passed) return [];
+  const text = (command ?? "").toLowerCase();
+  const classes = ["validation:any"];
+  if (/bun install|npm install|pnpm install|yarn install/iu.test(text))
+    classes.push("validation:install");
+  if (/tsc|typecheck/iu.test(text)) classes.push("validation:typecheck");
+  if (/bun test|vitest|jest|pytest|go test|cargo test/iu.test(text)) {
+    classes.push("validation:test");
+    if (/parser|tokeniz|lexer|grammar/iu.test(text))
+      classes.push("validation:parser");
+  }
+  return classes;
+}
+
+/**
  * The completion card's judgment (EI §8.8): given the task kind and the
  * evidence actually recorded, which required evidence classes are still
  * missing. An empty `missing` list means the completion claim is judge-able;
@@ -348,6 +376,12 @@ export function evaluateCompletionCard(input: {
   /** The changed paths — the primary (path-based) classification source. */
   changes?: string[];
   evidenceRefs: string[];
+  /**
+   * Evidence classes the caller already resolved from the records its
+   * evidenceRefs cite (T-02). The tool that owns the ledger lookup fills
+   * this; the judgment itself stays a pure function of its inputs.
+   */
+  resolvedEvidenceClasses?: string[];
   validations?: Array<{
     command?: string;
     result?: string;
@@ -374,19 +408,17 @@ export function evaluateCompletionCard(input: {
     : MINIMUM_EVIDENCE_MATRIX[kind as TaskKind];
   const present = new Set<string>();
   for (const reference of input.evidenceRefs) present.add(reference);
-  for (const validation of input.validations ?? []) {
-    const command = validation.command?.toLowerCase() ?? "";
-    if (validation.result !== "passed") continue;
-    present.add("validation:any");
-    if (/bun install|npm install|pnpm install|yarn install/iu.test(command))
-      present.add("validation:install");
-    if (/tsc|typecheck/iu.test(command)) present.add("validation:typecheck");
-    if (/bun test|vitest|jest|pytest|go test|cargo test/iu.test(command)) {
-      present.add("validation:test");
-      if (/parser|tokeniz|lexer|grammar/iu.test(command))
-        present.add("validation:parser");
-    }
-  }
+  // The classes the CALLER resolved from the records its evidenceIDs cite
+  // (T-02): the returned id is only useful if citing it counts, so the tool
+  // maps id -> record -> classes and hands them in here. The function stays
+  // pure — it never reads the ledger itself.
+  for (const cls of input.resolvedEvidenceClasses ?? []) present.add(cls);
+  for (const validation of input.validations ?? [])
+    for (const cls of validationClassesFor(
+      validation.command,
+      validation.result === "passed",
+    ))
+      present.add(cls);
   const missing = matrix.requires.filter((entry) => !present.has(entry));
   return {
     kind,

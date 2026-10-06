@@ -44,6 +44,7 @@ export {
   classifyTaskKind,
   classifyPathClass,
   evaluateCompletionCard,
+  validationClassesFor,
   isPlaceholderContractValue,
   isUnverifiableContract,
   validateWorkContractFields,

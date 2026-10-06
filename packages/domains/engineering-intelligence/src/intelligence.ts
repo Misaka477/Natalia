@@ -585,6 +585,10 @@ export function createIntelligenceSurface(
       ) as ReturnType<typeof projectedEvidenceRecords>;
       return paginate(
         evidence.map((r) => ({
+          // The record's own id: the string record_validation returns and
+          // record_completion's evidenceIDs cite. A view without it left the
+          // caller unable to correlate its citation with the record (T-02).
+          id: r.id,
           taskID: r.taskID,
           objective: r.objective,
           status: r.status,

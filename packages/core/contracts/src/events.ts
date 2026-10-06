@@ -4592,6 +4592,12 @@ export type RuntimeClient = {
     sessionID?: string,
   ): Promise<
     GovernancePage<{
+      /**
+       * The record's id — the string `record_validation` returns and
+       * `record_completion`'s evidenceIDs cite (T-02). Without it a caller
+       * cannot correlate its citation with the record it names.
+       */
+      id: string;
       taskID: string;
       objective: string;
       status: string;

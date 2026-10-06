@@ -27,6 +27,34 @@ test("the process family describes the tools it ships", () => {
   );
 });
 
+test("the process family ships the twelve process_* tools and no alias family", () => {
+  // The background_* aliases were deleted (2026-10-06, user ruling: the smoke
+  // run showed all twelve process_* tools working, so the duplicate surface
+  // only lied about them). The alias wrapper shared `process_start`'s execute
+  // while its own schema never declared `description`, so every
+  // `background_start` call failed with "description must be a string"
+  // (T-05). This guard keeps both facts true: the names are gone, and the
+  // surviving surface is exactly process_*.
+  const names = managedProcessTools(new ManagedProcessRegistry()).map(
+    (tool) => tool.name,
+  );
+  expect(names).toEqual([
+    "process_start",
+    "process_list",
+    "process_status",
+    "process_wait",
+    "process_output",
+    "process_ready",
+    "process_stop",
+    "process_restart",
+    "process_attach",
+    "process_detach",
+    "process_cleanup",
+    "process_audit",
+  ]);
+  for (const name of names) expect(name.startsWith("background_")).toBe(false);
+});
+
 test("the process plugin owns its tools and provides the registry service", async () => {
   const tools = createToolRegistry([]);
   const registry = createPluginRegistry({ tools });
@@ -142,10 +170,10 @@ test("managed process registry reports live workspace process counts", async () 
   expect(await registry.runningCount({ workspaceRoot: root })).toBe(0);
 });
 
-test("managed process registry persists state for restart and background aliases", async () => {
+test("managed process registry persists state across registry instances", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-persist-"));
   const first = processRegistryTools();
-  await first.get("background_start")!.execute(
+  await first.get("process_start")!.execute(
     {
       id: "proc_persist",
       command: "echo persisted; sleep 0.2",
@@ -155,22 +183,22 @@ test("managed process registry persists state for restart and background aliases
   );
   await waitForOutput(async () =>
     first
-      .get("background_output")!
+      .get("process_output")!
       .execute({ id: "proc_persist" }, { workspaceRoot: root }),
   );
 
   const second = processRegistryTools();
   const listed = JSON.parse(
-    await second.get("background_list")!.execute({}, { workspaceRoot: root }),
+    await second.get("process_list")!.execute({}, { workspaceRoot: root }),
   ) as Array<{ id: string }>;
   expect(listed.some((item) => item.id === "proc_persist")).toBe(true);
   expect(
     await second
-      .get("background_output")!
+      .get("process_output")!
       .execute({ id: "proc_persist" }, { workspaceRoot: root }),
   ).toContain("persisted");
   await second
-    .get("background_stop")!
+    .get("process_stop")!
     .execute({ id: "proc_persist" }, { workspaceRoot: root });
 });
 

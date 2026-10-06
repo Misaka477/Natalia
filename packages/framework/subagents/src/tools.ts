@@ -26,6 +26,7 @@ import type {
 import {
   renderSubagentTypes,
   resolveSubagentType,
+  spawnableAgentTypes,
   type SubagentTypeView,
 } from "./agent-types";
 
@@ -40,6 +41,7 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
   // Rendered once at registration and refreshed on config reload: the request
   // builder reads `description` per step, so updating it in place keeps the
   // advertised types current without disturbing the tool's identity.
+  const spawnable = spawnableAgentTypes(agentTypes);
   const description = [
     "Spawn an isolated TS/Bun subagent task.",
     "You keep working after the spawn: when the child ends (completed, " +
@@ -69,8 +71,10 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
             'Examples: "Audit the tool contracts" · "Find the flaky test" · "Write the handoff doc".',
         },
         // A configured agent type; its tool restrictions apply unless the call
-        // overrides them explicitly.
-        type: { type: "string" },
+        // overrides them explicitly. Exposed only when at least one type is
+        // configured: with none, the field can only be guessed at and every
+        // guess throws "configured types: none" (T-13).
+        ...(spawnable.length > 0 ? { type: { type: "string" } } : {}),
         // Whether the child inherits this conversation. `fork` seeds it with the
         // completed turns only; `fresh` gives it nothing but the task.
         context: { type: "string", enum: ["fresh", "fork"] },
@@ -453,9 +457,9 @@ function agentWaitTool(): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
-      const description = requireString(args.description, "description");
-      if (description.trim().length === 0)
-        throw new Error("invalid description: expected a non-empty string");
+      // No `description` requirement, for the same reason as the registry
+      // tools: dsh's wait/discovery surface declares none, and an execute
+      // that demands an undeclared field makes every correct call fail.
       const ids = ((args.ids as unknown[]) ?? []).map((id) => String(id));
       if (ids.length === 0) throw new Error("ids is required");
       const until =
@@ -683,9 +687,13 @@ function agentRegistryTool(
     },
     async execute(input, context) {
       const args = requireObject(input);
-      const description = requireString(args.description, "description");
-      if (description.trim().length === 0)
-        throw new Error("invalid description: expected a non-empty string");
+      // No `description` requirement here: these are the observation and
+      // control tools, and dsh's equivalents (`list_agents`, `interrupt_agent`,
+      // `send_message`) carry no display sentence — only the delegation tool
+      // does. The shared execute used to demand a `description` its schema
+      // never declared, so every schema-valid call died on
+      // "description must be a string" and a model that guessed the field was
+      // refused with "unexpected property" (T-12).
       return await action(requireSubagents(context), args);
     },
   };

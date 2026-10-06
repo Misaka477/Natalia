@@ -34,6 +34,21 @@ export function describeToolAccess(agent: SubagentTypeView): string {
 }
 
 /**
+ * The configured agents a `type` argument can actually name.
+ *
+ * One source of truth for both the rendered section and the schema's `type`
+ * field: a parameter exposed with no selectable value is a field every call
+ * must guess at, and the first guess throws "configured types: none" (T-13).
+ */
+export function spawnableAgentTypes(
+  agents: readonly SubagentTypeView[],
+): SubagentTypeView[] {
+  return agents.filter(
+    (agent) => (agent.mode ?? "primary") === "subagent" && agent.description,
+  );
+}
+
+/**
  * Render the spawnable agent types for a tool description.
  *
  * Empty when nothing is configured: a section listing nothing is worse than no
@@ -42,9 +57,7 @@ export function describeToolAccess(agent: SubagentTypeView): string {
 export function renderSubagentTypes(
   agents: readonly SubagentTypeView[],
 ): string {
-  const spawnable = agents.filter(
-    (agent) => (agent.mode ?? "primary") === "subagent" && agent.description,
-  );
+  const spawnable = spawnableAgentTypes(agents);
   if (spawnable.length === 0) return "";
   const lines = spawnable.map(
     (agent) =>

@@ -21,14 +21,9 @@ export function waitForToolExecution<T>(
 }
 
 export function isManagedResourceTool(toolName: string) {
-  return [
-    "process_start",
-    "process_stop",
-    "process_restart",
-    "background_start",
-    "background_stop",
-    "background_restart",
-  ].includes(toolName);
+  return ["process_start", "process_stop", "process_restart"].includes(
+    toolName,
+  );
 }
 
 export function lineCount(text: string) {

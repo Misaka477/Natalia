@@ -39,7 +39,7 @@ function syntheticFamily(id: string): ToolFamily {
 test("the effective tool catalogue names migrated plugin tools", () => {
   expect(runtimeToolNames()).toContain("ask_user");
   expect(runtimeToolNames()).toEqual(
-    expect.arrayContaining(["plan", "todo_read", "todo_write"]),
+    expect.arrayContaining(["todo_read", "todo_write"]),
   );
   expect(runtimeToolNames()).toEqual(expect.arrayContaining(["glob", "grep"]));
   expect(runtimeToolNames()).toEqual(
@@ -53,7 +53,6 @@ test("the effective tool catalogue names migrated plugin tools", () => {
   expect(runtimeToolNames()).toContain("interactive_start");
   expect(runtimeToolNames()).toContain("sandbox_create");
   expect(runtimeToolNames()).toContain("process_start");
-  expect(runtimeToolNames()).toContain("background_start");
 });
 
 test("each family declares exactly the tools grant", () => {

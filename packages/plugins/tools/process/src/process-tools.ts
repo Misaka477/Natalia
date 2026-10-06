@@ -776,28 +776,6 @@ function processControlTool(
   };
 }
 
-function aliasTool(
-  name: string,
-  description: string,
-  requiresApproval: boolean,
-  execute: RuntimeTool["execute"],
-): RuntimeTool {
-  return {
-    name,
-    description,
-    requiresApproval,
-    parameters: {
-      type: "object",
-      properties: {
-        id: { type: "string" },
-        command: { type: "string" },
-      },
-      additionalProperties: true,
-    },
-    execute,
-  };
-}
-
 function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
   return {
     name: "process_start",
@@ -1160,72 +1138,6 @@ function processAuditTool(registry: ManagedProcessRegistry): RuntimeTool {
   };
 }
 
-function backgroundStartTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_start",
-    "Start a background workspace process. Uses a bash-compatible shell on all platforms (Git Bash on Windows).",
-    true,
-    (input, context) => processStartTool(registry).execute(input, context),
-  );
-}
-
-function backgroundListTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_list",
-    "List background processes.",
-    false,
-    async (_input, context) =>
-      JSON.stringify(await registry.list(context), null, 2),
-  );
-}
-
-function backgroundOutputTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_output",
-    "Return background process output.",
-    false,
-    (input, context) => processOutputTool(registry).execute(input, context),
-  );
-}
-
-function backgroundStopTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_stop",
-    "Stop a background process.",
-    true,
-    (input, context) => processStopTool(registry).execute(input, context),
-  );
-}
-
-function backgroundRestartTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_restart",
-    "Restart a background process.",
-    true,
-    (input, context) => processRestartTool(registry).execute(input, context),
-  );
-}
-
-function backgroundCleanupTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_cleanup",
-    "Cleanup background process registry.",
-    true,
-    async (_input, context) =>
-      JSON.stringify(await registry.cleanup(context), null, 2),
-  );
-}
-
-function backgroundAuditTool(registry: ManagedProcessRegistry): RuntimeTool {
-  return aliasTool(
-    "background_audit",
-    "Return background process audit state.",
-    false,
-    async (_input, context) =>
-      JSON.stringify(await registry.audit(context), null, 2),
-  );
-}
-
 /**
  * Every tool that manages a long-lived process, over one registry.
  *
@@ -1249,13 +1161,6 @@ export function managedProcessTools(
     processDetachTool(registry),
     processCleanupTool(registry),
     processAuditTool(registry),
-    backgroundStartTool(registry),
-    backgroundListTool(registry),
-    backgroundOutputTool(registry),
-    backgroundStopTool(registry),
-    backgroundRestartTool(registry),
-    backgroundCleanupTool(registry),
-    backgroundAuditTool(registry),
   ];
 }
 

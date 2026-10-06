@@ -43,7 +43,7 @@ describe("permission families", () => {
 
   test("uses known capability owners conservatively", () => {
     expect(
-      classifyPermissionFamily("background_start", "natalia-tool-process").id,
+      classifyPermissionFamily("process_start", "natalia-tool-process").id,
     ).toBe("managed-process");
     expect(classifyPermissionFamily("custom", "natalia-tool-web").id).toBe(
       "network",

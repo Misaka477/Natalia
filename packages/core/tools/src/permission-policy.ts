@@ -62,7 +62,6 @@ const COMMAND_ARGUMENT_TOOLS = [
   "sandbox_execute",
   "sandbox_resource_start",
   "process_start",
-  "background_start",
   "interactive_start",
   "interactive_terminal_start",
 ];

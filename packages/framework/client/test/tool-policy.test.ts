@@ -351,7 +351,6 @@ test("agent rules cover sandbox paths and all command-launching tools", () => {
     "sandbox_execute",
     "sandbox_resource_start",
     "process_start",
-    "background_start",
     "interactive_start",
     "interactive_terminal_start",
   ])

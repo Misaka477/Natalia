@@ -327,6 +327,37 @@ test("agent_spawn accepts a context choice between fresh and fork", () => {
   });
 });
 
+test("agent_spawn hides `type` when no agent type is configured", () => {
+  // The field used to be declared unconditionally, so with nothing configured
+  // the model saw a parameter it could only guess at — and every guess threw
+  // "configured types: none" (T-13). An unselectable field is worse than no
+  // field: the schema is the contract, and it promised a choice that did not
+  // exist.
+  const spawn = agentTools().find((t) => t.name === "agent_spawn")!;
+  const properties = spawn.parameters.properties as Record<string, unknown>;
+  expect(properties.type).toBeUndefined();
+  expect(spawn.description).not.toContain("Pass one of these as `type`");
+});
+
+test("agent_spawn exposes `type` when a spawnable type is configured", () => {
+  const spawn = agentTools(AGENT_TYPES).find((t) => t.name === "agent_spawn")!;
+  const properties = spawn.parameters.properties as Record<string, unknown>;
+  expect(properties.type).toEqual({ type: "string" });
+  expect(spawn.description).toContain("Pass one of these as `type`");
+});
+
+test("agent_spawn hides `type` when no configured agent is spawnable", () => {
+  // A configured agent that is not a subagent mode, or has no description, is
+  // not selectable: exposing `type` here would re-open the same lie for the
+  // deployments that configure only primary agents.
+  const spawn = agentTools([
+    { name: "primary_only", description: "the main agent", mode: "primary" },
+    { name: "undocumented", description: "", mode: "subagent" },
+  ]).find((t) => t.name === "agent_spawn")!;
+  const properties = spawn.parameters.properties as Record<string, unknown>;
+  expect(properties.type).toBeUndefined();
+});
+
 test("spawning with fork threads the choice through to the record", async () => {
   let spawned: { context?: string } | undefined;
   const spawn = agentTools().find((t) => t.name === "agent_spawn")!;
@@ -415,4 +446,70 @@ test("a stranger session cannot steer another session's subagent", async () => {
       },
     ),
   ).rejects.toThrow(/only its parent may steer/);
+});
+
+// The observation/control tools take exactly what their schema declares. The
+// shared execute wrapper used to demand a `description` no registry schema
+// declared, so the model's schema-valid calls died on "description must be a
+// string" (T-12), and a model that guessed the field was refused with
+// "unexpected property" — the tool was uncallable either way. Each entry is a
+// schema-valid call whose only success criterion is reaching the service: the
+// stub below throws the marker from every method, so a re-added argument
+// requirement fails this test with the requirement's own message instead.
+const SERVICE_MARKER = "REACHED_SERVICE";
+const SCHEMA_VALID_CALLS: Array<[name: string, args: Record<string, unknown>]> =
+  [
+    ["agent_list", {}],
+    ["agent_status", { id: "a1" }],
+    ["agent_output", { id: "a1" }],
+    ["agent_wait", { ids: ["a1"], until: "all_terminal" }],
+    ["agent_stop", { id: "a1", reason: "stalled" }],
+    ["agent_resume", { id: "a1" }],
+    ["agent_retry", { id: "a1" }],
+    ["agent_attach", { id: "a1" }],
+    ["agent_detach", { id: "a1" }],
+    ["agent_cleanup", {}],
+    ["agent_audit", {}],
+  ];
+
+test("every observation and control tool accepts a schema-valid call", async () => {
+  for (const [name, args] of SCHEMA_VALID_CALLS) {
+    const tool = agentTools().find((t) => t.name === name)!;
+    expect(tool, `${name} is registered`).toBeDefined();
+    await expect(
+      tool.execute(args, {
+        workspaceRoot: "/tmp",
+        // Every method the wrapper can reach throws the marker: the call either
+        // gets past argument validation into the service (marker, pass) or dies
+        // on an undeclared required argument (its own message, fail).
+        subagents: new Proxy(
+          {},
+          {
+            get:
+              (_target, prop) =>
+              (...callArgs: unknown[]) => {
+                void prop;
+                void callArgs;
+                throw new Error(SERVICE_MARKER);
+              },
+          },
+        ) as never,
+      }),
+    ).rejects.toThrow(SERVICE_MARKER);
+  }
+});
+
+test("no agent tool requires an argument its schema does not declare", () => {
+  // The invariant behind the previous test, stated once for the whole family:
+  // `required` in the schema and the fields execute reads must agree, or the
+  // tool is a lie in one direction or the other.
+  for (const tool of agentTools()) {
+    const properties = tool.parameters.properties as Record<string, unknown>;
+    const required = (tool.parameters.required ?? []) as string[];
+    for (const field of required)
+      expect(
+        properties[field],
+        `${tool.name} requires "${field}" without declaring it`,
+      ).toBeDefined();
+  }
 });

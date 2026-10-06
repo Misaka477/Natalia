@@ -1,3 +1,4 @@
+export * from "./humanize";
 export * from "./markdown";
 export * from "./modal";
 export * from "./projection";

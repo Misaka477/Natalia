@@ -1,3 +1,5 @@
+import { humanizeToolResult } from "./humanize";
+
 export type ToolStatus =
   | "receiving_arguments"
   | "queued"
@@ -282,22 +284,20 @@ function humanReadableResult(
     };
   }
   if (isRecord(value)) {
-    const entries = Object.entries(value).filter(([, item]) =>
-      isDisplayValue(item),
-    );
+    // The generic flatten (P0.1): a presenter-less JSON result must still
+    // read as `key: value` lines, with nested structures recursed — the old
+    // branch printed `String(item)`, which rendered a nested object as
+    // [object Object].
+    const name = presentation.name ?? "Tool";
     return {
-      summary: `${presentation.name ?? "Tool"} completed`,
-      preview:
-        entries
-          .slice(0, 8)
-          .map(([key, item]) => `${humanKey(key)}: ${formatValue(item)}`)
-          .join("\n") || "Structured result available.",
+      summary: `${name} completed`,
+      preview: humanizeToolResult(result, name),
     };
   }
   if (Array.isArray(value)) {
     return {
       summary: `${value.length} result item${value.length === 1 ? "" : "s"}`,
-      preview: value.slice(0, 8).map(formatValue).join("\n") || "No results.",
+      preview: humanizeToolResult(result, presentation.name ?? ""),
     };
   }
   return { summary: plainSummary(result), preview: String(value) };
@@ -305,18 +305,6 @@ function humanReadableResult(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isDisplayValue(value: unknown) {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    (Array.isArray(value) &&
-      value.length <= 4 &&
-      value.every((item) => typeof item !== "object"))
-  );
 }
 
 function formatChange(change: Record<string, unknown>) {
@@ -340,17 +328,8 @@ function changeVerb(kind: string) {
   return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 }
 
-function formatValue(value: unknown) {
-  if (Array.isArray(value)) return value.map(String).join(", ");
-  return String(value);
-}
-
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined;
-}
-
-function humanKey(key: string) {
-  return key.replace(/([a-z])([A-Z])/gu, "$1 $2");
 }
 
 function truncateLine(value: string, max: number) {
@@ -373,6 +352,40 @@ export function elapsedLabel(
   const elapsed = Math.max(0, (endedAt ?? now) - startedAt);
   if (elapsed < 1000) return `${elapsed}ms`;
   return `${(elapsed / 1000).toFixed(elapsed < 10_000 ? 1 : 0)}s`;
+}
+
+/**
+ * Whether a tool result's card must offer the collapse toggle (P0.2).
+ *
+ * The old criterion counted lines and characters only, so a single-line
+ * JSON.stringify result — the shape ~70 of our tools return — of under
+ * 2000 chars folded to nothing: one long unreadable line with no way to
+ * collapse it. A single-line JSON over 400 chars is exactly that shape,
+ * so it collapses on its own term.
+ */
+export function shouldCollapseToolOutput(
+  output: string,
+  options: {
+    maxLines?: number;
+    maxChars?: number;
+    jsonSingleLineChars?: number;
+  } = {},
+): boolean {
+  const maxLines = options.maxLines ?? 14;
+  const maxChars = options.maxChars ?? 2_000;
+  const jsonSingleLineChars = options.jsonSingleLineChars ?? 400;
+  if (output.split("\n").length > maxLines) return true;
+  if (Array.from(output).length > maxChars) return true;
+  if (!output.includes("\n")) {
+    // The single-line JSON shape: a JSON document on one line.
+    const trimmed = output.trim();
+    const looksJson =
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"));
+    if (looksJson && Array.from(trimmed).length > jsonSingleLineChars)
+      return true;
+  }
+  return false;
 }
 
 export function collapseToolOutput(

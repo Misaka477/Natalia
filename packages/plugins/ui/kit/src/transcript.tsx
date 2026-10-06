@@ -10,6 +10,7 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
+  shouldCollapseToolOutput,
   toolRowLabel,
   type Attachment,
   type Message,
@@ -809,8 +810,7 @@ export function estimateMessageHeight(message: Message): number {
   for (const toolCall of message.toolCalls ?? []) {
     const output = toolCall.output ?? toolCall.summary ?? "";
     const outputLines = wrappedLineCount(output, 110);
-    const collapsible =
-      outputLines > TOOL_OUTPUT_COLLAPSE_LINES || output.length > 2_000;
+    const collapsible = shouldCollapseToolOutput(output);
     height +=
       TOOL_CARD_BASE_HEIGHT +
       (collapsible
@@ -863,8 +863,7 @@ export function fixedRowHeight(message: Message): number {
   for (const toolCall of message.toolCalls ?? []) {
     const output = toolCall.output ?? toolCall.summary ?? "";
     const outputLines = wrappedLineCount(output, 110);
-    const collapsible =
-      outputLines > TOOL_OUTPUT_COLLAPSE_LINES || output.length > 2_000;
+    const collapsible = shouldCollapseToolOutput(output);
     height +=
       TOOL_CARD_BASE_HEIGHT +
       (collapsible
@@ -1241,9 +1240,9 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // output. The raw result is the fallback for a tool that declared no card.
   const output = () => card?.body ?? props.toolCall.output ?? "";
   const outputLines = () => output().split("\n");
-  const collapsible = () =>
-    outputLines().length > TOOL_OUTPUT_COLLAPSE_LINES ||
-    output().length > 2_000;
+  // The collapse criterion is the model layer's (P0.2): it knows the
+  // single-line-JSON shape that the old line/char count missed.
+  const collapsible = () => shouldCollapseToolOutput(output());
   const shownOutput = () => {
     if (!collapsible() || expanded()) return output();
     return outputLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES).join("\n");

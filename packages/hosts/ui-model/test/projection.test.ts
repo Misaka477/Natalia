@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   EventBatcher,
+  humanizeToolResult,
+  shouldCollapseToolOutput,
   ProjectionCache,
   classifyTool,
   collapseToolOutput,
@@ -168,4 +170,100 @@ test("projectToolCall decodes the call card from metadata.call", () => {
   expect(
     projectToolCall({ render: { kind: "read", title: "x", summary: "y" } }),
   ).toBeUndefined();
+});
+
+test("humanizeToolResult flattens JSON a presenter-less tool returned", () => {
+  // P0.1: the plan's floor. A tool that declares no card still answers with
+  // `JSON.stringify`, so the UI must never show that raw.
+  // Non-JSON passes through untouched.
+  expect(humanizeToolResult("plain text", "any_tool")).toBe("plain text");
+  // An object becomes key: value lines.
+  expect(
+    humanizeToolResult(
+      JSON.stringify({ id: "sb_1", status: "running" }),
+      "sandbox_list",
+    ),
+  ).toBe("id: sb_1\nstatus: running");
+  // A nested object recurses (the old branch printed [object Object]).
+  expect(
+    humanizeToolResult(
+      JSON.stringify({ manifest: { root: "/tmp/x", files: 2 } }),
+      "sandbox_status",
+    ),
+  ).toBe("manifest: {root=/tmp/x, files=2}");
+  // An array becomes one line per element; objects as a=1, b=2.
+  expect(
+    humanizeToolResult(
+      JSON.stringify([{ path: "a.ts", kind: "modify" }, { path: "b.ts" }]),
+      "sandbox_diff",
+    ),
+  ).toBe("path=a.ts, kind=modify\npath=b.ts");
+  // Depth is bounded: the fifth level elides rather than exploding.
+  const deep = { a: { b: { c: { d: { e: "bottom" } } } } };
+  // Four levels render, the fifth elides — the bound is the point.
+  expect(humanizeToolResult(JSON.stringify(deep), "x")).toBe(
+    "a: {b={c={d={…}}}}",
+  );
+});
+
+test("humanizeToolResult answers the pinned tool cases in their grouped form", () => {
+  // collab_inbox: one message per line with direction and status.
+  expect(
+    humanizeToolResult(
+      JSON.stringify({
+        messages: [
+          {
+            from: "live_chat",
+            to: "main_agent",
+            text: "ship it",
+            status: "queued",
+          },
+          { from: "main_agent", to: "live_chat", text: "on it" },
+        ],
+      }),
+      "collab_inbox",
+    ),
+  ).toBe(
+    "live_chat → main_agent [queued]: ship it\nmain_agent → live_chat: on it",
+  );
+  // process_audit: a field table per process.
+  expect(
+    humanizeToolResult(
+      JSON.stringify({ processes: [{ id: "p1", status: "running" }] }),
+      "process_audit",
+    ),
+  ).toBe("id=p1, status=running");
+  // ask_user: the picked answers as one line.
+  expect(
+    humanizeToolResult(
+      JSON.stringify({ answers: [["yes"], "no"] }),
+      "ask_user",
+    ),
+  ).toBe("Answer: yes; no");
+});
+
+test("shouldCollapseToolOutput catches the single-line JSON shape (P0.2)", () => {
+  // The old criterion was lines>14 || chars>2000, so a one-line JSON.stringify
+  // result under 2000 chars never folded: one unreadable line with no
+  // toggle. The single-line JSON term is what catches it.
+  const shortJson = JSON.stringify({ id: "sb_1", status: "running" });
+  expect(shouldCollapseToolOutput(shortJson)).toBe(false);
+  // A single-line JSON over 400 chars folds even though it is one line and
+  // under the char ceiling.
+  const longJson = JSON.stringify({
+    items: Array.from({ length: 12 }, (_, index) => ({
+      path: `packages/some/deeply/nested/file-${index}.ts`,
+      kind: "modify",
+      summary: "a change summary long enough to matter",
+    })),
+  });
+  expect(longJson.includes("\n")).toBe(false);
+  expect(Array.from(longJson).length).toBeGreaterThan(400);
+  expect(shouldCollapseToolOutput(longJson)).toBe(true);
+  // A single-line NON-JSON text does not gain the toggle from this term.
+  const prose = "x".repeat(600);
+  expect(shouldCollapseToolOutput(prose)).toBe(false);
+  // The original two terms still fire.
+  expect(shouldCollapseToolOutput("a\nb\n".repeat(20))).toBe(true);
+  expect(shouldCollapseToolOutput("y".repeat(2_001))).toBe(true);
 });

@@ -1,5 +1,11 @@
-import { projectToolCall, projectToolRender } from "@natalia/ui-model";
+import {
+  projectToolCall,
+  projectToolRender,
+  shouldCollapseToolOutput,
+} from "@natalia/ui-model";
 import type { ToolRenderIntent } from "@natalia/ui-model";
+
+export { shouldCollapseToolOutput };
 
 /**
  * Decodes a tool's self-projected card from the raw event metadata, or

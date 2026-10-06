@@ -1176,3 +1176,41 @@ test("scrollback search without a starting point fails with guidance (T-08)", as
     .get("interactive_terminal_stop")!
     .execute({ id: "tty_nostart" }, context);
 });
+
+test("a model write on a human-taken pane is refused naming the current owner (T-06)", async () => {
+  // The user's own correction: the takeover is the USER's action, so the
+  // refusal must not speculate about a previous owner — it must say what the
+  // owner state IS right now. The old message ("terminal input is
+  // controlled by a human") never did.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-owner-"));
+  const { factory } = fakePtyForBehavior();
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "rt",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless" as const,
+    spawn: factory,
+  });
+  await controller.start({ command: "bash", cwd: root, id: "tty_owner" });
+  // The user takes over (the only way the owner flips — the tool's own
+  // correction: this is a user action, never automatic).
+  await controller.claimHumanInput("tty_owner");
+  await expect(
+    controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
+  ).rejects.toThrow(/inputOwner=human/u);
+  await expect(
+    controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
+  ).rejects.toThrow(/the user took over this pane/u);
+  // The guidance says what waits for what.
+  await expect(
+    controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
+  ).rejects.toThrow(/release control/u);
+  // After the user releases, the model's write lands again.
+  await controller.releaseHumanControl("tty_owner");
+  await expect(
+    controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
+  ).resolves.toBeTruthy();
+  await controller.stop("tty_owner", "system");
+});

@@ -258,3 +258,49 @@ test("todo_read bounds its page and reports the total", async () => {
     ).truncated,
   ).toBe(false);
 });
+
+test("todo_write answers with the same envelope todo_read returns (T-01)", async () => {
+  // The two tools used to speak different shapes — read returned
+  // {items,total,truncated} while write answered {saved,items} — so a model
+  // that read the list and echoed the result back into write sent the
+  // envelope itself. One envelope now, and the descriptions name it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-todo-shape-"));
+  const tools = createToolRegistry(todoTools);
+  const written = JSON.parse(
+    await tools.get("todo_write")!.execute(
+      {
+        items: [
+          { content: "one", status: "in_progress" },
+          { content: "two", status: "pending" },
+        ],
+      },
+      { workspaceRoot: root, sessionID: "ses_shape" },
+    ),
+  ) as { items: unknown[]; total: number; truncated: boolean };
+  expect(written).toEqual({
+    items: [
+      { content: "one", status: "in_progress" },
+      { content: "two", status: "pending" },
+    ],
+    total: 2,
+    truncated: false,
+  });
+  // The read's envelope has the same keys — a round trip needs no reshaping.
+  const read = JSON.parse(
+    await tools
+      .get("todo_read")!
+      .execute({}, { workspaceRoot: root, sessionID: "ses_shape" }),
+  ) as Record<string, unknown>;
+  expect(Object.keys(read).sort()).toEqual(Object.keys(written).sort());
+  expect(read.items).toEqual(written.items);
+  // The write's parameter takes the items array, not the envelope: passing
+  // the envelope back is refused by name.
+  await expect(
+    tools
+      .get("todo_write")!
+      .execute(
+        { items: read.items },
+        { workspaceRoot: root, sessionID: "ses_shape" },
+      ),
+  ).resolves.toBeTruthy();
+});

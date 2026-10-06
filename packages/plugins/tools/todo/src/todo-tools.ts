@@ -31,7 +31,8 @@ function todoReadTool(): RuntimeTool {
   return {
     name: "todo_read",
     description:
-      "Read this session's durable todo items. Optionally bound the result with `limit`; the result reports how many items exist in total.",
+      "Read this session's durable todo items. Optionally bound the result with `limit`; the result reports how many items exist in total. " +
+      "The answer is the todo envelope: an object {items, total, truncated} — `items` is the page, `total` is how many exist, `truncated` says whether the page was cut. It is NOT a bare array; todo_write takes the `items` array, not this envelope.",
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -74,16 +75,13 @@ function todoReadTool(): RuntimeTool {
         return { kind: "generic", title: "todos", summary: "read" };
       },
       presentResult(_args, value) {
-        const items =
-          (JSON.parse(value) as Array<{
-            status?: string;
-            content?: string;
-          }> | null) ?? [];
-        const done = items.filter((item) => item.status === "completed").length;
         const parsed = JSON.parse(value) as {
+          items?: Array<{ status?: string; content?: string }>;
           total?: number;
           truncated?: boolean;
         };
+        const items = parsed.items ?? [];
+        const done = items.filter((item) => item.status === "completed").length;
         const summary = parsed.truncated
           ? `${items.length} of ${parsed.total} items · ${done} done`
           : `${items.length} items · ${done} done`;
@@ -121,7 +119,8 @@ function todoWriteTool(): RuntimeTool {
   return {
     name: "todo_write",
     description:
-      "Replace this session's durable todo items. Example: " +
+      "Replace this session's durable todo items. Takes an object {items} whose array is the complete replacement list (pass [] to clear); each item is {content,status}. " +
+      "The answer is the same envelope todo_read returns — {items,total,truncated} — NOT {saved}: a read's envelope must never be passed back in; take its `items` array. Example: " +
       '{"items":[{"content":"Write the parser","status":"in_progress"},' +
       '{"content":"Add tests","status":"pending"}]}',
     requiresApproval: false,
@@ -176,7 +175,15 @@ function todoWriteTool(): RuntimeTool {
       await writeFile(path, `${JSON.stringify(items, null, 2)}\n`, {
         mode: 0o600,
       });
-      return JSON.stringify({ saved: items.length, items });
+      // The same envelope todo_read answers with (T-01): the two tools used
+      // to speak different shapes — read returned {items,total,truncated}
+      // while write answered {saved,items} — so a model that read and
+      // echoed the result back into write sent the envelope itself.
+      return JSON.stringify({
+        items,
+        total: items.length,
+        truncated: false,
+      });
     },
   };
 }

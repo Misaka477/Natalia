@@ -1293,7 +1293,17 @@ export function createPtyTerminalController(
       if (session.secureInput)
         throw new Error("terminal is accepting secure human input");
     } else if (session.inputOwner !== "model")
-      throw new Error("terminal input is controlled by a human");
+      // T-06: the refusal names the CURRENT owner state — the model needs
+      // to know a human holds the pane right now, not that "a human"
+      // exists somewhere in the past. (The user's own correction: the
+      // takeover is the user's action; the defect was only that the
+      // refusal never said so.)
+      throw new Error(
+        `terminal input is controlled by a human (inputOwner=${session.inputOwner}): ` +
+          `the user took over this pane; wait for them to release control ` +
+          `(their release sets inputOwner back to model). Reads still work; ` +
+          `this write is refused until then.`,
+      );
     if (session.secureInput)
       throw new Error("terminal is accepting secure human input");
     const writtenBytes = new TextEncoder().encode(value).byteLength;

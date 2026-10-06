@@ -877,10 +877,7 @@ export function createConstitutionRuleReadTool(
       if (!ruleID) return "constitution_rule_read requires ruleID";
       const exec = resolveExec(ctx, context.sessionID);
       if (!exec) return "no session";
-      await ensureCompleteSessionFactState(ctx, exec);
-      const rules = exec.factState
-        ? sessionFactConstitutionRules(exec.factState)
-        : projectedConstitutionRules(exec.session.events);
+      const rules = await sessionConstitutionRules(ctx, exec);
       const active = rules.find((rule) => rule.ruleID === ruleID);
       if (active)
         return JSON.stringify({
@@ -974,10 +971,7 @@ export function createConstitutionRuleRevokeTool(
         governanceLedgerController,
       );
       if (!governanceLedger) return "governance ledger unavailable";
-      await ensureCompleteSessionFactState(ctx, exec);
-      const rules = exec.factState
-        ? sessionFactConstitutionRules(exec.factState)
-        : projectedConstitutionRules(exec.session.events);
+      const rules = await sessionConstitutionRules(ctx, exec);
       const rule = rules.find((candidate) => candidate.ruleID === ruleID);
       if (!rule) {
         const views = governanceViews(ctx.ports.getWorkspaceRoot());

@@ -1196,7 +1196,9 @@ test("a model write on a human-taken pane is refused naming the current owner (T
   await controller.start({ command: "bash", cwd: root, id: "tty_owner" });
   // The user takes over (the only way the owner flips — the tool's own
   // correction: this is a user action, never automatic).
-  await controller.claimHumanInput("tty_owner");
+  // The facade type marks these optional (a mux facade omits them); the pty
+  // controller provides them.
+  await controller.claimHumanInput!("tty_owner");
   await expect(
     controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
   ).rejects.toThrow(/inputOwner=human/u);

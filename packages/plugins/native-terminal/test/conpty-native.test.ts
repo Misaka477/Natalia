@@ -92,24 +92,25 @@ async function drive(
   let buffer = "";
   // ONE timer for the whole drive, not one per iteration.
   //
-  // The old shape raced `reader.read()` against a fresh 500ms setTimeout on
-  // every pass and never cleared either loser. `reader.read()` on a pipe with
-  // nothing to read is a promise that stays pending indefinitely, so the race
-  // kept piling up unresolved reads AND un-cleared timers; once the deadline
-  // hit, the process could not exit until the runtime tore it down, which is
-  // why a 30s drive reported as 48s and 45s on the Windows CI. Local is fast
-  // enough to finish in three reads and never shows it.
+  // Two rules, both learned from the Windows CI measuring this harness.
   //
-  // So: a single shared deadline timer, and `reader.cancel()` at the end, which
-  // settles the pending read and lets the process leave.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const tick = new Promise<{ value: undefined }>((resolve) => {
-    timer = setTimeout(() => resolve({ value: undefined }), 500);
-  });
+  // 1. THE DEADLINE KILLS THE PROCESS; it never races a read. The earlier
+  //    shape raced `reader.read()` against a 500ms tick, and the read that
+  //    lost the race had ALREADY CONSUMED its bytes off the stream — the next
+  //    iteration's fresh read() never saw them. That is where the exit frame
+  //    went: the bridge's stderr showed the complete shutdown (frame written)
+  //    while the harness waited 30s for a frame it had itself discarded. A
+  //    reader is a single queue; abandon a read and you abandon its bytes.
+  //    Killing the bridge ends the stream, so the pending read settles as
+  //    `done` on its own — no race needed.
+  // 2. The timer is armed once and cleared in `finally`. The pre-fix shape
+  //    also leaked one uncleared timer per pass, which held the process open
+  //    and made a 30s drive report as 48s on CI.
+  const timer = setTimeout(() => bridge.kill(), ms);
   try {
-    while (Date.now() < deadline && !until(frames)) {
-      const read = await Promise.race([reader.read(), tick]);
-      if (!read.value) continue;
+    for (;;) {
+      const read = await reader.read();
+      if (read.done) break;
       buffer += decoder.decode(read.value, { stream: true });
       for (;;) {
         const newline = buffer.indexOf("\n");

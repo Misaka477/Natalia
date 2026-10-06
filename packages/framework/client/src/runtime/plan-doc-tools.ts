@@ -154,7 +154,7 @@ export function createPlanPauseTool(ctx: RuntimeContext): RuntimeTool {
   return {
     name: "plan_pause",
     description:
-      "Pause or resume a plan at the user's request (El §3.5). paused=true marks the plan 'paused' so it is no longer treated as actively executing; paused=false resumes it to 'executing'. Use it only when the user asks to pause or resume the plan in chat.",
+      "Pause or resume a plan at the user's request (El §3.5). paused=true marks the plan 'paused' so it is no longer treated as actively executing; paused=false resumes it to 'executing'. Use it only when the user asks to pause or resume the plan in chat. A plan that is completed or handed_off (terminal) refuses both directions and says so — a finished plan stays finished.",
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -186,7 +186,7 @@ export function createPlanPauseTool(ctx: RuntimeContext): RuntimeTool {
         if (!result.updated)
           return JSON.stringify({
             ok: false,
-            reason: `no marked plan ${args.planID}`,
+            reason: result.reason ?? `no marked plan ${args.planID}`,
           });
         return JSON.stringify({
           ok: true,

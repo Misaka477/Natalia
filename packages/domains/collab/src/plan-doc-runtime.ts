@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { RuntimeInvalidParams } from "@anthelia/contracts";
+import { isTerminalPlanStatus } from "@anthelia/contracts";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import { sessionStoreController } from "@anthelia/session-store";
 import { workLedgerController } from "@natalia/work-ledger";
@@ -419,6 +420,21 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       const entries = await readIndex(ctx);
       const record = entries[planID];
       if (!record) return { updated: false };
+      // Terminal protection (T-20): a completed or handed-off plan is a closed
+      // lifecycle fact. The state machine used to accept every write, so a
+      // `plan_pause(paused=false)` after completion silently returned a
+      // finished plan to `executing` — the 2026-10-06 smoke run did exactly
+      // that (completed → paused → executing). The write is refused with the
+      // terminal status named, and the caller (plan_pause, the chat tools)
+      // surfaces it to the model.
+      if (isTerminalPlanStatus(record.status) && !isTerminalPlanStatus(status))
+        return {
+          updated: false,
+          reason:
+            `plan ${planID} is ${record.status} (a terminal status); ` +
+            `it cannot return to ${status}. A finished plan stays finished — ` +
+            `mark a new plan document to continue the work.`,
+        };
       const now = new Date().toISOString();
       const previousStatus = record.status;
       record.status = status;

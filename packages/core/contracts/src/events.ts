@@ -14,6 +14,24 @@ import type {
 export type SessionID = `ses_${string}`;
 export type EpisodeID = `epi_${string}`;
 
+/**
+ * The plan lifecycle statuses that END a plan: `completed` (the audit passed)
+ * and `handed_off` (a next plan took over). A plan in one of these is a closed
+ * fact — `planDocUpdateStatus` refuses to move it back to a live status, which
+ * is what let a pause/resume return a finished plan to `executing` in the
+ * 2026-10-06 smoke run (T-20). Writers that project a terminal status spell it
+ * exactly as it appears here; the set is the one vocabulary both sides read.
+ */
+export const PLAN_TERMINAL_STATUSES: readonly string[] = [
+  "completed",
+  "handed_off",
+];
+
+/** Whether a plan lifecycle status ends the plan. */
+export function isTerminalPlanStatus(status: string): boolean {
+  return PLAN_TERMINAL_STATUSES.includes(status);
+}
+
 export type ErrorKind =
   | "timeout"
   | "connection"
@@ -4522,12 +4540,19 @@ export type RuntimeClient = {
     planID: string,
     sessionID?: string,
   ): Promise<{ status: string }>;
-  /** Updates a plan document lifecycle status (e.g. awaiting_audit, audit_gaps). */
+  /**
+   * The plan lifecycle statuses that END a plan: `completed` (the audit passed)
+   * and `handed_off` (a next plan took over). A plan in one of these is a closed
+   * fact: `planDocUpdateStatus` refuses to move it back to a live status, which
+   * is what let a pause/resume return a finished plan to `executing` in the
+   * 2026-10-06 smoke run (T-20). Writers that project a terminal status must
+   * spell it exactly as it appears here.
+   */
   planDocUpdateStatus?(input: {
     planID: string;
     status: string;
     sessionID?: string;
-  }): Promise<{ updated: boolean }>;
+  }): Promise<{ updated: boolean; reason?: string }>;
   /**
    * Reads the session-scoped active plan pointer. Plan documents themselves are
    * workspace-level; activation is independent per session.

@@ -57,7 +57,7 @@ export type PlanDocRuntime = {
     planID: string;
     status: string;
     sessionID?: string;
-  }): Promise<{ updated: boolean }>;
+  }): Promise<{ updated: boolean; reason?: string }>;
   /** Workspace-level plan registry snapshot for synchronous prompt building. */
   planDocSnapshot(): PlanDocRecord[];
   /** Workspace-level lookup by planID. */

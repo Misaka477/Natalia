@@ -1009,6 +1009,10 @@ export function createChatTools(ctx: RuntimeContext) {
             status,
             gaps: args.gaps ?? [],
             updated: result.updated,
+            // A terminal plan refuses the status write (T-20); the verdict and
+            // its evidence still landed, so the report names the refusal
+            // instead of silently claiming the plan moved.
+            ...(result.reason ? { statusRefusal: result.reason } : {}),
             ...(round ? { round } : {}),
             ...(roundCheckpointID ? { roundCheckpointID } : {}),
             ...(evidenceID ? { evidenceID } : {}),

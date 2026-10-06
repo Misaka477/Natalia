@@ -653,15 +653,18 @@ test("a completion wakes Nia; a status write alone wakes nobody (the cut)", asyn
       .map((event) => (event as { status: string }).status);
     expect(lifecycle).toEqual(["awaiting_audit", "auditing", "completed"]);
     // The cut: writing the status (the OLD trigger's own input) wakes
-    // nobody — no new wake request appears, before vs after the write.
+    // nobody — no new wake request appears, before vs after the write. The
+    // write is now REFUSED outright (T-20: a completed plan is terminal, so
+    // returning it to awaiting_audit is not a legal transition), which is the
+    // cut at its source: the old trigger's input cannot even move the plan.
     const wakeRequestsBefore = requests.filter(isWakeRequest).length;
     expect(wakeRequestsBefore).toBeGreaterThanOrEqual(1);
-    expect(
-      await client.planDocUpdateStatus!({
-        planID: marked.planID,
-        status: "awaiting_audit",
-      }),
-    ).toEqual({ updated: true });
+    const refused = await client.planDocUpdateStatus!({
+      planID: marked.planID,
+      status: "awaiting_audit",
+    });
+    expect(refused.updated).toBe(false);
+    expect(refused.reason).toContain("terminal");
     await Bun.sleep(100);
     expect(requests.filter(isWakeRequest).length).toBe(wakeRequestsBefore);
   } finally {

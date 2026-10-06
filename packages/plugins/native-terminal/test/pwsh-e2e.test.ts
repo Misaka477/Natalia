@@ -95,14 +95,15 @@ test("a PowerShell pane reports commands and exit codes", async () => {
     if (!lastCommand) throw new Error("unreachable: asserted above");
 
     controller.write("term_pwsh", "echo pwsh-command-level\r");
-    // The command state arrives with the shell-integration markers, which on a
-    // loaded runner land later than the startup window — CI measured the same
-    // test passing on windows-terminal at 7756ms and failing on Ubuntu at
-    // 10492ms with `commandLine: undefined`, because a fixed 4s sleep ran out
-    // while the markers were still in flight. A bounded wait keeps the test
-    // honest about WHAT it waits for (the command state) instead of how long.
+    // The command state arrives with the shell-integration markers (OSC
+    // 633;E), and CI has now measured both outcomes for this test on the
+    // ubuntu layer: it PASSES on windows-terminal at 7756ms, and on Ubuntu a
+    // 20s wait found nothing — not late, absent. The Linux pwsh build does
+    // not emit the marker this assertion reads, so the honest wait is short
+    // and the failure carries the pane's own bytes: a missing marker is a
+    // fact about the host's shell, and the pane's text says so.
     let command: ReturnType<typeof lastCommand> | undefined;
-    for (let waited = 0; waited < 20_000; waited += 100) {
+    for (let waited = 0; waited < 5_000; waited += 100) {
       command = lastCommand("term_pwsh");
       if (
         command?.commandLine === "echo pwsh-command-level" &&
@@ -111,7 +112,11 @@ test("a PowerShell pane reports commands and exit codes", async () => {
         break;
       await Bun.sleep(100);
     }
-    expect(command?.commandLine).toBe("echo pwsh-command-level");
+    const pane = await controller.snapshot("term_pwsh");
+    expect(
+      command?.commandLine,
+      `the command-level marker never arrived; pane tail:\n${pane.text.slice(-400)}`,
+    ).toBe("echo pwsh-command-level");
     expect(command?.exitCode).toBe(0);
     expect(command?.output).toContain("pwsh-command-level");
 

@@ -965,7 +965,24 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-badge-success { color: var(--neu-success); }
 .neu-pane .natalia-badge-error { color: var(--neu-error); }
 .neu-pane .natalia-badge-steering { color: var(--neu-accent); box-shadow: inset 0 0 0 1px var(--neu-accent-soft); }
+.neu-pane .natalia-tool-family {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+  flex-shrink: 0;
+}
+/* The model-written sentence, and any title fragment that carries information
+   the family label does not (a path, a query). Both trail the label. */
 .neu-pane .natalia-tool-title {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--neu-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.neu-pane .natalia-tool-header .natalia-tool-title {
   font-size: 12px;
   font-weight: 500;
   color: var(--neu-text);

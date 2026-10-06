@@ -228,6 +228,67 @@ function readMediaFileTool(): RuntimeTool {
       required: ["path"],
       additionalProperties: false,
     },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          size: { type: "integer" },
+          sha256: { type: "string" },
+        },
+        required: ["path", "size", "sha256"],
+        additionalProperties: false,
+      },
+      presentCall(args) {
+        return {
+          kind: "read",
+          title: requireObject(args).path as string,
+          summary: "read media metadata",
+        };
+      },
+      presentResult(args, value) {
+        // The metadata IS the read: a card that shows the raw JSON text makes a
+        // reader parse five quoted keys to learn the size and the digest. The
+        // same envelope the model reads is decoded here into facets.
+        let parsed: {
+          path?: string;
+          size?: number;
+          mode?: string;
+          sha256?: string;
+          kind?: string;
+        } | null = null;
+        try {
+          parsed = JSON.parse(value) as typeof parsed;
+        } catch {
+          parsed = null;
+        }
+        if (!parsed) {
+          return {
+            kind: "read",
+            title: requireObject(args).path as string,
+            summary: "read media metadata",
+            body: value,
+          };
+        }
+        return {
+          kind: "read",
+          title: parsed.path ?? (requireObject(args).path as string),
+          summary: parsed.kind
+            ? `${parsed.kind} · ${parsed.size} bytes`
+            : "media",
+          body: [
+            `path:   ${parsed.path ?? ""}`,
+            `size:   ${parsed.size ?? ""} bytes`,
+            `mode:   ${parsed.mode ?? ""}`,
+            `sha256: ${parsed.sha256 ?? ""}`,
+          ].join("\n"),
+          meta: [
+            ["size", String(parsed.size ?? "")],
+            ["kind", parsed.kind ?? ""],
+          ],
+        };
+      },
+    },
     async execute(input, context) {
       const path = workspacePath(
         context.workspaceRoot,
@@ -281,6 +342,32 @@ export function imageReadTool(): RuntimeTool {
       properties: { path: { type: "string" } },
       required: ["path"],
       additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: { attached: { type: "string" } },
+        required: ["attached"],
+        additionalProperties: false,
+      },
+      presentCall(args) {
+        return {
+          kind: "read",
+          title: requireObject(args).path as string,
+          summary: "attach image",
+        };
+      },
+      presentResult(args, value) {
+        // "What the model read" for this tool is WHICH image entered its
+        // context. The card says the file; the result sentence rides as a facet
+        // so a reader does not have to decode `image attached: <path>`.
+        return {
+          kind: "read",
+          title: requireObject(args).path as string,
+          summary: "image attached",
+          meta: [["result", value]],
+        };
+      },
     },
     async execute(input, context) {
       if (!context.attachImage)

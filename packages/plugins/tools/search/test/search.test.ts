@@ -265,3 +265,43 @@ test("a glob page is well-formed and continuable when it stops early", async () 
   // And when the scan timed out instead, the remedy rides with it.
   expect(parsed.timedOut === true ? parsed.note : parsed.note).toBeUndefined();
 });
+
+test("glob's result card lists the paths, not just a count", () => {
+  // dsh's SearchPathsResultView carries `paths` itself. A card that shows only
+  // "3 matches" makes a reader open the result JSON to learn WHICH three.
+  const tool = searchToolFamily().tools.find((t) => t.name === "glob")!;
+  const card = tool.output?.presentResult?.(
+    { pattern: "**/*.ts" },
+    JSON.stringify({ paths: ["a.ts", "b/c.ts"], truncated: false }),
+  );
+  expect(card?.body).toBe("a.ts\nb/c.ts");
+  expect(card?.kind).toBe("search");
+});
+
+test("grep's result card groups the matches by file with line numbers", () => {
+  // dsh's SearchMatchesResultView groups by file. Same reasoning: the hit
+  // locations are the content, the count is not.
+  const tool = searchToolFamily().tools.find((t) => t.name === "grep")!;
+  const card = tool.output?.presentResult?.(
+    { pattern: "renderer" },
+    JSON.stringify({
+      matches: [
+        { path: "a.ts", line: 12, text: "the renderer" },
+        { path: "a.ts", line: 40, text: "renderer again" },
+        { path: "b.ts", line: 3, text: "a renderer" },
+      ],
+      truncated: false,
+    }),
+  );
+  expect(card?.body).toBe(
+    "a.ts\n  12: the renderer\n  40: renderer again\nb.ts\n  3: a renderer",
+  );
+});
+
+test("a search result that is not the envelope still renders", () => {
+  // The projector is a DISPLAY path: a malformed result must degrade to the
+  // raw text, never throw — the same defensive shape read_file's card uses.
+  const tool = searchToolFamily().tools.find((t) => t.name === "glob")!;
+  const card = tool.output?.presentResult?.({ pattern: "**/*.ts" }, "not json");
+  expect(card?.body).toBe("not json");
+});

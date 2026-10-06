@@ -84,17 +84,27 @@ function writeFileTool(): RuntimeTool {
         // new text and a UI renders it as the whole-file change.
         return {
           kind: "diff",
-          title: requireObject(args).path as string,
+          title: `Write ${requireObject(args).path as string}`,
           summary: "write",
           body: optionalString((args as { content?: unknown }).content) ?? "",
         };
       },
       presentResult(args, value) {
+        // The completed state REPEATS the call-time diff. A settled UI update
+        // replaces the pending card's content, so a result card that carries
+        // the plain result string instead erases the diff — which is exactly
+        // what dsh's diff model warns about ("otherwise raw result text would
+        // replace the diff") and exactly what this card did: the screenshot of
+        // a live run showed `edited <path>` where the file's change belonged.
+        // The result text is the tool's own message to the MODEL; the card's
+        // job is to show the READER what changed.
+        const parsed = requireObject(args);
         return {
           kind: "diff",
-          title: requireObject(args).path as string,
+          title: `Write ${parsed.path as string}`,
           summary: "wrote",
-          body: value,
+          body: optionalString(parsed.content) ?? "",
+          meta: [["result", value]],
         };
       },
     },
@@ -157,7 +167,7 @@ function editFileTool(): RuntimeTool {
         const newText = optionalString(parsed.newText) ?? "";
         return {
           kind: "diff",
-          title: parsed.path as string,
+          title: `Edit ${parsed.path as string}`,
           summary: "edit",
           // The hunk the model asked for, in the shape a diff renderer
           // reads: the removed lines, then the added ones, each marked.
@@ -171,11 +181,21 @@ function editFileTool(): RuntimeTool {
         };
       },
       presentResult(args, value) {
+        // See write_file: the hunk survives the completed state, and the
+        // result sentence rides as a facet rather than replacing the diff.
+        const parsed = requireObject(args);
+        const oldText = optionalString(parsed.oldText) ?? "";
+        const newText = optionalString(parsed.newText) ?? "";
         return {
           kind: "diff",
-          title: requireObject(args).path as string,
+          title: `Edit ${parsed.path as string}`,
           summary: "edited",
-          body: value,
+          body: unifiedHunk(oldText, newText),
+          meta: [
+            ["removed", String(countLines(oldText))],
+            ["added", String(countLines(newText))],
+            ["result", value],
+          ],
         };
       },
     },
@@ -285,8 +305,39 @@ function applyEditsTool(): RuntimeTool {
       presentCall() {
         return { kind: "diff", title: "workspace", summary: "apply edits" };
       },
-      presentResult(_args, value) {
-        return { kind: "diff", title: "workspace", summary: value };
+      presentResult(args, value) {
+        // Every edit in the batch is its own hunk, so a reader sees the whole
+        // change set rather than a summary sentence that names the files.
+        const parsed = requireObject(args);
+        const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
+        const hunks: string[] = [];
+        for (const entry of edits) {
+          const edit = requireObject(entry);
+          const path = optionalString(edit.path) ?? "?";
+          const operation = optionalString(edit.operation) ?? "replace";
+          if (operation === "delete") hunks.push(`--- ${path} (deleted)`);
+          else if (operation === "create")
+            hunks.push(
+              `+++ ${path}\n${(optionalString(edit.newText) ?? "")
+                .split("\n")
+                .map((line) => `+ ${line}`)
+                .join("\n")}`,
+            );
+          else
+            hunks.push(
+              `--- ${path}\n${unifiedHunk(
+                optionalString(edit.oldText) ?? "",
+                optionalString(edit.newText) ?? "",
+              )}`,
+            );
+        }
+        return {
+          kind: "diff",
+          title: `apply_edits: ${hunks.length} edit${hunks.length === 1 ? "" : "s"}`,
+          summary: "applied",
+          body: hunks.join("\n"),
+          meta: [["result", value]],
+        };
       },
     },
     async execute(input, context) {

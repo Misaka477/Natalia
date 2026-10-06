@@ -115,12 +115,28 @@ function globTool(): RuntimeTool {
         } catch {
           summary = "glob";
         }
+        // dsh's SearchPathsResultView carries the PATHS THEMSELVES, not just a
+        // count: a UI renders them as a list it can follow, and the card shows
+        // what the model actually got. A bare "3 matches" made the reader parse
+        // the result JSON to learn WHICH three.
+        const parsed2 = (() => {
+          try {
+            return JSON.parse(value) as { paths?: unknown[] };
+          } catch {
+            return null;
+          }
+        })();
+        const paths = Array.isArray(parsed2?.paths)
+          ? parsed2!.paths.filter(
+              (entry): entry is string => typeof entry === "string",
+            )
+          : [];
         return {
           kind: "search",
           title: requireObject(args).pattern as string,
           summary,
           meta,
-          body: value,
+          body: paths.length ? paths.join("\n") : value,
         };
       },
     },
@@ -254,12 +270,38 @@ function grepTool(): RuntimeTool {
         } catch {
           summary = value === "no matches" ? "no matches" : "matches";
         }
+        // dsh's SearchMatchesResultView groups the matches BY FILE with their
+        // line numbers, so a reader sees where each hit lives instead of a
+        // count. The model-facing JSON is decoded here into that shape.
+        const parsed2 = (() => {
+          try {
+            return JSON.parse(value) as {
+              matches?: Array<{ path?: unknown; line?: unknown }>;
+            };
+          } catch {
+            return null;
+          }
+        })();
+        const grouped = new Map<string, string[]>();
+        for (const match of parsed2?.matches ?? []) {
+          if (typeof match?.path !== "string") continue;
+          const line = typeof match.line === "number" ? `${match.line}: ` : "";
+          const bucket = grouped.get(match.path) ?? [];
+          bucket.push(`${line}${String(match.text ?? "")}`.trimEnd());
+          grouped.set(match.path, bucket);
+        }
+        const body =
+          grouped.size > 0
+            ? [...grouped]
+                .map(([path, lines]) => `${path}\n  ${lines.join("\n  ")}`)
+                .join("\n")
+            : value;
         return {
           kind: "search",
           title: requireObject(args).pattern as string,
           summary,
           meta,
-          body: value,
+          body,
         };
       },
     },

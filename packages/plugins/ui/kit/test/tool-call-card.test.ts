@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { toolCallCard } from "../src/message";
+import { toolCallCard, toolRowLabel } from "../src/message";
 
 /**
  * The bridge from a tool's self-projected card to the UI's card model.
@@ -137,4 +137,26 @@ test("an edit's marked hunk is what the card carries, marks included", () => {
     render: { kind: "diff", title: "c.txt", summary: "edit", body: "- gone" },
   });
   expect(deleted?.body).toBe("- gone");
+});
+
+test("toolRowLabel gives every tool its family label", () => {
+  // The collapsed row reads `<Label> · <the sentence the model wrote>`, the
+  // shape dsh's rows use (`Bash · Verify all three families in dist`). Without
+  // this table the row leads with the raw command, which is what our rows did.
+  expect(toolRowLabel("run_shell")).toBe("Bash");
+  expect(toolRowLabel("read_file")).toBe("Read");
+  expect(toolRowLabel("read_media_file")).toBe("Read");
+  expect(toolRowLabel("image_read")).toBe("Read");
+  expect(toolRowLabel("write_file")).toBe("Write");
+  expect(toolRowLabel("edit_file")).toBe("Edit");
+  expect(toolRowLabel("apply_edits")).toBe("Edit");
+  expect(toolRowLabel("glob")).toBe("Glob");
+  expect(toolRowLabel("grep")).toBe("Grep");
+  expect(toolRowLabel("web_fetch")).toBe("Fetch");
+  expect(toolRowLabel("web_search")).toBe("Search");
+  expect(toolRowLabel("todo_read")).toBe("Todo");
+  expect(toolRowLabel("agent_spawn")).toBe("Agent");
+  expect(toolRowLabel("process_start")).toBe("Process");
+  // An unclassified tool keeps its own name: the honest answer, not "other".
+  expect(toolRowLabel("some_new_tool")).toBe("some_new_tool");
 });

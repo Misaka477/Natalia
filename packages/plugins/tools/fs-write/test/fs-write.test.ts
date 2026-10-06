@@ -323,18 +323,81 @@ test("write_file projects a diff card carrying the new text", () => {
     tool.output?.presentCall?.({ path: "a.txt", content: "x\ny" }),
   ).toEqual({
     kind: "diff",
-    title: "a.txt",
+    title: "Write a.txt",
     summary: "write",
     body: "x\ny",
   });
+  // The RESULT state repeats the diff. dsh's diff model says it outright: a
+  // completed update replaces the pending card's content, so a result card
+  // carrying the plain result string ERASES the diff. The measured screenshot
+  // of a live run showed exactly that — `edited <path>` where the change
+  // belonged. The tool's sentence to the model rides as a facet instead.
   expect(
-    tool.output?.presentResult?.({ path: "a.txt" }, "wrote a.txt"),
+    tool.output?.presentResult?.(
+      { path: "a.txt", content: "x\ny" },
+      "wrote a.txt",
+    ),
   ).toEqual({
     kind: "diff",
-    title: "a.txt",
+    title: "Write a.txt",
     summary: "wrote",
-    body: "wrote a.txt",
+    body: "x\ny",
+    meta: [["result", "wrote a.txt"]],
   });
+});
+
+test("an edit's result state repeats the hunk instead of replacing it", () => {
+  const tool = writeFileTools.find((t) => t.name === "edit_file")!;
+  expect(
+    tool.output?.presentResult?.(
+      { path: "a.txt", oldText: "one", newText: "two" },
+      "edited a.txt",
+    ),
+  ).toEqual({
+    kind: "diff",
+    title: "Edit a.txt",
+    summary: "edited",
+    body: "- one\n+ two",
+    meta: [
+      ["removed", "1"],
+      ["added", "1"],
+      ["result", "edited a.txt"],
+    ],
+  });
+});
+
+test("apply_edits projects one hunk per edit, not a summary sentence", () => {
+  // The batch card used to be `title: "workspace", summary: <the result
+  // sentence>` — a reader learned WHICH files changed and nothing about WHAT
+  // changed. Now each edit contributes its own marked hunk.
+  const tool = writeFileTools.find((t) => t.name === "apply_edits")!;
+  const card = tool.output?.presentResult?.(
+    {
+      edits: [
+        {
+          path: "a.txt",
+          operation: "replace",
+          oldText: "one",
+          newText: "two",
+        },
+        { path: "b.txt", operation: "create", newText: "fresh" },
+        { path: "c.txt", operation: "delete" },
+      ],
+    },
+    "apply_edits: all 3 edits applied; 3 files changed.",
+  );
+  expect(card).toMatchObject({
+    kind: "diff",
+    title: "apply_edits: 3 edits",
+    summary: "applied",
+  });
+  expect(card?.body).toBe(
+    "--- a.txt\n- one\n+ two\n+++ b.txt\n+ fresh\n--- c.txt (deleted)",
+  );
+  expect(card?.meta).toContainEqual([
+    "result",
+    "apply_edits: all 3 edits applied; 3 files changed.",
+  ]);
 });
 
 test("edit_file projects the marked hunk and its line counts", () => {
@@ -346,7 +409,7 @@ test("edit_file projects the marked hunk and its line counts", () => {
   });
   expect(intent).toEqual({
     kind: "diff",
-    title: "a.txt",
+    title: "Edit a.txt",
     summary: "edit",
     // Removed lines first, then added: the shape a diff renderer reads, so
     // every UI agrees and none re-derives a diff it may get wrong.

@@ -9,7 +9,12 @@ import {
 import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
-import type { Attachment, Message, ToolCall } from "./message";
+import {
+  toolRowLabel,
+  type Attachment,
+  type Message,
+  type ToolCall,
+} from "./message";
 import { TailScrollController } from "./scroll-controller";
 import {
   evaluateTailScroll,
@@ -1220,6 +1225,17 @@ function ToolKindIcon(props: { kind: string | undefined }) {
 function ToolCallCard(props: { toolCall: ToolCall }) {
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
+  const rowLabel = () => toolRowLabel(props.toolCall.name);
+  // The tool's own title, when it says something the label does not: a path, a
+  // query, a job id. A title that merely repeats the label is dropped.
+  const titleExtra = () => {
+    const title = card?.title;
+    if (!title) return "";
+    if (title === rowLabel()) return "";
+    if (title.startsWith(`${rowLabel()} `))
+      return title.slice(rowLabel().length + 1);
+    return title;
+  };
   // The tool's own body wins: for a diff it is the marked hunk (the raw result
   // string is not the same text at all), for a terminal it is the command's
   // output. The raw result is the fallback for a tool that declared no card.
@@ -1268,9 +1284,17 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
     >
       <div class="natalia-tool-header">
         <ToolKindIcon kind={card?.kind} />
-        <span class="natalia-tool-title">{heading()}</span>
+        {/* The family label leads, and the model's sentence follows it — the
+            shape dsh's rows use. The tool's own title (the command, the path)
+            is what the EXPANDED card is for, so it does not lead here. */}
+        <span class="natalia-tool-family">{rowLabel()}</span>
         <Show when={summary()}>
           <span class="natalia-tool-summary">{summary()}</span>
+        </Show>
+        {/* A title that carries information the label does not (a file path)
+            still shows, as the trailing fragment rather than the lead. */}
+        <Show when={titleExtra()}>
+          <span class="natalia-tool-title">{titleExtra()}</span>
         </Show>
         <span
           classList={{

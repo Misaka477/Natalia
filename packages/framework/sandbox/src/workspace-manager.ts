@@ -455,8 +455,17 @@ export class WorkspaceSandboxManager
   async delete(id: string) {
     await this.initialize();
     const manifest = this.mustGet(id);
+    const pendingChanges = manifest.changedFiles.map((change) => ({
+      ...change,
+    }));
+    // The discard is the fact the caller approves: deleting a sandbox with
+    // pending changes destroys that work, and a result of bare arrays left
+    // the caller to infer it (T-10).
     const result = {
-      pendingChanges: manifest.changedFiles.map((change) => ({ ...change })),
+      deleted: true,
+      discardedChanges: pendingChanges.length,
+      discardedPaths: pendingChanges.map((change) => change.path),
+      pendingChanges,
       runningResources: [...manifest.runningResources],
     };
     for (const resourceID of manifest.runningResources)

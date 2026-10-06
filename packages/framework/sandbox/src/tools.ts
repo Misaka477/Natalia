@@ -294,7 +294,8 @@ function sandboxRollbackTool(): RuntimeTool {
 function sandboxDeleteTool(): RuntimeTool {
   return {
     name: "sandbox_delete",
-    description: "Delete a TS workspace sandbox.",
+    description:
+      "Delete a TS workspace sandbox. The answer names what the deletion discarded: `deleted`, `discardedChanges` and `discardedPaths` — a sandbox with pending (unmerged) changes has that work destroyed here, not merged.",
     requiresApproval: true,
     parameters: {
       type: "object",

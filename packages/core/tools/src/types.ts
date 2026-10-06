@@ -352,6 +352,16 @@ export type SandboxToolService = {
     lastKnownGood?: string;
   }>;
   delete(id: string): Promise<{
+    /** The operation's own fact: the sandbox is gone (this call deleted it). */
+    deleted: boolean;
+    /**
+     * The pending changes that died with the sandbox — the fact a caller
+     * needs before approving the deletion: an unmerged candidate's work is
+     * discarded here, not merged (T-10).
+     */
+    discardedChanges: number;
+    discardedPaths: string[];
+    /** The full change list the discard refers to. */
     pendingChanges: SandboxChangeView[];
     runningResources: string[];
   }>;

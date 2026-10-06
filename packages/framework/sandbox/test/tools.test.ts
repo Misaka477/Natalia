@@ -385,3 +385,78 @@ test("sandbox_merge refuses a workspace with no marker and no configured command
     } as never),
   ).rejects.toThrow(/sandbox\.promoteCommand/u);
 });
+
+test("sandbox_delete names what the deletion discarded (T-10)", async () => {
+  // The result used to be bare arrays — pendingChanges and runningResources
+  // — so a caller could not tell whether the delete happened at all, and a
+  // sandbox with unmerged work reported its loss as a list of files rather
+  // than the fact that this deletion discards them.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-delete-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+
+  await tools.get("sandbox_create")!.execute({ id: "gone.1" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute(
+      { id: "gone.1", path: "unmerged.txt", content: "never merged\n" },
+      context,
+    );
+  const deleted = JSON.parse(
+    await tools.get("sandbox_delete")!.execute({ id: "gone.1" }, context),
+  ) as {
+    deleted?: boolean;
+    discardedChanges?: number;
+    discardedPaths?: string[];
+    pendingChanges: Array<{ path: string }>;
+  };
+  // The operation's own fact, and the discard it performed.
+  expect(deleted.deleted).toBe(true);
+  expect(deleted.discardedChanges).toBe(1);
+  expect(deleted.discardedPaths).toEqual(["unmerged.txt"]);
+  // The full list the discard refers to is still carried.
+  expect(deleted.pendingChanges.map((change) => change.path)).toEqual([
+    "unmerged.txt",
+  ]);
+  // The sandbox is really gone: the manager no longer knows it.
+  await expect(manager.delete("gone.1")).rejects.toThrow(/unknown sandbox/i);
+});
+
+test("sandbox_delete of a clean sandbox reports a zero discard, not a silent success", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-clean-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "clean.1" }, context);
+  const deleted = JSON.parse(
+    await tools.get("sandbox_delete")!.execute({ id: "clean.1" }, context),
+  ) as {
+    deleted?: boolean;
+    discardedChanges?: number;
+    discardedPaths?: string[];
+  };
+  expect(deleted.deleted).toBe(true);
+  expect(deleted.discardedChanges).toBe(0);
+  expect(deleted.discardedPaths).toEqual([]);
+});

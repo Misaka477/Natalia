@@ -95,7 +95,10 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
         return {
           kind: "generic",
           title: requireObject(args).task as string,
-          summary: requireString(args.description, "description"),
+          summary:
+            optionalString(
+              (requireObject(args) as { description?: unknown }).description,
+            ) ?? "spawn",
         };
       },
       presentResult(_args, value) {

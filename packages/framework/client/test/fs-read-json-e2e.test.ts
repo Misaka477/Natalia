@@ -96,14 +96,15 @@ test("read_file on a JSON document succeeds instead of failing its output schema
   // `truncated`) — the same shape glob and grep use. Pinning the bare document
   // here pinned an implementation detail of a tool this test does not own;
   // what it does own is that the document's text survives the round trip.
-  const envelope = JSON.parse(done!.result) as {
+  const raw = done!.result ?? "";
+  const envelope = JSON.parse(raw) as {
     content?: string;
     totalLines?: number;
     truncated?: boolean;
   };
-  expect(envelope.content).toContain('"@probe/fixture"');
-  expect(envelope.content).toContain('"workspaces"');
-  expect(envelope.totalLines).toBe(20);
+  expect(envelope.content ?? "").toContain('"@probe/fixture"');
+  expect(envelope.content ?? "").toContain('"workspaces"');
+  expect(envelope.totalLines ?? 0).toBe(20);
   expect(envelope.truncated).toBe(false);
 
   await client.dispose?.();

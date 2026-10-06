@@ -407,7 +407,9 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
    * Rolls the system slot back to the last-known-good commit — the rollback a
    * failed activation after promotion triggers.
    */
-  override async rollback(id: string): Promise<{ restored: boolean; reason?: string }> {
+  override async rollback(
+    id: string,
+  ): Promise<{ restored: boolean; reason?: string }> {
     const recorded = this.lastKnownGood ?? (await this.loadLastKnownGood());
     if (!recorded)
       return {

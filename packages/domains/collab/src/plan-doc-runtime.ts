@@ -330,6 +330,21 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
         }),
         input.sessionID,
       );
+      // The work-graph node the plan never had (the 2026-10-07 gap pass):
+      // a marked plan lived only as plan.doc.* journal rows, so
+      // work_graph_query could not answer "which plans exist". One node per
+      // plan, emitted at its marking — the identity is the planID, and the
+      // session is the one the created fact itself belongs to.
+      const createdExec = sessionExec(input.sessionID);
+      if (createdExec)
+        publish(
+          requireWorkLedger().planNode({
+            planID,
+            title: record.title,
+            sessionID: createdExec.session.id,
+          }),
+          input.sessionID,
+        );
       return { marked: true, planID };
     },
 

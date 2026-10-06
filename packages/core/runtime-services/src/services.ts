@@ -211,9 +211,13 @@ export interface WorkLedgerController {
   constitutionRuleNode: ServiceOperation;
   decisionNode: ServiceOperation;
   externalWorkspaceChangeNode: ServiceOperation;
+  goalNode: ServiceOperation;
+  planNode: ServiceOperation;
   toolCallEdge: ServiceOperation;
   toolCallNode: ServiceOperation;
   rollbackCheckpointEdge: ServiceOperation;
+  validationCausedEdge: ServiceOperation;
+  validationNode: ServiceOperation;
   workspaceChangeEdge: ServiceOperation;
   workspaceChangeNode: ServiceOperation;
 }

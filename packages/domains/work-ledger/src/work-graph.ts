@@ -46,6 +46,12 @@ export const WORK_GRAPH_KIND = {
   workspaceChange: "workspace_change",
   constraint: "constraint",
   decision: "decision",
+  // The B7 schema's kinds that had no builder until the 2026-10-07 gap
+  // pass: goals and plans existed only as journal rows, and evidence only
+  // as a governance-ledger record, so work_graph_query could not see them.
+  goal: "goal",
+  plan: "plan",
+  validation: "validation",
 } as const;
 
 /** Edge vocabulary, likewise from `workGraphEdgeSchema`. */
@@ -234,6 +240,118 @@ export function decisionNode(input: {
     actor: "decision",
     target: input.decisionID,
     sessionID: input.sessionID,
+  };
+}
+
+/**
+ * One node per goal (T-22 batch: the work-graph gap where goals lived only
+ * as `goal.changed` journal rows and no graph node). The goalID is the
+ * identity; the objective preview is the summary a reader answers from.
+ */
+export function goalNode(input: {
+  goalID: string;
+  objective?: string;
+  sessionID: SessionID;
+  turnID?: string;
+  planID?: string;
+}): WorkGraphNodeEvent {
+  return {
+    type: "workgraph.node_added",
+    id: goalNodeID(input.goalID),
+    nodeID: goalNodeID(input.goalID),
+    kind: WORK_GRAPH_KIND.goal,
+    summary: workGraphSummary([
+      "goal",
+      input.objective ? input.objective.slice(0, 120) : input.goalID,
+    ]),
+    actor: "main_agent",
+    sessionID: input.sessionID,
+    ...(input.turnID ? { turnID: input.turnID } : {}),
+    ...(input.planID ? { planID: input.planID } : {}),
+  };
+}
+
+export function goalNodeID(goalID: string): string {
+  return `wg:goal:${goalID}`;
+}
+
+/**
+ * One node per marked plan (the same gap: `plan.doc.marked` was the only
+ * fact, so work_graph_query could not answer "which plans exist"). The
+ * planID is the identity.
+ */
+export function planNode(input: {
+  planID: string;
+  title?: string;
+  sessionID: SessionID;
+  turnID?: string;
+}): WorkGraphNodeEvent {
+  return {
+    type: "workgraph.node_added",
+    id: planNodeID(input.planID),
+    nodeID: planNodeID(input.planID),
+    kind: WORK_GRAPH_KIND.plan,
+    summary: workGraphSummary([
+      "plan",
+      input.title ? input.title.slice(0, 120) : input.planID,
+    ]),
+    actor: "main_agent",
+    sessionID: input.sessionID,
+    ...(input.turnID ? { turnID: input.turnID } : {}),
+  };
+}
+
+export function planNodeID(planID: string): string {
+  return `wg:plan:${planID}`;
+}
+
+/**
+ * One node per recorded evidence (the schema's `validation` kind: an
+ * evidence record IS the graph's validation fact). The evidence id is the
+ * identity; the objective is the summary.
+ */
+export function validationNode(input: {
+  evidenceID: string;
+  objective?: string;
+  sessionID: SessionID;
+  turnID?: string;
+  taskID?: string;
+}): WorkGraphNodeEvent {
+  return {
+    type: "workgraph.node_added",
+    id: validationNodeID(input.evidenceID),
+    nodeID: validationNodeID(input.evidenceID),
+    kind: WORK_GRAPH_KIND.validation,
+    summary: workGraphSummary([
+      "validation",
+      input.objective ? input.objective.slice(0, 120) : input.evidenceID,
+    ]),
+    actor: "main_agent",
+    sessionID: input.sessionID,
+    ...(input.turnID ? { turnID: input.turnID } : {}),
+    ...(input.taskID ? { target: input.taskID } : {}),
+  };
+}
+
+export function validationNodeID(evidenceID: string): string {
+  return `wg:validation:${evidenceID}`;
+}
+
+/**
+ * The edge from the turn that recorded a validation to the validation
+ * itself — the graph's causal spine needs it: a node with no parent is an
+ * orphan no traversal can reach from the action.
+ */
+export function validationCausedEdge(input: {
+  evidenceID: string;
+  turnID: string;
+}): WorkGraphEdgeEvent {
+  return {
+    type: "workgraph.edge_added",
+    id: `wg:edge:action-validation:${input.turnID}:${input.evidenceID}`,
+    sourceID: agentActionNodeID(input.turnID),
+    targetID: validationNodeID(input.evidenceID),
+    kind: WORK_GRAPH_EDGE_KIND.caused,
   };
 }
 

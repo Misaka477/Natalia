@@ -9,12 +9,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/operation-log": "workspace:*",
     "@anthelia/session": "workspace:*",
     "@anthelia/session-store": "workspace:*",
     "@anthelia/substrate": "workspace:*",
     "@anthelia/tools": "workspace:*",
-    "@anthelia/contracts": "workspace:*",
-    "@anthelia/operation-log": "workspace:*",
-    "@natalia/goal": "workspace:*"
+    "@natalia/goal": "workspace:*",
+    "@natalia/work-ledger": "workspace:*"
   }
 }

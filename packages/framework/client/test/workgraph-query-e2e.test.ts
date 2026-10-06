@@ -458,3 +458,128 @@ test("Phase 3 E2E: work_graph_query answers a FILE path with the file's chain, n
   });
   await client.dispose?.();
 }, 30_000);
+
+test("goal, plan and validation nodes exist in the graph (the 2026-10-07 gap pass)", async () => {
+  // The schema had goal/plan/plan_step/validation kinds with no builder and
+  // no emitter: goals lived only as goal.changed rows, plans only as
+  // plan.doc.* rows, and evidence only as a governance-ledger record — so
+  // work_graph_query could not answer "which goals/plans exist" or reach a
+  // recorded validation.
+  const root = await officialPluginWorkspace("workgraph-node-gap");
+  const sessionID = "ses_wgq_node_gap" as SessionID;
+  const answers: string[] = [];
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "auto",
+    provider: {
+      provider: "wg-gap",
+      model: "wg-gap-model",
+      async *stream(request: ProviderStreamRequest) {
+        const messages = (
+          request as {
+            messages: Array<{
+              role: string;
+              content: string;
+              toolCallID?: string;
+            }>;
+          }
+        ).messages;
+        const toolResult = messages
+          .filter(
+            (message) =>
+              message.role === "tool" &&
+              String(message.toolCallID ?? "").startsWith("call_gap"),
+          )
+          .at(-1);
+        const query = (nodeKind: string) => ({
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_gap",
+              name: "work_graph_query",
+              arguments: JSON.stringify({ nodeKind, depth: 0 }),
+            },
+          ],
+        });
+        if (toolResult) {
+          answers.push(String(toolResult.content ?? ""));
+          if (answers.length === 1) {
+            // After the goal's birth: record the validation.
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_gap",
+                  name: "record_validation",
+                  arguments: JSON.stringify({
+                    taskID: "task_gap",
+                    objective: "the graph gap closes green",
+                    command: "true",
+                  }),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          if (answers.length === 2) {
+            yield query("goal");
+            yield { type: "done" as const };
+            return;
+          }
+          if (answers.length === 3) {
+            yield query("plan");
+            yield { type: "done" as const };
+            return;
+          }
+          if (answers.length === 4) {
+            yield query("validation");
+            yield { type: "done" as const };
+            return;
+          }
+          yield { type: "content" as const, text: "gap closed" };
+          yield { type: "done" as const };
+          return;
+        }
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_gap",
+              name: "create_goal",
+              arguments: JSON.stringify({ objective: "close the graph gap" }),
+            },
+          ],
+        };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start(() => undefined);
+  await client.sessionAttach!(sessionID);
+  // The plan's birth through the client seams: a plan is marked by a human
+  // turn, and there is no model tool for it.
+  await client.planDocWrite!({
+    path: "plans/gap-plan.md",
+    content: "# Gap plan\n",
+    title: "Gap plan",
+  });
+  await client.planDocMark!({ path: "plans/gap-plan.md", title: "Gap plan" });
+  await client.submitAndWait!("create the goal, record, read the graph");
+
+  const pages = answers.map((entry) => {
+    try {
+      return JSON.parse(entry) as GraphResult;
+    } catch {
+      return undefined;
+    }
+  });
+  for (const kind of ["goal", "plan", "validation"] as const) {
+    expect(
+      pages.some((page) => page?.nodes?.some((node) => node.kind === kind)),
+      `no ${kind} node in the graph`,
+    ).toBe(true);
+  }
+  await client.dispose?.();
+}, 30_000);

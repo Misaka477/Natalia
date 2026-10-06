@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,16 @@ import {
   rinaMemory,
 } from "@anthelia/rina";
 import { workspaceStoreID } from "@anthelia/platform";
+import type { SessionID } from "@anthelia/contracts";
+import type { ProviderStreamRequest } from "@anthelia/runtime";
+import { createRealRuntimeClient } from "../src";
+import {
+  officialPluginWorkspace,
+  useWorkspaceCleanup,
+} from "./plugin-test-helpers";
 import { createRinaContextTools } from "../src/runtime/context-tools";
+
+useWorkspaceCleanup();
 
 /**
  * The RINA study's five Agent Tools (Phase2b-1): read-only faces over
@@ -344,3 +354,129 @@ test("a bad recordID is classified, not lumped into cross-session (T-17)", async
   expect(present.error).toBeUndefined();
   expect(Array.isArray(present.data)).toBe(true);
 });
+
+test("a recorded validation reaches the context faces through the real runtime (T-18/RINA)", async () => {
+  // The write-side slice of the RINA plan: record_* writes the governance
+  // ledger, and the vault is a DERIVED index of the journal — the classifier
+  // table is the bridge. Until the record family was classified, every
+  // evidence/completion/decision landed in the ledger and NOTHING reached the
+  // vault, so context_list/search/recall were empty no matter what was
+  // written ("写完了 context 查不到" was a classifier gap, not a mystery).
+  const root = await mkdtemp(join(tmpdir(), "natalia-ctx-rina-"));
+  await mkdir(join(root, ".natalia"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "config.json"),
+    JSON.stringify({ version: 3 }),
+  );
+  const sessionID = "ses_ctx_rina_write" as SessionID;
+  const results: string[] = [];
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "auto",
+    provider: {
+      provider: "ctx-rina",
+      model: "ctx-rina-model",
+      async *stream(request: ProviderStreamRequest) {
+        const messages = (
+          request as {
+            messages: Array<{
+              role: string;
+              content: string;
+              toolCallID?: string;
+            }>;
+          }
+        ).messages;
+        const answered = messages
+          .filter(
+            (message) =>
+              message.role === "tool" &&
+              String(message.toolCallID ?? "").startsWith("call_ctx"),
+          )
+          .at(-1);
+        if (answered) {
+          results.push(String(answered.content ?? ""));
+          if (results.length === 1) {
+            // Then: the list face over this session's records.
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_ctx",
+                  name: "context_list",
+                  arguments: JSON.stringify({}),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          if (results.length === 2) {
+            // Finally: recall by the objective's own words.
+            yield {
+              type: "tool_call" as const,
+              calls: [
+                {
+                  id: "call_ctx",
+                  name: "context_recall",
+                  arguments: JSON.stringify({
+                    query: "artifact wiring proof",
+                  }),
+                },
+              ],
+            };
+            yield { type: "done" as const };
+            return;
+          }
+          yield { type: "content" as const, text: "context wired" };
+          yield { type: "done" as const };
+          return;
+        }
+        // First: a validation record with a distinctive objective.
+        yield {
+          type: "tool_call" as const,
+          calls: [
+            {
+              id: "call_ctx",
+              name: "record_validation",
+              arguments: JSON.stringify({
+                taskID: "task_rina",
+                objective: "the artifact wiring proof runs green",
+                command: "true",
+              }),
+            },
+          ],
+        };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start(() => undefined);
+  await client.sessionAttach!(sessionID);
+  await client.submitAndWait!("record then recall");
+
+  expect(results).toHaveLength(3);
+  // results[0] is record_validation's own answer; the faces follow.
+  const validation = JSON.parse(results[0]!) as { evidenceID?: string };
+  expect(validation.evidenceID).toStartWith("evidence:");
+  // The list face carries the evidence record — the vault now classifies
+  // the record family.
+  const listed = JSON.parse(results[1]!) as {
+    data?: Array<{ recordType?: string; entityKey?: string }>;
+  };
+  const evidence = (listed.data ?? []).find(
+    (record) => record.entityKey === validation.evidenceID,
+  );
+  expect(evidence?.recordType).toBe("evidence");
+  // The recall face answers with the same memory, scored and ranked.
+  const recalled = JSON.parse(results[2]!) as {
+    sections?: Array<{ source: string; items: Array<{ summary?: string }> }>;
+  };
+  const vaultItems = (recalled.sections ?? []).flatMap(
+    (section) => section.items,
+  );
+  expect(
+    vaultItems.some((hit) => hit.summary?.includes("artifact wiring proof")),
+  ).toBe(true);
+  await client.dispose?.();
+}, 30_000);

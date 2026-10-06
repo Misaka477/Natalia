@@ -8,6 +8,7 @@
  */
 import type { GoalBlockReason, SessionID } from "@anthelia/contracts";
 import { sessionFactGoal } from "@anthelia/session";
+import { workLedgerController as goalWorkLedger } from "@natalia/work-ledger";
 import type { RuntimeTool } from "@anthelia/tools";
 import type {
   RuntimeContext,
@@ -158,6 +159,24 @@ export function goalTools(
           },
         );
         publish(exec, result.event);
+        // The work-graph node the goal never had (the 2026-10-07 gap pass):
+        // a goal lived only as `goal.changed` journal rows, so
+        // work_graph_query could not answer "which goals exist". One node
+        // per goal, emitted at its creation — the identity is the goalID.
+        const ledger = ctx.state.serviceDirectory.getOptional(goalWorkLedger);
+        if (ledger)
+          publish(
+            exec,
+            ledger.goalNode({
+              goalID: result.view.goalID,
+              objective,
+              sessionID: exec.session.id,
+              ...(exec.activeTurnID ? { turnID: exec.activeTurnID } : {}),
+              ...(stringArg(args.plan_id)
+                ? { planID: stringArg(args.plan_id) }
+                : {}),
+            }),
+          );
         goalRuntime.requestDrive(exec);
         return JSON.stringify({
           goal: {

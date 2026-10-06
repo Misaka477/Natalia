@@ -180,6 +180,32 @@ export function createRecordValidationTool(
           ...repoRefs,
         }),
       );
+      // The work-graph node the evidence never had (the 2026-10-07 gap
+      // pass): evidence lived only as a governance-ledger record, so
+      // work_graph_query could not reach it. The schema's `validation`
+      // kind IS this fact; the turn's agent-action node is its parent, so
+      // the traversal from the action reaches the evidence.
+      const workLedger = requireWorkLedger(ctx);
+      if (workLedger) {
+        ctx.ports.publishForSession(
+          exec,
+          workLedger.validationNode({
+            evidenceID,
+            objective: args.objective.trim(),
+            sessionID: exec.session.id,
+            taskID: args.taskID.trim(),
+            ...(exec.activeTurnID ? { turnID: exec.activeTurnID } : {}),
+          }),
+        );
+        if (exec.activeTurnID)
+          ctx.ports.publishForSession(
+            exec,
+            workLedger.validationCausedEdge({
+              evidenceID,
+              turnID: exec.activeTurnID,
+            }),
+          );
+      }
       return JSON.stringify({
         recorded: true,
         evidenceID,

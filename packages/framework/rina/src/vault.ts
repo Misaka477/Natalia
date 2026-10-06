@@ -238,6 +238,14 @@ type EventClassification = {
   label: (event: RuntimeEvent) => string;
 };
 
+/**
+ * Bounded label helper: every label rides an FTS index and a recall row, so
+ * prose is cut, never stored whole.
+ */
+function label(text: string, max = 200): string {
+  return text.slice(0, max);
+}
+
 const CLASSIFIED: Partial<Record<RuntimeEvent["type"], EventClassification>> = {
   "composition.switched": {
     recordType: "decision",
@@ -255,6 +263,78 @@ const CLASSIFIED: Partial<Record<RuntimeEvent["type"], EventClassification>> = {
     recordType: "evidence",
     entityOf: (event) => String((event as { id?: string }).id ?? "feedback"),
     label: () => "feedback recorded",
+  },
+  // The record family (2026-10-07): the journal's own record events are the
+  // memory the context_* faces read. Before this table carried them, every
+  // evidence/completion/decision the model wrote landed in the governance
+  // ledger and NOTHING reached the vault — "写完了 context 查不到" was a
+  // classifier gap, not a data-flow mystery (the RINA plan's write-side
+  // slice). The collab messages are deliberately absent: their events carry
+  // no session, and an unjournaled-for-session event is not a memory.
+
+  "evidence.recorded": {
+    recordType: "evidence",
+    entityOf: (event) => String((event as { id?: string }).id ?? "evidence"),
+    label: (event) =>
+      label(
+        `evidence: ${String((event as { objective?: string }).objective ?? "")} [${String((event as { status?: string }).status ?? "")}]`,
+      ),
+  },
+  "completion.recorded": {
+    recordType: "evidence",
+    entityOf: (event) => String((event as { id?: string }).id ?? "completion"),
+    label: (event) =>
+      label(
+        `completion: ${String((event as { objective?: string }).objective ?? "")}`,
+      ),
+  },
+  "decision.recorded": {
+    recordType: "decision",
+    entityOf: (event) => String((event as { id?: string }).id ?? "decision"),
+    label: (event) =>
+      label(String((event as { decision?: string }).decision ?? "")),
+  },
+  "plan.doc.created": {
+    recordType: "plan",
+    entityOf: (event) =>
+      String((event as { planID?: string }).planID ?? "plan"),
+    label: (event) =>
+      label(String((event as { title?: string }).title ?? "plan")),
+  },
+  "plan.doc.status": {
+    recordType: "plan",
+    entityOf: (event) =>
+      String((event as { planID?: string }).planID ?? "plan"),
+    label: (event) =>
+      `plan status: ${String((event as { status?: string }).status ?? "")}`,
+  },
+  "mailbox.queued": {
+    recordType: "mailbox",
+    entityOf: (event) =>
+      String((event as { messageID?: string }).messageID ?? "mailbox"),
+    label: (event) =>
+      `mailbox: ${String((event as { intent?: string }).intent ?? "message")}`,
+  },
+  "constitution.rule_added": {
+    recordType: "decision",
+    entityOf: (event) =>
+      String((event as { ruleID?: string }).ruleID ?? "rule"),
+    label: (event) =>
+      label(
+        `rule added: ${String((event as { statement?: string }).statement ?? "")}`,
+      ),
+  },
+  "constitution.rule_removed": {
+    recordType: "decision",
+    entityOf: (event) =>
+      String((event as { ruleID?: string }).ruleID ?? "rule"),
+    label: () => "rule removed",
+  },
+  "constitution.rule_updated": {
+    recordType: "decision",
+    entityOf: (event) =>
+      String((event as { ruleID?: string }).ruleID ?? "rule"),
+    label: () => "rule updated",
   },
 };
 

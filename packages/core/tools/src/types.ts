@@ -373,7 +373,7 @@ export type SandboxToolService = {
    * cannot reach a rollback point says false rather than reporting a success it
    * did not achieve.
    */
-  rollback(id: string): Promise<{ restored: boolean }>;
+  rollback(id: string): Promise<{ restored: boolean; reason?: string }>;
   startResource(
     id: string,
     command: string,

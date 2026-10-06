@@ -283,6 +283,10 @@ function sandboxRollbackTool(): RuntimeTool {
           id,
           restored: result.restored,
           restoredPaths: result.restored ? paths : [],
+          // T-11: a refusal that says nothing reads as a mute backend. The
+          // reason names the obstacle — no rollback point, or one that
+          // belongs to a later promotion.
+          ...(result.reason ? { reason: result.reason } : {}),
         },
         null,
         2,

@@ -407,12 +407,22 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
    * Rolls the system slot back to the last-known-good commit — the rollback a
    * failed activation after promotion triggers.
    */
-  override async rollback(id: string): Promise<{ restored: boolean }> {
+  override async rollback(id: string): Promise<{ restored: boolean; reason?: string }> {
     const recorded = this.lastKnownGood ?? (await this.loadLastKnownGood());
-    if (!recorded) return { restored: false };
+    if (!recorded)
+      return {
+        restored: false,
+        reason: `no rollback point recorded for ${id} (the last promotion left none)`,
+      };
     // The recorded commit belongs to the last promotion, so undoing any other
     // sandbox would revert work this rollback was never asked about.
-    if (recorded.sandboxID !== id) return { restored: false };
+    if (recorded.sandboxID !== id)
+      return {
+        restored: false,
+        reason:
+          `the recorded rollback point belongs to ${recorded.sandboxID} ` +
+          `(a later promotion), not ${id}; undoing it would revert newer work`,
+      };
     const lastKnownGood = recorded.commit;
     if (await this.mergeInProgress()) {
       // A merge left half-applied is the state a rollback exists to clear, so

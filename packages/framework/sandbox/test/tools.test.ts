@@ -460,3 +460,31 @@ test("sandbox_delete of a clean sandbox reports a zero discard, not a silent suc
   expect(deleted.discardedChanges).toBe(0);
   expect(deleted.discardedPaths).toEqual([]);
 });
+
+test("sandbox_rollback refuses with a reason, not a bare false (T-11)", async () => {
+  // A rollback with nothing to undo used to answer {restored: false,
+  // restoredPaths: []} — indistinguishable from a mute backend. The reason
+  // names the obstacle.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-rb-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "rb.1" }, context);
+  // No promotion ever ran, so there is no rollback point.
+  const refused = JSON.parse(
+    await tools.get("sandbox_rollback")!.execute({ id: "rb.1" }, context),
+  ) as { restored: boolean; reason?: string };
+  expect(refused.restored).toBe(false);
+  expect(refused.reason).toContain("rb.1");
+  expect(refused.reason).toContain("last-known-good");
+});

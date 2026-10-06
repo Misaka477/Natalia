@@ -352,8 +352,11 @@ export class WorkspaceSandboxManager
    * that reaches a rollback by sandbox id is the only shape that can be exposed
    * as a tool. `restored: false` means there was nothing to undo.
    */
-  async rollback(_id: string): Promise<{ restored: boolean }> {
-    return { restored: false };
+  async rollback(_id: string): Promise<{ restored: boolean; reason?: string }> {
+    return {
+      restored: false,
+      reason: "this backend keeps no rollback point for a promotion",
+    };
   }
 
   /**

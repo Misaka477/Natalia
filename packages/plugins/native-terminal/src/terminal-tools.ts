@@ -39,6 +39,100 @@ export const TERMINAL_OBSERVE_MODES = [
   "latest",
 ] as const;
 
+/**
+ * The input-family card (presentation plan P1.2): every input tool answers
+ * with the pane info plus a delivery fact, so the card is the pane and the
+ * delivery rides as the summary/pill. A malformed result degrades.
+ */
+function terminalInputCard(input: {
+  callSummary: string;
+}): NonNullable<
+  import("@anthelia/tools").ToolOutputDefinition["presentResult"]
+> {
+  return (_args, value) => {
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+        parsed = decoded as Record<string, unknown>;
+    } catch {
+      // degrade, never throw
+    }
+    const delivery =
+      typeof parsed?.delivery === "string" ? parsed.delivery : undefined;
+    const bytes =
+      typeof parsed?.writtenBytes === "number"
+        ? parsed.writtenBytes
+        : undefined;
+    const summary =
+      delivery === "duplicate"
+        ? "duplicate input"
+        : bytes !== undefined
+          ? `sent ${bytes} bytes`
+          : input.callSummary;
+    const meta: Array<[string, string]> = [];
+    if (bytes !== undefined) meta.push(["bytes", String(bytes)]);
+    if (delivery) meta.push(["delivery", delivery]);
+    return {
+      kind: "terminal",
+      title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+      summary,
+      ...(meta.length ? { meta } : {}),
+    };
+  };
+}
+
+/**
+ * The read-family card (presentation plan P1.2): a terminal read answers
+ * with a served window plus the document's extent, so the card's summary
+ * is the window (`lines A-B of N`) and the meta pills are the pivot
+ * facts (cursor, total, byte window when one was served). The pane id is
+ * the title.
+ */
+function terminalReadCard(input: {
+  callSummary: string;
+}): NonNullable<
+  import("@anthelia/tools").ToolOutputDefinition["presentResult"]
+> {
+  return (_args, value) => {
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+        parsed = decoded as Record<string, unknown>;
+    } catch {
+      // A non-JSON result degrades to the generic card, never throws.
+    }
+    const num = (key: string): number | undefined =>
+      typeof parsed?.[key] === "number" ? (parsed![key] as number) : undefined;
+    const meta: Array<[string, string]> = [];
+    const window = parsed?.window as
+      | { startLine?: number; endLine?: number; lineCount?: number }
+      | undefined;
+    const start = window?.startLine;
+    const end = window?.endLine;
+    const total = num("totalLines") ?? window?.lineCount;
+    const summary =
+      start !== undefined && end !== undefined && total !== undefined
+        ? `lines ${start}-${end} of ${total}`
+        : input.callSummary;
+    if (total !== undefined) meta.push(["lines", String(total)]);
+    if (num("startByte") !== undefined && num("endByte") !== undefined)
+      meta.push([
+        "bytes",
+        `${num("startByte")}-${num("endByte")}${num("totalBytes") !== undefined ? ` of ${num("totalBytes")}` : ""}`,
+      ]);
+    if (num("cursorX") !== undefined && num("cursorY") !== undefined)
+      meta.push(["cursor", `${num("cursorX")},${num("cursorY")}`]);
+    return {
+      kind: "read",
+      title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+      summary,
+      ...(meta.length ? { meta } : {}),
+    };
+  };
+}
+
 function requireNativeTerminal(context: ToolExecutionContext) {
   if (!context.terminal)
     throw new Error(
@@ -81,6 +175,36 @@ function interactiveStartTool(): RuntimeTool {
       },
       required: ["command"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: optionalString(requireObject(args).id) ?? "terminal",
+          summary: "start",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary:
+            typeof parsed?.status === "string" ? parsed.status : "started",
+          meta:
+            typeof parsed?.pid === "number"
+              ? [["pid", String(parsed.pid)]]
+              : [],
+        };
+      },
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -128,6 +252,17 @@ function interactiveReadTool(): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "read",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "read",
+        };
+      },
+      presentResult: terminalReadCard({ callSummary: "read" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -297,6 +432,43 @@ function interactiveSearchTool(): RuntimeTool {
       required: ["id", "query"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: `search: ${requireString(requireObject(args).query, "query")}`,
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const matches = Array.isArray(parsed?.matches) ? parsed!.matches! : [];
+        const summary =
+          matches.length === 0
+            ? "no matches"
+            : `${matches.length} match${matches.length === 1 ? "" : "es"}`;
+        const meta: Array<[string, string]> = [];
+        if (typeof parsed?.truncated === "boolean" && parsed.truncated)
+          meta.push(["truncated", "true"]);
+        if (parsed?.nextCursor !== undefined)
+          meta.push(["nextCursor", String(parsed.nextCursor)]);
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary,
+          ...(meta.length ? { meta } : {}),
+          body: value,
+        };
+      },
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
@@ -362,6 +534,42 @@ function terminalLastCommandTool(): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "last command",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const command =
+          typeof parsed?.commandLine === "string"
+            ? parsed.commandLine
+            : parsed?.commandLine === null
+              ? "no command yet"
+              : "last command";
+        const exitCode = parsed?.exitCode;
+        const meta: Array<[string, string]> = [];
+        if (typeof exitCode === "number") meta.push(["exit", String(exitCode)]);
+        return {
+          kind: "terminal",
+          title: command,
+          summary:
+            typeof exitCode === "number" ? `exit ${exitCode}` : "last command",
+          ...(meta.length ? { meta } : {}),
+        };
+      },
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -436,6 +644,35 @@ function terminalObserveTool(): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const parsed = requireObject(args);
+        return {
+          kind: "terminal",
+          title: requireString(parsed.id, "id"),
+          summary: typeof parsed.mode === "string" ? parsed.mode : "full",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const mode = typeof parsed?.mode === "string" ? parsed.mode : "observe";
+        const changed = parsed?.changed === true;
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary: changed ? `${mode} · new output` : mode,
+          meta: changed ? [["changed", "true"]] : [],
+        };
+      },
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -551,6 +788,17 @@ function interactiveWriteTool(): RuntimeTool {
       required: ["id", "input"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "write",
+        };
+      },
+      presentResult: terminalInputCard({ callSummary: "write" }),
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
@@ -584,6 +832,17 @@ function interactiveSendLineTool(): RuntimeTool {
       },
       required: ["id", "text"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "send line",
+        };
+      },
+      presentResult: terminalInputCard({ callSummary: "send line" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -631,6 +890,17 @@ function interactiveKeyTool(): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "send keys",
+        };
+      },
+      presentResult: terminalInputCard({ callSummary: "send keys" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -680,6 +950,24 @@ function interactiveInputTool(): RuntimeTool {
       },
       required: ["id"],
       additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const parsed = requireObject(args);
+        return {
+          kind: "terminal",
+          title: requireString(parsed.id, "id"),
+          summary: Array.isArray(parsed.keys)
+            ? "send keys"
+            : typeof parsed.text === "string"
+              ? parsed.submit === false
+                ? "type text"
+                : "run input"
+              : "input",
+        };
+      },
+      presentResult: terminalInputCard({ callSummary: "input" }),
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -792,6 +1080,37 @@ function interactiveResizeTool(): RuntimeTool {
       required: ["id", "rows", "cols"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "resize",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const meta: Array<[string, string]> = [];
+        if (typeof parsed?.rows === "number")
+          meta.push(["rows", String(parsed.rows)]);
+        if (typeof parsed?.cols === "number")
+          meta.push(["cols", String(parsed.cols)]);
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary: "resized",
+          ...(meta.length ? { meta } : {}),
+        };
+      },
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
@@ -830,6 +1149,34 @@ function interactiveRequestHumanTool(): RuntimeTool {
       required: ["id", "reason"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "ask the human",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary:
+            parsed?.humanRequested === true
+              ? "human asked to take over"
+              : "human request",
+        };
+      },
+    },
     async execute(input, context) {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
@@ -864,6 +1211,32 @@ function interactiveStopTool(): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        return {
+          kind: "terminal",
+          title: requireString(requireObject(args).id, "id"),
+          summary: "stop",
+        };
+      },
+      presentResult(_args, value) {
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        return {
+          kind: "terminal",
+          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          summary:
+            typeof parsed?.status === "string" ? parsed.status : "stopped",
+        };
+      },
+    },
     async execute(input, context) {
       const session = await requireNativeTerminal(context).stop(
         requireString(requireObject(input).id, "id"),
@@ -883,6 +1256,36 @@ function interactiveListTool(): RuntimeTool {
     description: "List real interactive Terminal sessions.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return { kind: "terminal", title: "terminals", summary: "list" };
+      },
+      presentResult(_args, value) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          // degrade, never throw
+        }
+        const count = Array.isArray(parsed) ? parsed.length : 0;
+        const running = Array.isArray(parsed)
+          ? parsed.filter(
+              (item) =>
+                Boolean(item) &&
+                typeof item === "object" &&
+                (item as { status?: unknown }).status === "running",
+            ).length
+          : 0;
+        return {
+          kind: "terminal",
+          title: "terminals",
+          summary: `${count} listed · ${running} running`,
+          meta: [["running", String(running)]],
+          body: value,
+        };
+      },
+    },
     async execute(_input, context) {
       return JSON.stringify(
         (await requireNativeTerminal(context).list()).map(

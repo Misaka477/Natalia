@@ -14,6 +14,7 @@ import {
 import { workLedgerController } from "@natalia/work-ledger";
 import { governanceLedgerController } from "@natalia/governance-ledger";
 import { workspaceMutations } from "@anthelia/workspace";
+import { detectPromoteCommand } from "@anthelia/sandbox";
 import type { RuntimeContext } from "@anthelia/substrate";
 import {
   ensureSessionEventWindow,
@@ -138,11 +139,33 @@ export function createSandboxRuntime(
     return ledger;
   }
 
-  function promoteCommand() {
+  /**
+   * The validation command a sandbox merge runs before it lands, in the one
+   * honest order: the configured `sandbox.promoteCommand` wins; otherwise the
+   * workspace's OWN project markers decide; with neither, the caller gets a
+   * refusal that says what to set.
+   *
+   * The T-09 regression this replaces: the client path fell back to a
+   * hardcoded `npm run typecheck` when nothing was configured, so a CMake/C
+   * workspace was validated by a command whose package.json does not exist —
+   * exit 254, no merge, and no honest reason. The detector is the same one
+   * the sandbox tool family uses, so both surfaces agree.
+   */
+  function promoteCommand(): string {
     const configured = ctx.ports.getTsRuntimeConfig()?.sandbox.promoteCommand;
-    const command = configured?.trim() || "npm run typecheck";
-    if (!command) throw new Error("sandbox promote command must not be empty");
-    return command;
+    const trimmed = configured?.trim();
+    if (trimmed) return trimmed;
+    const detected = detectPromoteCommand(ctx.ports.getWorkspaceRoot());
+    if (detected) return detected.command;
+    throw new Error(
+      "sandbox_merge needs a validation command for this workspace: no " +
+        "project marker (package.json, CMakeLists.txt, Cargo.toml, " +
+        "pyproject.toml) was found under " +
+        ctx.ports.getWorkspaceRoot() +
+        ", and sandbox.promoteCommand is not configured. Set " +
+        "sandbox.promoteCommand to the command that verifies this project, " +
+        "or call sandbox_validate with an explicit command first.",
+    );
   }
 
   return {

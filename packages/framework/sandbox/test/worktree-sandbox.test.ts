@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { WorktreeSandboxManager } from "../src/worktree-sandbox";
+import { rmSync } from "node:fs";
 
 async function git(cwd: string, args: string[]) {
   const process = Bun.spawn(["git", ...args], {
@@ -212,4 +213,50 @@ test("governance requires the human approval for a high-risk promotion", async (
   });
   // A contract change is high risk: the human approval ran.
   expect(authorized.length).toBe(1);
+});
+
+test("a candidate's .natalia data write shows in the diff like any other (user smoke 2026-10-07)", async () => {
+  // The smoke run: sandbox_write wrote `.natalia/tool-smoke/from-sandbox.txt`,
+  // sandbox_diff showed NO change, but sandbox_delete listed the same file as
+  // a discardable pending change — three surfaces, three answers about one
+  // write. The cause was the candidate's structural exclusion covering ALL of
+  // `.natalia/`, so the write was never committed and the git-derived diff
+  // never saw it. Only the sandbox's OWN stores are structural; a
+  // `.natalia/tool-smoke/` file is user data.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  await manager.create("box");
+  await manager.write(
+    "box",
+    ".natalia/tool-smoke/from-sandbox.txt",
+    "from the sandbox\n",
+  );
+  const changes = await manager.previewMerge("box");
+  expect(changes.map((change) => change.path)).toContain(
+    ".natalia/tool-smoke/from-sandbox.txt",
+  );
+  // Visible, and honest about why it will not merge: the .nataliaignore bulk
+  // rules exclude it, and the entry says so instead of vanishing.
+  const entry = changes.find(
+    (change) => change.path === ".natalia/tool-smoke/from-sandbox.txt",
+  )!;
+  expect(entry.ignored).toBe(true);
+  expect(entry.ignoreReason).toContain("nataliaignore");
+  // The sandbox's own stores stay excluded: committing them would recurse.
+  await manager.write(
+    "box",
+    ".natalia/sandboxes/intruder.txt",
+    "must not be a candidate change\n",
+  );
+  expect(
+    (await manager.previewMerge("box")).map((change) => change.path),
+  ).not.toContain(".natalia/sandboxes/intruder.txt");
+  // A normal write still merges: nothing above changed the git path.
+  await manager.write("box", "notes.txt", "mergeable\n");
+  expect(
+    (await manager.previewMerge("box")).some(
+      (change) => change.path === "notes.txt" && !change.ignored,
+    ),
+  ).toBe(true);
+  rmSync(root, { recursive: true, force: true });
 });

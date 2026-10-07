@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { rmSync } from "node:fs";
-import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
@@ -1262,6 +1261,8 @@ test("every ownership transition is recorded with its actor and action (user P0)
   await controller.claimHumanInput!("tty_ledger");
   await expect(
     controller.write("tty_ledger", "echo x\n", { actor: "model" }),
-  ).rejects.toThrow(/The last transition: a human claimed input at .* via claim/u);
+  ).rejects.toThrow(
+    /The last transition: a human claimed input at .* via claim/u,
+  );
   rmSync(root, { recursive: true, force: true });
 });

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -487,4 +488,34 @@ test("sandbox_rollback refuses with a reason, not a bare false (T-11)", async ()
   expect(refused.restored).toBe(false);
   expect(refused.reason).toContain("rb.1");
   expect(refused.reason).toContain("last-known-good");
+});
+
+test("no promote path hardcodes a toolchain default (T-09 regression guard)", async () => {
+  // The 2026-10-07 smoke run: a CMake/C workspace's sandbox_merge ran
+  // `npm run typecheck` (the client runtime's hardcoded fallback), failed on
+  // the absent package.json with exit 254, and the merge never landed. The
+  // command now comes from the config, then from the workspace's own
+  // markers, then a refusal — never a default. This pins that across both
+  // surfaces: the sandbox tool family and the client runtime bridge.
+  const sandboxToolSource = await Bun.file(
+    new URL("../src/tools.ts", import.meta.url),
+  ).text();
+  expect(sandboxToolSource.includes('?? "npm run typecheck"')).toBe(false);
+  expect(sandboxToolSource.includes('|| "npm run typecheck"')).toBe(false);
+  const clientBridge = await Bun.file(
+    new URL(
+      "../../../framework/client/src/runtime/sandbox-runtime.ts",
+      import.meta.url,
+    ),
+  ).text();
+  expect(clientBridge.includes('|| "npm run typecheck"')).toBe(false);
+  expect(clientBridge.includes("detectPromoteCommand")).toBe(true);
+  // CMake workspaces resolve to cmake, not to a JS toolchain.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-cmake-"));
+  await writeFile(join(root, "CMakeLists.txt"), "project(demo C)\n");
+  expect(detectPromoteCommand(root)).toEqual({
+    command: "cmake -S . -B build && cmake --build build",
+    marker: "CMakeLists.txt",
+  });
+  rmSync(root, { recursive: true, force: true });
 });

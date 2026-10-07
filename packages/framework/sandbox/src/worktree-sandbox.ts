@@ -109,6 +109,21 @@ function patchCounts(patch: string): { additions: number; deletions: number } {
   return { additions, deletions };
 }
 
+/** The sandbox's own stores, shared with the snapshot manager's exclusions. */
+function isSandboxStorePath(rel: string): boolean {
+  return (
+    rel === ".natalia" ||
+    rel === ".natalia/sandboxes" ||
+    rel.startsWith(".natalia/sandboxes/") ||
+    rel === ".natalia/snapshots" ||
+    rel.startsWith(".natalia/snapshots/") ||
+    rel === ".natalia/objects" ||
+    rel.startsWith(".natalia/objects/") ||
+    rel === ".natalia/checkpoints" ||
+    rel.startsWith(".natalia/checkpoints/")
+  );
+}
+
 export class WorktreeSandboxManager extends WorkspaceSandboxManager {
   /** The commit the last promotion was built on, and whose promotion it was. */
   private lastKnownGood: { commit: string; sandboxID: string } | undefined;
@@ -134,6 +149,19 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     return (await loadNataliaIgnore(this.hostRoot)).rules;
   }
 
+  /**
+   * The structural exclusions for a candidate: the sandbox's OWN stores and
+   * version control, not user content.
+   *
+   * This used to exclude ALL of `.natalia/`, which made the four surfaces
+   * disagree about the same write: a candidate writing
+   * `.natalia/tool-smoke/from-sandbox.txt` was committed nowhere (diff
+   * missed it, so sandbox_diff showed no change) while the delete surface
+   * still listed it as a discardable pending change. The 2026-10-07 smoke
+   * run hit exactly that. Only the stores that recurse or churn are
+   * structural — a `.natalia/tool-smoke/` file is user data like any other
+   * and every surface must show it the same way.
+   */
   private isInternalCandidatePath(rel: string): boolean {
     return (
       rel === NATALIA_IGNORE_FILE ||
@@ -141,8 +169,7 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
       rel === ".natalia-manifest.json" ||
       rel === ".git" ||
       rel.startsWith(".git/") ||
-      rel === ".natalia" ||
-      rel.startsWith(".natalia/")
+      isSandboxStorePath(rel)
     );
   }
 
@@ -301,7 +328,40 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
         ...patchCounts(patch ?? ""),
       });
     }
+    this.appendIgnoredRecordedChanges(id, changes);
     return changes;
+  }
+
+  /**
+   * The recorded changes the git diff could not surface, appended as
+   * explicitly ignored pending changes.
+   *
+   * A candidate can record a write (sandbox_write records every write into
+   * the manifest) whose path the workspace's ignore rules then exclude from
+   * the commit — so the git-derived diff never mentions it while the delete
+   * surface (which reads the manifest) lists it as a discardable change. The
+   * 2026-10-07 smoke run hit exactly that with `.natalia/tool-smoke/`. The
+   * fix is not to hide it: it rides the preview marked `ignored`, with the
+   * reason, and the promotion skips it — a caller can no longer conclude
+   * "no changes" from a diff that filtered one out.
+   */
+  private appendIgnoredRecordedChanges(
+    id: string,
+    changes: SandboxChange[],
+  ): void {
+    const manifest = this["mustGet"](id);
+    const surfaced = new Set(changes.map((change) => change.path));
+    for (const recorded of manifest.changedFiles) {
+      if (surfaced.has(recorded.path)) continue;
+      // The sandbox's own stores are structural and stay invisible.
+      if (this.isInternalCandidatePath(recorded.path)) continue;
+      changes.push({
+        ...recorded,
+        ignored: true,
+        ignoreReason:
+          "the workspace's .nataliaignore rules exclude this path; a promotion will not carry it",
+      });
+    }
   }
 
   /**
@@ -331,7 +391,11 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     if (Number(ahead) === 0)
       throw new Error(`candidate ${id} has no changes to promote`);
     const changedFiles = await this.previewMerge(id);
-    const paths = changedFiles.map((change) => change.path);
+    // An ignored pending change is visible in the preview but a promotion
+    // never carries it — the .nataliaignore contract holds at the merge
+    // boundary too, so the authorization is asked for what will land.
+    const mergeable = changedFiles.filter((change) => !change.ignored);
+    const paths = mergeable.map((change) => change.path);
     if (paths.length) await authorize?.(paths);
     // Recorded before the merge is attempted, not after: a merge that conflicts
     // never reaches an assignment placed after the `await`, and the commit it

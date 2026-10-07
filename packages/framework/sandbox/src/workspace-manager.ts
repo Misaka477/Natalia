@@ -57,6 +57,17 @@ export type SandboxChange = {
   after?: string;
   additions?: number;
   deletions?: number;
+  /**
+   * The change exists but a promotion will not carry it: the workspace's
+   * ignore rules (.nataliaignore) exclude the path. It is still REPORTED —
+   * the 2026-10-07 smoke run wrote `.natalia/tool-smoke/...` inside a
+   * sandbox, saw no diff, and then watched sandbox_delete list the same file
+   * as a discardable change. Three surfaces must answer the same way about
+   * one write: visible as a pending, ignored change, mergeable never.
+   */
+  ignored?: boolean;
+  /** Why the change is ignored, when it is. */
+  ignoreReason?: string;
 };
 
 export type SandboxManager = {

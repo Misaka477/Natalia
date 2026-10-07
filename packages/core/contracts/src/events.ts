@@ -2969,12 +2969,7 @@ export type NativeTerminalOwnershipChange = {
   from: "model" | "human";
   to: "model" | "human";
   actor: "model" | "human" | "system";
-  action:
-    | "claim"
-    | "release"
-    | "stop"
-    | "request_human"
-    | "secure_input";
+  action: "claim" | "release" | "stop" | "request_human" | "secure_input";
   at: string;
 };
 

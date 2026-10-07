@@ -22,6 +22,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import type {
+  NativeTerminalOwnershipChange,
   RuntimeEvent,
   RuntimeNativeTerminalSession,
 } from "@anthelia/contracts";
@@ -106,6 +107,8 @@ type PtySession = {
   geometryOwner: "human";
   secureInput: boolean;
   attached: boolean;
+  /** The most recent input-ownership transition, newest last. */
+  lastOwnershipChange?: NativeTerminalOwnershipChange;
   rows: number;
   cols: number;
   revision: number;
@@ -664,6 +667,35 @@ export function createPtyTerminalController(
     });
   }
 
+  /**
+   * The ONLY place inputOwner changes.
+   *
+   * Ownership is an explicit state change with a named actor and action —
+   * the user's P0: focus is not takeover, activity is not takeover, and a
+   * takeover nobody asked for is a defect. Every transition is recorded so
+   * a refused model write can name WHO moved the pane and WHEN, and the
+   * audit trail shows the trigger source rather than an unexplained flip.
+   */
+  function setInputOwner(
+    session: PtySession,
+    to: "model" | "human",
+    actor: "model" | "human" | "system",
+    action: NativeTerminalOwnershipChange["action"],
+  ): void {
+    const from = session.inputOwner;
+    if (from === to) return;
+    session.inputOwner = to;
+    session.lastOwnershipChange = {
+      from,
+      to,
+      actor,
+      action,
+      at: new Date().toISOString(),
+    };
+    session.revision += 1;
+    notifyRevision(session.id);
+  }
+
   function publishAudit(
     session: PtySession,
     action:
@@ -721,6 +753,9 @@ export function createPtyTerminalController(
       inputOwner: session.inputOwner,
       geometryOwner: session.geometryOwner,
       secureInput: session.secureInput,
+      ...(session.lastOwnershipChange
+        ? { lastOwnershipChange: session.lastOwnershipChange }
+        : {}),
       rows: session.rows,
       cols: session.cols,
       startedAt: session.startedAt,
@@ -1098,9 +1133,7 @@ export function createPtyTerminalController(
       throw new Error(
         "secure input must end before returning control to model",
       );
-    session.inputOwner = "model";
-    session.revision += 1;
-    notifyRevision(session.id);
+    setInputOwner(session, "model", "human", "release");
     publishAudit(session, "detach", "human");
     return publicSession(session);
   }
@@ -1135,9 +1168,7 @@ export function createPtyTerminalController(
     if (session.secureInput && session.inputOwner !== "human")
       throw new Error("secure input requires human terminal control");
     if (session.inputOwner === "human") return publicSession(session);
-    session.inputOwner = "human";
-    session.revision += 1;
-    notifyRevision(session.id);
+    setInputOwner(session, "human", "human", "claim");
     publishAudit(session, "write", "human");
     return publicSession(session);
   }
@@ -1156,6 +1187,10 @@ export function createPtyTerminalController(
         // process already gone
       }
     }
+    // A stopped pane holds no input, so a human's ownership of it ends with
+    // the stop — recorded, like every transition, with the actor who stopped.
+    if (session.inputOwner === "human")
+      setInputOwner(session, "model", actor, "stop");
     markExited(session, actor);
     return publicSession(session);
   }
@@ -1292,18 +1327,28 @@ export function createPtyTerminalController(
     if (options?.actor === "human") {
       if (session.secureInput)
         throw new Error("terminal is accepting secure human input");
-    } else if (session.inputOwner !== "model")
+    } else if (session.inputOwner !== "model") {
       // T-06: the refusal names the CURRENT owner state — the model needs
       // to know a human holds the pane right now, not that "a human"
       // exists somewhere in the past. (The user's own correction: the
       // takeover is the user's action; the defect was only that the
       // refusal never said so.)
+      //
+      // The user's P0 follow-up: the refusal must also name the LAST
+      // TRANSITION (who took the pane, when, through what action), so an
+      // unexplained flip is diagnosable instead of just refused.
+      const change = session.lastOwnershipChange;
+      const transition =
+        change && change.to === "human"
+          ? ` The last transition: a ${change.actor} claimed input at ${change.at} via ${change.action}.`
+          : "";
       throw new Error(
         `terminal input is controlled by a human (inputOwner=${session.inputOwner}): ` +
           `the user took over this pane; wait for them to release control ` +
           `(their release sets inputOwner back to model). Reads still work; ` +
-          `this write is refused until then.`,
+          `this write is refused until then.${transition}`,
       );
+    }
     if (session.secureInput)
       throw new Error("terminal is accepting secure human input");
     const writtenBytes = new TextEncoder().encode(value).byteLength;

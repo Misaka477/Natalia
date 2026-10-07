@@ -2958,6 +2958,26 @@ export type RuntimeTerminalSession = {
   }>;
 };
 
+/**
+ * One input-ownership transition on a native terminal pane: the state it
+ * moved between, who moved it (the human, the model or the runtime), the
+ * action that moved it, and when. `action` names the RPC/method so the
+ * trigger source is visible — a focus event is not a trigger, because
+ * takeover has no implicit path.
+ */
+export type NativeTerminalOwnershipChange = {
+  from: "model" | "human";
+  to: "model" | "human";
+  actor: "model" | "human" | "system";
+  action:
+    | "claim"
+    | "release"
+    | "stop"
+    | "request_human"
+    | "secure_input";
+  at: string;
+};
+
 export type RuntimeNativeTerminalSession = {
   id: string;
   host: "wezterm" | "pty";
@@ -2971,6 +2991,16 @@ export type RuntimeNativeTerminalSession = {
   inputOwner: "model" | "human";
   geometryOwner: "human";
   secureInput: boolean;
+  /**
+   * The pane's most recent input-ownership transition (TERM-M.3 route 4).
+   *
+   * Ownership is an EXPLICIT state change — a claim (a human taking the pane)
+   * or a release (giving it back) — never a side effect of focus or activity.
+   * The last transition rides the session so a reader sees WHO moved the pane
+   * and WHEN, and so a refused model write can name it instead of saying "a
+   * human" and leaving the model to guess.
+   */
+  lastOwnershipChange?: NativeTerminalOwnershipChange;
   rows?: number;
   cols?: number;
   startedAt: string;

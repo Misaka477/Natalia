@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
@@ -1215,4 +1217,51 @@ test("a model write on a human-taken pane is refused naming the current owner (T
     controller.write("tty_owner", "echo model-write\n", { actor: "model" }),
   ).resolves.toBeTruthy();
   await controller.stop("tty_owner", "system");
+});
+
+test("every ownership transition is recorded with its actor and action (user P0)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-tty-ledger-"));
+  const { factory } = fakePtyForBehavior();
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "rt",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless" as const,
+    spawn: factory,
+  });
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "tty_ledger",
+  });
+  // A fresh pane has had no transition.
+  expect(started.lastOwnershipChange).toBeUndefined();
+  // The claim records who moved the pane, when, and through what.
+  const claimedView = await controller.claimHumanInput!("tty_ledger");
+  expect(claimedView.inputOwner).toBe("human");
+  const claimed = claimedView.lastOwnershipChange!;
+  expect(claimed.from).toBe("model");
+  expect(claimed.to).toBe("human");
+  expect(claimed.actor).toBe("human");
+  expect(claimed.action).toBe("claim");
+  expect(Number.isNaN(Date.parse(claimed.at))).toBe(false);
+  // The release records its own transition.
+  const releasedView = controller.releaseHumanControl("tty_ledger");
+  expect(releasedView.inputOwner).toBe("model");
+  expect(releasedView.lastOwnershipChange).toEqual({
+    from: "human",
+    to: "model",
+    actor: "human",
+    action: "release",
+    at: releasedView.lastOwnershipChange!.at,
+  });
+  // The refused write names the last transition, so an unexplained flip is
+  // diagnosable instead of just refused (the user's P0 requirement).
+  await controller.claimHumanInput!("tty_ledger");
+  await expect(
+    controller.write("tty_ledger", "echo x\n", { actor: "model" }),
+  ).rejects.toThrow(/The last transition: a human claimed input at .* via claim/u);
+  rmSync(root, { recursive: true, force: true });
 });

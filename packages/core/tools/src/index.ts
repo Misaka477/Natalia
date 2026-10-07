@@ -181,6 +181,11 @@ export class ToolRegistry extends Map<string, RuntimeTool> {
  * "the tools you get when you say nothing" is exactly the built-in catalogue this
  * package no longer owns. The host assembles the catalogue from families.
  */
+export { toolResultSummary } from "./summary";
+export { genericToolCard } from "./card";
+export type { GenericToolCardInput } from "./card";
+export type { ProjectedToolSummary } from "./summary";
+
 export function createToolRegistry(tools: RuntimeTool[]): ToolRegistry {
   return new ToolRegistry(tools.map((tool) => [tool.name, tool]));
 }

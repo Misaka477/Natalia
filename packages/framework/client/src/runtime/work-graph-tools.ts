@@ -7,6 +7,7 @@
  * provenance) lands with the B7 graph batch; this slice gives the model the
  * basic "what has this plan touched" read with bounded output.
  */
+import { genericToolCard } from "@anthelia/tools";
 import {
   projectedWorkGraphNodes,
   projectedWorkGraphEdges,
@@ -106,6 +107,12 @@ export function createWorkGraphQueryTool(
       },
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "work graph",
+      callSummary: "query",
+      resultSummary: "queried",
+      meta: [["total", "total"]],
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         path?: string;

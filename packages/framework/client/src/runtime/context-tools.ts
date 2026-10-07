@@ -1,6 +1,6 @@
 import type { SessionID } from "@anthelia/contracts";
 import type { RuntimeContext } from "@anthelia/substrate";
-import type { RuntimeTool } from "@anthelia/tools";
+import { genericToolCard, type RuntimeTool } from "@anthelia/tools";
 import { estimateTokens } from "@anthelia/runtime";
 import { workspaceStoreID } from "@anthelia/platform";
 import {
@@ -106,6 +106,13 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         },
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "records",
+        callSummary: "recall",
+        resultSummary: "recalled",
+        titleKey: "query",
+        meta: [["total", "total"]],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as {
@@ -192,6 +199,13 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["query"],
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "records",
+        callSummary: "search",
+        resultSummary: "found",
+        titleKey: "query",
+        meta: [["total", "total"]],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as {
@@ -267,6 +281,13 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["recordID"],
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "record",
+        callSummary: "read",
+        resultSummary: "read",
+        titleKey: "recordID",
+        meta: [["type", "recordType"]],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as { recordID?: unknown; sessionID?: unknown };
@@ -335,6 +356,15 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         },
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "records",
+        callSummary: "list",
+        resultSummary: "listed",
+        meta: [
+          ["total", "total"],
+          ["returned", "returned"],
+        ],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as {
@@ -395,6 +425,12 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["recordID"],
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "history",
+        callSummary: "history",
+        resultSummary: "listed",
+        meta: [["total", "total"]],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as { recordID?: unknown; sessionID?: unknown };
@@ -468,6 +504,15 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["agentID"],
         additionalProperties: false,
       },
+      output: genericToolCard({
+        family: "context pack",
+        callSummary: "pack",
+        resultSummary: "packed",
+        meta: [
+          ["tokens", "tokens"],
+          ["truncated", "truncated"],
+        ],
+      }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as {

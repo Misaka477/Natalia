@@ -7,6 +7,7 @@
  * same pure builders the surfaces use — the event vocabulary stays the
  * journal-face one and no prompt ever carries the正文.
  */
+import { genericToolCard } from "@anthelia/tools";
 import {
   validationClassesFor,
   workLedgerController,
@@ -97,6 +98,13 @@ export function createRecordValidationTool(
       required: ["taskID", "objective", "command"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "evidence",
+      callSummary: "validate",
+      resultSummary: "recorded",
+      titleKey: "taskID",
+      meta: [["result", "result"]],
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         taskID?: string;
@@ -278,6 +286,12 @@ export function createRecordCompletionTool(
       required: ["taskID", "objective", "changeSummary"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "completion",
+      callSummary: "record",
+      resultSummary: "recorded",
+      titleKey: "taskID",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         taskID?: string;
@@ -497,6 +511,12 @@ export function createRecordDecisionTool(
       required: ["decision"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "decision",
+      callSummary: "record",
+      resultSummary: "recorded",
+      titleKey: "decision",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         decision?: string;
@@ -589,6 +609,11 @@ export function createDriftAcknowledgeTool(
       required: ["findingID", "status"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "drift",
+      callSummary: "acknowledge",
+      resultSummary: "acknowledged",
+    }),
     async execute(parsed, context) {
       const args = parsed as {
         findingID?: string;

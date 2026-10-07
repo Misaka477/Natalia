@@ -40,7 +40,7 @@ import type {
   SessionExecutionState,
 } from "@anthelia/substrate";
 import { niaFace, smokeFace } from "./verification-faces";
-import type { RuntimeTool } from "@anthelia/tools";
+import { genericToolCard, type RuntimeTool } from "@anthelia/tools";
 
 function activeExec(ctx: RuntimeContext): SessionExecutionState | undefined {
   return ctx.ports.getActiveExec();
@@ -153,6 +153,12 @@ export function createProposeGenerationTool(ctx: RuntimeContext): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "generation",
+      callSummary: "propose",
+      resultSummary: "proposed",
+      titleKey: "sessionID",
+    }),
     async execute(input) {
       const args = input as {
         configPatch?: Record<string, unknown>;
@@ -228,6 +234,12 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
       required: ["candidateID"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "generation",
+      callSummary: "apply",
+      resultSummary: "applied",
+      titleKey: "generationID",
+    }),
     async execute(input) {
       const args = input as {
         candidateID?: string;
@@ -311,6 +323,12 @@ export function createRollbackGenerationTool(ctx: RuntimeContext): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "generation",
+      callSummary: "rollback",
+      resultSummary: "rolled back",
+      titleKey: "generationID",
+    }),
     async execute(input) {
       const args = input as { to?: string; reason?: string };
       const pointer = generationPointers(ctx);
@@ -385,6 +403,12 @@ export function createCancelGenerationTool(ctx: RuntimeContext): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "generation",
+      callSummary: "cancel",
+      resultSummary: "cancelled",
+      titleKey: "generationID",
+    }),
     async execute(input) {
       const args = input as { candidateID?: string; reason?: string };
       const pointer = generationPointers(ctx);
@@ -426,6 +450,12 @@ export function createListGenerationCandidatesTool(
       "List this session's staged composition candidates with their status (outstanding / applied / cancelled) and the reason each was staged. Read-only; never changes the workspace.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: genericToolCard({
+      family: "generations",
+      callSummary: "list",
+      resultSummary: "listed",
+      meta: [["candidates", "candidates"]],
+    }),
     async execute() {
       const pointer = generationPointers(ctx);
       const candidates = proposedGenerations(

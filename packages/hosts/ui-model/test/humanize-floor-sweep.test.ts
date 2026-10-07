@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { join } from "node:path";
 import { humanizeToolResult, resultView } from "../src";
 
@@ -153,4 +154,60 @@ test("every transcript host flattens tool output through the model layer", () =>
       `${host} must flatten through humanizeToolResult`,
     ).toBe(true);
   }
+});
+
+test("every model-facing tool projects a card (the 2026-10-07 completeness sweep)", () => {
+  // The user's report: "绝大多数的工具返回是 json 数据而不是按 dsh 那种
+  // 返回". The row's summary is now derived from the result, and the tools
+  // that were answering with a bare envelope were wired to the generic card
+  // factory one by one (context/work-graph/generation/record/goal/plan/
+  // process/todo). This sweep keeps the surface honest: a NEW tool without
+  // a presenter fails here the day it lands.
+  const toolDirGlobs = [
+    "packages/plugins/tools/*/src",
+    "packages/plugins/browser/src",
+    "packages/plugins/team/src",
+    "packages/plugins/skills/src",
+    "packages/plugins/native-terminal/src",
+    "packages/framework/client/src/runtime",
+    "packages/domains/collab/src",
+    "packages/domains/goal-runtime/src",
+  ];
+  const repoRoot = join(import.meta.dir, "../../../..");
+  const unwired: string[] = [];
+  for (const dir of toolDirGlobs) {
+    const base = resolve(repoRoot, dir);
+    let files: string[] = [];
+    try {
+      files = readdirSync(base)
+        .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
+        .map((name) => join(base, name));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      const re = /name: "([a-z_]+)",\n\s+description:/g;
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(source)) !== null) {
+        const next = source.indexOf('name: "', match.index + 10);
+        const body = source.slice(
+          match.index + match[0].length,
+          next === -1 ? source.length : next,
+        );
+        const wired = [
+          "presentCall",
+          "collabOutput(",
+          "terminalReadCard",
+          "terminalInputCard",
+          "genericToolCard(",
+        ].some((marker) => body.includes(marker));
+        if (!wired) unwired.push(`${file.split("packages/")[1]}: ${match[1]}`);
+      }
+    }
+  }
+  expect(
+    unwired,
+    `model-facing tools without a presenter: ${unwired.join(", ")}`,
+  ).toEqual([]);
 });

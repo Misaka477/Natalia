@@ -25,6 +25,7 @@ import type { SessionExecutionState } from "@anthelia/substrate";
 import { ensureSessionFullEvents } from "@anthelia/substrate";
 import { findMailboxMessage } from "./mailbox";
 import { logOf } from "@anthelia/operation-log";
+import { collabOutput } from "./collab-presenters";
 
 export function createMailboxPlans(ctx: RuntimeContext) {
   return {
@@ -71,6 +72,13 @@ export function createMailboxPlans(ctx: RuntimeContext) {
         required: ["text"],
         additionalProperties: false,
       },
+      output: collabOutput({
+        callTitle: "message",
+        callSummary: "send",
+        resultTitle: "message",
+        resultSummary: "sent",
+        meta: [["messageID", "messageID"]],
+      }),
       async execute(parsed, context) {
         const args = parsed as {
           text?: string;

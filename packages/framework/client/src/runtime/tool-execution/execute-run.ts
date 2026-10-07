@@ -12,6 +12,7 @@ import type { ProviderToolCall } from "@anthelia/runtime";
 import {
   requiresForcedGitApprovalAst,
   timeoutSecOr,
+  toolResultSummary,
   validateToolOutput,
   type RuntimeTool,
 } from "@anthelia/tools";
@@ -393,7 +394,12 @@ export async function runExecuteStage(
       name: tool.name,
       callID: call.id,
       status: "succeeded",
-      summary: result.slice(0, 200),
+      // The row's one-line state, DERIVED from the result (dsh's layer-1
+      // `render` contract): the tool's own projected summary when it
+      // declared a presenter, otherwise a count/first-line over the result
+      // — never `result.slice(0, 200)`, which printed raw JSON on the row
+      // for every JSON-returning tool (the user's 2026-10-07 report).
+      summary: toolResultSummary(result, projectedRender),
       result,
       argumentsDelta: call.arguments,
       ...(call.thoughtSignature

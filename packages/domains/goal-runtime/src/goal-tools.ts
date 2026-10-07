@@ -9,7 +9,7 @@
 import type { GoalBlockReason, SessionID } from "@anthelia/contracts";
 import { sessionFactGoal } from "@anthelia/session";
 import { workLedgerController as goalWorkLedger } from "@natalia/work-ledger";
-import type { RuntimeTool } from "@anthelia/tools";
+import { genericToolCard, type RuntimeTool } from "@anthelia/tools";
 import type {
   RuntimeContext,
   SessionExecutionState,
@@ -99,6 +99,12 @@ export function goalTools(
       "Read the current same-session goal: id, revision, objective, phase, blockedReason, rounds started/max, and whether automatic continuation is armed. Returns { goal: null } when there is none.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: genericToolCard({
+      family: "goal",
+      callSummary: "read",
+      resultSummary: "read",
+      meta: [["phase", "phase"]],
+    }),
     async execute(_parsed, context) {
       const exec = execFor(sessionID(context));
       if (!exec) return JSON.stringify({ goal: null });
@@ -136,6 +142,13 @@ export function goalTools(
       required: ["objective"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "goal",
+      callSummary: "create",
+      resultSummary: "created",
+      titleKey: "objective",
+      meta: [["rounds", "maxGoalRounds"]],
+    }),
     async execute(parsed, context) {
       const args = (parsed ?? {}) as Params;
       const objective = stringArg(args.objective);
@@ -210,6 +223,13 @@ export function goalTools(
       required: ["goal_id", "revision", "action"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "goal",
+      callSummary: "update",
+      resultSummary: "updated",
+      titleKey: "goalID",
+      meta: [["action", "action"]],
+    }),
     async execute(parsed, context) {
       const args = (parsed ?? {}) as Params;
       const action = stringArg(args.action);

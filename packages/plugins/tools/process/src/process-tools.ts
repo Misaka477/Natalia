@@ -23,6 +23,7 @@ import { resolve } from "node:path";
 import { detachedShellPrefix, startDetachedProcess } from "@anthelia/platform";
 import { selectExecutor } from "@anthelia/shell";
 import {
+  genericToolCard,
   processFingerprint,
   readOptionalFile,
   safeToolEnv,
@@ -1093,6 +1094,12 @@ function processOutputTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "process",
+      callSummary: "output",
+      resultSummary: "read",
+      titleKey: "id",
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       return await registry.output(requireString(args.id, "id"), context);
@@ -1122,6 +1129,13 @@ function processReadyTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "process",
+      callSummary: "ready",
+      resultSummary: "ready",
+      titleKey: "id",
+      meta: [["exitCode", "exitCode"]],
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       return JSON.stringify(
@@ -1153,6 +1167,12 @@ function processStopTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "process",
+      callSummary: "stop",
+      resultSummary: "stopped",
+      titleKey: "id",
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       return JSON.stringify(
@@ -1197,6 +1217,12 @@ function processCleanupTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "Remove stopped or exited managed processes.",
     requiresApproval: true,
     parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: genericToolCard({
+      family: "process",
+      callSummary: "cleanup",
+      resultSummary: "cleaned",
+      titleKey: "id",
+    }),
     async execute(_input, context) {
       return JSON.stringify(await registry.cleanup(context), null, 2);
     },

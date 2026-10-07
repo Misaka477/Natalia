@@ -242,12 +242,17 @@ export function createGoalRuntime(ctx: RuntimeContext): GoalRuntime {
           message: "paused from the status bar",
         });
         ctx.ports.publishForSession(exec, result.event);
-        // A durable `paused` phase alone only stops the NEXT round, so the
-        // in-flight round would keep running for minutes. Hard-stop it — but
-        // only a goal round; a human turn keeps working.
-        const activeTurnID = exec.activeTurnID;
-        if (activeTurnID && driver.isGoalRound(sessionID, activeTurnID))
-          await ctx.ports.cancelTurn?.("goal paused", sessionID);
+        // dsh's semantics, adopted on the user's 2026-10-07 report ("暂停
+        // goal 会把当前正在跑的轮次直接停了"): pause DISARMS, it does not
+        // cancel. The in-flight goal round runs to completion — its
+        // findings, its journal, its settlement all land — and the driver
+        // simply refuses to start the next one, because the goal's phase is
+        // no longer `active`. A hard cancel threw away minutes of a round's
+        // work to save the same minutes of waiting.
+        //
+        // (The driver's gate is the enforcement: `drive` skips while
+        // `phase !== "active"`, so the paused goal cannot be resumed by a
+        // racing settle either.)
         return { ok: true, action };
       }
       if (action === "resume") {

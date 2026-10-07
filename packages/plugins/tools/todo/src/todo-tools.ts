@@ -8,6 +8,7 @@
  * loads it. The host composes families; the framework ships none.
  */
 import {
+  genericToolCard,
   optionalInteger,
   requireObject,
   requireString,
@@ -152,6 +153,12 @@ function todoWriteTool(): RuntimeTool {
       required: ["items"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "todo",
+      callSummary: "write",
+      resultSummary: "written",
+      meta: [["total", "total"]],
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       if (!Array.isArray(args.items)) throw new Error("items must be an array");

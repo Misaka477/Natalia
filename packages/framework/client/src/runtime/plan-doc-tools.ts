@@ -9,6 +9,7 @@
  * the runtime context; the正文 never does.
  */
 import type { RuntimeTool } from "@anthelia/tools";
+import { genericToolCard } from "@anthelia/tools";
 import { applyPlanDocTick } from "@natalia/work-ledger";
 import type { RuntimeContext } from "@anthelia/substrate";
 
@@ -24,6 +25,11 @@ export function createPlanDocListTool(ctx: RuntimeContext): RuntimeTool {
       properties: {},
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "plans",
+      callSummary: "list",
+      resultSummary: "listed",
+    }),
     async execute() {
       return JSON.stringify(await ctx.ports.planDocRuntime.planDocList());
     },
@@ -51,6 +57,12 @@ export function createPlanDocReadTool(ctx: RuntimeContext): RuntimeTool {
       },
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "plan",
+      callSummary: "read",
+      resultSummary: "read",
+      titleKey: "planID",
+    }),
     async execute(parsed) {
       const args = parsed as { planID?: string; path?: string };
       if (!args.planID && !args.path)
@@ -103,6 +115,12 @@ export function createPlanDocTickTool(ctx: RuntimeContext): RuntimeTool {
       required: ["planID", "task", "done"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "plan",
+      callSummary: "tick",
+      resultSummary: "ticked",
+      titleKey: "planID",
+    }),
     async execute(parsed) {
       const args = parsed as {
         planID?: string;
@@ -171,6 +189,12 @@ export function createPlanPauseTool(ctx: RuntimeContext): RuntimeTool {
       required: ["planID", "paused"],
       additionalProperties: false,
     },
+    output: genericToolCard({
+      family: "plan",
+      callSummary: "pause",
+      resultSummary: "paused",
+      titleKey: "planID",
+    }),
     async execute(parsed, context) {
       const args = parsed as { planID?: string; paused?: boolean };
       if (!args.planID?.trim()) return "plan_pause requires planID";

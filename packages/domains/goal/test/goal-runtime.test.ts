@@ -546,3 +546,24 @@ test("a durable view answers on a fast-attach tail the fold cannot", () => {
   expect(service.current("s1", tail, durable)?.phase).toBe("active");
   expect(service.current("s1", tail)?.phase).toBe("active");
 });
+
+test("a paused goal drives no further round — the round in flight finishes (user 2026-10-07)", async () => {
+  // dsh's semantics: pause DISARMS, it does not cancel. The in-flight round
+  // runs to completion; the driver refuses the NEXT one, because the goal's
+  // phase is no longer `active`. (Our status-bar path used to hard-cancel
+  // the in-flight round, which threw away its minutes of work.)
+  const h = harness();
+  h.seed("ship it");
+  // Round 1 is admitted and (here) settles as still running.
+  await h.driver.drive("s1");
+  expect(h.admitted).toHaveLength(1);
+  // The user pauses while round 1 is in flight. The round is NOT cancelled —
+  // no cancel call exists in the pause path — and the driver skips the next.
+  const goalID = h.service.current("s1", h.events)!.goalID;
+  const paused = h.service.pause("s1", h.service.current("s1", h.events)!);
+  h.host.publish("s1", paused.event);
+  h.driver.settle("s1", `goal_${goalID}_round_1`, "done");
+  await h.driver.drive("s1");
+  expect(h.admitted).toHaveLength(1);
+  expect(h.service.current("s1", h.events)?.phase).toBe("paused");
+});

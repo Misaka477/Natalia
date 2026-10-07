@@ -25,6 +25,7 @@ import type { Message } from "./types";
 import { toolCallCard } from "@natalia/ui-kit";
 import { stableRows, type RowSignature } from "./stable-rows";
 import { SessionUsageBar } from "./components/SessionUsageBar";
+import { humanizeToolResult } from "@natalia/ui-model";
 
 function subagentToolCallsFromText(
   text: string,
@@ -262,7 +263,10 @@ export function AgentPanel(props: {
                   toolCalls: [
                     {
                       name: tool.name,
-                      output: tool.result ?? tool.summary,
+                      output: humanizeToolResult(
+                        tool.result ?? tool.summary,
+                        tool.name,
+                      ),
                       status: tool.status,
                       summary: tool.summary,
                       card: toolCallCard(tool.metadata),

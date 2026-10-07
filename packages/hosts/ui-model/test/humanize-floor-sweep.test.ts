@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { humanizeToolResult, resultView } from "../src";
 
@@ -114,5 +115,39 @@ test("every presenter-less JSON tool's result is flattened, never raw", async ()
     const view = resultView(SAMPLE, 8, 1200, { name: tool.tool });
     expect(view.preview, `${tool.file}: ${tool.tool}`).not.toBe(SAMPLE);
     expect(view.preview).toContain("id: probe_1");
+  }
+});
+
+test("every transcript host flattens tool output through the model layer", () => {
+  // The P0 hole the user caught: the model layer's flattener covered the
+  // panels' OTHER paths but the transcript's tool rows were built by each
+  // host itself — app-neu had a local flatten, and agent-panel/nia-panel
+  // passed `tool.result` RAW into the card, which is where the raw JSON in
+  // the UI came from. The flatten now lives in exactly one place
+  // (humanizeToolResult) and every host calls it. This guard reads the
+  // sources so the hole cannot reopen quietly.
+  const hosts = [
+    "packages/plugins/ui/web/src/app-neu.tsx",
+    "packages/plugins/ui/web/src/agent-panel.tsx",
+    "packages/plugins/ui/web/src/nia-panel.tsx",
+  ];
+  const repoRoot = join(import.meta.dir, "../../../..");
+  for (const host of hosts) {
+    const source = readFileSync(join(repoRoot, host), "utf8");
+    // The import may be merged with other ui-model names, so match on the
+    // binding appearing in an import statement from that module.
+    const importsHumanize =
+      /import\s*\{[^}]*\bhumanizeToolResult\b[^}]*\}\s*from\s*"@natalia\/ui-model"/s.test(
+        source,
+      );
+    expect(importsHumanize, `${host} must import the flattener`).toBe(true);
+    expect(
+      source.includes("output: tool.result ?? tool.summary,"),
+      `${host} must not pass a raw tool result into the card`,
+    ).toBe(false);
+    expect(
+      source.includes("humanizeToolResult("),
+      `${host} must flatten through humanizeToolResult`,
+    ).toBe(true);
   }
 });

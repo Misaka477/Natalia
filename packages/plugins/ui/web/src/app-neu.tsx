@@ -33,7 +33,7 @@ import {
   type TranscriptHandle,
 } from "@natalia/ui-kit";
 import type { UiPanelDefinition } from "@natalia/ui-host";
-import { pendingToolLink } from "@natalia/ui-model";
+import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { QueueDock } from "./components/QueueDock";
@@ -2411,22 +2411,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const sessionID = selectedSessionID() || state().sessionID;
     await props.ctx.runtime.naviChat?.setModelProfile?.(next, sessionID);
   }
-  function formatValue(value: unknown): string {
-    if (value === null) return "null";
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean")
-      return String(value);
-    if (Array.isArray(value))
-      return value
-        .map((item) =>
-          typeof item === "object" && item !== null
-            ? JSON.stringify(item)
-            : String(item),
-        )
-        .join(", ");
-    return "";
-  }
-
   const toolOutputCache = new Map<string, string>();
   function formatToolOutput(name: string, output: string): string {
     const cacheKey = `${name}\n${output}`;
@@ -2442,43 +2426,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }
 
   function formatToolOutputUncached(name: string, output: string): string {
-    if (name === "ask_user") {
-      try {
-        const parsed = JSON.parse(output) as { answers?: unknown };
-        if (Array.isArray(parsed.answers)) {
-          const text = parsed.answers
-            .flatMap((answer) =>
-              Array.isArray(answer) ? answer.map(String) : [String(answer)],
-            )
-            .filter(Boolean)
-            .join("; ");
-          if (text) return text;
-        }
-      } catch {
-        // fall through
-      }
-      return output;
-    }
-    try {
-      const parsed = JSON.parse(output) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((item) => formatValue(item))
-          .filter(Boolean)
-          .join("\n");
-      }
-      if (parsed && typeof parsed === "object") {
-        return Object.entries(parsed as Record<string, unknown>)
-          .map(([key, value]) => {
-            const text = formatValue(value);
-            return text ? `${key}: ${text}` : key;
-          })
-          .join("\n");
-      }
-    } catch {
-      // not JSON: keep plain text
-    }
-    return output;
+    // The model layer's single flattener (ui-model's humanizeToolResult):
+    // every JSON result becomes `key: value` lines with the known-tool
+    // special cases (ask_user's answers, the mailbox pages, the plans).
+    // This used to be a LOCAL flatten, which is how the Navi/Nia panels
+    // ended up showing raw JSON — they never had the flatten at all.
+    return humanizeToolResult(output, name);
   }
 
   async function loadOlderHistory(): Promise<boolean> {

@@ -313,7 +313,7 @@ test("apply_edits description is a structured model-facing batch editor", () => 
   expect(applyEdits.description).toContain("Do not use unified diff");
 });
 
-test("write_file projects a diff card carrying the new text", () => {
+test("write_file projects a diff card whose lines are marked additions", () => {
   // A create has no prior content (dsh's FileDiff uses oldText: null for that
   // case), so the card IS the new text — a UI renders it as the whole-file
   // change. Before this the family used a generic card, so a write looked like
@@ -325,7 +325,8 @@ test("write_file projects a diff card carrying the new text", () => {
     kind: "diff",
     title: "Write a.txt",
     summary: "write",
-    body: "x\ny",
+    body: "+ x\n+ y",
+    meta: [["lines", "2"]],
   });
   // The RESULT state repeats the diff. dsh's diff model says it outright: a
   // completed update replaces the pending card's content, so a result card
@@ -341,9 +342,29 @@ test("write_file projects a diff card carrying the new text", () => {
     kind: "diff",
     title: "Write a.txt",
     summary: "wrote",
-    body: "x\ny",
-    meta: [["result", "wrote a.txt"]],
+    body: "+ x\n+ y",
+    meta: [
+      ["lines", "2"],
+      ["result", "wrote a.txt"],
+    ],
   });
+});
+
+test("a write's marked lines are what a diff renderer colors (user screenshot)", () => {
+  // The live run that produced the user's screenshot: a Write card whose body
+  // was the RAW text, so the diff renderer's `+ ` convention matched nothing
+  // and the content rendered plain — "Write 没有 diff". Every body line now
+  // carries the addition mark, which is the only contract the renderer reads.
+  const tool = writeFileTools.find((t) => t.name === "write_file")!;
+  const card = tool.output?.presentResult?.(
+    { path: ".natalia/tool-smoke/direct.txt", content: "alpha" },
+    "wrote .natalia/tool-smoke/direct.txt",
+  );
+  expect(card?.kind).toBe("diff");
+  expect((card?.body ?? "").split("\n").every((l) => l.startsWith("+ "))).toBe(
+    true,
+  );
+  expect(card?.body).toBe("+ alpha");
 });
 
 test("an edit's result state repeats the hunk instead of replacing it", () => {

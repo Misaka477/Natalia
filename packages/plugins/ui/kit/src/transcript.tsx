@@ -10,7 +10,7 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
-  hasKeyedToolview,
+  keyedToolviewLines,
   parseAskTranscript,
   shouldCollapseToolOutput,
   relativizePath,
@@ -1225,70 +1225,17 @@ function ToolKindIcon(props: { kind: string | undefined }) {
   }
 }
 
-/**
- * The keyed toolviews (P2): ask_user's Q&A transcript and the todo
- * checklist. Both read the tool's own projected card — the transcript
- * lines and the envelope items are parsed by the pure helpers in
- * message.ts, so the rendering here has no parsing to get wrong.
- */
-function KeyedToolCard(props: { toolCall: ToolCall }) {
-  if (props.toolCall.name === "ask_user") {
-    const lines = () =>
-      parseAskTranscript(
-        props.toolCall.card?.body ?? props.toolCall.output ?? "",
-      );
-    return (
-      <div class="natalia-tool-output natalia-keyed-qa">
-        <pre>
-          <For each={lines()}>
-            {(entry) => (
-              <span
-                class="natalia-tool-output-line"
-                data-line-kind={
-                  entry.kind === "answer"
-                    ? "added"
-                    : entry.kind === "question"
-                      ? "removed"
-                      : "plain"
-                }
-              >
-                {entry.text}
-                {"\n"}
-              </span>
-            )}
-          </For>
-        </pre>
-      </div>
-    );
-  }
-  // todo_read / todo_write: the checklist.
-  const items = () =>
-    todoItemsFromBody(props.toolCall.card?.body ?? props.toolCall.output ?? "");
-  return (
-    <div class="natalia-tool-output natalia-keyed-todo">
-      <Show when={items().length > 0} fallback={<pre>(no items)</pre>}>
-        <For each={items()}>
-          {(item) => (
-            <span
-              class="natalia-tool-output-line"
-              data-line-kind={item.status === "completed" ? "added" : "plain"}
-            >
-              {`${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`}
-              {"\n"}
-            </span>
-          )}
-        </For>
-      </Show>
-    </div>
-  );
-}
-
 function ToolCallCard(props: { toolCall: ToolCall }) {
   // The keyed dispatch (presentation plan P2.1): a keyed toolview REPLACES
   // the generic card, the same dispatch dsh's ToolCallTree performs. The
   // keyed set lives in message.ts beside the other tool tables.
-  if (hasKeyedToolview(props.toolCall.name))
-    return <KeyedToolCard toolCall={props.toolCall} />;
+  // The keyed toolviews (presentation plan P2.1): ask_user's Q&A and the
+  // todo checklist REPLACE this card's BODY, never its row — a reader must
+  // still see which tool ran, its status and its title (the screenshot that
+  // taught this: a keyed row that said only `(no items)` named no tool).
+  // The line model is message.ts's pure function; the shell below is shared
+  // with the generic path.
+  const keyed = () => keyedToolviewLines(props.toolCall);
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
   const rowLabel = () => toolRowLabel(props.toolCall.name);
@@ -1311,7 +1258,13 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // The tool's own body wins: for a diff it is the marked hunk (the raw result
   // string is not the same text at all), for a terminal it is the command's
   // output. The raw result is the fallback for a tool that declared no card.
-  const output = () => card?.body ?? props.toolCall.output ?? "";
+  const rawOutput = () => card?.body ?? props.toolCall.output ?? "";
+  const output = () => {
+    const keyedBody = keyed();
+    return keyedBody
+      ? keyedBody.map((entry) => entry.line).join("\n")
+      : rawOutput();
+  };
   const outputLines = () => output().split("\n");
   // The collapse criterion is the model layer's (P0.2): it knows the
   // single-line-JSON shape that the old line/char count missed.
@@ -1333,8 +1286,28 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   const outputLineElements = (): Array<{
     line: string;
     kind: "added" | "removed" | "plain";
-  }> =>
-    shownOutput()
+  }> => {
+    // The keyed model carries its own kinds (Q&A rows, checklist done rows);
+    // the generic path derives them from the diff marks the tool wrote.
+    const keyedBody = keyed();
+    if (keyedBody) {
+      const bounded = keyedBody.slice(
+        0,
+        collapsible() && !expanded()
+          ? TOOL_OUTPUT_PREVIEW_LINES
+          : keyedBody.length,
+      );
+      return bounded.map((entry) => ({
+        line: entry.line,
+        kind:
+          entry.kind === "added" || entry.kind === "answer"
+            ? ("added" as const)
+            : entry.kind === "removed"
+              ? ("removed" as const)
+              : ("plain" as const),
+      }));
+    }
+    return shownOutput()
       .split("\n")
       .map((line) => {
         if (!isDiff()) return { line, kind: "plain" as const };
@@ -1342,6 +1315,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
         if (line.startsWith("- ")) return { line, kind: "removed" as const };
         return { line, kind: "plain" as const };
       });
+  };
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.

@@ -147,6 +147,60 @@ export function parseAskTranscript(body: string): QATranscriptLine[] {
 /** One checklist row, decoded from a todo result envelope. */
 export type TodoChecklistItem = { content: string; status: string };
 
+/** A keyed card's rendered line: the text and its visual treatment. */
+export type KeyedToolviewLine = {
+  line: string;
+  kind: "plain" | "added" | "removed" | "question" | "choices" | "answer";
+};
+
+/**
+ * The keyed card's lines, or undefined for a tool with no keyed toolview
+ * (presentation plan P2.1).
+ *
+ * A keyed toolview REPLACES the generic card's BODY, never its row: the
+ * reader must still see which tool ran (the label, the status, the title),
+ * which is why this returns just the line model and the card's shell is
+ * shared with the generic path.
+ *
+ * The discipline the user's screenshot taught: a keyed card whose payload
+ * is missing must fall back to the tool's RAW output, never invent a
+ * placeholder — `(no items)` on a row that names no tool is worse than
+ * showing the result text the tool actually returned.
+ */
+export function keyedToolviewLines(toolCall: {
+  name: string;
+  output?: string;
+  card?: { body?: string };
+}): KeyedToolviewLine[] | undefined {
+  if (!KEYED_TOOLVIEW_NAMES.has(toolCall.name)) return undefined;
+  const body = toolCall.card?.body ?? toolCall.output ?? "";
+  if (toolCall.name === "ask_user")
+    return parseAskTranscript(body).map((entry) => ({
+      line: entry.text,
+      kind:
+        entry.kind === "answer"
+          ? ("answer" as const)
+          : entry.kind === "question"
+            ? ("question" as const)
+            : entry.kind === "choices"
+              ? ("choices" as const)
+              : ("plain" as const),
+    }));
+  const items = todoItemsFromBody(body);
+  return items.length > 0
+    ? items.map((item) => ({
+        line: `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`,
+        kind:
+          item.status === "completed" ? ("added" as const) : ("plain" as const),
+      }))
+    : // The envelope is absent (a prose result, an error sentence): show
+      // what the tool actually said rather than fabricating an empty list.
+      body
+        .split(String.fromCharCode(10))
+        .filter((line) => line.length > 0)
+        .map((line) => ({ line, kind: "plain" as const }));
+}
+
 /**
  * The todo items a tool's result envelope carries, or an empty list when
  * the body is not the envelope. Both todo tools answer with it after the

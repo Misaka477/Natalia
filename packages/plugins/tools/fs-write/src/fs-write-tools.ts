@@ -30,6 +30,23 @@ function countLines(text: string): number {
  * renderer can ignore this and diff the texts itself; one that does not gets
  * a readable hunk for free.
  */
+/**
+ * Marks every line of a whole-file write as an addition.
+ *
+ * The diff convention the renderers read: `+ ` prefix per line. A whole-file
+ * write has no prior text to diff against at call time (and reading the file
+ * inside a presenter would make it I/O, not a projection), so the card shows
+ * the new content as the complete change — the same thing dsh's FileDiff
+ * shows for `oldText: null`.
+ */
+function markedAdditions(text: string): string {
+  if (text === "") return "";
+  return text
+    .split("\n")
+    .map((line) => `+ ${line}`)
+    .join("\n");
+}
+
 function unifiedHunk(oldText: string, newText: string): string {
   const removed =
     oldText === "" ? [] : oldText.split("\n").map((l) => `- ${l}`);
@@ -81,12 +98,18 @@ function writeFileTool(): RuntimeTool {
         // A write is a diff card: a create has no prior text (dsh's
         // FileDiff uses oldText: null for exactly that), and an overwrite
         // cannot know the old content at call time — so the card carries the
-        // new text and a UI renders it as the whole-file change.
+        // new text as the whole-file change. The lines are MARKED (`+ `):
+        // that is the convention every renderer reads (the kit colors `+ `
+        // lines, keeps unmarked text plain), and an unmarked body is why a
+        // live run showed a Write with no diff at all.
+        const content =
+          optionalString((args as { content?: unknown }).content) ?? "";
         return {
           kind: "diff",
           title: `Write ${requireObject(args).path as string}`,
           summary: "write",
-          body: optionalString((args as { content?: unknown }).content) ?? "",
+          body: markedAdditions(content),
+          meta: [["lines", String(countLines(content))]],
         };
       },
       presentResult(args, value) {
@@ -99,12 +122,16 @@ function writeFileTool(): RuntimeTool {
         // The result text is the tool's own message to the MODEL; the card's
         // job is to show the READER what changed.
         const parsed = requireObject(args);
+        const content = optionalString(parsed.content) ?? "";
         return {
           kind: "diff",
           title: `Write ${parsed.path as string}`,
           summary: "wrote",
-          body: optionalString(parsed.content) ?? "",
-          meta: [["result", value]],
+          body: markedAdditions(content),
+          meta: [
+            ["lines", String(countLines(content))],
+            ["result", value],
+          ],
         };
       },
     },

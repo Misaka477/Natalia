@@ -3,7 +3,11 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
-import { buildContextPack, createContextVault } from "../src/vault";
+import {
+  buildContextPack,
+  createContextVault,
+  ftsPhraseQuery,
+} from "../src/vault";
 import { createHash } from "node:crypto";
 
 /**
@@ -462,4 +466,34 @@ test("a record that lands after close degrades — the caller is never thrown at
   await new Promise((resolve) => setTimeout(resolve, 20));
   // A second close is idempotent (the dispose path can run twice).
   expect(() => instance.close()).not.toThrow();
+});
+
+test("a hyphenated plain query is a search, not an FTS syntax error (user smoke 2026-10-07)", async () => {
+  // The smoke run: context_search("tool-smoke record validation") answered
+  // `no such column: smoke` — FTS5 read the hyphen as a column filter and
+  // the query never ran. A plain query is not FTS syntax, so it is now
+  // tokenized into quoted terms before it reaches the MATCH clause.
+  const v = vault();
+  v.remember({
+    id: "s1:2",
+    workspaceID: "w1",
+    sessionID: "s1",
+    recordType: "decision",
+    entityKey: "smoke-1",
+    summary: "tool-smoke record validation passed",
+    seq: 2,
+  });
+  const hits = v.recall("tool-smoke record validation", {});
+  expect(hits).toHaveLength(1);
+  expect(hits[0]!.entityKey).toBe("smoke-1");
+  // The tokens are ANDed: a hyphenated term the record carries still finds
+  // it on its own.
+  expect(v.recall("tool-smoke", {})).toHaveLength(1);
+  // A query that no record satisfies is empty, not an error.
+  expect(v.recall("absent-tool absent-word", {})).toHaveLength(0);
+  // An empty query matches nothing rather than failing to parse.
+  expect(v.recall("   ", {})).toHaveLength(0);
+  // The raw escape still exists for a caller that wants FTS operators.
+  expect(ftsPhraseQuery("a b")).toBe('"a" "b"');
+  expect(ftsPhraseQuery('say "hi"')).toBe('"say" """hi"""');
 });

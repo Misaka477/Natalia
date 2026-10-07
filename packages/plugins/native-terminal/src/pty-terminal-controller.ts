@@ -109,6 +109,17 @@ type PtySession = {
   attached: boolean;
   /** The most recent input-ownership transition, newest last. */
   lastOwnershipChange?: NativeTerminalOwnershipChange;
+  /**
+   * Whether this pane's shell ever emitted an integration marker (OSC 133).
+   *
+   * The command-level read (`interactive_terminal_last_command`) is built
+   * from those markers, so a pane that runs fine without them has output on
+   * screen and no commandLine — and the honest answer names the difference
+   * instead of claiming no command ran (the 2026-10-07 smoke run: observe,
+   * read and search all saw the command's output while last_command said
+   * "no command has run in this pane yet").
+   */
+  sawShellMarkers: boolean;
   rows: number;
   cols: number;
   revision: number;
@@ -808,12 +819,28 @@ export function createPtyTerminalController(
   function lastCommand(id: string) {
     const session = get(id);
     assertReadable(session);
+    // The screen's last non-empty line: the evidence a marker-less pane's
+    // answer carries, so the caller sees WHAT ran, not just that something did.
+    const screenTail = (() => {
+      const lines = paneText(session).filter((line) => line.trim().length > 0);
+      return lines.length > 0 ? lines[lines.length - 1] : undefined;
+    })();
     return {
       commandLine: session.commandState.commandLine,
       exitCode: session.commandState.exitCode,
       atPrompt: session.commandState.atPrompt,
       output: session.lastCommandOutput,
       revision: session.revision,
+      /**
+       * "markers" when this pane's shell emits the integration protocol the
+       * command-level read is folded from; "missed" when it never has — a
+       * pane started without the Natalia shell integration (a raw
+       * `bash --norc`, a shell that does not source the rc file).
+       */
+      integration: session.sawShellMarkers
+        ? ("markers" as const)
+        : ("missed" as const),
+      ...(screenTail ? { screenTail } : {}),
     };
   }
 
@@ -839,6 +866,7 @@ export function createPtyTerminalController(
     // state is what it means. They cannot disagree because neither re-reads the
     // stream independently.
     const markers = parseShellMarkers(chunk);
+    if (markers.length > 0) session.sawShellMarkers = true;
     // OSC 7: the pane's working directory follows the shell. The spawn-time
     // cwd is stale the moment the operator types `cd`, and the model's file
     // tools work relative to the pane —so the pane reports where the shell
@@ -1262,6 +1290,7 @@ export function createPtyTerminalController(
       status: "running",
       inputOwner: "model",
       geometryOwner: "human",
+      sawShellMarkers: false,
       secureInput: false,
       attached: true,
       rows,

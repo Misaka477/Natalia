@@ -222,6 +222,25 @@ test("read_media_file reports native metadata without injecting bytes", async ()
       .get("read_media_file")!
       .execute({ path: "image.png" }, { workspaceRoot: root }),
   ).toContain('"kind": "png"');
+  // The user's 2026-10-07 correction: a plain .txt answered `binary`, which
+  // reads as a MIME claim when the truth was only "bytes not injected". A
+  // NUL-free UTF-8 file is text — the name says what the bytes are.
+  await writeFile(join(root, "notes.txt"), "plain text\nsecond line\n");
+  expect(
+    await tools
+      .get("read_media_file")!
+      .execute({ path: "notes.txt" }, { workspaceRoot: root }),
+  ).toContain('"kind": "text"');
+  // A file with a NUL byte is binary, and only that means binary.
+  await writeFile(
+    join(root, "blob.bin"),
+    new Uint8Array([0x00, 0x01, 0x02, 0xff]),
+  );
+  expect(
+    await tools
+      .get("read_media_file")!
+      .execute({ path: "blob.bin" }, { workspaceRoot: root }),
+  ).toContain('"kind": "binary"');
 });
 
 test("image_read refuses when the host has no attachment channel", async () => {

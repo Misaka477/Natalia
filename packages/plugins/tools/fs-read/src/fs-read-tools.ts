@@ -332,6 +332,17 @@ function readMediaFileTool(): RuntimeTool {
   };
 }
 
+/**
+ * What the file's bytes are, for the metadata read.
+ *
+ * The user's 2026-10-07 correction: a plain `.txt` answered `binary`, which
+ * reads as a MIME claim ("this file is binary data") when the truth is only
+ * "this read did not inject the bytes". A file that decodes as text is TEXT —
+ * the name must say what the bytes are, so:
+ *   - the three image magics name themselves;
+ *   - a NUL-free UTF-8-decodable file is "text" (what a .txt/.json/.md is);
+ *   - everything else is "binary", and only that means binary.
+ */
 function mediaKind(data: Uint8Array) {
   const hex = [...data.slice(0, 12)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -339,6 +350,15 @@ function mediaKind(data: Uint8Array) {
   if (hex.startsWith("89504e47")) return "png";
   if (hex.startsWith("ffd8ff")) return "jpeg";
   if (hex.startsWith("47494638")) return "gif";
+  const head = data.slice(0, 4096);
+  if (head.length > 0 && !head.includes(0)) {
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(head);
+      return "text";
+    } catch {
+      // Not valid UTF-8: fall through to binary.
+    }
+  }
   return "binary";
 }
 

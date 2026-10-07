@@ -222,3 +222,64 @@ test("a completion citing a recorded evidenceID stops reporting the validation m
   expect(answer.card.judgeable).toBe(true);
   await client.dispose?.();
 }, 30_000);
+
+test("a cited validation evidence answers with the classes it satisfies (user smoke 2026-10-07)", async () => {
+  // The smoke run: record_validation returned a passed evidence id, the
+  // completion cited it, and the card still answered
+  // `judgeable:false / missing: validation:test` with no explanation of WHY
+  // the cited evidence did not count. Two answers landed: the validation
+  // now reports the classes citing it satisfies, and the completion reports
+  // what each cited id resolved to (a passed validation's classes, an
+  // unknown id, or a non-validation record).
+  const root = await officialPluginWorkspace("evidence-classes");
+  const sessionID = "ses_evidence_classes" as SessionID;
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "auto",
+    provider: createScriptedProvider({
+      main: [
+        {
+          tool: () => ({
+            name: "record_validation",
+            arguments: {
+              taskID: "task_smoke",
+              objective: "tool smoke: the terminal runs a command",
+              command: "echo smoke-ok",
+            },
+          }),
+        },
+        {
+          tool: ({ latestToolResult }) => {
+            // The previous step's record_validation answer: the classes the
+            // evidence satisfies are the contract this step asserts on.
+            const raw = latestToolResult?.content ?? "";
+            expect(raw).toContain('"satisfies"');
+            const parsed = JSON.parse(raw.slice(raw.indexOf("{")) || "{}") as {
+              evidenceID?: string;
+              satisfies?: string[];
+            };
+            expect(parsed.satisfies).toEqual(["validation:any"]);
+            return {
+              name: "record_completion",
+              arguments: {
+                objective: "tool smoke: the terminal runs a command",
+                evidenceIDs: [parsed.evidenceID!],
+              },
+            };
+          },
+        },
+        { text: "recorded" },
+      ],
+      navi: [{ text: "standby" }],
+      nia: [{ text: "standby" }],
+    }),
+  });
+  client.start(() => undefined);
+  await client.sessionAttach!(sessionID);
+  await client.submitAndWait!("record the validation and the completion");
+
+  const page = await client.evidenceRecords!({ sessionID });
+  expect(page.items.some((r) => r.taskID === "task_smoke")).toBe(true);
+  await client.dispose?.();
+}, 30_000);

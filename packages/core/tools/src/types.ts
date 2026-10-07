@@ -226,6 +226,15 @@ export type TerminalToolService = {
     atPrompt: boolean;
     output: string | undefined;
     revision: number;
+    /**
+     * Whether this pane's shell emits the shell-integration markers this
+     * read is folded from ("markers"), or never has ("missed"). A missed
+     * pane still runs commands; the answer names the difference instead of
+     * claiming nothing ran.
+     */
+    integration?: "markers" | "missed";
+    /** The pane's last non-empty screen line, when there is one. */
+    screenTail?: string;
   };
   snapshot(id: string): Promise<{
     text: string;

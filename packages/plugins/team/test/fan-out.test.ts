@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -337,9 +337,17 @@ test("a promotion that fails is reported for that PR without stopping the batch"
       id: "bad",
       sandboxID: "sb_does_not_exist",
       status: "completed",
-      diff: [],
+      // A non-empty diff: the promotion runs and fails. (An EMPTY diff is no
+      // longer a promotion failure — it is the accepted-no-changes terminal,
+      // a read-only task's success.)
+      diff: [{ kind: "modify", path: "a.txt" }],
     },
-    { id: "good", sandboxID: "sb_also_missing", status: "completed", diff: [] },
+    {
+      id: "good",
+      sandboxID: "sb_also_missing",
+      status: "completed",
+      diff: [{ kind: "modify", path: "b.txt" }],
+    },
   ];
   const decisions: string[] = [];
 
@@ -531,4 +539,27 @@ test("a straggler past the deadline is reported running, never coerced", async (
   // than a guess.
   expect(slow.status).toBe("running");
   expect(slow.diff).toEqual([]);
+});
+
+test("an approved PR with no diff is accepted, not a failed promotion (user smoke 2026-10-07)", async () => {
+  // The smoke run: a read-only team task succeeded, its candidate diff was
+  // empty, and the lead's approve came back
+  // `request-changes: promotion failed: candidate has no changes to promote` —
+  // a success reported as a rejection, because the approval path ran a
+  // promotion that refuses an empty candidate. An approve on an empty diff
+  // is its own terminal state now.
+  const root = await mkdtemp(join(tmpdir(), "natalia-review-nochanges-"));
+  const sandboxes = new SnapshotSandboxManager(root);
+  await sandboxes.initialize();
+  const outcomes = await reviewPRs({
+    prs: [{ id: "ro", sandboxID: "sb_ro", status: "completed", diff: [] }],
+    sandboxes,
+    workspaceRoot: root,
+    decide: (pr) => ({ id: pr.id, decision: "approve" }),
+  });
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]!.decision).toBe("accepted-no-changes");
+  expect(outcomes[0]!.promotionError).toBeUndefined();
+  expect(outcomes[0]!.reason).toContain("no changes to promote");
+  rmSync(root, { recursive: true, force: true });
 });

@@ -206,12 +206,19 @@ export function createRecordValidationTool(
             }),
           );
       }
+      // The classes citing this evidence satisfies (the user's 2026-10-07
+      // ask): a completion card resolves cited evidenceIDs into evidence
+      // classes, and the caller could not tell what its validation bought
+      // until the card came back `missing` with no explanation. Now the
+      // record says which classes it carries.
+      const satisfies = validationClassesFor(args.command, result === "passed");
       return JSON.stringify({
         recorded: true,
         evidenceID,
         taskID: args.taskID.trim(),
         result,
         safeSummary: outcome.safeSummary,
+        satisfies,
         ...(artifactRef ? { artifactRef } : {}),
       });
     },
@@ -368,15 +375,48 @@ export function createRecordCompletionTool(
         : [];
       const cited = new Set(args.evidenceIDs ?? []);
       const resolvedClasses: string[] = [];
-      for (const record of evidenceRecords) {
-        if (!cited.has(record.id)) continue;
-        if (record.status !== "validated") continue;
-        for (const validation of record.validations ?? [])
+      // What each cited id resolved to, so the missing answer can explain
+      // WHY a cited validation does not close the requirement (the user's
+      // 2026-10-07 ask: "证据 ID 已指向 passed validation 时，应说明为什么
+      // 它不满足要求"). A cited id that resolves to nothing (unknown id,
+      // not a validation, not a passed one) is reported as such instead of
+      // silently contributing nothing.
+      const citedResolved: Array<{
+        evidenceID: string;
+        resolved: "passed-validation" | "not-a-validation" | "unknown-id";
+        satisfies: string[];
+      }> = [];
+      for (const evidenceID of args.evidenceIDs ?? []) {
+        const record = evidenceRecords.find((entry) => entry.id === evidenceID);
+        if (!record) {
+          citedResolved.push({
+            evidenceID,
+            resolved: "unknown-id",
+            satisfies: [],
+          });
+          continue;
+        }
+        if (record.status !== "validated" || !record.validations?.length) {
+          citedResolved.push({
+            evidenceID,
+            resolved: "not-a-validation",
+            satisfies: [],
+          });
+          continue;
+        }
+        const classes: string[] = [];
+        for (const validation of record.validations)
           for (const cls of validationClassesFor(
             validation.command,
             validation.result === "passed",
           ))
-            resolvedClasses.push(cls);
+            classes.push(cls);
+        for (const cls of classes) resolvedClasses.push(cls);
+        citedResolved.push({
+          evidenceID,
+          resolved: "passed-validation",
+          satisfies: classes,
+        });
       }
       const card = requireWorkLedger(ctx)!.evaluateCompletionCard({
         objective: args.objective.trim(),
@@ -385,13 +425,30 @@ export function createRecordCompletionTool(
         resolvedEvidenceClasses: resolvedClasses,
         validations: args.validations ?? [],
       });
+      const whyMissing = (() => {
+        if (!card.missing.length) return undefined;
+        const detail = citedResolved
+          .map((entry) =>
+            entry.resolved === "passed-validation"
+              ? `${entry.evidenceID} satisfies ${entry.satisfies.join(", ") || "nothing"}`
+              : entry.resolved === "unknown-id"
+                ? `${entry.evidenceID} resolved to nothing (no such evidence record in this session)`
+                : `${entry.evidenceID} is not a passed validation record`,
+          )
+          .join("; ");
+        return `${card.note} Requirements still open: ${card.missing.join(", ")}.${detail ? ` Cited evidence: ${detail}.` : ""} The completion changed no files, so the requirement comes from the objective's task kind, not from a path class.`;
+      })();
       return JSON.stringify({
         recorded: true,
         completionID,
         card,
+        ...(args.evidenceIDs?.length
+          ? { citedEvidenceResolved: citedResolved }
+          : {}),
         ...(card.missing.length
           ? {
               missingEvidence: card.missing,
+              whyMissing,
               hint: `${card.note}; record the missing validation with record_validation (then cite its evidenceID) before claiming done`,
             }
           : {}),

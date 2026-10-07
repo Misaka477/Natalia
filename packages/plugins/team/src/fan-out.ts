@@ -296,7 +296,7 @@ export type PRReviewDecision = {
 
 export type PRReviewOutcome = {
   id: string;
-  decision: "approve" | "request-changes";
+  decision: "approve" | "request-changes" | "accepted-no-changes";
   reason?: string;
   /** The promoted changes when approved and merged. */
   merged?: SandboxChangeView[];
@@ -335,6 +335,31 @@ export async function reviewPRs(input: {
     }
     const decision = await input.decide(pr);
     if (decision.decision === "approve") {
+      // A read-only task legitimately produces NO diff — its success IS the
+      // answer. Approving one used to run a promotion that refuses an empty
+      // candidate ("candidate has no changes to promote"), which labeled the
+      // success `request-changes: promotion failed: ...` — the 2026-10-07
+      // smoke run hit exactly that on a read-only review task. An approve on
+      // an empty diff is its own terminal state: accepted, nothing to
+      // promote, no failure.
+      if (pr.diff.length === 0) {
+        input.publish?.({
+          type: "diagnostic",
+          level: "info",
+          message: `PR ${pr.id} approved with no changes to promote`,
+        });
+        outcomes.push({
+          id: pr.id,
+          decision: "accepted-no-changes",
+          reason:
+            "approved with no changes to promote (a read-only task's success)",
+          merged: [],
+        });
+        // The candidate holds no work, but its worktree and branch would
+        // still leak — the same cleanup an approved PR gets.
+        await input.sandboxes.delete(pr.sandboxID).catch(() => undefined);
+        continue;
+      }
       const promotion = await input.sandboxes
         .promoteWithValidation(pr.sandboxID, {
           // An empty command is refused by the promotion, so a batch with no

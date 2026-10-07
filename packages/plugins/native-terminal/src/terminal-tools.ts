@@ -595,18 +595,38 @@ function terminalLastCommandTool(): RuntimeTool {
       // so and names the per-moment read, instead of a record whose command
       // field is simply absent — a model reading that cannot tell "no command
       // ran" from "the backend forgot" (T-07).
-      if (command.commandLine === undefined)
+      //
+      // The 2026-10-07 smoke run found the third case: the pane RAN commands
+      // (observe, read and search all saw the output) while this tool still
+      // said "no command has run" — because the command-level read is folded
+      // from the shell-integration markers and this pane's shell never emitted
+      // one. Claiming nothing ran is a lie the model acts on, so the answer
+      // now separates the two and hands over the reads that DO have the data.
+      if (command.commandLine === undefined) {
+        const markersMissed = command.integration === "missed";
+        const sawActivity = command.screenTail !== undefined;
         return JSON.stringify(
           {
             id,
             commandLine: null,
             atPrompt: command.atPrompt,
             revision: command.revision,
-            note: "no command has run in this pane yet; use interactive_terminal_read for what is on screen now",
+            integration: command.integration,
+            ...(command.screenTail === undefined
+              ? {}
+              : { screenTail: command.screenTail }),
+            // The marker caveat is only the answer when the pane SHOWS
+            // activity: a fresh, blank pane has indeed run no command, and
+            // saying anything else would bury that truth (T-07's guard).
+            note:
+              markersMissed && sawActivity
+                ? "this pane's shell has not emitted the shell-integration markers (OSC 133), so the command-level read is empty even though the pane runs commands; the pane's last screen line is screenTail — use interactive_terminal_read/search/terminal_observe for the pane's actual content, and interactive_terminal_start for a pane whose shell loads the Natalia integration"
+                : "no command has run in this pane yet; use interactive_terminal_read for what is on screen now",
           },
           null,
           2,
         );
+      }
       return JSON.stringify(
         {
           id,
@@ -615,6 +635,7 @@ function terminalLastCommandTool(): RuntimeTool {
           atPrompt: command.atPrompt,
           ...(command.output === undefined ? {} : { output: command.output }),
           revision: command.revision,
+          integration: command.integration,
         },
         null,
         2,

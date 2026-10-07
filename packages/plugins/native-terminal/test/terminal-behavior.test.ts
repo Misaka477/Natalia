@@ -1266,3 +1266,34 @@ test("every ownership transition is recorded with its actor and action (user P0)
   );
   rmSync(root, { recursive: true, force: true });
 });
+
+test("a marker-less pane with activity says the integration is missed, not that nothing ran (user smoke 2026-10-07)", async () => {
+  // The smoke run: the pane ran its command (observe, read and search all saw
+  // the output) while interactive_terminal_last_command kept answering "no
+  // command has run in this pane yet" — because the command-level read folds
+  // from the shell-integration markers and this shell never emitted one. The
+  // answer now separates the two cases and hands over the reads that do have
+  // the data.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tty-nomarkers-"));
+  const { factory, processes } = fakePtyForBehavior();
+  const controller = createPtyTerminalController({
+    workspaceRoot: root,
+    publish: () => undefined,
+    onPerformance: () => undefined,
+    runtimeID: () => "rt",
+    userRuntimeHome: () => undefined,
+    windowMode: () => "windowless" as const,
+    spawn: factory,
+  });
+  await controller.start({ command: "bash", cwd: root, id: "tty_raw" });
+  // The shell answers with plain output and NO OSC 133 markers — a raw
+  // `bash --norc` pane, which runs commands fine but never integrates.
+  (processes[0] as PtyProcess & { emit(data: string): void }).emit(
+    "$ some-command\r\ncommand output line\r\n$ ",
+  );
+  const command = controller.lastCommand!("tty_raw");
+  expect(command.commandLine).toBeUndefined();
+  expect(command.integration).toBe("missed");
+  expect(command.screenTail).toContain("$");
+  rmSync(root, { recursive: true, force: true });
+});

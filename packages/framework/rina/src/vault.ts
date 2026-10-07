@@ -78,6 +78,17 @@ export type VaultRecallScope = {
   createdAfter?: string;
   createdBefore?: string;
   limit?: number;
+  /**
+   * Pass the query to FTS verbatim instead of tokenizing it.
+   *
+   * The default tokenizes: a plain-English query is not FTS syntax, and a
+   * hyphen (`tool-smoke`) parses as a column filter, which is how the
+   * 2026-10-07 smoke run's `context_search` surfaced
+   * `no such column: smoke` — an SQLite parser error where a search result
+   * belonged. A caller that really wants FTS operators (NEAR, prefix*) opts
+   * in explicitly.
+   */
+  rawFtsQuery?: boolean;
 };
 
 export type VaultListScope = {
@@ -132,6 +143,26 @@ const SCORE_WEIGHTS = {
 const VECTOR_SCAN_CAP = 5_000;
 
 /** A stored BLOB back to a vector (the embedding module's reader). */
+/**
+ * A plain-English query as a safe FTS5 match expression.
+ *
+ * FTS5's query syntax is not a search language a model can be expected to
+ * write: a hyphen reads as a column filter (`smoke` became a column name and
+ * the query failed with `no such column: smoke`), and bare punctuation can
+ * make the whole match a syntax error. The honest default is to quote each
+ * whitespace-separated token as an FTS string — implicit AND, punctuation
+ * inert, no syntax surface. An empty query matches nothing rather than
+ * erroring.
+ */
+export function ftsPhraseQuery(query: string): string {
+  const tokens = query
+    .split(/\s+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+    .map((token) => `"${token.replace(/"/gu, '""')}"`);
+  return tokens.length > 0 ? tokens.join(" ") : '""';
+}
+
 function toVector(blob: Buffer | Uint8Array): Float32Array {
   return new Float32Array(
     blob.buffer,
@@ -803,6 +834,9 @@ export function createContextVault(input: {
         args.push(scope.createdBefore);
       }
       const limit = Math.max(1, Math.min(scope.limit ?? 20, 200));
+      // A plain query is not FTS syntax: tokenize it so a hyphen is a word,
+      // not a column filter (the smoke run's `no such column: smoke`).
+      const match = scope.rawFtsQuery ? query : ftsPhraseQuery(query);
       // Two-phase by the study's model: FTS supplies the CANDIDATES (a
       // wider window), the four signals pick the top-N.
       const window = Math.min(Math.max(limit * 4, 50), 500);
@@ -816,7 +850,7 @@ export function createContextVault(input: {
           ${filters.length ? `AND ${filters.join(" AND ")}` : ""}
         ORDER BY rank
         LIMIT ?`;
-      let rows = db.query(sql).all(query, ...args, window) as Array<{
+      let rows = db.query(sql).all(match, ...args, window) as Array<{
         id: string;
         record_type: VaultRecordType;
         entity_key: string;

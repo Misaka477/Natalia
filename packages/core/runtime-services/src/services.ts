@@ -654,6 +654,16 @@ export interface TerminalController {
     atPrompt: boolean;
     output: string | undefined;
     revision: number;
+    /**
+     * Whether this pane's shell emits the integration markers the
+     * command-level read is folded from ("markers"), or never has
+     * ("missed" — a raw shell that does not load the Natalia integration).
+     * A missed pane runs commands fine; only this read is empty, and the
+     * answer says so rather than claiming nothing ran.
+     */
+    integration?: "markers" | "missed";
+    /** The pane's last non-empty screen line, when there is one. */
+    screenTail?: string;
   };
   observe(
     id: string,

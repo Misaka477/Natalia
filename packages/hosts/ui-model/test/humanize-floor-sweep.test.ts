@@ -130,6 +130,7 @@ test("every transcript host flattens tool output through the model layer", () =>
     "packages/plugins/ui/web/src/app-neu.tsx",
     "packages/plugins/ui/web/src/agent-panel.tsx",
     "packages/plugins/ui/web/src/nia-panel.tsx",
+    "packages/plugins/ui/web/src/status-panel.tsx",
   ];
   const repoRoot = join(import.meta.dir, "../../../..");
   for (const host of hosts) {
@@ -141,6 +142,8 @@ test("every transcript host flattens tool output through the model layer", () =>
         source,
       );
     expect(importsHumanize, `${host} must import the flattener`).toBe(true);
+    // The card-model construction must not pass a raw result through; the
+    // panel path must route its fallback through the flattener.
     expect(
       source.includes("output: tool.result ?? tool.summary,"),
       `${host} must not pass a raw tool result into the card`,

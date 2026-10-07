@@ -9,6 +9,7 @@ import type {
   RuntimeDiagnostic,
   RuntimeStatusSnapshot,
 } from "@anthelia/contracts";
+import { humanizeToolResult } from "@natalia/ui-model";
 
 type Tab = "status" | "diagnostics" | "tools";
 
@@ -35,12 +36,11 @@ function formatToolDetail(tool: ToolBlock): string {
       if (typeof parsed.command === "string" && parsed.command)
         parts.push(parsed.command);
       if (parts.length) return parts.join("\n");
-      return Object.entries(parsed)
-        .map(
-          ([key, value]) =>
-            `${key}: ${typeof value === "object" ? JSON.stringify(value) : String(value)}`,
-        )
-        .join("\n");
+      // No known field matched: the model layer's flattener is the floor,
+      // the same one the transcript uses — a bespoke entry-dump here is how
+      // this panel used to show raw JSON for every tool outside the five
+      // hand-written keys above.
+      return humanizeToolResult(raw, tool.name);
     }
   } catch {
     // not JSON; show raw below

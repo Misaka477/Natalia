@@ -683,15 +683,20 @@ test("a tool with an output definition projects its result into the event", asyn
   expect(update).toBeDefined();
   // read_file declares an output definition, so its card travels with the
   // event as a first-class field (UI refactor R0) and a client renders it
-  // without reclassifying the string.
+  // without reclassifying the string. R2: the page rides as the card's
+  // structured `content` — the file's own lines — beside the window facts.
   expect(update!.card).toMatchObject({
     kind: "read",
     title: "note.txt",
-    // The three-state footer rides INSIDE the card's body: a whole small file
-    // is the "end of file" state, and it says so rather than leaving a reader
-    // to wonder whether the read was cut. The window's own facts are card
-    // facets (totalLines), derived from the same numbers as the text.
-    body: "projected content\n\n(End of file - total 1 lines)",
+    // The three-state footer rides INSIDE the card's content: a whole small
+    // file is the "end of file" state, and it says so rather than leaving a
+    // reader to wonder whether the read was cut. The window's own facts are
+    // the card's structured fields (totalLines/lines), derived from the same
+    // numbers as the text.
+    content: "projected content\n\n(End of file - total 1 lines)",
+    totalLines: 1,
+    lines: 3,
+    lang: "txt",
     meta: [["totalLines", "1"]],
     summary: "1 lines",
   });

@@ -51,7 +51,7 @@ function unionKinds(): string[] {
 /** The renderer table's keys, in dispatch order. */
 function rendererKeys(): string[] {
   const block =
-    /const CARD_RENDERERS: Record<ToolCard\["kind"\], ToolCardRenderer> = \{([\s\S]*?)\n\};/u.exec(
+    /const CARD_RENDERERS: CardRendererMap = \{([\s\S]*?)\n\};/u.exec(
       transcript,
     );
   expect(
@@ -97,9 +97,11 @@ test("every card kind has exactly one renderer (卡型完备)", () => {
   // compile error, but a second switch arm would not be — so the table is
   // the ONE dispatch, and it is counted.
   expect(new Set(keys).size).toBe(keys.length);
-  // The dispatch is driven by the kind, not by a name.
-  expect(transcript).toContain('Record<ToolCard["kind"], ToolCardRenderer>');
-  expect(transcript).toContain("CARD_RENDERERS[card.kind]");
+  // The dispatch is driven by the kind, not by a name: one table keyed by
+  // the union's own discriminant, and a switch that hands each kind its
+  // narrowed variant (a field that is not on that kind is a compile error).
+  expect(transcript).toContain("const CARD_RENDERERS: CardRendererMap = {");
+  expect(transcript).toContain("switch (card.kind)");
 });
 
 test("the framework's dispatch surface names no tool (框架无工具名)", () => {

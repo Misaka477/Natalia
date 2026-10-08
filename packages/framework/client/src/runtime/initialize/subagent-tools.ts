@@ -176,8 +176,15 @@ export async function createSubagentTools(
         finalizedResult,
         scope.redactToolOutputEnabled(input.exec),
       );
-      const projectedRender = tool.output?.presentResult?.(parsed, result);
+      // The same order the main path uses (R1): the facts are computed once
+      // and handed to the presenter, so a structured card is composed from
+      // them rather than parsed out of the result text again.
       const projectedMeta = tool.output?.presentationMeta?.(parsed, result);
+      const projectedRender = tool.output?.presentResult?.(
+        parsed,
+        result,
+        projectedMeta,
+      );
       await scope
         .createToolPolicyLayer(input.exec)
         .postExecute({ ...hookEvent, result });

@@ -1234,6 +1234,20 @@ type ToolCardLine = {
 };
 
 /**
+ * The renderer map, keyed by kind: each kind's handler receives ITS OWN
+ * variant of the union, so a family's structured fields are simply there —
+ * no cast, and a field that is not on that kind is a compile error. A new
+ * kind in the union is a missing key here, which is the compiler half of
+ * the completeness guard.
+ */
+type CardRendererMap = {
+  [Kind in ToolCard["kind"]]: (
+    card: Extract<ToolCard, { kind: Kind }>,
+    toolCall: ToolCall,
+  ) => ToolCardLine[];
+};
+
+/**
  * A card renderer: the card's own data in, its display lines out.
  *
  * The second argument is the ToolCall ITSELF — never a rebuilt subset of
@@ -1281,11 +1295,14 @@ function diffCardLines(text: string): ToolCardLine[] {
  * lands its structured fields the same renderer draws those instead — the
  * dispatch does not change, only what sits behind it.
  */
-const CARD_RENDERERS: Record<ToolCard["kind"], ToolCardRenderer> = {
+export const CARD_RENDERERS: CardRendererMap = {
   read: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
   diff: (card, toolCall) => diffCardLines(card.body ?? toolCall.output ?? ""),
+  // A terminal's own text: the structured `output` field once the family
+  // projects one (R1), the migration body before that, the raw result for a
+  // card that carries neither.
   terminal: (card, toolCall) =>
-    plainCardLines(card.body ?? toolCall.output ?? ""),
+    plainCardLines(card.output ?? card.body ?? toolCall.output ?? ""),
   search: (card, toolCall) =>
     plainCardLines(card.body ?? toolCall.output ?? ""),
   web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
@@ -1294,6 +1311,28 @@ const CARD_RENDERERS: Record<ToolCard["kind"], ToolCardRenderer> = {
       humanizeToolResult(card.body ?? toolCall.output ?? "", toolCall.name),
     ),
 };
+
+/**
+ * The one dispatch: the card's kind picks its renderer, and the narrowed
+ * variant is handed over. A kind nobody renders cannot reach here — the
+ * map literal above would already have failed to compile.
+ */
+function renderCard(card: ToolCard, toolCall: ToolCall): ToolCardLine[] {
+  switch (card.kind) {
+    case "read":
+      return CARD_RENDERERS.read(card, toolCall);
+    case "diff":
+      return CARD_RENDERERS.diff(card, toolCall);
+    case "terminal":
+      return CARD_RENDERERS.terminal(card, toolCall);
+    case "search":
+      return CARD_RENDERERS.search(card, toolCall);
+    case "web":
+      return CARD_RENDERERS.web(card, toolCall);
+    case "generic":
+      return CARD_RENDERERS.generic(card, toolCall);
+  }
+}
 
 function ToolCallCard(props: { toolCall: ToolCall }) {
   // The keyed toolviews (presentation plan P2.1): ask_user's Q&A and the
@@ -1351,7 +1390,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
               ? ("removed" as const)
               : ("plain" as const),
       }));
-    if (card) return CARD_RENDERERS[card.kind](card, props.toolCall);
+    if (card) return renderCard(card, props.toolCall);
     return plainCardLines(
       humanizeToolResult(props.toolCall.output ?? "", props.toolCall.name),
     );
@@ -1383,6 +1422,11 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   const summary = () => card?.summary ?? props.toolCall.summary;
   const failed = () =>
     props.toolCall.status === "failed" ||
+    // The structured exit code once a family projects one (R1), the exit
+    // facet before that: a non-zero exit is a failed row either way.
+    (card?.kind === "terminal" &&
+      card.exitCode !== undefined &&
+      card.exitCode !== 0) ||
     (card?.meta ?? []).some(
       ([label, value]) => label === "exit" && value !== "0",
     );

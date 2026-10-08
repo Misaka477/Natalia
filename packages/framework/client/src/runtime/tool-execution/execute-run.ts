@@ -381,14 +381,17 @@ export async function runExecuteStage(
     // the card the tool described instead of guessing from the string. The
     // sibling `meta` slot carries the tool's `presentationMeta` output —
     // the structured facts that used to be re-derived from the result
-    // string by every consumer that wanted them.
-    const projectedRender = tool.output?.presentResult?.(
-      tryParseToolArguments(call.arguments),
-      result,
-    );
+    // string by every consumer that wanted them. The facts are computed
+    // ONCE and handed to the presenter (R1), so a structured card is
+    // composed from them rather than parsed out of the text again.
     const projectedMeta = tool.output?.presentationMeta?.(
       tryParseToolArguments(call.arguments),
       result,
+    );
+    const projectedRender = tool.output?.presentResult?.(
+      tryParseToolArguments(call.arguments),
+      result,
+      projectedMeta,
     );
     if (
       tool.name === "interactive_terminal_start" ||

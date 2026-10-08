@@ -36,6 +36,24 @@ const TOOL_DIRS = [
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..");
 
+/**
+ * Every way a tool declares its projection — the ONE list both halves of
+ * this sweep use. The floor's presenter check used to be a narrower regex
+ * than the completeness sweep's marker list, so a tool wired through a
+ * factory (`genericToolCard`, `collabOutput`) was counted as presenter-less
+ * by one guard and wired by the other. Two detectors, one list.
+ */
+const PRESENTER_MARKERS = [
+  "presentCall",
+  "collabOutput(",
+  "terminalReadCard",
+  "terminalInputCard",
+  "genericToolCard(",
+  // Family factories that declare the projection for their tools (R1's
+  // process family, the template the others copy).
+  "processToolCard(",
+] as const;
+
 /** A representative JSON document a presenter-less tool might return. */
 const SAMPLE = JSON.stringify({
   id: "probe_1",
@@ -68,15 +86,29 @@ async function collectTools(
       tool: match[1]!,
       file: relative,
       returnsJSON: /JSON\.stringify/.test(body),
-      // A presenter is the output definition's presentCall/presentResult;
-      // its absence in this tool's block is the floor's case.
-      hasPresenter: /present(?:Call|Result)\s*[:(]/.test(body),
+      // A presenter is the output definition's presentCall/presentResult —
+      // or a family factory that declares them for the tool (R1's
+      // `processToolCard`, the shape the later families copy). Its absence
+      // in this tool's block is the floor's case.
+      hasPresenter: PRESENTER_MARKERS.some((marker) => body.includes(marker)),
     });
   }
   return out;
 }
 
-test("every presenter-less JSON tool's result is flattened, never raw", async () => {
+test("no JSON-returning tool reaches the floor without a card (R1)", async () => {
+  // The floor used to be a BUCKET this sweep proved readable: the tools with
+  // no presenter fell back to the flatten, and the sweep named each of them
+  // (record_decision, plan_pause, work_graph_query — pinned here for weeks).
+  // R1 unified the two detector lists (the floor's presenter check had been
+  // NARROWER than the completeness sweep's: it never saw the card factories,
+  // so factory-wired tools were counted as presenter-less), and the bucket
+  // is EMPTY — every JSON-returning tool in these dirs declares a card.
+  //
+  // So the guard inverts: a presenter-less JSON tool is now a FAILURE the
+  // day it lands, not a member of a list. The flatten machinery is still
+  // pinned below, on a synthetic tool: the fallback must READ correctly for
+  // whoever lands without a card until the sweep catches them.
   const tools: ToolFacts[] = [];
   for (const dir of TOOL_DIRS) {
     const absolute = join(REPO_ROOT, dir);
@@ -97,31 +129,28 @@ test("every presenter-less JSON tool's result is flattened, never raw", async ()
   const presenterlessJSON = tools.filter(
     (tool) => tool.returnsJSON && !tool.hasPresenter,
   );
-  // Anti-vacuity: the sweep must actually see the surface it claims.
-  expect(presenterlessJSON.length).toBeGreaterThan(20);
-  // Pinned members: known presenter-less JSON tools the plan listed. (The
-  // families P1 wired — collab/terminal/browser/mcp/team/skills/process —
-  // correctly left this set; the record tools and the work-graph read are
-  // what the floor still carries.)
-  for (const name of ["record_decision", "plan_pause", "work_graph_query"])
-    expect(
-      presenterlessJSON.some((tool) => tool.tool === name),
-      `${name} was not swept`,
-    ).toBe(true);
-  // The floor: the flatten changes the JSON, and resultView's preview is
-  // the flattened text (what the generic row shows).
-  for (const tool of presenterlessJSON) {
-    const flattened = humanizeToolResult(SAMPLE, tool.tool);
-    expect(flattened, `${tool.file}: ${tool.tool}`).not.toBe(SAMPLE);
-    const view = resultView(SAMPLE, 8, 1200, { name: tool.tool });
-    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toBe(SAMPLE);
-    expect(view.preview).toContain("id: probe_1");
+  expect(
+    presenterlessJSON.map((tool) => `${tool.file}: ${tool.tool}`),
+    "a JSON-returning tool landed without a card — its result would show " +
+      "raw JSON on the row; give it a presenter (or a family factory)",
+  ).toEqual([]);
+  // Anti-vacuity the other way round: the sweep must actually SEE the
+  // surface (every tool in the dirs, not zero tools).
+  expect(tools.length).toBeGreaterThan(50);
+  // The floor, pinned on a synthetic presenter-less tool so the machinery
+  // cannot rot while nobody uses it.
+  for (const name of ["tool_without_a_card", "process_output"]) {
+    const flattened = humanizeToolResult(SAMPLE, name);
+    expect(flattened, name).not.toBe(SAMPLE);
+    const view = resultView(SAMPLE, 8, 1200, { name });
+    expect(view.preview, name).not.toBe(SAMPLE);
+    expect(view.preview, name).toContain("id: probe_1");
     // And it is a READING, not a JSON dump with the punctuation swapped:
     // no raw-document markers survive anywhere in the preview (the user's
     // 2026-10-07 verdict — "拍扁就以为不是 json 是吧").
-    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('{"');
-    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('":');
-    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('",');
+    expect(view.preview, name).not.toContain('{"');
+    expect(view.preview, name).not.toContain('":');
+    expect(view.preview, name).not.toContain('",');
   }
   // The same shape law over EVERY envelope the catalogue can answer with,
   // not only the pinned sample: an array of records renders one per line.
@@ -241,6 +270,13 @@ test("every tool.update publisher fills the structured slots (R0)", () => {
       source.includes("...(projectedMeta ? { meta: projectedMeta } : {})"),
       `${where} must publish presentationMeta on the event's meta slot`,
     ).toBe(true);
+    // And the facts are computed FIRST, then handed to the presenter
+    // (R1): `presentResult(args, result, projectedMeta)` — a card composed
+    // from the facts rather than the result text parsed a second time.
+    expect(
+      /presentResult\?\.\(\s*[\s\S]{0,200}?projectedMeta/u.test(source),
+      `${where} must hand the computed facts to presentResult`,
+    ).toBe(true);
     // And the legacy blob is gone from the publisher side: a client still
     // READS it (an old event carries it), but nothing writes it anymore.
     expect(
@@ -294,13 +330,7 @@ test("every model-facing tool projects a card (the 2026-10-07 completeness sweep
           match.index + match[0].length,
           next === -1 ? source.length : next,
         );
-        const wired = [
-          "presentCall",
-          "collabOutput(",
-          "terminalReadCard",
-          "terminalInputCard",
-          "genericToolCard(",
-        ].some((marker) => body.includes(marker));
+        const wired = PRESENTER_MARKERS.some((marker) => body.includes(marker));
         if (!wired) unwired.push(`${file.split("packages/")[1]}: ${match[1]}`);
       }
     }

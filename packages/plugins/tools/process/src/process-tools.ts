@@ -23,7 +23,6 @@ import { resolve } from "node:path";
 import { detachedShellPrefix, startDetachedProcess } from "@anthelia/platform";
 import { selectExecutor } from "@anthelia/shell";
 import {
-  genericToolCard,
   processFingerprint,
   readOptionalFile,
   safeToolEnv,
@@ -42,8 +41,10 @@ import type { Plugin, PluginManifest } from "@anthelia/plugin";
 import { PROCESS_OBSERVER_SERVICE } from "@anthelia/tools";
 import type {
   RuntimeTool,
+  ToolCard,
   ToolExecutionContext,
   ToolFamily,
+  ToolOutputDefinition,
 } from "@anthelia/tools";
 import type { SettlementReason } from "@anthelia/contracts";
 import {
@@ -100,6 +101,201 @@ export function settlementReasonFor(
 // The shell that owns the POSIX launcher spelling. It is stateless, so one per
 // process; a second shell would be a different CLASS here, not an argument.
 const shell = selectExecutor();
+
+/**
+ * The process family's card — R1's template, the shape every other family
+ * copies in R2–R5.
+ *
+ * ONE parse, in `presentationMeta`: the envelope is decoded once into the
+ * family's facts, which travel the event's `meta` slot AND are handed to
+ * `presentResult` (the runtime computes them before it calls the
+ * presenter). A structured card is therefore composed from those facts —
+ * never from the result string being parsed a second time, which is what
+ * this family's presenters all used to do.
+ *
+ * A result that is not the envelope (a retained output dump, a prose error)
+ * simply yields no facts, and the card degrades to its CALL summary rather
+ * than throwing: a throwing presenter takes the whole transcript row down.
+ */
+type ProcessFacts = {
+  id?: string;
+  command?: string;
+  status?: string;
+  exitCode?: number;
+  ready?: boolean;
+  timedOut?: boolean;
+  outputUpdatedAt?: string;
+  /** A listing's counts: an array envelope, or an audit's `processes`. */
+  total?: number;
+  running?: number;
+  /** A cleanup's own counts. */
+  removed?: number;
+  remaining?: number;
+};
+
+/** The arguments as a record — never throws, a presenter must not. */
+function argsRecord(args: unknown): Record<string, unknown> {
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : {};
+}
+
+/** The facts one result envelope carries, or `{}` when it is not one. */
+function processFacts(args: unknown, value: string): ProcessFacts {
+  const idFromArgs = optionalString(argsRecord(args).id);
+  const facts: ProcessFacts = {};
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value) as unknown;
+  } catch {
+    return facts;
+  }
+  const runningIn = (items: unknown[]): number =>
+    items.filter(
+      (item) =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        (item as { status?: unknown }).status === "running",
+    ).length;
+  if (Array.isArray(decoded)) {
+    facts.total = decoded.length;
+    facts.running = runningIn(decoded);
+    return facts;
+  }
+  if (!decoded || typeof decoded !== "object") return facts;
+  const record = decoded as Record<string, unknown>;
+  const id = optionalString(record.id) ?? idFromArgs;
+  if (id !== undefined) facts.id = id;
+  const command = optionalString(record.command);
+  if (command !== undefined) facts.command = command;
+  const status = optionalString(record.status);
+  if (status !== undefined) facts.status = status;
+  if (typeof record.exitCode === "number") facts.exitCode = record.exitCode;
+  if (record.ready === true) facts.ready = true;
+  if (record.timedOut === true) facts.timedOut = true;
+  const outputUpdatedAt = optionalString(record.outputUpdatedAt);
+  if (outputUpdatedAt !== undefined) facts.outputUpdatedAt = outputUpdatedAt;
+  if (typeof record.removed === "number") facts.removed = record.removed;
+  if (typeof record.remaining === "number") facts.remaining = record.remaining;
+  if (Array.isArray(record.processes)) {
+    facts.total = record.processes.length;
+    facts.running = runningIn(record.processes);
+  }
+  return facts;
+}
+
+/** The facts back off the `meta` slot, or recomputed when it is absent. */
+function readFacts(meta: Record<string, unknown> | undefined): ProcessFacts {
+  if (!meta) return {};
+  const facts: ProcessFacts = {};
+  const id = optionalString(meta.id);
+  if (id !== undefined) facts.id = id;
+  const command = optionalString(meta.command);
+  if (command !== undefined) facts.command = command;
+  const status = optionalString(meta.status);
+  if (status !== undefined) facts.status = status;
+  if (typeof meta.exitCode === "number") facts.exitCode = meta.exitCode;
+  if (meta.ready === true) facts.ready = true;
+  if (meta.timedOut === true) facts.timedOut = true;
+  const outputUpdatedAt = optionalString(meta.outputUpdatedAt);
+  if (outputUpdatedAt !== undefined) facts.outputUpdatedAt = outputUpdatedAt;
+  if (typeof meta.total === "number") facts.total = meta.total;
+  if (typeof meta.running === "number") facts.running = meta.running;
+  if (typeof meta.removed === "number") facts.removed = meta.removed;
+  if (typeof meta.remaining === "number") facts.remaining = meta.remaining;
+  return facts;
+}
+
+/** One label:value pill, spelled so a conditional spread keeps its tuple. */
+function pill(label: string, value: string): [label: string, value: string] {
+  return [label, value];
+}
+
+type ProcessCardInput = {
+  /**
+   * The row's title: the command the call runs, the process handle it names,
+   * or the family itself for a call that names no process.
+   */
+  title: "command" | "id" | "family";
+  /** The call's verb — "start", "status", "read". */
+  callSummary: string;
+  /**
+   * The result's one-line state, from the structured facts. Reached only
+   * when the result decoded: an envelope-less result reads its call verb.
+   */
+  resultSummary: (facts: ProcessFacts) => string;
+  /** The label:value pills, from the same facts. */
+  facets?: (facts: ProcessFacts) => Array<[label: string, value: string]>;
+  /**
+   * The card kind: a process's own state is `terminal` (it has a command,
+   * an exit code, an output); a listing of processes is `generic` (an
+   * envelope the reader scans).
+   */
+  kind?: "terminal" | "generic";
+  /**
+   * The result text IS the output — a retained dump the call reads out.
+   * Carried as the terminal card's structured `output` field, so a client
+   * renders the process's own text rather than flattening it.
+   */
+  textAsOutput?: boolean;
+};
+
+function processToolCard(input: ProcessCardInput): ToolOutputDefinition {
+  const cardKind = input.kind ?? "terminal";
+  const callTitle = (args: unknown): string => {
+    const parsed = argsRecord(args);
+    if (input.title === "command")
+      return optionalString(parsed.command) ?? "process";
+    if (input.title === "id") return optionalString(parsed.id) ?? "process";
+    return "processes";
+  };
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      // The model's own sentence for the call, when the call carries one
+      // (process_start's `description`, the run_shell contract): that is
+      // what the collapsed row reads, never the raw command line. A call
+      // with no such argument reads its verb.
+      const declared = optionalString(argsRecord(args).description);
+      return {
+        kind: cardKind,
+        title: callTitle(args),
+        summary: declared ?? input.callSummary,
+      };
+    },
+    presentationMeta(args, value) {
+      return processFacts(args, value) as Record<string, unknown>;
+    },
+    presentResult(args, value, meta) {
+      // The runtime hands the facts it just computed; a caller without them
+      // (a direct unit call, an old event's presenter run outside the
+      // runtime) recomputes over the same pure decode.
+      const facts =
+        meta === undefined ? processFacts(args, value) : readFacts(meta);
+      // A call whose result IS its answer (the retained dump) has an answer
+      // even with no facts; an envelope-less result reads its call verb.
+      const answered =
+        Object.keys(facts).length > 0 || input.textAsOutput === true;
+      const card: ToolCard = {
+        kind: cardKind,
+        title: callTitle(args),
+        summary: answered ? input.resultSummary(facts) : input.callSummary,
+        // A generic listing keeps the envelope as its body (the reader
+        // scans it); a terminal card carries the dump as its output field
+        // and its exit as the structured field a client reads (the pill
+        // below is the same fact for the eye).
+        ...(cardKind === "generic" ? { body: value } : {}),
+        ...(input.textAsOutput ? { output: value } : {}),
+        ...(cardKind === "terminal" && facts.exitCode !== undefined
+          ? { exitCode: facts.exitCode }
+          : {}),
+      };
+      const facets = input.facets?.(facts) ?? [];
+      if (facets.length > 0) card.meta = facets;
+      return card;
+    },
+  };
+}
 
 export class ManagedProcessRegistry {
   readonly observer: ManagedProcessObserver;
@@ -765,6 +961,7 @@ function processControlTool(
   name: string,
   description: string,
   requiresApproval: boolean,
+  callSummary: string,
   action: (
     id: string,
     context: ToolExecutionContext,
@@ -785,6 +982,15 @@ function processControlTool(
       required: ["id"],
       additionalProperties: false,
     },
+    output: processToolCard({
+      title: "id",
+      callSummary,
+      resultSummary: (facts) => facts.status ?? "done",
+      facets: (facts) =>
+        facts.exitCode === undefined
+          ? []
+          : [pill("exit", String(facts.exitCode))],
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       return JSON.stringify(
@@ -849,32 +1055,12 @@ function processStartTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["command", "description"],
       additionalProperties: false,
     },
-    output: {
-      schema: {
-        type: "object",
-        properties: { id: { type: "string" } },
-        required: ["id"],
-        additionalProperties: false,
-      },
-      presentCall(args) {
-        const parsed = requireObject(args);
-        return {
-          kind: "terminal",
-          title: parsed.command as string,
-          summary: optionalString(parsed.description) ?? "start",
-        };
-      },
-      presentResult(args, value) {
-        const command = requireObject(args).command as string;
-        const id = JSON.parse(value)?.id as string | undefined;
-        return {
-          kind: "terminal",
-          title: command,
-          summary: id ? `started ${id}` : "started",
-          meta: id ? [["id", id]] : [],
-        };
-      },
-    },
+    output: processToolCard({
+      title: "command",
+      callSummary: "start",
+      resultSummary: (facts) => (facts.id ? `started ${facts.id}` : "started"),
+      facets: (facts) => (facts.id ? [pill("id", facts.id)] : []),
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       const description = requireString(args.description, "description");
@@ -905,29 +1091,14 @@ function processListTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "List managed workspace processes.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
-    output: {
-      schema: { type: "object", properties: {} },
-      presentCall() {
-        return { kind: "generic", title: "processes", summary: "list" };
-      },
-      presentResult(_args, value) {
-        const parsed = JSON.parse(value) as Array<{
-          id?: string;
-          status?: string;
-        }> | null;
-        const items = Array.isArray(parsed) ? parsed : [];
-        const running = items.filter(
-          (item) => item.status === "running",
-        ).length;
-        return {
-          kind: "generic",
-          title: "processes",
-          summary: `${items.length} listed · ${running} running`,
-          meta: [["running", String(running)]],
-          body: value,
-        };
-      },
-    },
+    output: processToolCard({
+      title: "family",
+      callSummary: "list",
+      kind: "generic",
+      resultSummary: (facts) =>
+        `${facts.total ?? 0} listed · ${facts.running ?? 0} running`,
+      facets: (facts) => [pill("running", String(facts.running ?? 0))],
+    }),
     async execute(_input, context) {
       return JSON.stringify(await registry.list(context), null, 2);
     },
@@ -957,40 +1128,20 @@ function processWaitTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
-    output: {
-      schema: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          status: { type: "string" },
-          exitCode: { type: "number" },
-          timedOut: { type: "boolean" },
-        },
-        required: ["id", "status", "timedOut"],
-        additionalProperties: false,
-      },
-      presentCall(args) {
-        return {
-          kind: "generic",
-          title: requireString(requireObject(args).id, "id"),
-          summary: "wait",
-        };
-      },
-      presentResult(_args, value) {
-        const parsed = JSON.parse(value) as {
-          id?: string;
-          status?: string;
-          timedOut?: boolean;
-        } | null;
-        return {
-          kind: "generic",
-          title: parsed?.id ?? "process",
-          summary: parsed?.timedOut
-            ? `still ${parsed.status ?? "running"}`
-            : (parsed?.status ?? "finished"),
-        };
-      },
-    },
+    output: processToolCard({
+      title: "id",
+      callSummary: "wait",
+      resultSummary: (facts) =>
+        facts.timedOut
+          ? `still ${facts.status ?? "running"}`
+          : (facts.status ?? "finished"),
+      facets: (facts) => [
+        ...(facts.exitCode === undefined
+          ? []
+          : [pill("exit", String(facts.exitCode))]),
+        ...(facts.timedOut ? [pill("timedOut", "yes")] : []),
+      ],
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       const timeoutMs = numberOr(args.timeoutMs, DEFAULT_PROCESS_WAIT_MS);
@@ -1033,40 +1184,21 @@ function processStatusTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
-    output: {
-      schema: { type: "object", properties: {} },
-      presentCall(args) {
-        return {
-          kind: "generic",
-          title: requireString(requireObject(args).id, "id"),
-          summary: "status",
-        };
-      },
-      presentResult(args, value) {
-        const parsed = JSON.parse(value) as {
-          id?: string;
-          status?: string;
-          exitCode?: number | null;
-          ready?: boolean;
-          outputUpdatedAt?: string;
-        } | null;
-        const id = parsed?.id ?? requireString(requireObject(args).id, "id");
-        const meta: Array<[string, string]> = [
-          ["status", parsed?.status ?? "unknown"],
-        ];
-        if (parsed?.exitCode !== undefined && parsed?.exitCode !== null)
-          meta.push(["exit", String(parsed.exitCode)]);
-        if (parsed?.ready) meta.push(["ready", "true"]);
-        if (parsed?.outputUpdatedAt)
-          meta.push(["output", parsed.outputUpdatedAt]);
-        return {
-          kind: "generic",
-          title: id,
-          summary: parsed?.status ?? "unknown",
-          meta,
-        };
-      },
-    },
+    output: processToolCard({
+      title: "id",
+      callSummary: "status",
+      resultSummary: (facts) => facts.status ?? "unknown",
+      facets: (facts) => [
+        pill("status", facts.status ?? "unknown"),
+        ...(facts.exitCode === undefined
+          ? []
+          : [pill("exit", String(facts.exitCode))]),
+        ...(facts.ready ? [pill("ready", "true")] : []),
+        ...(facts.outputUpdatedAt
+          ? [pill("output", facts.outputUpdatedAt)]
+          : []),
+      ],
+    }),
     async execute(input, context) {
       const args = requireObject(input);
       return JSON.stringify(
@@ -1094,11 +1226,11 @@ function processOutputTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
-    output: genericToolCard({
-      family: "process",
+    output: processToolCard({
+      title: "id",
       callSummary: "output",
-      resultSummary: "read",
-      titleKey: "id",
+      resultSummary: () => "read",
+      textAsOutput: true,
     }),
     async execute(input, context) {
       const args = requireObject(input);
@@ -1129,12 +1261,15 @@ function processReadyTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
-    output: genericToolCard({
-      family: "process",
+    output: processToolCard({
+      title: "id",
       callSummary: "ready",
-      resultSummary: "ready",
-      titleKey: "id",
-      meta: [["exitCode", "exitCode"]],
+      resultSummary: (facts) =>
+        facts.ready ? "ready" : (facts.status ?? "running"),
+      facets: (facts) =>
+        facts.exitCode === undefined
+          ? []
+          : [pill("exit", String(facts.exitCode))],
     }),
     async execute(input, context) {
       const args = requireObject(input);
@@ -1167,11 +1302,14 @@ function processStopTool(registry: ManagedProcessRegistry): RuntimeTool {
       required: ["id"],
       additionalProperties: false,
     },
-    output: genericToolCard({
-      family: "process",
+    output: processToolCard({
+      title: "id",
       callSummary: "stop",
-      resultSummary: "stopped",
-      titleKey: "id",
+      resultSummary: (facts) => facts.status ?? "stopped",
+      facets: (facts) =>
+        facts.exitCode === undefined
+          ? []
+          : [pill("exit", String(facts.exitCode))],
     }),
     async execute(input, context) {
       const args = requireObject(input);
@@ -1189,6 +1327,7 @@ function processRestartTool(registry: ManagedProcessRegistry): RuntimeTool {
     "process_restart",
     "Restart a managed process.",
     true,
+    "restart",
     (id, context) => registry.restart(id, context),
   );
 }
@@ -1198,6 +1337,7 @@ function processAttachTool(registry: ManagedProcessRegistry): RuntimeTool {
     "process_attach",
     "Mark a managed process as attached.",
     false,
+    "attach",
     (id, context) => registry.attach(id, context),
   );
 }
@@ -1207,6 +1347,7 @@ function processDetachTool(registry: ManagedProcessRegistry): RuntimeTool {
     "process_detach",
     "Mark a managed process as detached.",
     false,
+    "detach",
     (id, context) => registry.detach(id, context),
   );
 }
@@ -1217,11 +1358,16 @@ function processCleanupTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "Remove stopped or exited managed processes.",
     requiresApproval: true,
     parameters: { type: "object", properties: {}, additionalProperties: false },
-    output: genericToolCard({
-      family: "process",
+    output: processToolCard({
+      title: "family",
       callSummary: "cleanup",
-      resultSummary: "cleaned",
-      titleKey: "id",
+      kind: "generic",
+      resultSummary: (facts) =>
+        `cleaned ${facts.removed ?? 0} · ${facts.remaining ?? 0} left`,
+      facets: (facts) => [
+        pill("removed", String(facts.removed ?? 0)),
+        pill("remaining", String(facts.remaining ?? 0)),
+      ],
     }),
     async execute(_input, context) {
       return JSON.stringify(await registry.cleanup(context), null, 2);
@@ -1235,28 +1381,14 @@ function processAuditTool(registry: ManagedProcessRegistry): RuntimeTool {
     description: "Return managed process audit state.",
     requiresApproval: false,
     parameters: { type: "object", properties: {}, additionalProperties: false },
-    output: {
-      schema: { type: "object", properties: {} },
-      presentCall() {
-        return { kind: "generic", title: "processes", summary: "audit" };
-      },
-      presentResult(_args, value) {
-        const parsed = JSON.parse(value) as {
-          processes?: Array<{ id?: string; status?: string }>;
-        } | null;
-        const items = parsed?.processes ?? [];
-        const running = items.filter(
-          (item) => item.status === "running",
-        ).length;
-        return {
-          kind: "generic",
-          title: "processes",
-          summary: `audit · ${items.length} listed · ${running} running`,
-          meta: [["running", String(running)]],
-          body: value,
-        };
-      },
-    },
+    output: processToolCard({
+      title: "family",
+      callSummary: "audit",
+      kind: "generic",
+      resultSummary: (facts) =>
+        `audit · ${facts.total ?? 0} listed · ${facts.running ?? 0} running`,
+      facets: (facts) => [pill("running", String(facts.running ?? 0))],
+    }),
     async execute(_input, context) {
       return JSON.stringify(await registry.audit(context), null, 2);
     },

@@ -104,6 +104,7 @@ export type {
   ProcessObserverService,
   TerminalSessionView,
   TerminalToolService,
+  ToolCard,
   ToolExecutionBoundary,
   ToolExecutionContext,
   ToolOutputDefinition,

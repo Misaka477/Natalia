@@ -484,8 +484,23 @@ export type ToolOutputDefinition = {
    * the call's own presentation.
    */
   presentCall?(args: unknown): ToolCard | undefined;
-  /** Projects the arguments and the result into a card. */
-  presentResult?(args: unknown, value: string): ToolCard | undefined;
+  /**
+   * Projects the arguments, the result and the call's STRUCTURED FACTS into
+   * a card.
+   *
+   * `meta` is what this tool's `presentationMeta` just computed over the same
+   * (args, value) — the runtime computes it once and hands it here, so a
+   * structured presenter composes its card from those facts instead of
+   * parsing the result string a second time (dsh's `presentResult` reads
+   * `result.meta` for exactly this reason). It is `undefined` when the tool
+   * declares no `presentationMeta`; a presenter that needs the text reads
+   * `value`.
+   */
+  presentResult?(
+    args: unknown,
+    value: string,
+    meta?: Record<string, unknown>,
+  ): ToolCard | undefined;
   /**
    * The call's STRUCTURED facts, persisted beside the result (dsh's
    * `presentationMeta`): what a client needs to draw the result without

@@ -613,10 +613,15 @@ test("a natural death presents one terminal state across status, wait and audit 
   expect(waited.timedOut).toBe(false);
 });
 
-test("the process family's read tools project generic cards (P1)", async () => {
+test("the process family's read tools project terminal cards (R1)", async () => {
   // The presentation plan's P1: each family gets presenters in dsh's
   // vocabulary. The process reads project title=the handle, summary=the
   // state, meta=pills a reader scans without opening the card.
+  //
+  // R1 moved the kind from `generic` to `terminal`: a process IS a terminal
+  // session (it has a command, an exit code, an output), so its card now
+  // carries those structured fields and the terminal renderer draws them.
+  // The listings (list/audit) stay `generic` — an envelope a reader scans.
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-card-"));
   const tools = processRegistryTools();
   await tools.get("process_start")!.execute(
@@ -630,7 +635,7 @@ test("the process family's read tools project generic cards (P1)", async () => {
   const status = tools.get("process_status")!;
   const statusCall = status.output!.presentCall!({ id: "proc_card" });
   expect(statusCall).toEqual({
-    kind: "generic",
+    kind: "terminal",
     title: "proc_card",
     summary: "status",
   });
@@ -639,7 +644,7 @@ test("the process family's read tools project generic cards (P1)", async () => {
     JSON.stringify({ id: "proc_card", status: "running", ready: true }),
   );
   expect(statusCard).toMatchObject({
-    kind: "generic",
+    kind: "terminal",
     title: "proc_card",
     summary: "running",
     meta: [

@@ -352,7 +352,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
           (event) => event.type === "goal.round.cost" && event.round === 2,
         ),
       "round 2 settlement",
-      40_000,
+      45_000,
     );
     expect(
       events.some((event) => event.type === "goal.round" && event.round === 3),

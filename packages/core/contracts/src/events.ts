@@ -454,6 +454,15 @@ export type ToolCard =
       totalLines?: number;
       /** Language hint for the content renderer. */
       lang?: string;
+      /** Whether a cap cut the page short of the file. */
+      truncated?: boolean;
+      /**
+       * The page itself — the file's own lines, verbatim. A client renders
+       * them as content (and may colour them by `lang`); nothing re-parses
+       * or flattens them, which is the whole point of the read card (a JSON
+       * file used to arrive as `key: value` lines through the flatten).
+       */
+      content?: string;
     })
   | (ToolCardHeader & {
       kind: "diff";
@@ -470,7 +479,13 @@ export type ToolCard =
   | (ToolCardHeader & {
       kind: "search";
       query?: string;
+      /** A content search's hits: where and what matched. */
       matches?: Array<{ path: string; line: number; text: string }>;
+      /**
+       * A path search's listing (a glob): every path the pattern matched.
+       * Not a `matches` set — a match names a line, a listing names files.
+       */
+      paths?: string[];
       truncated?: boolean;
       nextCursor?: string;
     })

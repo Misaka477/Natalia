@@ -37,11 +37,19 @@ const TOOL_DIRS = [
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..");
 
 /**
- * Every way a tool declares its projection — the ONE list both halves of
+ * Every way a tool declares its projection — the ONE detector both halves of
  * this sweep use. The floor's presenter check used to be a narrower regex
  * than the completeness sweep's marker list, so a tool wired through a
  * factory (`genericToolCard`, `collabOutput`) was counted as presenter-less
- * by one guard and wired by the other. Two detectors, one list.
+ * by one guard and wired by the other. Two detectors, one rule:
+ *
+ *   1. an inline `presentCall`/`presentResult` in the tool's block, or a
+ *      factory the repo has used (the explicit marker list);
+ *   2. a DELEGATED output block — `output: someFactory(...)` — which is how
+ *      a family ships one projection for all its tools (R1's
+ *      `processToolCard`, R2's `readFileOutput`). The convention is that
+ *      such a factory declares the projection; a family that delegates to
+ *      something which does not would be lying in its own name.
  */
 const PRESENTER_MARKERS = [
   "presentCall",
@@ -50,9 +58,21 @@ const PRESENTER_MARKERS = [
   "terminalInputCard",
   "genericToolCard(",
   // Family factories that declare the projection for their tools (R1's
-  // process family, the template the others copy).
+  // process family, the template the others copy). A new factory needs no
+  // entry here — rule 2 above covers it — but the ones a reader greps for
+  // stay named.
   "processToolCard(",
 ] as const;
+
+/** `output: <factory>(` — the family-factory spelling. */
+const DELEGATED_OUTPUT = /output:\s*[a-zA-Z_$][\w$]*\(/u;
+
+function declaresProjection(body: string): boolean {
+  return (
+    PRESENTER_MARKERS.some((marker) => body.includes(marker)) ||
+    DELEGATED_OUTPUT.test(body)
+  );
+}
 
 /** A representative JSON document a presenter-less tool might return. */
 const SAMPLE = JSON.stringify({
@@ -90,7 +110,7 @@ async function collectTools(
       // or a family factory that declares them for the tool (R1's
       // `processToolCard`, the shape the later families copy). Its absence
       // in this tool's block is the floor's case.
-      hasPresenter: PRESENTER_MARKERS.some((marker) => body.includes(marker)),
+      hasPresenter: declaresProjection(body),
     });
   }
   return out;
@@ -298,8 +318,18 @@ test("every model-facing tool projects a card (the 2026-10-07 completeness sweep
   // factory one by one (context/work-graph/generation/record/goal/plan/
   // process/todo). This sweep keeps the surface honest: a NEW tool without
   // a presenter fails here the day it lands.
+  // The `*` is expanded HERE, not by resolve(): a literal `*` in a path
+  // makes readdirSync throw ENOENT, the catch below skips the directory, and
+  // every tool family under plugins/tools silently leaves the sweep — which
+  // is exactly how this guard stopped covering read_file in R2.
+  const repoRoot = join(import.meta.dir, "../../../..");
+  const toolFamilies = readdirSync(join(repoRoot, "packages/plugins/tools"), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/plugins/tools/${entry.name}/src`);
   const toolDirGlobs = [
-    "packages/plugins/tools/*/src",
+    ...toolFamilies,
     "packages/plugins/browser/src",
     "packages/plugins/team/src",
     "packages/plugins/skills/src",
@@ -308,7 +338,6 @@ test("every model-facing tool projects a card (the 2026-10-07 completeness sweep
     "packages/domains/collab/src",
     "packages/domains/goal-runtime/src",
   ];
-  const repoRoot = join(import.meta.dir, "../../../..");
   const unwired: string[] = [];
   for (const dir of toolDirGlobs) {
     const base = resolve(repoRoot, dir);
@@ -330,7 +359,7 @@ test("every model-facing tool projects a card (the 2026-10-07 completeness sweep
           match.index + match[0].length,
           next === -1 ? source.length : next,
         );
-        const wired = PRESENTER_MARKERS.some((marker) => body.includes(marker));
+        const wired = declaresProjection(body);
         if (!wired) unwired.push(`${file.split("packages/")[1]}: ${match[1]}`);
       }
     }

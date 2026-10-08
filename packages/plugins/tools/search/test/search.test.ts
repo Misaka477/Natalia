@@ -269,33 +269,75 @@ test("a glob page is well-formed and continuable when it stops early", async () 
 test("glob's result card lists the paths, not just a count", () => {
   // dsh's SearchPathsResultView carries `paths` itself. A card that shows only
   // "3 matches" makes a reader open the result JSON to learn WHICH three.
+  // R2: the paths are the card's structured field (the search renderer draws
+  // one line per path), so there is no body to read them from.
   const tool = searchToolFamily().tools.find((t) => t.name === "glob")!;
   const card = tool.output?.presentResult?.(
     { pattern: "**/*.ts" },
     JSON.stringify({ paths: ["a.ts", "b/c.ts"], truncated: false }),
   );
-  expect(card?.body).toBe("a.ts\nb/c.ts");
-  expect(card?.kind).toBe("search");
+  expect(card).toMatchObject({
+    kind: "search",
+    paths: ["a.ts", "b/c.ts"],
+  });
+  // The tool's facts travel the meta slot too (one parse, both slots).
+  expect(tool.output?.presentationMeta?.({}, "{}")).toEqual({ paths: [] });
 });
 
 test("grep's result card groups the matches by file with line numbers", () => {
   // dsh's SearchMatchesResultView groups by file. Same reasoning: the hit
   // locations are the content, the count is not.
   const tool = searchToolFamily().tools.find((t) => t.name === "grep")!;
-  const card = tool.output?.presentResult?.(
+  const value = JSON.stringify({
+    matches: [
+      { path: "a.ts", line: 12, text: "the renderer" },
+      { path: "a.ts", line: 40, text: "renderer again" },
+      { path: "b.ts", line: 3, text: "a renderer" },
+    ],
+    truncated: false,
+  });
+  const card = tool.output?.presentResult?.({ pattern: "renderer" }, value);
+  // R2: the hits are the card's structured `matches` — path, line, text.
+  // The grouping by file is the search kind's own DRAWING (the kit's
+  // renderer, pinned in ui-kit's card-renderer-fields test), not something
+  // the tool composes as text a second time.
+  expect(card).toMatchObject({
+    kind: "search",
+    matches: [
+      { path: "a.ts", line: 12, text: "the renderer" },
+      { path: "a.ts", line: 40, text: "renderer again" },
+      { path: "b.ts", line: 3, text: "a renderer" },
+    ],
+  });
+  // The same facts on the event's meta slot, from the same one parse.
+  expect(tool.output?.presentationMeta?.({}, value)).toEqual({
+    matches: [
+      { path: "a.ts", line: 12, text: "the renderer" },
+      { path: "a.ts", line: 40, text: "renderer again" },
+      { path: "b.ts", line: 3, text: "a renderer" },
+    ],
+  });
+});
+
+test("grep's card is composed from the FACTS, not a second parse (R2)", () => {
+  const tool = searchToolFamily().tools.find((t) => t.name === "grep")!;
+  const value = JSON.stringify({
+    matches: [{ path: "a.ts", line: 12, text: "the renderer" }],
+    truncated: false,
+  });
+  const meta = tool.output!.presentationMeta!({ pattern: "renderer" }, value);
+  const card = tool.output!.presentResult!(
     { pattern: "renderer" },
-    JSON.stringify({
-      matches: [
-        { path: "a.ts", line: 12, text: "the renderer" },
-        { path: "a.ts", line: 40, text: "renderer again" },
-        { path: "b.ts", line: 3, text: "a renderer" },
-      ],
-      truncated: false,
-    }),
+    "POISON",
+    meta as Record<string, unknown>,
   );
-  expect(card?.body).toBe(
-    "a.ts\n  12: the renderer\n  40: renderer again\nb.ts\n  3: a renderer",
-  );
+  expect(card).toMatchObject({
+    kind: "search",
+    matches: [{ path: "a.ts", line: 12, text: "the renderer" }],
+    // The count line keeps the tool's own spelling (plural even for one —
+    // the row reads "1 matches", the same as before R2).
+    summary: "1 matches",
+  });
 });
 
 test("a search result that is not the envelope still renders", () => {

@@ -9,11 +9,14 @@
  */
 import {
   optionalInteger,
+  optionalString,
   requireObject,
   requireString,
   workspacePath,
   type RuntimeTool,
+  type ToolCard,
   type ToolFamily,
+  type ToolOutputDefinition,
 } from "@anthelia/tools";
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
 import { createHash } from "node:crypto";
@@ -32,16 +35,194 @@ export const FS_READ_PLUGIN_ID = "natalia-tool-fs-read";
 export const READ_LINE_LIMIT = 2000;
 
 /**
- * The `read_media_file` result envelope `presentResult` decodes: the four
- * facets the model-facing JSON carries, plus the detected media kind.
+ * The `read_media_file` result envelope: the four facets the model-facing
+ * JSON carries, plus the detected media kind.
  */
-type MediaReadResult = {
+type MediaFacts = {
   path?: string;
   size?: number;
   mode?: string;
   sha256?: string;
   kind?: string;
 };
+
+/** The envelope's facts, or `{}` when the value is not one (defensive). */
+function mediaFacts(value: string): MediaFacts {
+  try {
+    const decoded = JSON.parse(value) as MediaFacts | null;
+    return decoded && typeof decoded === "object" ? decoded : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The same facts back off the `meta` slot. */
+function readMediaFacts(meta: Record<string, unknown>): MediaFacts {
+  const facts: MediaFacts = {};
+  const path = optionalString(meta.path);
+  if (path !== undefined) facts.path = path;
+  if (typeof meta.size === "number") facts.size = meta.size;
+  const mode = optionalString(meta.mode);
+  if (mode !== undefined) facts.mode = mode;
+  const sha256 = optionalString(meta.sha256);
+  if (sha256 !== undefined) facts.sha256 = sha256;
+  const kind = optionalString(meta.kind);
+  if (kind !== undefined) facts.kind = kind;
+  return facts;
+}
+
+/** The arguments as a record — a presenter must never throw. */
+function argsRecord(args: unknown): Record<string, unknown> {
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : {};
+}
+
+/** The language hint a path implies, for a content renderer. */
+function langOf(path: string): string | undefined {
+  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  return ext.length > 0 && ext.length <= 12 ? ext : undefined;
+}
+
+/**
+ * `read_file`'s output definition (R2): the read card, fully structured.
+ *
+ * ONE parse, in `presentationMeta`: the window facts the result envelope
+ * carries are decoded once and travel the event's `meta` slot; the card is
+ * composed from them — the page itself rides as the card's `content` field,
+ * the file's own lines, which a client renders without flattening them (the
+ * 2026-10-07 verdict: a JSON file read as `key: value` lines was the
+ * flatten's doing, and it is exactly what this card ends).
+ */
+type ReadWindowFacts = {
+  path: string;
+  offset?: number;
+  totalLines?: number;
+  truncated?: boolean;
+  lines?: number;
+};
+
+/** The window facts, from the arguments and the result envelope. */
+function readWindowFacts(args: unknown, value: string): ReadWindowFacts {
+  const record = argsRecord(args);
+  const facts: ReadWindowFacts = {
+    path: optionalString(record.path) ?? "file",
+  };
+  const offset = optionalInteger(record.offset, "offset");
+  if (offset !== undefined) facts.offset = offset;
+  const parsed = parseReadEnvelope(value);
+  if (typeof parsed?.totalLines === "number")
+    facts.totalLines = parsed.totalLines;
+  if (parsed?.truncated === true) facts.truncated = true;
+  if (typeof parsed?.content === "string")
+    facts.lines = parsed.content.split("\n").length;
+  return facts;
+}
+
+/** The same facts back off the `meta` slot. */
+function readWindowFromMeta(meta: Record<string, unknown>): ReadWindowFacts {
+  const facts: ReadWindowFacts = {
+    path: optionalString(meta.path) ?? "file",
+  };
+  if (typeof meta.offset === "number") facts.offset = meta.offset;
+  if (typeof meta.totalLines === "number") facts.totalLines = meta.totalLines;
+  if (meta.truncated === true) facts.truncated = true;
+  if (typeof meta.lines === "number") facts.lines = meta.lines;
+  return facts;
+}
+
+/** The result envelope, or null when the value is not one (defensive). */
+function parseReadEnvelope(
+  value: string,
+): { content?: unknown; totalLines?: unknown; truncated?: unknown } | null {
+  try {
+    const decoded = JSON.parse(value) as {
+      content?: unknown;
+      totalLines?: unknown;
+      truncated?: unknown;
+    } | null;
+    return decoded && typeof decoded === "object" ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function readFileOutput(): ToolOutputDefinition {
+  return {
+    schema: {
+      type: "object",
+      properties: {
+        content: { type: "string" },
+        totalLines: { type: "integer" },
+        truncated: { type: "boolean" },
+      },
+      required: ["content", "totalLines", "truncated"],
+      additionalProperties: false,
+    },
+    presentCall(args) {
+      const path = optionalString(argsRecord(args).path);
+      return {
+        kind: "read",
+        title: path ?? "file",
+        summary: "read",
+      };
+    },
+    presentationMeta(args, value) {
+      return readWindowFacts(args, value) as Record<string, unknown>;
+    },
+    presentResult(args, value, meta) {
+      // The window facts come from the `meta` slot the runtime just filled
+      // — one decode, not a second parse. The PAGE is the one thing that
+      // reads `value`: it IS the text, and dsh keeps a read's content on the
+      // card rather than duplicating it into meta.
+      const facts =
+        meta === undefined
+          ? readWindowFacts(args, value)
+          : readWindowFromMeta(meta);
+      const parsed = parseReadEnvelope(value);
+      const content =
+        typeof parsed?.content === "string" ? parsed.content : value;
+      const { path, offset, totalLines, truncated } = facts;
+      const pageLines = facts.lines ?? content.split("\n").length;
+      // The window, named from the SAME numbers the footer uses, so the card
+      // and the text can never disagree: `offset` is where this page starts
+      // (an argument, available while the call runs) and the page's own line
+      // count closes the range. A reader sees "lines 2-3 of 5" — the window
+      // read, not a char count that presents a capped page as the whole
+      // file.
+      const window =
+        offset !== undefined && totalLines !== undefined
+          ? `lines ${offset}-${offset + pageLines - 1} of ${totalLines}`
+          : totalLines === undefined
+            ? "read"
+            : `${totalLines} lines`;
+      return {
+        kind: "read",
+        title: path,
+        summary: window,
+        // The page is the file's own text; the window facts are the
+        // structured fields a renderer reads. The facets stay for a UI
+        // without a read-specific card.
+        content,
+        ...(offset === undefined ? {} : { offset }),
+        ...(totalLines === undefined ? {} : { totalLines }),
+        ...(totalLines === undefined ? {} : { lines: pageLines }),
+        ...(truncated ? { truncated } : {}),
+        lang: langOf(path),
+        meta: [
+          ...(totalLines === undefined
+            ? []
+            : ([["totalLines", String(totalLines)]] as Array<
+                [string, string]
+              >)),
+          ...(truncated
+            ? ([["truncated", "true"]] as Array<[string, string]>)
+            : []),
+        ],
+      };
+    },
+  };
+}
 
 function readFileTool(): RuntimeTool {
   return {
@@ -71,92 +252,9 @@ function readFileTool(): RuntimeTool {
       required: ["path"],
       additionalProperties: false,
     },
-    // The output definition: the tool declares what its call and result mean so
-    // a client can draw a file card instead of guessing from the string.
-    output: {
-      schema: {
-        type: "object",
-        properties: {
-          content: { type: "string" },
-          totalLines: { type: "integer" },
-          truncated: { type: "boolean" },
-        },
-        required: ["content", "totalLines", "truncated"],
-        additionalProperties: false,
-      },
-      presentCall(args) {
-        const path = requireObject(args).path as string | undefined;
-        return {
-          kind: "read",
-          title: typeof path === "string" ? path : "file",
-          summary: "read",
-        };
-      },
-      presentResult(args, value) {
-        const path = requireObject(args).path as string | undefined;
-        // `value` is the tool's raw result — JSON text, the shape the kernel's
-        // string-returning contract carries (glob and grep do the same). The
-        // parse is DEFENSIVE: a rendering path must never be the reason a
-        // call fails. Measured on CI: a caller handed this a value that was
-        // not the envelope (an error string), JSON.parse threw, and the tool
-        // reported "JSON Parse error: Unterminated string" as its RESULT —
-        // the card's problem became the read's failure.
-        let parsed: {
-          content?: string;
-          totalLines?: number;
-          truncated?: boolean;
-        } | null = null;
-        try {
-          parsed = JSON.parse(value) as {
-            content?: string;
-            totalLines?: number;
-            truncated?: boolean;
-          } | null;
-        } catch {
-          parsed = null;
-        }
-        const content =
-          typeof parsed?.content === "string" ? parsed.content : value;
-        const totalLines =
-          typeof parsed?.totalLines === "number" ? parsed.totalLines : null;
-        const truncated = parsed?.truncated === true;
-        // The window, named from the SAME numbers the footer uses, so the
-        // card and the text can never disagree: `offset` is where this page
-        // starts (arguments, available while the call runs) and the page's
-        // own line count closes the range. A reader sees "lines 2-3 of 5" —
-        // the window read, not a char count that presents a capped page as
-        // the whole file.
-        const offset = optionalInteger(
-          (requireObject(args) as { offset?: unknown }).offset,
-          "offset",
-        );
-        const pageLines = content.split("\n").length;
-        const window =
-          offset !== undefined && totalLines !== null
-            ? `lines ${offset}-${offset + pageLines - 1} of ${totalLines}`
-            : totalLines === null
-              ? "read"
-              : `${totalLines} lines`;
-        return {
-          kind: "read",
-          title: typeof path === "string" ? path : "file",
-          summary: window,
-          // The window facts ride as card facets too, so a UI without a
-          // read-specific card still shows them.
-          meta: [
-            ...(totalLines === null
-              ? []
-              : ([["totalLines", String(totalLines)]] as Array<
-                  [string, string]
-                >)),
-            ...(truncated
-              ? ([["truncated", "true"]] as Array<[string, string]>)
-              : []),
-          ],
-          body: content,
-        };
-      },
-    },
+    // The output definition: the tool declares what its call and result mean
+    // so a client can draw a file card instead of guessing from the string.
+    output: readFileOutput(),
     async execute(input, context) {
       const args = requireObject(input);
       const path = workspacePath(
@@ -258,44 +356,37 @@ function readMediaFileTool(): RuntimeTool {
           summary: "read media metadata",
         };
       },
-      presentResult(args, value) {
+      presentationMeta(_args, value) {
+        return mediaFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
         // The metadata IS the read: a card that shows the raw JSON text makes a
         // reader parse five quoted keys to learn the size and the digest. The
-        // same envelope the model reads is decoded here into facets.
-        //
-        // The cast names the envelope rather than `typeof parsed`: inside the
-        // try the variable's narrowed type is still the initializer's `null`,
-        // so a self-referential `as typeof parsed` casts to `null` and every
-        // later field read lands on `never`.
-        let parsed: MediaReadResult | null = null;
-        try {
-          parsed = JSON.parse(value) as MediaReadResult | null;
-        } catch {
-          parsed = null;
-        }
-        if (!parsed) {
+        // same envelope the model reads is decoded ONCE (in presentationMeta)
+        // into the facts the card is composed from.
+        const parsed = mediaFacts(value);
+        const facts = meta === undefined ? parsed : readMediaFacts(meta);
+        if (Object.keys(facts).length === 0) {
           return {
             kind: "read",
-            title: requireObject(args).path as string,
+            title: optionalString(argsRecord(args).path) ?? "file",
             summary: "read media metadata",
             body: value,
           };
         }
         return {
           kind: "read",
-          title: parsed.path ?? (requireObject(args).path as string),
-          summary: parsed.kind
-            ? `${parsed.kind} · ${parsed.size} bytes`
-            : "media",
+          title: facts.path ?? optionalString(argsRecord(args).path) ?? "file",
+          summary: facts.kind ? `${facts.kind} · ${facts.size} bytes` : "media",
           body: [
-            `path:   ${parsed.path ?? ""}`,
-            `size:   ${parsed.size ?? ""} bytes`,
-            `mode:   ${parsed.mode ?? ""}`,
-            `sha256: ${parsed.sha256 ?? ""}`,
+            `path:   ${facts.path ?? ""}`,
+            `size:   ${facts.size ?? ""} bytes`,
+            `mode:   ${facts.mode ?? ""}`,
+            `sha256: ${facts.sha256 ?? ""}`,
           ].join("\n"),
           meta: [
-            ["size", String(parsed.size ?? "")],
-            ["kind", parsed.kind ?? ""],
+            ["size", String(facts.size ?? "")],
+            ["kind", facts.kind ?? ""],
           ],
         };
       },

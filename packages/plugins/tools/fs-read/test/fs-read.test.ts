@@ -138,10 +138,15 @@ test("read_file projects a read card from its output definition", () => {
     // The window, not the char count: a card that shows only the size
     // presents a capped read as the whole file.
     summary: "1 lines",
+    // R2: the page is the file's own text on the card's structured
+    // `content` field — a client renders it verbatim (a JSON file is a JSON
+    // file, not `key: value` lines), so there is no body to read it from.
+    content: "export const x = 1;",
+    totalLines: 1,
+    lines: 1,
     // The same two numbers the footer's text carries, as card facets, so a UI
     // without a read-specific card still shows them.
     meta: [["totalLines", "1"]],
-    body: "export const x = 1;",
   });
   // With an offset the card names the RANGE, from the same numbers the footer
   // uses — the page starts at the argument, and the page's own line count
@@ -161,6 +166,36 @@ test("read_file projects a read card from its output definition", () => {
       ["totalLines", "5"],
       ["truncated", "true"],
     ],
+  });
+});
+
+test("read_file's card is composed from the FACTS, not a second parse (R2)", () => {
+  // The runtime computes presentationMeta once and hands it to the
+  // presenter. A presenter that parses `value` again would read POISON here
+  // and lose the page — which is the regression this pins.
+  const tool = fsReadToolFamily().tools.find(
+    (candidate) => candidate.name === "read_file",
+  )!;
+  const value = JSON.stringify({
+    content: "export const x = 1;",
+    totalLines: 1,
+    truncated: false,
+  });
+  const meta = tool.output!.presentationMeta!({ path: "src/index.ts" }, value);
+  const card = tool.output!.presentResult!(
+    { path: "src/index.ts" },
+    "POISON",
+    meta as Record<string, unknown>,
+  );
+  // The WINDOW FACTS come from the meta slot — a presenter that parsed
+  // `value` again would see POISON and lose them. The PAGE itself is the
+  // one thing that legitimately reads `value`: it is the text, and dsh keeps
+  // a read's content on the card too rather than duplicating it into meta.
+  expect(card).toMatchObject({
+    kind: "read",
+    content: "POISON",
+    totalLines: 1,
+    summary: "1 lines",
   });
 });
 

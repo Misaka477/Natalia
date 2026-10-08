@@ -39,6 +39,13 @@ function countLines(text: string): number {
  * the new content as the complete change — the same thing dsh's FileDiff
  * shows for `oldText: null`.
  */
+/** The arguments as a record — a presenter must never throw. */
+function argsRecord(args: unknown): Record<string, unknown> {
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : {};
+}
+
 function markedAdditions(text: string): string {
   if (text === "") return "";
   return text
@@ -112,7 +119,16 @@ function writeFileTool(): RuntimeTool {
           meta: [["lines", String(countLines(content))]],
         };
       },
-      presentResult(args, value) {
+      presentationMeta(args) {
+        // A write's facts come from the ARGUMENTS — the change the model
+        // asked for — not from the result sentence (which is the tool's
+        // message to the model). One decode of the same two fields the card
+        // reads, so the facts and the card cannot disagree.
+        const parsed = argsRecord(args);
+        const content = optionalString(parsed.content) ?? "";
+        return { path: parsed.path, lines: countLines(content) };
+      },
+      presentResult(args, value, meta) {
         // The completed state REPEATS the call-time diff. A settled UI update
         // replaces the pending card's content, so a result card that carries
         // the plain result string instead erases the diff — which is exactly
@@ -121,15 +137,17 @@ function writeFileTool(): RuntimeTool {
         // a live run showed `edited <path>` where the file's change belonged.
         // The result text is the tool's own message to the MODEL; the card's
         // job is to show the READER what changed.
-        const parsed = requireObject(args);
+        const parsed = argsRecord(args);
         const content = optionalString(parsed.content) ?? "";
+        const lines =
+          typeof meta?.lines === "number" ? meta.lines : countLines(content);
         return {
           kind: "diff",
           title: `Write ${parsed.path as string}`,
           summary: "wrote",
           body: markedAdditions(content),
           meta: [
-            ["lines", String(countLines(content))],
+            ["lines", String(lines)],
             ["result", value],
           ],
         };
@@ -207,20 +225,37 @@ function editFileTool(): RuntimeTool {
           ],
         };
       },
-      presentResult(args, value) {
-        // See write_file: the hunk survives the completed state, and the
-        // result sentence rides as a facet rather than replacing the diff.
-        const parsed = requireObject(args);
+      presentationMeta(args) {
+        // See write_file: an edit's facts are the two texts the model named.
+        const parsed = argsRecord(args);
         const oldText = optionalString(parsed.oldText) ?? "";
         const newText = optionalString(parsed.newText) ?? "";
+        return {
+          path: parsed.path,
+          removed: countLines(oldText),
+          added: countLines(newText),
+        };
+      },
+      presentResult(args, value, meta) {
+        // See write_file: the hunk survives the completed state, and the
+        // result sentence rides as a facet rather than replacing the diff.
+        const parsed = argsRecord(args);
+        const oldText = optionalString(parsed.oldText) ?? "";
+        const newText = optionalString(parsed.newText) ?? "";
+        const removed =
+          typeof meta?.removed === "number"
+            ? meta.removed
+            : countLines(oldText);
+        const added =
+          typeof meta?.added === "number" ? meta.added : countLines(newText);
         return {
           kind: "diff",
           title: `Edit ${parsed.path as string}`,
           summary: "edited",
           body: unifiedHunk(oldText, newText),
           meta: [
-            ["removed", String(countLines(oldText))],
-            ["added", String(countLines(newText))],
+            ["removed", String(removed)],
+            ["added", String(added)],
             ["result", value],
           ],
         };
@@ -332,10 +367,22 @@ function applyEditsTool(): RuntimeTool {
       presentCall() {
         return { kind: "diff", title: "workspace", summary: "apply edits" };
       },
-      presentResult(args, value) {
+      presentationMeta(args) {
+        // The batch's shape, from the arguments: how many edits and of what
+        // kinds. The hunks themselves stay the tool's own text below.
+        const parsed = argsRecord(args);
+        const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
+        const kinds: string[] = [];
+        for (const entry of edits) {
+          const edit = argsRecord(entry);
+          kinds.push(optionalString(edit.operation) ?? "replace");
+        }
+        return { edits: edits.length, kinds };
+      },
+      presentResult(args, value, meta) {
         // Every edit in the batch is its own hunk, so a reader sees the whole
         // change set rather than a summary sentence that names the files.
-        const parsed = requireObject(args);
+        const parsed = argsRecord(args);
         const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
         const hunks: string[] = [];
         for (const entry of edits) {
@@ -358,12 +405,17 @@ function applyEditsTool(): RuntimeTool {
               )}`,
             );
         }
+        const editsCount =
+          typeof meta?.edits === "number" ? meta.edits : edits.length;
         return {
           kind: "diff",
-          title: `apply_edits: ${hunks.length} edit${hunks.length === 1 ? "" : "s"}`,
+          title: `apply_edits: ${editsCount} edit${editsCount === 1 ? "" : "s"}`,
           summary: "applied",
           body: hunks.join("\n"),
-          meta: [["result", value]],
+          meta: [
+            ["edits", String(editsCount)],
+            ["result", value],
+          ],
         };
       },
     },

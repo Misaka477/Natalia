@@ -100,3 +100,67 @@ test("a diff's marks become color; the other kinds draw their text plain", () =>
     ]);
   }
 });
+
+test("a read's page is the file's own lines, verbatim", () => {
+  // A JSON file read as content is a JSON file — the flatten's `key: value`
+  // lines were the 2026-10-07 verdict, and this is where they end.
+  const page = '{\n  "name": "natalia"\n}';
+  const card: ToolCard = {
+    kind: "read",
+    title: "package.json",
+    summary: "3 lines",
+    content: page,
+    totalLines: 3,
+    lines: 3,
+  };
+  expect(CARD_RENDERERS.read(card, toolCall())).toEqual([
+    { line: "{", kind: "plain" },
+    { line: '  "name": "natalia"', kind: "plain" },
+    { line: "}", kind: "plain" },
+  ]);
+});
+
+test("a content search's hits are grouped by file, with line numbers", () => {
+  // dsh's SearchMatchesResultView: where each hit lives, not a count.
+  const card: ToolCard = {
+    kind: "search",
+    title: "renderer",
+    summary: "3 matches",
+    matches: [
+      { path: "a.ts", line: 12, text: "the renderer" },
+      { path: "a.ts", line: 40, text: "renderer again" },
+      { path: "b.ts", line: 3, text: "a renderer" },
+    ],
+  };
+  expect(CARD_RENDERERS.search(card, toolCall())).toEqual([
+    { line: "a.ts", kind: "plain" },
+    { line: "  12: the renderer", kind: "plain" },
+    { line: "  40: renderer again", kind: "plain" },
+    { line: "b.ts", kind: "plain" },
+    { line: "  3: a renderer", kind: "plain" },
+  ]);
+});
+
+test("a path search's listing is one line per path", () => {
+  const card: ToolCard = {
+    kind: "search",
+    title: "Glob **/*.ts",
+    summary: "2 matches",
+    paths: ["a.ts", "b/c.ts"],
+  };
+  expect(CARD_RENDERERS.search(card, toolCall())).toEqual([
+    { line: "a.ts", kind: "plain" },
+    { line: "b/c.ts", kind: "plain" },
+  ]);
+  // A search with neither field (an old card) still shows its own text.
+  const legacy: ToolCard = {
+    kind: "search",
+    title: "renderer",
+    summary: "3 matches",
+    body: "a.ts\n  12: the renderer",
+  };
+  expect(CARD_RENDERERS.search(legacy, toolCall())).toEqual([
+    { line: "a.ts", kind: "plain" },
+    { line: "  12: the renderer", kind: "plain" },
+  ]);
+});

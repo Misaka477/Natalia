@@ -1278,6 +1278,29 @@ function diffCardLines(text: string): ToolCardLine[] {
 }
 
 /**
+ * A content search's hits grouped by file, each with its line number: a
+ * reader scans WHERE a hit lives, which is what dsh's
+ * SearchMatchesResultView draws and what a flat list of texts loses.
+ */
+function groupedMatchLines(
+  matches: Array<{ path: string; line: number; text: string }>,
+): ToolCardLine[] {
+  const grouped = new Map<string, string[]>();
+  for (const match of matches) {
+    const bucket = grouped.get(match.path) ?? [];
+    const at = match.line > 0 ? `${match.line}: ` : "";
+    bucket.push(`${at}${match.text}`.trimEnd());
+    grouped.set(match.path, bucket);
+  }
+  const lines: ToolCardLine[] = [];
+  for (const [path, hits] of grouped) {
+    lines.push({ line: path, kind: "plain" });
+    for (const hit of hits) lines.push({ line: `  ${hit}`, kind: "plain" });
+  }
+  return lines;
+}
+
+/**
  * The card renderers — ONE per card kind, the framework's whole dispatch
  * surface (UI refactor R0; the completeness guard in
  * `card-renderers.test.ts` pins both the set and the one-renderer-per-kind
@@ -1296,15 +1319,25 @@ function diffCardLines(text: string): ToolCardLine[] {
  * dispatch does not change, only what sits behind it.
  */
 export const CARD_RENDERERS: CardRendererMap = {
-  read: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
+  // The page is the file's own lines: the structured `content` field (R2),
+  // the migration body before that, the raw result for a card with neither.
+  read: (card, toolCall) =>
+    plainCardLines(card.content ?? card.body ?? toolCall.output ?? ""),
   diff: (card, toolCall) => diffCardLines(card.body ?? toolCall.output ?? ""),
   // A terminal's own text: the structured `output` field once the family
   // projects one (R1), the migration body before that, the raw result for a
   // card that carries neither.
   terminal: (card, toolCall) =>
     plainCardLines(card.output ?? card.body ?? toolCall.output ?? ""),
+  // A content search's hits, grouped by file with their line numbers — the
+  // search kind's own drawing, the way the diff kind colors its marks. A
+  // path search's listing is one line per path.
   search: (card, toolCall) =>
-    plainCardLines(card.body ?? toolCall.output ?? ""),
+    card.matches
+      ? groupedMatchLines(card.matches)
+      : card.paths
+        ? plainCardLines(card.paths.join("\n"))
+        : plainCardLines(card.body ?? toolCall.output ?? ""),
   web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
   generic: (card, toolCall) =>
     plainCardLines(

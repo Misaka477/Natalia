@@ -13,7 +13,9 @@ import {
   requireObject,
   requireString,
   type RuntimeTool,
+  type ToolCard,
   type ToolFamily,
+  type ToolOutputDefinition,
 } from "@anthelia/tools";
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
 
@@ -34,6 +36,92 @@ export function searchBudgetNote(input: {
       ? "narrow path/pattern"
       : "narrow path/include/pattern";
   return `the scan spent its time budget after ${input.scannedFiles} files; this page is complete and continuable — call again with nextCursor, or ${remedy}`;
+}
+
+type GlobFacts = {
+  paths: string[];
+  nextCursor?: string;
+};
+
+/** The glob envelope's facts, or an empty listing when it is not one. */
+function globFacts(value: string): GlobFacts {
+  try {
+    const parsed = JSON.parse(value) as {
+      paths?: unknown;
+      nextCursor?: unknown;
+    };
+    const paths = Array.isArray(parsed.paths)
+      ? parsed.paths.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [];
+    const nextCursor = optionalString(parsed.nextCursor);
+    return nextCursor === undefined ? { paths } : { paths, nextCursor };
+  } catch {
+    return { paths: [] };
+  }
+}
+
+/** The same facts back off the `meta` slot. */
+function readGlobFacts(meta: Record<string, unknown>): GlobFacts {
+  const paths = Array.isArray(meta.paths)
+    ? meta.paths.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const nextCursor = optionalString(meta.nextCursor);
+  return nextCursor === undefined ? { paths } : { paths, nextCursor };
+}
+
+type GrepFacts = {
+  matches: Array<{ path: string; line: number; text: string }>;
+  nextCursor?: string;
+};
+
+/** The grep envelope's facts, or an empty match list when it is not one. */
+function grepFacts(value: string): GrepFacts {
+  try {
+    const parsed = JSON.parse(value) as {
+      matches?: unknown;
+      nextCursor?: unknown;
+    };
+    const matches = Array.isArray(parsed.matches)
+      ? parsed.matches.flatMap((entry) => {
+          if (!entry || typeof entry !== "object") return [];
+          const record = entry as Record<string, unknown>;
+          if (typeof record.path !== "string") return [];
+          return [
+            {
+              path: record.path,
+              line: typeof record.line === "number" ? record.line : 0,
+              text: typeof record.text === "string" ? record.text : "",
+            },
+          ];
+        })
+      : [];
+    const nextCursor = optionalString(parsed.nextCursor);
+    return nextCursor === undefined ? { matches } : { matches, nextCursor };
+  } catch {
+    return { matches: [] };
+  }
+}
+
+/** The same facts back off the `meta` slot. */
+function readGrepFacts(meta: Record<string, unknown>): GrepFacts {
+  const matches = Array.isArray(meta.matches)
+    ? (meta.matches as unknown[]).flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const record = entry as Record<string, unknown>;
+        if (typeof record.path !== "string") return [];
+        return [
+          {
+            path: record.path,
+            line: typeof record.line === "number" ? record.line : 0,
+            text: typeof record.text === "string" ? record.text : "",
+          },
+        ];
+      })
+    : [];
+  const nextCursor = optionalString(meta.nextCursor);
+  return nextCursor === undefined ? { matches } : { matches, nextCursor };
 }
 
 function globTool(): RuntimeTool {
@@ -98,51 +186,38 @@ function globTool(): RuntimeTool {
           summary: "glob",
         };
       },
-      presentResult(args, value) {
-        let summary = "glob";
-        let meta: Array<[string, string]> = [];
-        try {
-          const parsed = JSON.parse(value) as {
-            paths?: unknown[];
-            nextCursor?: string;
-          };
-          const count = parsed.paths?.length ?? 0;
-          summary = count === 0 ? "no matches" : `${count} matches`;
-          if (parsed.nextCursor) summary += " · more";
-          // A capped result must never read as a complete one: dsh's
-          // SearchResultView carries `truncated` and `total` as separate
-          // facts, so a UI can show "3 of 200" instead of a bare "3".
-          if (parsed.nextCursor)
-            meta = [
-              ["returned", String(count)],
-              ["truncated", "true"],
-            ];
-        } catch {
-          summary = "glob";
-        }
-        // dsh's SearchPathsResultView carries the PATHS THEMSELVES, not just a
-        // count: a UI renders them as a list it can follow, and the card shows
-        // what the model actually got. A bare "3 matches" made the reader parse
-        // the result JSON to learn WHICH three.
-        const parsed2 = (() => {
-          try {
-            return JSON.parse(value) as { paths?: unknown[] };
-          } catch {
-            return null;
-          }
-        })();
-        const paths = Array.isArray(parsed2?.paths)
-          ? parsed2!.paths.filter(
-              (entry): entry is string => typeof entry === "string",
-            )
-          : [];
-        return {
+      presentationMeta(_args, value) {
+        return globFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        // ONE parse (in presentationMeta): the paths and the cap travel as
+        // the event's facts, and the card is composed from them. dsh's
+        // SearchPathsResultView carries the PATHS THEMSELVES, not just a
+        // count — a bare "3 matches" made the reader parse the result JSON
+        // to learn WHICH three.
+        const facts =
+          meta === undefined ? globFacts(value) : readGlobFacts(meta);
+        const count = facts.paths.length;
+        const card: ToolCard = {
           kind: "search",
           title: requireObject(args).pattern as string,
-          summary,
-          meta,
-          body: paths.length ? paths.join("\n") : value,
+          summary: count === 0 ? "no matches" : `${count} matches`,
+          paths: facts.paths,
         };
+        // A capped result must never read as a complete one: dsh's
+        // SearchResultView carries `truncated` and `total` as separate
+        // facts, so a UI can show "3 of 200" instead of a bare "3".
+        if (facts.nextCursor !== undefined) {
+          card.summary += " · more";
+          card.truncated = true;
+          card.nextCursor = facts.nextCursor;
+          card.meta = [
+            ["returned", String(count)],
+            ["truncated", "true"],
+          ];
+        }
+        if (count === 0) card.body = value;
+        return card;
       },
     },
     async execute(input, context) {
@@ -258,64 +333,37 @@ function grepTool(): RuntimeTool {
           summary: "grep",
         };
       },
-      presentResult(args, value) {
-        let summary = "grep";
-        let meta: Array<[string, string]> = [];
-        try {
-          const parsed = JSON.parse(value) as {
-            matches?: unknown[];
-            nextCursor?: string;
-          };
-          const count = parsed.matches?.length ?? 0;
-          summary = count === 0 ? "no matches" : `${count} matches`;
-          if (parsed.nextCursor) summary += " · more";
-          // The same two facts as glob: the kept count and whether the cap
-          // cut the rest.
-          if (parsed.nextCursor)
-            meta = [
-              ["returned", String(count)],
-              ["truncated", "true"],
-            ];
-        } catch {
-          summary = value === "no matches" ? "no matches" : "matches";
-        }
-        // dsh's SearchMatchesResultView groups the matches BY FILE with their
-        // line numbers, so a reader sees where each hit lives instead of a
-        // count. The model-facing JSON is decoded here into that shape.
-        const parsed2 = (() => {
-          try {
-            return JSON.parse(value) as {
-              matches?: Array<{
-                path?: unknown;
-                line?: unknown;
-                text?: unknown;
-              }>;
-            };
-          } catch {
-            return null;
-          }
-        })();
-        const grouped = new Map<string, string[]>();
-        for (const match of parsed2?.matches ?? []) {
-          if (typeof match?.path !== "string") continue;
-          const line = typeof match.line === "number" ? `${match.line}: ` : "";
-          const bucket = grouped.get(match.path) ?? [];
-          bucket.push(`${line}${String(match.text ?? "")}`.trimEnd());
-          grouped.set(match.path, bucket);
-        }
-        const body =
-          grouped.size > 0
-            ? [...grouped]
-                .map(([path, lines]) => `${path}\n  ${lines.join("\n  ")}`)
-                .join("\n")
-            : value;
-        return {
+      presentationMeta(_args, value) {
+        return grepFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        // ONE parse (in presentationMeta): the hits travel as the event's
+        // facts — each with its path, line and text — and the card is
+        // composed from them. A client groups them by file (the search
+        // kind's own drawing, the way a diff kind colors its marks); the
+        // model-facing JSON is never parsed a second time here.
+        const facts =
+          meta === undefined ? grepFacts(value) : readGrepFacts(meta);
+        const count = facts.matches.length;
+        const card: ToolCard = {
           kind: "search",
           title: requireObject(args).pattern as string,
-          summary,
-          meta,
-          body,
+          summary: count === 0 ? "no matches" : `${count} matches`,
+          matches: facts.matches,
         };
+        if (facts.nextCursor !== undefined) {
+          card.summary += " · more";
+          card.truncated = true;
+          card.nextCursor = facts.nextCursor;
+          // The same two facts as glob: the kept count and whether the cap
+          // cut the rest.
+          card.meta = [
+            ["returned", String(count)],
+            ["truncated", "true"],
+          ];
+        }
+        if (count === 0) card.body = value;
+        return card;
       },
     },
     async execute(input, context) {

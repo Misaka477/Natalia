@@ -8,7 +8,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 
 /**
  * D6a — recorded human feedback, captured WITHOUT ever reaching the
- * model (design law 3, after dsh's feedback package group: "signals
+ * model (design law 3, after the feedback package group: "signals
  * about the output, never input to it").
  *
  * The isolation is STRUCTURAL: this factory holds no provider, no tool
@@ -18,7 +18,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
  * governance path (constitution / AGENTS.md / skills), which carries
  * hash changes and notifications — never this event.
  *
- * Categories form a FIXED taxonomy (dsh's pattern): extending it is a
+ * Categories form a FIXED taxonomy: extending it is a
  * code change on purpose, not free-text drift.
  */
 

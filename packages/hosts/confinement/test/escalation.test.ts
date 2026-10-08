@@ -88,7 +88,7 @@ test("a strictly wider mode asks once and grants for this call", async () => {
   ]);
 });
 
-test("a refusal throws before anything executes (dsh texts)", async () => {
+test("a refusal throws before anything executes (the refusal texts)", async () => {
   const refusal = async () => "rejected" as const;
   await expect(
     approveEscalation(

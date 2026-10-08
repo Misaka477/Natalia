@@ -491,7 +491,7 @@ export type ToolOutputDefinition = {
    * `meta` is what this tool's `presentationMeta` just computed over the same
    * (args, value) — the runtime computes it once and hands it here, so a
    * structured presenter composes its card from those facts instead of
-   * parsing the result string a second time (dsh's `presentResult` reads
+   * parsing the result string a second time (a structured presenter reads
    * `result.meta` for exactly this reason). It is `undefined` when the tool
    * declares no `presentationMeta`; a presenter that needs the text reads
    * `value`.
@@ -502,7 +502,7 @@ export type ToolOutputDefinition = {
     meta?: Record<string, unknown>,
   ): ToolCard | undefined;
   /**
-   * The call's STRUCTURED facts, persisted beside the result (dsh's
+   * The call's STRUCTURED facts, persisted beside the result (the
    * `presentationMeta`): what a client needs to draw the result without
    * re-parsing the result string — a read window's numbers, a search's
    * cursor, a diff's counts. Pure: the same arguments and result always

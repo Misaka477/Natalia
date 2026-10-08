@@ -1,5 +1,5 @@
 /**
- * Pure tail-scroll state machine, aligned with deepseek-harness
+ * Pure tail-scroll state machine, aligned with the reference
  * TrajectoryTable's `tableScrollInitialized` / `followsTableTail` /
  * `olderLoadAnchor` model.
  *

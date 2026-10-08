@@ -52,7 +52,7 @@ export type ProviderMessage = {
   /**
    * Provider-native reasoning text that some OpenAI-compatible thinking
    * models require in the assistant tool-call message on the next request
-   * (DeepSeek's `reasoning_content` is the canonical example). Anthropic
+   * (an interleaved `reasoning_content` is the canonical example). Anthropic
    * carries the opaque signature separately in `reasoningSignature`.
    */
   reasoningContent?: string;
@@ -2924,7 +2924,7 @@ function openAIReasoningField(
 }
 
 /**
- * OpenAI-compatible interleaved providers (DeepSeek is the canonical example)
+ * OpenAI-compatible interleaved providers (the gateway is the canonical example)
  * require the reasoning field on every assistant message, even when it is
  * empty. This is deliberately separate from `reasoningContent` because an
  * absent value is not the same as an empty string to these APIs.

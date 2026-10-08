@@ -428,7 +428,7 @@ export type ToolCardHeader = {
 };
 
 /**
- * The card a tool draws for one of its calls (UI refactor R0; dsh's fourth
+ * The card a tool draws for one of its calls (UI refactor R0; the fourth
  * corner — the `meta` slot beside it is the `presentationMeta` sibling).
  *
  * A card is a projection, not presentation: the tool says what the call or
@@ -498,7 +498,7 @@ export type ToolCard =
   | (ToolCardHeader & {
       kind: "generic";
       /**
-       * A Q&A's structure, when the tool is a question (dsh's
+       * A Q&A's structure, when the tool is a question (the
        * AskQuestionCard): the question asked, the choices offered, the
        * answers picked. Composed by the TOOL, which holds both halves — the
        * arguments and the result — so no consumer re-derives them (the
@@ -810,7 +810,7 @@ export type NamespacedCollabMessageEventData =
 
 /**
  * Why a long-running thing settled — the settlement spine's closed set
- * (the dsh study's stopReason taxonomy, Natalia-flavored). A notice's
+ * (the stopReason taxonomy, Natalia-flavored). A notice's
  * tone and the model's next move both key off it; a free string let a
  * typo reach durable state where a consumer switching on the reason
  * would silently fall through to a default — the exact failure the
@@ -2625,7 +2625,7 @@ type RuntimeEventData =
       type: "feedback.recorded";
       /**
        * D6a: human feedback about the OUTPUT, recorded without ever
-       * reaching the model (design law 3 — dsh's feedback group:
+       * reaching the model (design law 3 — the feedback group:
        * signals about output, never input to it). The only route into
        * model-visible material is governance (constitution / AGENTS.md
        * / skills) with its hash-change notifications.

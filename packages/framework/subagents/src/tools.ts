@@ -168,7 +168,7 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
         task: { type: "string" },
         // The row's human-facing label. `task` is the child's full brief — the
         // thing it reads; `description` is the 3-5 word line a human scanning
-        // the transcript reads, the same contract dsh's `agent` declares. Both
+        // the transcript reads, the same contract the `agent` tool declares. Both
         // are required: a spawn without one shows a wall of prompt text where
         // a sentence belongs.
         description: {
@@ -577,7 +577,7 @@ function agentWaitTool(): RuntimeTool {
     async execute(input, context) {
       const args = requireObject(input);
       // No `description` requirement, for the same reason as the registry
-      // tools: dsh's wait/discovery surface declares none, and an execute
+      // tools: the wait/discovery surface declares none, and an execute
       // that demands an undeclared field makes every correct call fail.
       const ids = ((args.ids as unknown[]) ?? []).map((id) => String(id));
       if (ids.length === 0) throw new Error("ids is required");
@@ -810,7 +810,7 @@ function agentRegistryTool(
     async execute(input, context) {
       const args = requireObject(input);
       // No `description` requirement here: these are the observation and
-      // control tools, and dsh's equivalents (`list_agents`, `interrupt_agent`,
+      // control tools, and the equivalents (`list_agents`, `interrupt_agent`,
       // `send_message`) carry no display sentence — only the delegation tool
       // does. The shared execute used to demand a `description` its schema
       // never declared, so every schema-valid call died on

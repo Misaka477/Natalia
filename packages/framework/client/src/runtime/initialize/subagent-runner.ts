@@ -241,7 +241,7 @@ export async function installSubagents(
       );
       // The child's own channel to its parent, as a tool: the model can
       // only call tools, and a mid-run finding must be reportable while
-      // it is being found (the dsh study's send_result). Always visible,
+      // it is being found (the send_result channel). Always visible,
       // never approval-gated — it is a message, not an action.
       visibleTools.push({
         name: "send_to_parent",

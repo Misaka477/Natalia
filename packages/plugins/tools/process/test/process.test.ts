@@ -614,7 +614,7 @@ test("a natural death presents one terminal state across status, wait and audit 
 });
 
 test("the process family's read tools project terminal cards (R1)", async () => {
-  // The presentation plan's P1: each family gets presenters in dsh's
+  // The presentation plan's P1: each family gets presenters in the
   // vocabulary. The process reads project title=the handle, summary=the
   // state, meta=pills a reader scans without opening the card.
   //

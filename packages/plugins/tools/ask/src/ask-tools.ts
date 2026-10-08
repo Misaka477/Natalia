@@ -107,7 +107,7 @@ function askUserTool(): RuntimeTool {
         // through the row model — the chain the user watched fail for a
         // day. One layer, one owner.
         //
-        // R4: the Q&A rides as the card's STRUCTURED fields (dsh's
+        // R4: the Q&A rides as the card's STRUCTURED fields (the
         // AskQuestionCard), so a client draws it rather than parsing a
         // transcript body. The transcript stays as the generic body for a
         // client that has not caught up — and the keyed kit card reads the
@@ -130,7 +130,7 @@ function askUserTool(): RuntimeTool {
           kind: "generic",
           title: facts.question,
           summary: "answered",
-          // dsh's AskQuestionCard shape: the question on its own line, each
+          // The AskQuestionCard shape: the question on its own line, each
           // choice on ITS OWN line (the user's 2026-10-07 report — the old
           // `Options: a · b · c` spelling crammed five choices into one
           // unreadable line), and the answer last.

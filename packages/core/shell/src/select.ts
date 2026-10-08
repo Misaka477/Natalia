@@ -1,7 +1,7 @@
 /**
  * Which shell runs a command.
  *
- * The platform mirror is dsh's shape: each host runs exactly one shell stack,
+ * The platform mirror's shape: each host runs exactly one shell stack,
  * with bash and pwsh as twins whose enablement is inverted. It is expressed here
  * as a function rather than a patch table because this repository composes
  * packages rather than loading a plugin manifest, but the property is the same —

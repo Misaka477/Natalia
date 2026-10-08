@@ -54,7 +54,7 @@ test("ask_user delegates to the runtime question channel", async () => {
 
 test("the Q&A transcript lists each choice on its own line (user 2026-10-07)", () => {
   // The screenshot: five choices crammed into one `Options: a · b · c` line
-  // — nobody can read that. dsh's AskQuestionCard lists them; the card body
+  // — nobody can read that. The question card lists them; the card body
   // now does too, one per line, with the answer last.
   const tool = askToolFamily().tools.find((t) => t.name === "ask_user")!;
   const card = tool.output!.presentResult!(

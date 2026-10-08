@@ -1,13 +1,13 @@
 /**
- * The one-line summary a tool result earns (dsh's layer-1 `output.render`
+ * The one-line summary a tool result earns (the layer-1 render contract,
  * counterpart for the row line).
  *
  * The runtime used to publish `result.slice(0, 200)` as the tool.update
  * event's summary, so every JSON-returning tool showed its first 200
  * characters of raw JSON on the transcript row — the user's 2026-10-07
- * report: "绝大多数的工具返回是 json 数据而不是按 dsh 那种返回".
+ * report: "绝大多数的工具返回是 json 数据而不是按可读的那种返回".
  *
- * dsh's model: the tool declares what its result MEANS, and the row shows
+ * The model: the tool declares what its result MEANS, and the row shows
  * that meaning. Two sources, in order:
  *   1. the tool's own projected card (presentResult's `summary`) — the
  *      sentence the tool wrote about its own result;

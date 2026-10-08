@@ -255,7 +255,7 @@ export async function wireFrameworkServices(
         sourceKind: SETTLEMENT_SOURCE_KINDS.subagentSettled,
       });
     },
-    // The child's mid-run channel (the dsh study's send_result, built on
+    // The child's mid-run channel (send_result, built on
     // Natalia's spine): a finding reaches the parent live, and the
     // terminal settlement still fires at the end.
     onChildMessage: (message) => {

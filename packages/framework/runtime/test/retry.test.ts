@@ -274,7 +274,7 @@ function toProviderError(
 }
 
 test("billing failures are classified as quota rather than invalid requests", () => {
-  // DeepSeek answers 402 with this body; OpenAI answers 429 with a quota code.
+  // The gateway answers 402 with this body; OpenAI answers 429 with a quota code.
   expect(
     providerErrorFromHttp({ statusCode: 402, message: "Insufficient Balance" })
       .kind,

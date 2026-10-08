@@ -4,7 +4,7 @@
  * The spec's consumption-side discipline: every switch over `RuntimeEventData`
  * must handle the known branches plus a default fallback, and `assertNever`
  * exhaustiveness assertions are forbidden — the union gains new members as a
- * legitimate unknown value, exactly as a plugin-added variant is (dsh's session
+ * legitimate unknown value, exactly as a plugin-added variant is (the session
  * format documents the same rule: "switches must NOT use assertNever — a
  * plugin-added variant is a valid unknown value").
  *

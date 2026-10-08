@@ -1,7 +1,7 @@
 /**
  * The collab family's presenters (presentation plan P1.1).
  *
- * dsh's layer-2 vocabulary: `presentCall` answers with the call's own
+ * The layer-2 vocabulary: `presentCall` answers with the call's own
  * arguments, `presentResult` with the settled value's facts. The collab
  * family's tools all answer with JSON envelopes (`JSON.stringify` of an
  * object), so the result presenters decode the same envelope the model
@@ -9,7 +9,7 @@
  * summary the one-line state, and `meta` the counts and ids a reader
  * scans without opening the card.
  *
- * Discipline (dsh's, restated for this family): a presenter is a PURE
+ * Discipline (restated for this family): a presenter is a PURE
  * function over its arguments and the result STRING — a malformed result
  * degrades to a generic card rather than throwing, because a card that
  * throws takes the whole transcript row down with it.

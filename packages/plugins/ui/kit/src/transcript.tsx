@@ -108,7 +108,7 @@ export function Transcript(props: TranscriptProps) {
   const [scrollReady, setScrollReady] = createSignal(false);
   const virtualize = () => props.messages.length > VIRTUALIZE_THRESHOLD;
   let controller: TailScrollController | undefined;
-  // dsh's useStableVirtualRowStructure keeps row identity/height stable across
+  // The reference's useStableVirtualRowStructure keeps row identity/height stable across
   // renders. Message heights are dynamic, so cache by a content signature: a
   // measurement callback must not see a different estimate for the same row.
   const estimateCache = new Map<
@@ -152,7 +152,7 @@ export function Transcript(props: TranscriptProps) {
     estimateSize: (index) => estimateStable(index),
     getItemKey: (index) => props.messages[index]?.id ?? index,
     anchorTo: "end",
-    // Match deepseek-harness TrajectoryTable: anchorTo:"end" plus the same
+    // Match the reference TrajectoryTable: anchorTo:"end" plus the same
     // 2px follow threshold lets TanStack compensate dynamic estimate→measure
     // deltas while the reader is pinned. Follow *ownership* still lives in
     // TailScrollController; without this end compensation a late measurement
@@ -205,7 +205,7 @@ export function Transcript(props: TranscriptProps) {
   const liveVirtualItems = () => virtualizer.getVirtualItems();
   const liveTotalSize = () => virtualizer.getTotalSize();
 
-  // deepseek-harness TrajectoryTable state machine (pure, tested in
+  // The reference TrajectoryTable state machine (pure, tested in
   // tail-scroll-machine.test.ts).
   let tailState: TailScrollState = initialTailScrollState();
   /**
@@ -366,7 +366,7 @@ export function Transcript(props: TranscriptProps) {
     breakFollow: () => controller?.breakFollow(),
   };
 
-  // deepseek-harness TrajectoryTable layout contract:
+  // The reference TrajectoryTable layout contract:
   // - historyLoading gates first initialization
   // - the first measured window owns one scroll-to-end
   // - later growth follows only while the reader is pinned
@@ -828,7 +828,7 @@ export function estimateMessageHeight(message: Message): number {
 }
 
 /**
- * DSH-style fixed-height row model (scroll Phase 5). Unlike the refining
+ * The fixed-height row model (scroll Phase 5). Unlike the refining
  * `estimateMessageHeight`, this computes a deterministic, *bounded* height: the
  * markdown/code body is clamped to a fixed line budget and the total to a hard
  * ceiling, and large tool output is always collapsed to its preview. Because
@@ -1155,7 +1155,7 @@ function sessionTurnID(messageID: string) {
 }
 
 /**
- * The card family's leading glyph, the same table dsh's GenericToolCard uses
+ * The card family's leading glyph, the same table the GenericToolCard uses
  * (figma): a magnifier for search, a browse glyph for read, a terminal glyph
  * for shell, a pencil for write/edit, code for code, a spark otherwise. All
  * render at 14 inside the 16px leading box.
@@ -1275,7 +1275,7 @@ function diffCardLines(text: string): ToolCardLine[] {
 
 /**
  * A content search's hits grouped by file, each with its line number: a
- * reader scans WHERE a hit lives, which is what dsh's
+ * reader scans WHERE a hit lives, which is what the
  * SearchMatchesResultView draws and what a flat list of texts loses.
  */
 function groupedMatchLines(
@@ -1450,7 +1450,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
       <div class="natalia-tool-header">
         <ToolKindIcon kind={card?.kind} />
         {/* The family label leads, and the model's sentence follows it — the
-            shape dsh's rows use. The tool's own title (the command, the path)
+            shape the reference rows use. The tool's own title (the command, the path)
             is what the EXPANDED card is for, so it does not lead here. */}
         <span class="natalia-tool-family">{rowLabel()}</span>
         <Show when={summary()}>

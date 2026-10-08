@@ -121,7 +121,7 @@ test("a read's page is the file's own lines, verbatim", () => {
 });
 
 test("a content search's hits are grouped by file, with line numbers", () => {
-  // dsh's SearchMatchesResultView: where each hit lives, not a count.
+  // The SearchMatchesResultView: where the hit lives, not a count.
   const card: ToolCard = {
     kind: "search",
     title: "renderer",

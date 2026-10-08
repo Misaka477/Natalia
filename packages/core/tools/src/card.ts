@@ -1,5 +1,5 @@
 /**
- * The generic tool card factory (dsh's layer-2 vocabulary, the shared
+ * The generic tool card factory (the layer-2 vocabulary, the shared
  * spelling).
  *
  * A tool that answers with a JSON envelope and has no reason to invent a

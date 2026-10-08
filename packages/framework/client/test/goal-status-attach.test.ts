@@ -155,7 +155,7 @@ test("same-id attach re-publishes an existing goal as a live goal.status", async
 });
 
 /**
- * The status-bar toggle and inline editor act on the *running* round the dsh
+ * The status-bar toggle and inline editor act on the *running* round the
  * way: `pause` DISARMS it (the round finishes, the next one never starts —
  * the user's 2026-10-07 ruling), and `edit` steers it at the next step while
  * the durable edit makes the next round use the new objective.
@@ -308,7 +308,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
 
     // The edit preserves continuation authority, so round 2 is driven and its
     // first provider call blocks. Pausing then DISARMS: round 2 finishes, no
-    // round 3 starts (the user's 2026-10-07 dsh-parity ruling).
+    // round 3 starts (the user's 2026-10-07 parity ruling).
     await waitUntil(
       () =>
         events.some(
@@ -325,7 +325,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
       "round 2 turn start",
     );
     // Pausing DISARMS: the in-flight round runs to completion and the next
-    // one is never started (the user's 2026-10-07 dsh-parity ruling — the
+    // one is never started (the user's 2026-10-07 parity ruling — the
     // old behaviour hard-cancelled the round, which the user rejected).
     const paused = await client.goalControl?.("pause", sessionID);
     expect(paused).toMatchObject({ ok: true, action: "pause" });
@@ -334,7 +334,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
         (event) => event.type === "goal.changed" && event.operation === "pause",
       ),
     ).toBe(true);
-    // The in-flight round SURVIVES the pause (no hard-stop) — dsh's
+    // The in-flight round SURVIVES the pause (no hard-stop) — the
     // semantics: pause disarms, it does not cancel.
     expect(
       events.some(

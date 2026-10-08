@@ -27,7 +27,7 @@ export const FS_READ_PLUGIN_ID = "natalia-tool-fs-read";
 
 /**
  * Default and maximum number of lines one `read_file` call returns. The
- * reference is dsh's `read` (`devref/deepseek-harness/packages/fs/tool-fs/
+ * reference is the `read` tool (the reference checkout's fs/tool-fs/
  * src/read.ts`, `READ_LIMIT = 2000`): a read without a window is still a
  * window, because the alternative is a 500MB file entering the context as
  * one result and the model never asking for a second page.
@@ -173,7 +173,7 @@ function readFileOutput(): ToolOutputDefinition {
     presentResult(args, value, meta) {
       // The window facts come from the `meta` slot the runtime just filled
       // — one decode, not a second parse. The PAGE is the one thing that
-      // reads `value`: it IS the text, and dsh keeps a read's content on the
+      // reads `value`: it IS the text, and a read's content rides on the
       // card rather than duplicating it into meta.
       const facts =
         meta === undefined
@@ -298,7 +298,7 @@ function readFileTool(): RuntimeTool {
       // (`search-tools.ts`). The model reads `content` (with its footer);
       // a client reads the rest.
       //
-      // The footer is the three-state form dsh's read uses, because a MODEL
+      // The footer is the three-state form the read uses, because a MODEL
       // reads it and a page it cannot resume is a page it must guess at:
       //   capped by this call's window  -> "Showing lines A-B of N", with the
       //     next offset named, so the next call needs no arithmetic;

@@ -548,7 +548,7 @@ test("a durable view answers on a fast-attach tail the fold cannot", () => {
 });
 
 test("a paused goal drives no further round — the round in flight finishes (user 2026-10-07)", async () => {
-  // dsh's semantics: pause DISARMS, it does not cancel. The in-flight round
+  // The adopted semantics: pause DISARMS, it does not cancel. The in-flight round
   // runs to completion; the driver refuses the NEXT one, because the goal's
   // phase is no longer `active`. (Our status-bar path used to hard-cancel
   // the in-flight round, which threw away its minutes of work.)

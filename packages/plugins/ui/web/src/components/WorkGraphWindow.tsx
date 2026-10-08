@@ -90,7 +90,7 @@ function WorkGraphRowView(props: {
 /**
  * The virtual window every work-graph view renders through.
  *
- * Mirrors the transcript's DSH-derived contract: one fixed row height, spacer
+ * Mirrors the transcript's derived contract: one fixed row height, spacer
  * rows above/below the window instead of DOM measurement, and a plain-list
  * fallback both below the row threshold and while the first window is not yet
  * ready (so a fresh pane or a session switch is never blank).

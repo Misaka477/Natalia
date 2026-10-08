@@ -8,7 +8,7 @@ import type { WorkGraphTreeNode, WorkGraphNodeView } from "@natalia/view-store";
  * into pure state (a collapsed id set) that the window can re-derive, instead
  * of a per-component `open` boolean buried in nested JSX.
  *
- * Row heights are fixed (DSH-style, see the unified scroll plan §3.1): a row is
+ * Row heights are fixed (see the unified scroll plan §3.1): a row is
  * always one line, so `WORK_GRAPH_ROW_HEIGHT` is both the estimate and the
  * rendered height and the virtualizer never DOM-measures rows.
  */

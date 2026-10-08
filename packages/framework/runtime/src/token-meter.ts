@@ -356,7 +356,7 @@ export class TokenMeter {
    *
    * Exact provider usage is reused only when the sample's canonical header is
    * still current and its total is at least the current heuristic price. That
-   * mirrors DSH's conservative anchor rule: stale or smaller samples never
+   * mirrors the conservative anchor rule: stale or smaller samples never
    * make compaction believe the request is cheaper than the local estimate.
    */
   measureRequest(scope: string, envelope: RequestEnvelope): TokenMeasurement {

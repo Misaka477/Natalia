@@ -432,10 +432,10 @@ test("configured provider resolution preserves the adapter provider identity", (
   });
 });
 
-test("providerForModel applies the DeepSeek interleaved reasoning default", async () => {
+test("providerForModel applies the gateway's interleaved reasoning default", async () => {
   const config = defaultConfigV3();
   config.providers.deepseek_gateway = {
-    name: "DeepSeek Gateway",
+    name: "Gateway",
     driver: "openai-compatible",
     enabled: true,
     connection: { apiKey: "test-key" },
@@ -460,7 +460,7 @@ test("providerForModel applies the DeepSeek interleaved reasoning default", asyn
   };
   config.modelOverrides["deepseek_gateway/deepseek-chat"] = {
     enabled: true,
-    name: "DeepSeek Chat",
+    name: "Chat",
     requestDefaults: { temperature: null, topP: null },
     requestOptions: {},
     headers: {},

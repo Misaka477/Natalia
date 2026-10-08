@@ -20,8 +20,8 @@ export type SettlementExec = { session: { id: string } };
  * The settlement spine (the Natalia settlement plan's block 1): a
  * long-running thing — a managed process, a terminal pane, a subagent, a
  * team PR — reaches a boundary, and the main agent is TOLD instead of
- * left polling. The plan's study (dsh-settlement-study.zh-CN.md) proved
- * the shape against DeepSeek's harness: settle -> notice -> steer/queue,
+ * left polling. The plan's settlement study proved
+ * the shape against the reference harness: settle -> notice -> steer/queue,
  * with a closed reason taxonomy and the discipline written into the
  * tools ("you are told when one finishes").
  *

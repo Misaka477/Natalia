@@ -36,7 +36,7 @@ function countLines(text: string): number {
  * The diff convention the renderers read: `+ ` prefix per line. A whole-file
  * write has no prior text to diff against at call time (and reading the file
  * inside a presenter would make it I/O, not a projection), so the card shows
- * the new content as the complete change — the same thing dsh's FileDiff
+ * the new content as the complete change — the same thing the FileDiff
  * shows for `oldText: null`.
  */
 /** The arguments as a record — a presenter must never throw. */
@@ -102,7 +102,7 @@ function writeFileTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        // A write is a diff card: a create has no prior text (dsh's
+        // A write is a diff card: a create has no prior text (the
         // FileDiff uses oldText: null for exactly that), and an overwrite
         // cannot know the old content at call time — so the card carries the
         // new text as the whole-file change. The lines are MARKED (`+ `):
@@ -132,7 +132,7 @@ function writeFileTool(): RuntimeTool {
         // The completed state REPEATS the call-time diff. A settled UI update
         // replaces the pending card's content, so a result card that carries
         // the plain result string instead erases the diff — which is exactly
-        // what dsh's diff model warns about ("otherwise raw result text would
+        // what the diff model warns about ("otherwise raw result text would
         // replace the diff") and exactly what this card did: the screenshot of
         // a live run showed `edited <path>` where the file's change belonged.
         // The result text is the tool's own message to the MODEL; the card's

@@ -10,12 +10,12 @@ import { resolve } from "node:path";
  * rlimit family) — the exec primitive's front wrapper, consumed through the
  * `confinement-exec` native binary in `../native`.
  *
- * The vocabulary and the enforcement dialect follow dsh's local sandbox
- * (`devref/deepseek-harness/packages/sandbox/`): the three-mode file axis,
+ * The vocabulary and the enforcement dialect follow the reference sandbox:
+ * the three-mode file axis,
  * the always-writable `/dev/null`, and the fail-closed rule that a missing
  * or unusable backend never degrades into running unconstrained. Two
  * deliberate differences, both recorded in the study: this wrapper adds the
- * rlimit family dsh lacks (the resource-exhaustion face), and macOS/Windows
+ * rlimit family the reference lacks (the resource-exhaustion face), and macOS/Windows
  * rungs are not here yet — on a platform without a backend, only
  * `danger-full-access` remains usable (the study's honest Windows
  * degradation).
@@ -122,7 +122,7 @@ export function enforceableConfinementMode(
 
 /**
  * Resolve a granted root to the path the kernel actually compares
- * (dsh's `roots.ts` lesson): the native realpath follows the
+ * (the `roots.ts` lesson): the native realpath follows the
  * component-by-component lookup a spawn performs, where the JS
  * implementation lexically collapses `..` before resolving a preceding
  * symlink — an as-spelled grant can match nothing. A missing root stays as
@@ -139,7 +139,7 @@ export function canonicalPath(path: string): string {
 
 /**
  * The one home for "where may this mode WRITE" — the landlock dialect's
- * spelling (dsh keeps one meaning and per-runner grants: their landlock
+ * spelling (the reference keeps one meaning and per-runner grants: their landlock
  * profile grants `/dev/null` unconditionally, adds `/tmp` and the workspace
  * under `workspace-write`). Deduplicated and canonical, so identical
  * content produces identical rule sets.
@@ -159,7 +159,7 @@ export function writableRoots(
  *
  * Returns `undefined` when the mode needs a backend and no usable one exists
  * — fail-closed: the caller must refuse rather than run the command raw
- * (dsh: "Missing or unusable confinement fails closed rather than returning
+ * (the reference: "Missing or unusable confinement fails closed rather than returning
  * the original argv"). `danger-full-access` needs no backend by definition,
  * so it returns the raw command: the degradation path that keeps working on
  * platforms whose rungs are not built yet.
@@ -193,7 +193,7 @@ export function wrapConfinedCommand(input: {
 
 /**
  * Probe the backend: capability facts from `--probe`, plus the functional
- * half dsh's runner chain performs — a trivial command actually running
+ * half the reference's runner chain performs — a trivial command actually running
  * through confinement. `undefined` means no binary exists at all (the
  * fail-closed signal for the ro/rw modes).
  */

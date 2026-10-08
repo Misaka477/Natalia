@@ -267,7 +267,7 @@ test("a glob page is well-formed and continuable when it stops early", async () 
 });
 
 test("glob's result card lists the paths, not just a count", () => {
-  // dsh's SearchPathsResultView carries `paths` itself. A card that shows only
+  // The SearchPathsResultView carries `paths` itself. A card that shows only
   // "3 matches" makes a reader open the result JSON to learn WHICH three.
   // R2: the paths are the card's structured field (the search renderer draws
   // one line per path), so there is no body to read them from.
@@ -285,7 +285,7 @@ test("glob's result card lists the paths, not just a count", () => {
 });
 
 test("grep's result card groups the matches by file with line numbers", () => {
-  // dsh's SearchMatchesResultView groups by file. Same reasoning: the hit
+  // The SearchMatchesResultView groups by file. Same reasoning: the hit
   // locations are the content, the count is not.
   const tool = searchToolFamily().tools.find((t) => t.name === "grep")!;
   const value = JSON.stringify({

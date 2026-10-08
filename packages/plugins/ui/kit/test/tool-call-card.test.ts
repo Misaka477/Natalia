@@ -248,7 +248,7 @@ test("an edit's marked hunk is what the card carries, marks included", () => {
 
 test("toolRowLabel gives every tool its family label", () => {
   // The collapsed row reads `<Label> · <the sentence the model wrote>`, the
-  // shape dsh's rows use (`Bash · Verify all three families in dist`). Without
+  // shape the reference rows use (`Bash · Verify all three families in dist`). Without
   // this table the row leads with the raw command, which is what our rows did.
   expect(toolRowLabel("run_shell")).toBe("Bash");
   expect(toolRowLabel("read_file")).toBe("Read");
@@ -269,7 +269,7 @@ test("toolRowLabel gives every tool its family label", () => {
 });
 
 test("a path title is relativized for the row (P3.3)", () => {
-  // dsh's relativizeToCwd + abbreviateHomePath: the row shows the short
+  // The relativizeToCwd + abbreviateHomePath: the row shows the short
   // form, the full path stays in the card's body. The home fold uses the
   // environment's real HOME, so the cases are built from it.
   const home = process.env.HOME ?? "";

@@ -3,7 +3,7 @@
  *
  * Turns an active, armed goal into sequential `<goal_round>` turns through a
  * small host interface (admission, idle/queue observation, flush, publish), so
- * it stays independent of the concrete agent loop — the same split dsh uses
+ * it stays independent of the concrete agent loop — the same split the
  * between `goal`, `goal-round-driver` and `tool-goal`.
  *
  * This is what replaces "wake an auditor every turn to prod the model": the
@@ -22,7 +22,7 @@ import type { GoalBlockReason } from "@anthelia/contracts";
 import type { GoalService } from "./service";
 import type { GoalView } from "./types";
 
-/** Renders one retained goal-round instruction (dsh's `<goal_round>` block). */
+/** Renders one retained goal-round instruction (the `<goal_round>` block). */
 export function renderGoalRoundPrompt(
   goal: GoalView,
   round: number,

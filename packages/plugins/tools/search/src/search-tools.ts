@@ -175,7 +175,7 @@ function globTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        // dsh's spelling: the verb and the scope in the title, so the row
+        // The spelling: the verb and the scope in the title, so the row
         // reads "Glob *.ts in src" rather than a bare pattern.
         const parsed = requireObject(args);
         const pattern = String(parsed.pattern ?? "");
@@ -191,7 +191,7 @@ function globTool(): RuntimeTool {
       },
       presentResult(args, value, meta) {
         // ONE parse (in presentationMeta): the paths and the cap travel as
-        // the event's facts, and the card is composed from them. dsh's
+        // the event's facts, and the card is composed from them. The
         // SearchPathsResultView carries the PATHS THEMSELVES, not just a
         // count — a bare "3 matches" made the reader parse the result JSON
         // to learn WHICH three.
@@ -204,7 +204,7 @@ function globTool(): RuntimeTool {
           summary: count === 0 ? "no matches" : `${count} matches`,
           paths: facts.paths,
         };
-        // A capped result must never read as a complete one: dsh's
+        // A capped result must never read as a complete one: the
         // SearchResultView carries `truncated` and `total` as separate
         // facts, so a UI can show "3 of 200" instead of a bare "3".
         if (facts.nextCursor !== undefined) {

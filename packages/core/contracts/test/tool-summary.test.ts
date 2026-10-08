@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { toolResultSummary } from "../src/tool-summary";
 
 /**
- * The row's one-line summary, derived from a tool result (dsh's layer-1
+ * The row's one-line summary, derived from a tool result (the layer-1
  * `render` counterpart).
  *
  * The runtime used to publish `result.slice(0, 200)` as the tool.update

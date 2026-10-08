@@ -55,7 +55,7 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
         };
       },
       presentResult(_args, value) {
-        // dsh's SearchResultView shape for the transcript: the page carries
+        // The SearchResultView shape for the transcript: the page carries
         // `data` rows plus both cursors, so the card is the row count and
         // the paging truth (has previous / has next) as pills.
         let parsed: Record<string, unknown> | undefined;

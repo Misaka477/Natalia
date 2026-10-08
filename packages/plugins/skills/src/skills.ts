@@ -386,7 +386,7 @@ export function createSkillLoadTool(options: {
         const name = (args as { name?: unknown }).name;
         return {
           kind: "generic",
-          // dsh's spelling: the verb is in the title ("Load skill <name>").
+          // The spelling: the verb is in the title ("Load skill <name>").
           title: `Load skill ${typeof name === "string" ? name : ""}`.trim(),
           summary: "load",
         };

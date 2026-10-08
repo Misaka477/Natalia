@@ -12,7 +12,7 @@ import type {
  * declares its data relations and the runtime checks them live instead of
  * at CI time).
  *
- * The dsh invariants pattern (comparative study §4.2) on our strongest
+ * The invariants pattern (comparative study §4.2) on our strongest
  * carrier: the journal is the single source of truth, so an invariant is
  * a predicate over folded events — replays, unit-tests, and every finding
  * can point at the events it derives from (design law 4: a finding that
@@ -86,9 +86,9 @@ export type RuntimeDiagnosticsOptions = {
   sets: readonly InvariantSet[];
   /** Where findings are reported — the runtime's operation log. */
   log: DiagnosticsReporter;
-  /** The global switch (dsh): checks off, declarations stay. */
+  /** The global switch: checks off, declarations stay. */
   enabled?: boolean;
-  /** Owner allow/block lists (dsh's package filter): block wins. */
+  /** Owner allow/block lists (the package filter): block wins. */
   owners?: { allow?: readonly string[]; block?: readonly string[] };
   /**
    * The journal seam (Discovery D2): findings cross into the journal EDGE-
@@ -104,7 +104,7 @@ export interface RuntimeDiagnostics {
   tick(input: InvariantCheckInput): InvariantFinding[];
   /** The global switch. */
   setEnabled(enabled: boolean): void;
-  /** The dsh package filter: block beats allow; absent allow = all. */
+  /** The package filter: block beats allow; absent allow = all. */
   setOwnerFilter(filter: {
     allow?: readonly string[];
     block?: readonly string[];

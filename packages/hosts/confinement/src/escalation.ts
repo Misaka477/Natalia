@@ -3,8 +3,7 @@ import type { ConfinementMode } from "@anthelia/contracts";
 /**
  * The sandbox escalation vocabulary and choreography.
  *
- * Ported from dsh's `sandbox/src/escalation.ts`
- * (`devref/deepseek-harness/packages/sandbox/sandbox/src/escalation.ts`):
+ * Ported from the reference sandbox's `escalation.ts`:
  * the strictly-wider table, the argument-pairing validation, the
  * model-facing denial/hint markers, and the ordered fail-closed sequence
  * that resolves a `sandbox_permissions` request BEFORE anything executes.
@@ -15,7 +14,7 @@ import type { ConfinementMode } from "@anthelia/contracts";
  *
  * - The approval channel here is a TURN/SESSION-routed closure the runtime
  *   hands the tool (it owns tool/call/turn identity), so the port drops
- *   dsh's agent-routing requirement — same trick dsh itself uses to keep
+ *   the agent-routing requirement — the same trick the reference uses to keep
  *   this module free of its approval/agent packages.
  * - The unknown-outcome branch throws a named error instead of an
  *   exhaustive-assert helper: our unknown-fallback discipline (interface
@@ -79,7 +78,7 @@ export function confinementContextLine(mode: ConfinementMode): string {
   );
 }
 
-/** The model-facing denial marker (verbatim dsh vocabulary). */
+/** The model-facing denial marker (the reference vocabulary). */
 export function sandboxDenialMarker(mode: ConfinementMode): string {
   return `[sandbox: file access denied under ${mode} mode]`;
 }

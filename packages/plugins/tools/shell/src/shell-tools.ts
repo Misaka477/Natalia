@@ -51,7 +51,7 @@ function runShellTool(): RuntimeTool {
         },
         // A required, human-facing one-liner the model writes per call. Its
         // whole job is the UI row: a collapsed tool row shows this sentence,
-        // never the raw command — the same contract dsh's bash/pwsh tools
+        // never the raw command — the same contract the bash/pwsh tools
         // declare. The examples are part of the schema so the shape is not
         // left to chance.
         description: {

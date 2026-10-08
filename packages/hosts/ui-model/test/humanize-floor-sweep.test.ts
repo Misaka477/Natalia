@@ -320,7 +320,7 @@ test("every tool.update publisher fills the structured slots (R0)", () => {
 });
 
 test("every model-facing tool projects a card (the 2026-10-07 completeness sweep)", () => {
-  // The user's report: "绝大多数的工具返回是 json 数据而不是按 dsh 那种
+  // The user's report: "绝大多数的工具返回是 json 数据而不是按可读的那种
   // 返回". The row's summary is now derived from the result, and the tools
   // that were answering with a bare envelope were wired to the generic card
   // factory one by one (context/work-graph/generation/record/goal/plan/

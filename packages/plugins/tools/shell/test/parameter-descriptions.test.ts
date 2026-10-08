@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * The parameter-description guard, over every model-facing tool the repo ships.
  *
- * The rule is dsh's, learned from its whole tool catalogue (33 files, 40+
+ * The rule, learned from a whole tool catalogue (33 files, 40+
  * tools): a tool's parameters carry a description on EVERY key, because the
  * description is what the model reads when it decides how to call. An
  * undescribed parameter is a coin flip: the model guesses its semantics from

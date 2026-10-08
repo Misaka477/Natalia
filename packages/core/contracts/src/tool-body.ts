@@ -1,7 +1,7 @@
 /**
  * The generic tool-result flattener (UI refactor R5.5).
  *
- * dsh's layer-1 contract: `execute` returns a typed value and
+ * The layer-1 contract: `execute` returns a typed value and
  * `output.render` turns it into the text the model reads, so a UI never
  * shows raw JSON. Our tools return JSON strings and a tool may declare no
  * presenter at all, so this is the floor under them: every JSON result is

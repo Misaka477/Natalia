@@ -189,7 +189,7 @@ test("read_file's card is composed from the FACTS, not a second parse (R2)", () 
   );
   // The WINDOW FACTS come from the meta slot — a presenter that parsed
   // `value` again would see POISON and lose them. The PAGE itself is the
-  // one thing that legitimately reads `value`: it is the text, and dsh keeps
+  // one thing that legitimately reads `value`: it is the text, and a read keeps
   // a read's content on the card too rather than duplicating it into meta.
   expect(card).toMatchObject({
     kind: "read",

@@ -408,7 +408,7 @@ export async function runExecuteStage(
       name: tool.name,
       callID: call.id,
       status: "succeeded",
-      // The row's one-line state, DERIVED from the result (dsh's layer-1
+      // The row's one-line state, DERIVED from the result (the layer-1
       // `render` contract): the tool's own projected summary when it
       // declared a presenter, otherwise a count/first-line over the result
       // — never `result.slice(0, 200)`, which printed raw JSON on the row

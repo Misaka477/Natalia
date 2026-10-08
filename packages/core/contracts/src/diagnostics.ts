@@ -22,7 +22,7 @@ export type InvariantCheckInput = {
 };
 
 export type Violation = {
-  /** Machine-readable code (dsh pattern): stable, greppable, per-invariant. */
+  /** Machine-readable code: stable, greppable, per-invariant. */
   code: string;
   detail: string;
   /**

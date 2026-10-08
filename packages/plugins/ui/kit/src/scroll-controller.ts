@@ -66,7 +66,7 @@ function attributeSelector(selector: string, value: string): string {
 }
 
 /**
- * DSH-aligned tail follower.
+ * The aligned tail follower.
  *
  * There is exactly one follow state. The controller never watches content
  * height; it only follows after explicit data updates, an explicit
@@ -172,7 +172,7 @@ export class TailScrollController {
       this.isPaused()
     )
       return;
-    // DSH aligns the tail synchronously in the layout effect that observes
+    // The reference aligns the tail synchronously in the layout effect that observes
     // the data/structure change. Do the same here so a large block inserted
     // above the viewport cannot race a scroll event into dropping follow
     // before the deferred rAF runs. The follow-up rAF still catches late

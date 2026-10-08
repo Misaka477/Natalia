@@ -311,7 +311,7 @@ export const modelCapabilitiesSchema = z.object({
    * OpenAI-compatible providers that expect reasoning to be carried in a
    * dedicated message field across turns. `false` disables the behavior even
    * for models whose id otherwise looks interleaved. An omitted value lets the
-   * adapter use its built-in DeepSeek default.
+   * adapter use its built-in provider default.
    */
   interleaved: interleavedReasoningCapabilitySchema.optional(),
 });

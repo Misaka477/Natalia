@@ -17,11 +17,11 @@ export {
 export type { ToolCard };
 
 /**
- * The row's leading label, dsh's `classifyTool` table.
+ * The row's leading label, the `classifyTool` table.
  *
  * The collapsed row reads `<Label> · <the sentence the model wrote>` — never
  * the raw command or path, which is what the EXPANDED card is for. Measured
- * against dsh's own rows (`Bash · Verify all three families in dist`): the
+ * against the reference rows (`Bash · Verify all three families in dist`): the
  * family name first, the human sentence second, the command nowhere in the
  * collapsed state.
  *
@@ -75,7 +75,7 @@ export function toolRowLabel(toolName: string): string {
 }
 
 /**
- * Relativize a path for display (presentation plan P3.3, dsh's
+ * Relativize a path for display (presentation plan P3.3, the
  * `relativizeToCwd` + `abbreviateHomePath`): a path under the session's
  * cwd becomes relative to it, one under the user's home folds to `~`, and
  * everything else passes through. A reader scanning a row wants the short

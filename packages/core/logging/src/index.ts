@@ -10,7 +10,7 @@
  *   const log = getLogger("runtime");
  *   log.error("turn failed: %s", error.message);
  *
- * The reference is the DeepSeek Harness logger (devref/deepseek-harness,
+ * The reference is the harness logger (the reference checkout,
  * vendor/cordis/src/logger.ts): severities error/info/warn/debug, printf-style
  * formatting, per-exporter per-name level tables, Error-chain unwrapping.
  *
@@ -177,7 +177,7 @@ export function formatMessage(
   let next = 0;
   let format = "%o";
   if (values[0] instanceof Error) {
-    // A leading Error IS the format (dsh's rule): it renders as its stack
+    // A leading Error IS the format: it renders as its stack
     // and cause chain, which is the difference between "rpc failed" and
     // "rpc failed / caused by: the body said unknown method".
     format = "%s";

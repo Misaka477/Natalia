@@ -314,7 +314,7 @@ test("apply_edits description is a structured model-facing batch editor", () => 
 });
 
 test("write_file projects a diff card whose lines are marked additions", () => {
-  // A create has no prior content (dsh's FileDiff uses oldText: null for that
+  // A create has no prior content (the FileDiff model uses oldText: null for that
   // case), so the card IS the new text — a UI renders it as the whole-file
   // change. Before this the family used a generic card, so a write looked like
   // any other tool call and no diff renderer ever saw it.
@@ -328,7 +328,7 @@ test("write_file projects a diff card whose lines are marked additions", () => {
     body: "+ x\n+ y",
     meta: [["lines", "2"]],
   });
-  // The RESULT state repeats the diff. dsh's diff model says it outright: a
+  // The RESULT state repeats the diff. The diff model says it outright: a
   // completed update replaces the pending card's content, so a result card
   // carrying the plain result string ERASES the diff. The measured screenshot
   // of a live run showed exactly that — `edited <path>` where the change

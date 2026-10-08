@@ -5,7 +5,7 @@ import { generateCompositionDts } from "../src/dts-codegen";
 import { compositionRowRegistrations } from "../src/rows";
 
 /**
- * spec §6.5's freshness gate (dsh's verify-cordis-catalog discipline):
+ * spec §6.5's freshness gate (a catalog-verification discipline):
  * composition.d.ts must equal a fresh generation from the row registry,
  * both prettier-normalized — the comparison doubles as a syntax check
  * (prettier parses the committed file or the read throws). A registry

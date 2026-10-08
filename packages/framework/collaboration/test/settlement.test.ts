@@ -12,7 +12,7 @@ import {
 /**
  * The settlement spine's pins (the Natalia settlement plan's block 1):
  * the notice is a durable fact FIRST, delivered second, and its failure
- * degrades — the dsh study's three disciplines, each observable here.
+ * degrades — the settlement study's three disciplines, each observable here.
  */
 
 const notice: SettlementNotice = {

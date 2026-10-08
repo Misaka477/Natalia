@@ -316,29 +316,6 @@ export type ToolBlockLike = {
  * (keyed checklist or the flatten) — again per call, never per recording.
  */
 export function toolCallRow(tool: ToolBlockLike): ToolCall {
-  if (tool.name === "ask_user") {
-    const raw = tool.argumentsRaw ?? "";
-    let ok = false;
-    try {
-      JSON.parse(raw);
-      ok = true;
-    } catch {}
-    console.log(
-      "[ALL-ASK]",
-      "len=",
-      raw.length,
-      "parseOk=",
-      ok,
-      "q=",
-      (() => {
-        try {
-          return String(JSON.parse(raw).question ?? "").slice(0, 20);
-        } catch {
-          return "PARSE-FAIL:" + raw.slice(0, 40);
-        }
-      })(),
-    );
-  }
   const card = toolCallCard(tool.metadata);
   const raw = tool.result ?? tool.summary;
   const args = parseArguments(tool.argumentsRaw);

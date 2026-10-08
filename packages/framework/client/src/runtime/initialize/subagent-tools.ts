@@ -23,7 +23,7 @@ import {
   REPEAT_MAX,
   REPEAT_WINDOW_MS,
 } from "../tool-execution/repeat-guard";
-import { toolResultSummary } from "@anthelia/tools";
+import { defaultToolCard, toolResultSummary } from "@anthelia/tools";
 
 export async function createSubagentTools(
   ctx: RuntimeContext,
@@ -202,7 +202,9 @@ export async function createSubagentTools(
         result,
         // The card and its structured facts ride the event as first-class
         // fields (UI refactor R0), the same slots the main path fills.
-        ...(projectedRender ? { card: projectedRender } : {}),
+        // R5.5: the default projection for a presenter-less tool, so the
+        // subagent channel reads exactly like the main one.
+        card: projectedRender ?? defaultToolCard(tool.name, result),
         ...(projectedMeta ? { meta: projectedMeta } : {}),
         endedAt: Date.now(),
       });

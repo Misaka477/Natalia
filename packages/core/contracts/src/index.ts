@@ -8,6 +8,7 @@ export * from "./interactive";
 export * from "./permission-families";
 export * from "./refusals";
 export * from "./schemas";
+export * from "./tool-body";
 export * from "./tool-summary";
 export * from "./token-usage";
 export * from "./workspace-observation";

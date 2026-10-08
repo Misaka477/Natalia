@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import {
   boundToolOutput,
+  defaultToolCard,
   genericToolCard,
   cleanupToolOutput,
   MAX_TOOL_OUTPUT_BYTES,

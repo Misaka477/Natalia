@@ -228,12 +228,16 @@ test("every transcript host routes its tool rows through the kit's toolCallRow",
       `${host} must not pre-flatten the result itself`,
     ).toBe(false);
   }
-  // The kit owns the single flatten point.
-  const kitSource = readFileSync(
-    join(repoRoot, "packages/plugins/ui/kit/src/message.ts"),
+  // R5.5: the flatten lives in the contracts leaf and the RUNTIME is the
+  // publisher of the floor — a presenter-less tool's default card carries
+  // it, so the reading is produced where the data is. The kit renders that
+  // body and parses nothing (R6 deletes its last flatten call).
+  const bodySource = readFileSync(
+    join(repoRoot, "packages/core/contracts/src/tool-body.ts"),
     "utf8",
   );
-  expect(kitSource.includes("humanizeToolResult")).toBe(true);
+  expect(bodySource).toContain("export function toolResultBody");
+  expect(bodySource).not.toContain("SPECIAL_CASES");
   // The runtime never publishes a raw prefix as a summary again.
   const runtimeSource = readFileSync(
     join(
@@ -282,8 +286,12 @@ test("every tool.update publisher fills the structured slots (R0)", () => {
     ["execute-run", runtimeSource],
     ["subagent-tools", subagentSource],
   ] as const) {
+    // R5.5: the card slot is ALWAYS filled — the tool's own card when it
+    // declared a presenter, the runtime's default projection otherwise.
     expect(
-      source.includes("...(projectedRender ? { card: projectedRender } : {})"),
+      source.includes(
+        "card: projectedRender ?? defaultToolCard(tool.name, result)",
+      ),
       `${where} must publish the result card on the event's card slot`,
     ).toBe(true);
     expect(

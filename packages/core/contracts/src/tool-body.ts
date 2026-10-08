@@ -1,18 +1,23 @@
 /**
- * The tool-result flattener, with the known-tool cases (presentation plan
- * P0.1, UI refactor R5.5).
+ * The generic tool-result flattener (UI refactor R5.5).
  *
- * The generic half now lives in the contracts leaf (`toolResultBody`),
- * because the runtime publishes it as a presenter-less tool's default card
- * body — one implementation, no drift. What stays HERE is the tool-name
- * special cases: the grouped forms the plan pinned for the tools that
- * answered with a JSON blob nobody could read. Every tool they cover now
- * declares its own presenter (the floor sweep's bucket is empty), so these
- * only ever fire for a card-less event — a journal written before the
- * presenter existed, which is exactly the replay case they were written for.
+ * dsh's layer-1 contract: `execute` returns a typed value and
+ * `output.render` turns it into the text the model reads, so a UI never
+ * shows raw JSON. Our tools return JSON strings and a tool may declare no
+ * presenter at all, so this is the floor under them: every JSON result is
+ * flattened into `key: value` lines a human can read, nested values recurse
+ * to a bounded depth, arrays become one line per element, and non-JSON text
+ * passes through untouched.
+ *
+ * It lives HERE, in the contracts leaf, because both sides need the same
+ * reading: the runtime publishes it as a presenter-less tool's default card
+ * body, and a client renders that body verbatim. One implementation, no
+ * drift. The TOOL-NAME special cases the old flattener carried are NOT
+ * here: every tool they covered now declares its own presenter (the floor
+ * sweep's bucket is empty), and a contract must not know tool names.
  */
-import { toolResultBody } from "@anthelia/contracts";
 
+/** Maximum nesting depth the generic flatten renders before eliding. */
 const MAX_DEPTH = 4;
 
 /** Maximum line width before a line is cut (the FTS-free preview bound). */
@@ -216,32 +221,21 @@ function questionAnswer(value: unknown): string | undefined {
 }
 
 /** The plan's pinned special cases, by tool name. */
-const SPECIAL_CASES: Record<string, (value: unknown) => string | undefined> = {
-  session_history: sessionHistory,
-  collab_inbox: messageList,
-  mailbox_status: messageList,
-  process_audit: processTable,
-  background_audit: processTable,
-  ask_user: questionAnswer,
-};
-
 /**
  * Flattens a tool's result text into something a human reads.
  *
  * Non-JSON text returns unchanged. A JSON object becomes `key: value`
  * lines (nested values recurse, depth-bounded); a JSON array becomes one
- * line per element (objects as `a=1, b=2`, long lines clipped). The
- * pinned tool names get their grouped form; everything else the generic
- * flatten.
+ * line per element (objects as `a=1, b=2`, long lines clipped).
  */
-export function humanizeToolResult(value: string, toolName: string): string {
+export function toolResultBody(value: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value) as unknown;
   } catch {
     return value;
   }
-  const special = SPECIAL_CASES[toolName]?.(parsed);
-  if (special !== undefined) return special;
-  return toolResultBody(value);
+  if (Array.isArray(parsed)) return flattenArray(parsed);
+  if (isPlainObject(parsed)) return flattenObject(parsed);
+  return flattenValue(parsed, 0);
 }

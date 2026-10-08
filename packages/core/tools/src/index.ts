@@ -190,6 +190,7 @@ export {
   type ProjectedToolSummary,
 } from "@anthelia/contracts";
 export { genericToolCard } from "./card";
+export { defaultToolCard } from "./default-card";
 export type { GenericToolCardInput } from "./card";
 
 export function createToolRegistry(tools: RuntimeTool[]): ToolRegistry {

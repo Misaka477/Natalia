@@ -10,6 +10,7 @@
  */
 import type { ProviderToolCall } from "@anthelia/runtime";
 import {
+  defaultToolCard,
   requiresForcedGitApprovalAst,
   timeoutSecOr,
   toolResultSummary,
@@ -422,7 +423,12 @@ export async function runExecuteStage(
       // `metadata.render` blob is no longer published here: the card IS
       // the event's own field now, and an event recorded before that slot
       // still renders because a client decodes the blob it did carry.
-      ...(projectedRender ? { card: projectedRender } : {}),
+      //
+      // R5.5: a tool that declared no presenter still gets a card — the
+      // runtime's default projection (name, row line, the shared flatten),
+      // so a third-party or self-generated tool reads as a card rather
+      // than a raw result string, and no client ever parses JSON.
+      card: projectedRender ?? defaultToolCard(tool.name, result),
       ...(projectedMeta ? { meta: projectedMeta } : {}),
       metadata: {
         ...(bounded.outputPath

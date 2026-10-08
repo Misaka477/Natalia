@@ -24,7 +24,13 @@ import { CapabilityHost } from "@anthelia/capability";
 
 async function waitForWorker(
   predicate: () => boolean,
-  timeoutMs = 5000,
+  // 30s, not 5s: the wait is a runtime condition across the worker channel,
+  // and 5s was measured on THIS machine where the file runs in under a
+  // second. The CI runner is several times slower under the concurrent
+  // suite — the same lottery the goal-attach test documented — and this
+  // budget cost a red client-rest-2 run. The per-test cap and the job
+  // timeout still bound a genuine hang.
+  timeoutMs = 30_000,
   label = "condition",
 ) {
   for (let elapsed = 0; elapsed < timeoutMs; elapsed += 10) {
@@ -66,7 +72,7 @@ test("worker transport: submit after cancel starts the next turn instead of queu
   client.start((event) => events.push(event));
 
   await client.submit("first");
-  await waitForWorker(() => requests.includes("first"), 5000, "first turn");
+  await waitForWorker(() => requests.includes("first"), 30_000, "first turn");
   client.cancel("stop");
   while (!release) await Bun.sleep(1);
   release?.();

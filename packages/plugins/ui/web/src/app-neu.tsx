@@ -34,7 +34,6 @@ import {
 } from "@natalia/ui-kit";
 import type { UiPanelDefinition } from "@natalia/ui-host";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
-import { toolResultSummary } from "@anthelia/tools";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { QueueDock } from "./components/QueueDock";

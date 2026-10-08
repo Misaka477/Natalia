@@ -13,7 +13,6 @@
     "@anthelia/diff": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
     "@anthelia/plugin": "workspace:*",
-    "@anthelia/tools": "workspace:*",
     "@natalia/governance-ledger": "workspace:*",
     "@natalia/ui-host": "workspace:*",
     "@natalia/ui-kit": "workspace:*",

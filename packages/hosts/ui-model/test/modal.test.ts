@@ -182,3 +182,40 @@ test("normalizePendingItems carries a generic interactive kind through", () => {
     }),
   ]);
 });
+
+test("a question's field carries the question, not its options (S7)", () => {
+  // The 2026-10-08 report: the pending panel showed every option twice —
+  // once as bullet text inside the question field, once as the clickable
+  // control below it. The field is the question; the control is the choice.
+  const item = normalizePendingItems({
+    questions: [
+      {
+        id: "turn_a:call_2:question",
+        title: "Pick one",
+        questions: [
+          {
+            id: "q0",
+            header: "Q",
+            question: "Which?",
+            options: [{ label: "a", description: "the first" }, { label: "b" }],
+          },
+        ],
+      },
+    ],
+  })[0] as PendingItem;
+  const fields = questionPresenter.fields(item);
+  expect(fields).toEqual([{ label: "Q", value: "Which?" }]);
+  // The options — WITH their descriptions — still reach the reader, on the
+  // control that is clicked.
+  const controls = questionPresenter.controls(item);
+  expect(controls).toEqual([
+    {
+      kind: "options",
+      label: "Q",
+      field: "selections",
+      index: 0,
+      multiple: undefined,
+      options: [{ label: "a", description: "the first" }, { label: "b" }],
+    },
+  ]);
+});

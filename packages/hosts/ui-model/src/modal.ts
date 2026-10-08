@@ -276,17 +276,15 @@ export type QuestionDraft = {
 export const questionPresenter: PendingPresenter<QuestionResponse> = {
   kind: "question",
   label: (item) => item.title,
+  // The question's own text, and nothing else. The options are the CONTROL
+  // below (clickable, with their descriptions) — repeating them here as
+  // bullet text showed every option twice in the pending panel, which is
+  // exactly what the 2026-10-08 report ruled on. The controls are the
+  // interactive half; the field is the question.
   fields: (item) =>
     normalizeQuestionRequest(item).questions.map((question) => ({
       label: question.header || "问题",
-      value: [
-        question.question,
-        ...question.options.map((option) =>
-          option.description
-            ? `• ${option.label} — ${option.description}`
-            : `• ${option.label}`,
-        ),
-      ].join("\n"),
+      value: question.question,
     })),
   controls: (item) =>
     normalizeQuestionRequest(item).questions.flatMap((question, index) => {

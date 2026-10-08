@@ -87,9 +87,14 @@ function globTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        // dsh's spelling: the verb and the scope in the title, so the row
+        // reads "Glob *.ts in src" rather than a bare pattern.
+        const parsed = requireObject(args);
+        const pattern = String(parsed.pattern ?? "");
+        const where = optionalString(parsed.path);
         return {
           kind: "search",
-          title: requireObject(args).pattern as string,
+          title: `Glob ${pattern}${where ? ` in ${where}` : ""}`,
           summary: "glob",
         };
       },
@@ -243,9 +248,13 @@ function grepTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
+        const parsed = requireObject(args);
+        const pattern = String(parsed.pattern ?? "");
+        const where = optionalString(parsed.path);
+        const include = optionalString(parsed.include);
         return {
           kind: "search",
-          title: requireObject(args).pattern as string,
+          title: `Grep ${pattern}${where ? ` in ${where}` : ""}${include ? ` (${include})` : ""}`,
           summary: "grep",
         };
       },

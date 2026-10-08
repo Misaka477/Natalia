@@ -139,9 +139,12 @@ export function parseAskTranscript(body: string): QATranscriptLine[] {
         ? ("question" as const)
         : line.startsWith("Options:")
           ? ("choices" as const)
-          : line.startsWith("A:")
-            ? ("answer" as const)
-            : ("plain" as const),
+          : // An indented choice line belongs to the choices block.
+            line.startsWith("  · ")
+            ? ("choices" as const)
+            : line.startsWith("A:")
+              ? ("answer" as const)
+              : ("plain" as const),
     }));
 }
 

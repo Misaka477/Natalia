@@ -92,9 +92,15 @@ function askUserTool(): RuntimeTool {
         } catch {
           // The envelope is the fallback text.
         }
+        // dsh's AskQuestionCard shape: the question on its own line, each
+        // choice on ITS OWN line (the user's 2026-10-07 report — the old
+        // `Options: a · b · c` spelling crammed five choices into one
+        // unreadable line), and the answer last.
         const transcript = [
           `Q: ${String(parsed.question ?? "")}`,
-          ...(options.length ? [`Options: ${options.join(" · ")}`] : []),
+          ...(options.length
+            ? ["Options:", ...options.map((option) => `  · ${option}`)]
+            : []),
           answers.length
             ? `A: ${answers.join("; ")}`
             : "A: (no answer recorded)",

@@ -44,7 +44,7 @@ function flattenValue(value: unknown, depth: number): string {
   if (scalar !== undefined) return scalar;
   if (depth >= MAX_DEPTH) return Array.isArray(value) ? "[…]" : "{…}";
   if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
+    if (value.length === 0) return "(none)";
     return `[${value.map((item) => flattenValue(item, depth + 1)).join(", ")}]`;
   }
   if (isPlainObject(value)) {
@@ -57,10 +57,34 @@ function flattenValue(value: unknown, depth: number): string {
   return String(value);
 }
 
-/** The generic object flatten: one `key: value` line per top-level key. */
+/** One record as an inline `a=1, b=2` line (the per-element spelling). */
+function recordLine(item: unknown, depth: number): string {
+  if (isPlainObject(item))
+    return Object.entries(item)
+      .map(([key, nested]) => `${key}=${flattenValue(nested, depth + 1)}`)
+      .join(", ");
+  return flattenValue(item, depth);
+}
+
+/**
+ * The generic object flatten: one `key: value` line per top-level key.
+ *
+ * An array of records under a key renders ONE ELEMENT PER LINE, indented —
+ * the shape every envelope tool returns (`data`, `items`, `nodes`,
+ * `candidates`, `messages`). The old spelling inlined the whole array onto
+ * the key's line (`data: [{a=1}, {b=2}]`), which is a JSON dump with the
+ * punctuation swapped — the user's 2026-10-07 verdict: "拍扁就以为不是
+ * json 是吧". A reader now scans one record per line.
+ */
 function flattenObject(value: Record<string, unknown>, depth = 0): string {
   return Object.entries(value)
-    .map(([key, item]) => `${key}: ${flattenValue(item, depth + 1)}`)
+    .map(([key, item]) => {
+      if (Array.isArray(item) && item.some(isPlainObject))
+        return `${key}:\n${item
+          .map((element) => `  · ${recordLine(element, depth)}`)
+          .join("\n")}`;
+      return `${key}: ${flattenValue(item, depth + 1)}`;
+    })
     .join("\n");
 }
 

@@ -51,3 +51,25 @@ test("ask_user delegates to the runtime question channel", async () => {
   );
   expect(result).toContain("yes");
 });
+
+test("the Q&A transcript lists each choice on its own line (user 2026-10-07)", () => {
+  // The screenshot: five choices crammed into one `Options: a · b · c` line
+  // — nobody can read that. dsh's AskQuestionCard lists them; the card body
+  // now does too, one per line, with the answer last.
+  const tool = askToolFamily().tools.find((t) => t.name === "ask_user")!;
+  const card = tool.output!.presentResult!(
+    {
+      question: "请选择允许范围",
+      options: ["第一个选项", "第二个选项", "第三个选项"],
+    },
+    JSON.stringify({ answers: [["第二个选项"]] }),
+  );
+  const body = card?.body ?? "";
+  const lines = body.split("\n");
+  expect(lines[0]).toBe("Q: 请选择允许范围");
+  expect(lines[1]).toBe("Options:");
+  expect(lines[2]).toBe("  · 第一个选项");
+  expect(lines[3]).toBe("  · 第二个选项");
+  expect(lines[4]).toBe("  · 第三个选项");
+  expect(lines[5]).toBe("A: 第二个选项");
+});

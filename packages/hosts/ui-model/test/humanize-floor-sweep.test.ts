@@ -116,6 +116,33 @@ test("every presenter-less JSON tool's result is flattened, never raw", async ()
     const view = resultView(SAMPLE, 8, 1200, { name: tool.tool });
     expect(view.preview, `${tool.file}: ${tool.tool}`).not.toBe(SAMPLE);
     expect(view.preview).toContain("id: probe_1");
+    // And it is a READING, not a JSON dump with the punctuation swapped:
+    // no raw-document markers survive anywhere in the preview (the user's
+    // 2026-10-07 verdict — "拍扁就以为不是 json 是吧").
+    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('{"');
+    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('":');
+    expect(view.preview, `${tool.file}: ${tool.tool}`).not.toContain('",');
+  }
+  // The same shape law over EVERY envelope the catalogue can answer with,
+  // not only the pinned sample: an array of records renders one per line.
+  const envelope = JSON.stringify({
+    data: [
+      { id: "a", kind: "x" },
+      { id: "b", kind: "y" },
+    ],
+    total: 2,
+  });
+  for (const tool of presenterlessJSON) {
+    const rendered = humanizeToolResult(envelope, tool.tool);
+    const lines = rendered.split("\n");
+    expect(lines[0], `${tool.tool}`).toBe("data:");
+    expect(lines[1]?.startsWith("  · "), `${tool.tool}: ${lines[1]}`).toBe(
+      true,
+    );
+    expect(lines[2]?.startsWith("  · "), `${tool.tool}: ${lines[2]}`).toBe(
+      true,
+    );
+    expect(lines).toContain("total: 2");
   }
 });
 
@@ -233,4 +260,34 @@ test("every model-facing tool projects a card (the 2026-10-07 completeness sweep
     unwired,
     `model-facing tools without a presenter: ${unwired.join(", ")}`,
   ).toEqual([]);
+});
+
+test("an envelope's records render one per line, never inlined (user 2026-10-07)", () => {
+  // The four tools from the user's screenshot — context_search,
+  // work_graph_query, list_generation_candidates, context_pack — all
+  // answer with `{ <array>: [...], ... }`, and the old flatten inlined the
+  // array onto the key's line: `data: [{a=1}, {b=2}]` — a JSON dump with
+  // the punctuation swapped. A reader scans one record per line now.
+  const search = humanizeToolResult(
+    JSON.stringify({
+      data: [
+        { id: "ses:1", recordType: "evidence", score: 0.34 },
+        { id: "ses:2", recordType: "decision", score: 0.31 },
+      ],
+      total: 3,
+    }),
+    "context_search",
+  );
+  const lines = search.split("\n");
+  expect(lines[0]).toBe("data:");
+  expect(lines[1]).toBe("  · id=ses:1, recordType=evidence, score=0.34");
+  expect(lines[2]).toBe("  · id=ses:2, recordType=decision, score=0.31");
+  expect(lines[3]).toBe("total: 3");
+  // An empty envelope reads as an answer, not as `[]`.
+  expect(
+    humanizeToolResult(
+      JSON.stringify({ candidates: [] }),
+      "list_generation_candidates",
+    ),
+  ).toBe("candidates: (none)");
 });

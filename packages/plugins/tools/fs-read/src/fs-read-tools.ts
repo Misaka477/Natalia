@@ -99,8 +99,21 @@ type ReadWindowFacts = {
   offset?: number;
   totalLines?: number;
   truncated?: boolean;
-  lines?: number;
+  /** The window's own lines, each keeping the file's line number. */
+  lines?: Array<{ number: number; text: string }>;
 };
+
+/** The window's numbered lines, from the page text and the read's offset. */
+function numberedLines(
+  content: string,
+  offset: number | undefined,
+): Array<{ number: number; text: string }> {
+  const start = offset ?? 1;
+  return content.split("\n").map((text, index) => ({
+    number: start + index,
+    text,
+  }));
+}
 
 /** The window facts, from the arguments and the result envelope. */
 function readWindowFacts(args: unknown, value: string): ReadWindowFacts {
@@ -115,7 +128,7 @@ function readWindowFacts(args: unknown, value: string): ReadWindowFacts {
     facts.totalLines = parsed.totalLines;
   if (parsed?.truncated === true) facts.truncated = true;
   if (typeof parsed?.content === "string")
-    facts.lines = parsed.content.split("\n").length;
+    facts.lines = numberedLines(parsed.content, offset);
   return facts;
 }
 
@@ -127,7 +140,8 @@ function readWindowFromMeta(meta: Record<string, unknown>): ReadWindowFacts {
   if (typeof meta.offset === "number") facts.offset = meta.offset;
   if (typeof meta.totalLines === "number") facts.totalLines = meta.totalLines;
   if (meta.truncated === true) facts.truncated = true;
-  if (typeof meta.lines === "number") facts.lines = meta.lines;
+  if (Array.isArray(meta.lines))
+    facts.lines = meta.lines as ReadWindowFacts["lines"];
   return facts;
 }
 
@@ -183,7 +197,8 @@ function readFileOutput(): ToolOutputDefinition {
       const content =
         typeof parsed?.content === "string" ? parsed.content : value;
       const { path, offset, totalLines, truncated } = facts;
-      const pageLines = facts.lines ?? content.split("\n").length;
+      const numbered = facts.lines ?? numberedLines(content, offset);
+      const pageLines = numbered.length;
       // The window, named from the SAME numbers the footer uses, so the card
       // and the text can never disagree: `offset` is where this page starts
       // (an argument, available while the call runs) and the page's own line
@@ -206,7 +221,9 @@ function readFileOutput(): ToolOutputDefinition {
         content,
         ...(offset === undefined ? {} : { offset }),
         ...(totalLines === undefined ? {} : { totalLines }),
-        ...(totalLines === undefined ? {} : { lines: pageLines }),
+        // The window's own lines, numbered by the file — the shape a client
+        // renders a gutter from (the reference implementation's read card).
+        lines: numbered,
         ...(truncated ? { truncated } : {}),
         lang: langOf(path),
         meta: [

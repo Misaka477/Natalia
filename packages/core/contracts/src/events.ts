@@ -448,8 +448,12 @@ export type ToolCard =
       path?: string;
       /** First line shown (1-based). */
       offset?: number;
-      /** Lines shown. */
-      lines?: number;
+      /**
+       * The window's own lines, each keeping the FILE's line number — the
+       * reference implementation's shape, so a client renders a numbered
+       * gutter (and can highlight by `lang`) instead of counting rows.
+       */
+      lines?: Array<{ number: number; text: string }>;
       /** Lines the file has. */
       totalLines?: number;
       /** Language hint for the content renderer. */

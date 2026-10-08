@@ -142,8 +142,10 @@ test("read_file projects a read card from its output definition", () => {
     // `content` field — a client renders it verbatim (a JSON file is a JSON
     // file, not `key: value` lines), so there is no body to read it from.
     content: "export const x = 1;",
+    // S3: the window's lines keep the FILE's line numbers, so a client
+    // renders a gutter rather than counting rows.
+    lines: [{ number: 1, text: "export const x = 1;" }],
     totalLines: 1,
-    lines: 1,
     // The same two numbers the footer's text carries, as card facets, so a UI
     // without a read-specific card still shows them.
     meta: [["totalLines", "1"]],

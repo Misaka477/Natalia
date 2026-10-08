@@ -104,19 +104,36 @@ test("a diff's marks become color; the other kinds draw their text plain", () =>
 test("a read's page is the file's own lines, verbatim", () => {
   // A JSON file read as content is a JSON file — the flatten's `key: value`
   // lines were the 2026-10-07 verdict, and this is where they end.
-  const page = '{\n  "name": "natalia"\n}';
   const card: ToolCard = {
     kind: "read",
     title: "package.json",
-    summary: "3 lines",
-    content: page,
+    summary: "lines 1-3 of 3",
+    content: '{\n  "name": "natalia"\n}',
     totalLines: 3,
-    lines: 3,
+    // The reference implementation's shape: the window's lines each keep
+    // the FILE's line number, and the renderer draws them as a gutter.
+    lines: [
+      { number: 1, text: "{" },
+      { number: 2, text: '  "name": "natalia"' },
+      { number: 3, text: "}" },
+    ],
   };
   expect(CARD_RENDERERS.read(card, toolCall())).toEqual([
-    { line: "{", kind: "plain" },
-    { line: '  "name": "natalia"', kind: "plain" },
-    { line: "}", kind: "plain" },
+    { line: "1: {", kind: "plain" },
+    { line: '2:   "name": "natalia"', kind: "plain" },
+    { line: "3: }", kind: "plain" },
+  ]);
+  // A card without the numbered lines (an older event, a flat content)
+  // still renders its page — the gutter is an upgrade, not a gate.
+  const flat: ToolCard = {
+    kind: "read",
+    title: "package.json",
+    summary: "3 lines",
+    content: "a\nb",
+  };
+  expect(CARD_RENDERERS.read(flat, toolCall())).toEqual([
+    { line: "a", kind: "plain" },
+    { line: "b", kind: "plain" },
   ]);
 });
 

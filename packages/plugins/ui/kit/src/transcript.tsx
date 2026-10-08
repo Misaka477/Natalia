@@ -1327,10 +1327,18 @@ function groupedMatchLines(
  * dispatch does not change, only what sits behind it.
  */
 export const CARD_RENDERERS: CardRendererMap = {
-  // The page is the file's own lines: the structured `content` field (R2),
-  // the migration body before that, the raw result for a card with neither.
+  // The page is the file's own lines. The card carries them NUMBERED (the
+  // reference implementation's shape): a gutter with the file's own line
+  // numbers, which is what makes a window readable — `lines 40-55 of 300`
+  // means nothing without the numbers. The flat `content` (and the older
+  // body/result fallbacks) render as a plain block.
   read: (card, toolCall) =>
-    plainCardLines(card.content ?? card.body ?? toolCall.output ?? ""),
+    card.lines
+      ? card.lines.map((line) => ({
+          line: `${line.number}: ${line.text}`,
+          kind: "plain" as const,
+        }))
+      : plainCardLines(card.content ?? card.body ?? toolCall.output ?? ""),
   diff: (card, toolCall) => diffCardLines(card.body ?? toolCall.output ?? ""),
   // A terminal's own text: the structured `output` field once the family
   // projects one (R1), the migration body before that, the raw result for a

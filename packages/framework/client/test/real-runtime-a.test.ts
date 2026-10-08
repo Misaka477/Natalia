@@ -695,7 +695,12 @@ test("a tool with an output definition projects its result into the event", asyn
     // numbers as the text.
     content: "projected content\n\n(End of file - total 1 lines)",
     totalLines: 1,
-    lines: 3,
+    // S3: the window's lines keep the file's own line numbers.
+    lines: [
+      { number: 1, text: "projected content" },
+      { number: 2, text: "" },
+      { number: 3, text: "(End of file - total 1 lines)" },
+    ],
     lang: "txt",
     meta: [["totalLines", "1"]],
     summary: "1 lines",

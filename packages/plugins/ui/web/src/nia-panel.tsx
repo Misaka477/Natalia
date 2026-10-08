@@ -71,7 +71,15 @@ export function NiaPanel(props: {
         if (tool) {
           return {
             id: msg.id,
-            signature: [tool.name, tool.result, tool.summary, tool.status],
+            signature: [
+              tool.name,
+              tool.result,
+              tool.summary,
+              tool.status,
+              // The arguments stream in fragments; a row cached mid-stream
+              // would pin a ToolCall without parsed arguments forever.
+              tool.argumentsRaw,
+            ],
             create: () => ({
               id: msg.id,
               role: "assistant",

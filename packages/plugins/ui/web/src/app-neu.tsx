@@ -2578,6 +2578,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               tool.result,
               tool.summary,
               tool.status,
+              // The arguments stream in fragments, so a row first cached
+              // mid-stream would pin a ToolCall with no parsed arguments
+              // forever (the signature never changed) — the keyed cards
+              // derive from them, so they are part of the row's identity.
+              tool.argumentsRaw,
               status,
               Boolean(active),
               isLast,
@@ -2708,7 +2713,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         if (tool) {
           return {
             id: msg.id,
-            signature: [tool.name, tool.result, tool.summary, tool.status],
+            signature: [
+              tool.name,
+              tool.result,
+              tool.summary,
+              tool.status,
+              // The arguments stream in fragments; a row cached mid-stream
+              // would pin a ToolCall without parsed arguments forever.
+              tool.argumentsRaw,
+            ],
             create: () => ({
               id: msg.id,
               role: "assistant",

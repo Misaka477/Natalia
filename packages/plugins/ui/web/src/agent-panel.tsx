@@ -253,7 +253,16 @@ export function AgentPanel(props: {
             const status = (tool.status as Message["status"]) ?? "completed";
             return {
               id: rowID,
-              signature: [id, tool.name, tool.result, tool.summary, status],
+              signature: [
+                id,
+                tool.name,
+                tool.result,
+                tool.summary,
+                status,
+                // The arguments stream in fragments; a row cached mid-stream
+                // would pin a ToolCall without parsed arguments forever.
+                tool.argumentsRaw,
+              ],
               create: () =>
                 ({
                   id: rowID,

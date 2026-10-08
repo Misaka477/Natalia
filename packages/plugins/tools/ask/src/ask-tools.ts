@@ -96,6 +96,13 @@ function askUserTool(): RuntimeTool {
         // choice on ITS OWN line (the user's 2026-10-07 report — the old
         // `Options: a · b · c` spelling crammed five choices into one
         // unreadable line), and the answer last.
+        // dsh's shape, composed HERE — the presenter already holds the
+        // call's arguments (the question and the choices) and the result
+        // (the answers), so the card is complete without the UI deriving
+        // anything. The previous design pushed that composition into the
+        // kit's keyed-card layer, which had to re-plumb the arguments
+        // through the row model — the chain the user watched fail for a
+        // day. One layer, one owner.
         const transcript = [
           `Q: ${String(parsed.question ?? "")}`,
           ...(options.length
@@ -109,7 +116,7 @@ function askUserTool(): RuntimeTool {
           kind: "generic",
           title: parsed.question as string,
           summary: "answered",
-          body: answers.length ? transcript : value,
+          body: transcript,
         };
       },
     },

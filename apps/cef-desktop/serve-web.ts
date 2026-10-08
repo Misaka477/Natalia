@@ -6,6 +6,28 @@ const port = Number(process.env.NATALIA_WEB_PORT ?? 5178);
 
 const indexFile = resolve(root, "index.html");
 
+/**
+ * The cache policy for a served path.
+ *
+ * The 2026-10-08 stale-bundle hunt's root cause: this server sent
+ * `cache-control: no-cache` WITHOUT a validator (no ETag, no
+ * Last-Modified). Per HTTP, `no-cache` means "revalidate before reuse" —
+ * with nothing to revalidate AGAINST, Chromium kept serving its disk-cached
+ * copy, so every app restart and every reload rendered the PREVIOUS build
+ * (the user's "你根本没改" across a day of fixes, and a one-step lag on
+ * every reload). The policy is now the standard SPA one:
+ *
+ *   - the HTML entry is `no-store`: every load fetches the current
+ *     index.html, which names the current content-hashed bundle;
+ *   - the hashed assets are `immutable`: a new build is a new URL, so a
+ *     long cache is both safe and instant on the next launch.
+ */
+function cacheControlFor(pathname: string): string {
+  if (pathname.endsWith(".html") || !pathname.includes("."))
+    return "no-store, must-revalidate";
+  return "public, max-age=31536000, immutable";
+}
+
 function contentTypeFor(pathname: string): string {
   if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
   if (pathname.endsWith(".js")) return "application/javascript; charset=utf-8";
@@ -46,7 +68,7 @@ serve({
       return new Response(body, {
         headers: {
           "access-control-allow-origin": "*",
-          "cache-control": "no-cache",
+          "cache-control": cacheControlFor(pathname),
           "content-type": contentTypeFor(pathname),
         },
       });
@@ -61,7 +83,7 @@ serve({
         headers: {
           "access-control-allow-origin": "*",
           "content-type": "text/html; charset=utf-8",
-          "cache-control": "no-cache",
+          "cache-control": "no-store, must-revalidate",
         },
       });
     }

@@ -16,7 +16,10 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chatToolCard } from "../src/chat-summary";
-import { planDocReadOutput as planDocReadOutputForTest } from "../src/chat-tools";
+import {
+  planDocReadOutput as planDocReadOutputForTest,
+  planWriteCard as planWriteCardForTest,
+} from "../src/chat-tools";
 import { collabOutput } from "../src/collab-presenters";
 
 const source = readFileSync(
@@ -208,4 +211,28 @@ test("plan_doc_read's card carries the document, not the envelope (S3)", () => {
     "plan document not found: x.md",
   );
   expect(refused).toMatchObject({ kind: "read", title: "plan" });
+});
+
+test("plan_doc_write's card reads what changed (S4)", () => {
+  // A plan write's answer is WHAT changed — plan identity, path, revision —
+  // one line per fact, not the raw envelope.
+  const output = planWriteCardForTest({ callSummary: "write" });
+  const value = JSON.stringify({
+    marked: true,
+    planID: "plan_neon-plan_mlt5srlp",
+  });
+  const card = output.presentResult!({ path: "neon-plan.md" }, value);
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "neon-plan.md",
+    summary: "plan · plan_neon-plan_mlt5srlp",
+    body: "plan · plan_neon-plan_mlt5srlp",
+    meta: [["marked", "true"]],
+  });
+  // A prose refusal (a write that never happened) reads as the call verb.
+  const refused = output.presentResult!(
+    { path: "x.md" },
+    "plan_doc_write requires path and content",
+  );
+  expect(refused).toMatchObject({ kind: "generic", summary: "write" });
 });

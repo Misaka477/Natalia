@@ -177,6 +177,106 @@ export async function mailboxMessagesForStatus(
 }
 
 /**
+ * The plan family's write card (S4).
+ *
+ * A plan write's answer is WHAT changed: the plan's identity, the document
+ * path, the revision it reached, the action taken. The generic card showed
+ * the raw envelope; this card reads it.
+ */
+export function planWriteCard(input: {
+  callSummary: string;
+  titleKey?: string;
+}): ToolOutputDefinition {
+  const facts = (value: string): Record<string, unknown> => {
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+        ? (decoded as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  };
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      const path = typeof parsed.path === "string" ? parsed.path : undefined;
+      const title =
+        typeof key === "string" && key
+          ? key
+          : typeof path === "string" && path
+            ? path
+            : "plan";
+      return {
+        kind: "generic",
+        title,
+        summary: input.callSummary,
+      };
+    },
+    presentationMeta(_args, value) {
+      const record = facts(value);
+      const meta: Record<string, unknown> = {};
+      for (const key of [
+        "planID",
+        "documentPath",
+        "action",
+        "status",
+        "revision",
+        "marked",
+        "deleted",
+        "ok",
+      ])
+        if (record[key] !== undefined) meta[key] = record[key];
+      return meta;
+    },
+    presentResult(args, value, meta) {
+      const record = facts(value);
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      const path = typeof parsed.path === "string" ? parsed.path : undefined;
+      const merged: Record<string, unknown> = { ...record, ...(meta ?? {}) };
+      const lines: string[] = [];
+      if (typeof merged.planID === "string")
+        lines.push(`plan · ${merged.planID}`);
+      if (typeof merged.documentPath === "string")
+        lines.push(`path · ${merged.documentPath}`);
+      if (typeof merged.action === "string")
+        lines.push(`action · ${merged.action}`);
+      if (typeof merged.status === "string")
+        lines.push(`status · ${merged.status}`);
+      if (typeof merged.revision === "number")
+        lines.push(`revision · ${merged.revision}`);
+      const facets: Array<[string, string]> = [];
+      if (typeof merged.ok === "boolean")
+        facets.push(["ok", String(merged.ok)]);
+      if (typeof merged.marked === "boolean")
+        facets.push(["marked", String(merged.marked)]);
+      const title =
+        typeof key === "string" && key
+          ? key
+          : typeof path === "string" && path
+            ? path
+            : "plan";
+      return {
+        kind: "generic",
+        title,
+        summary: lines[0] ?? input.callSummary,
+        ...(lines.length ? { body: lines.join("\n") } : {}),
+        ...(facets.length ? { meta: facets } : {}),
+      };
+    },
+  };
+}
+
+/**
  * The plan-document read card (S3).
  *
  * A plan document is a DOCUMENT, not an envelope: the card carries the
@@ -281,13 +381,7 @@ export function planDocWriteTool(
       required: ["path", "content"],
       additionalProperties: false,
     },
-    output: collabOutput({
-      callTitle: "plan",
-      callSummary: "write",
-      resultTitle: "plan",
-      resultSummary: "written",
-      meta: [["planID", "planID"]],
-    }),
+    output: planWriteCard({ callSummary: "write", titleKey: "path" }),
     async execute(parsed) {
       const args = parsed as {
         path?: string;

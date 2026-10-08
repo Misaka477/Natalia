@@ -219,15 +219,21 @@ test("pause disarms — the running goal round finishes and no next one starts (
   };
 
   const events: RuntimeEvent[] = [];
-  // 20s, the runtime-condition budget the real-runtime harness documents:
+  // 45s, the runtime-condition budget the real-runtime harness documents:
   // a goal round admission crosses the runtime boundary (a settle on disk, a
   // wake that has to run), and a 5s default is a lottery under the concurrent
   // suite — a different victim every run. The 60s per-test cap still bounds a
   // genuine hang.
+  //
+  // 20s was measured on THIS machine, where the whole file runs in ~3s; the
+  // CI runner is ~3.4x slower (the same client-rest-1 batch: 49s local vs
+  // 167s there), which turned the default into a coin flip — it failed twice
+  // on client-rest-1 while every local run, loaded or not, passed. 45s gives
+  // the runner headroom without loosening what a genuine hang looks like.
   const waitUntil = async (
     predicate: () => boolean,
     label: string,
-    timeoutMs = 20_000,
+    timeoutMs = 45_000,
   ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {

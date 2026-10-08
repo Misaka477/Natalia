@@ -296,9 +296,12 @@ function agentListTool(): RuntimeTool {
       meta: [["collapsible", "true"]],
     }),
     (_args, value) => ({
+      // The list IS the reading: one line per agent. The old card carried
+      // only the count, so the row showed nothing of the list itself.
       kind: "generic",
       title: "subagents",
       summary: `listed ${subagentListCount(value)}`,
+      body: value,
     }),
   );
 }
@@ -346,11 +349,18 @@ function agentOutputTool(): RuntimeTool {
     true,
     { verbose: { type: "boolean" } },
     idCall("read output", true),
-    (args) => ({
-      kind: "generic",
-      title: requireString(requireObject(args).id, "id"),
-      summary: "output read",
-    }),
+    (args, value) => {
+      // The agent's captured output IS the reading: the card names the
+      // agent and carries the output lines as its body. The old card had
+      // no body at all, so the row rendered the raw result blob.
+      const lines = value.split("\n");
+      return {
+        kind: "generic",
+        title: requireString(requireObject(args).id, "id"),
+        summary: `${lines.length} line${lines.length === 1 ? "" : "s"}`,
+        body: value,
+      };
+    },
   );
 }
 

@@ -54,10 +54,8 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
             typeof cursor === "string" && cursor ? "page" : "recent window",
         };
       },
-      presentResult(_args, value) {
-        // The SearchResultView shape for the transcript: the page carries
-        // `data` rows plus both cursors, so the card is the row count and
-        // the paging truth (has previous / has next) as pills.
+      presentationMeta(_args, value) {
+        // ONE decode (S3): the page's rows and its paging truth.
         let parsed: Record<string, unknown> | undefined;
         try {
           const decoded = JSON.parse(value) as unknown;
@@ -71,17 +69,57 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
           parsed?.cursor && typeof parsed.cursor === "object"
             ? (parsed.cursor as Record<string, unknown>)
             : {};
-        const meta: Array<[string, string]> = [];
-        if (typeof cursor.previous === "string" && cursor.previous)
-          meta.push(["older", "yes"]);
-        if (typeof cursor.next === "string" && cursor.next)
-          meta.push(["newer", "yes"]);
+        return {
+          total: rows.length,
+          older: typeof cursor.previous === "string" && cursor.previous,
+          newer: typeof cursor.next === "string" && cursor.next,
+        };
+      },
+      presentResult(_args, value, meta) {
+        // The page's rows ARE the reading: one line per row, the role and
+        // the row's first line, with the paging truth as facets. The card
+        // used to carry the whole page envelope as one text block.
+        let parsed: Record<string, unknown> | undefined;
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const rows = Array.isArray(parsed?.data)
+          ? (parsed!.data as Array<Record<string, unknown>>)
+          : [];
+        const lines = rows.map((row) => {
+          const role = typeof row.role === "string" ? row.role : "row";
+          const kind = typeof row.kind === "string" ? row.kind : "message";
+          const text = typeof row.text === "string" ? row.text : "";
+          const head = text.split("\n", 1)[0] ?? "";
+          // A tool row names the tool; a thinking row is not a message at
+          // all. The prefix is the row's own kind.
+          const tool =
+            row.tool && typeof row.tool === "object"
+              ? (row.tool as Record<string, unknown>)
+              : undefined;
+          const toolName = tool?.name;
+          const label =
+            kind === "tool" && typeof toolName === "string"
+              ? `tool · ${toolName}`
+              : kind;
+          return `${label}: ${head}`;
+        });
+        const facets: Array<[string, string]> = [];
+        const older = meta === undefined ? undefined : meta.older;
+        const newer = meta === undefined ? undefined : meta.newer;
+        if (older === true) facets.push(["older", "yes"]);
+        if (newer === true) facets.push(["newer", "yes"]);
         return {
           kind: "search",
           title: "session history",
           summary: `${rows.length} row${rows.length === 1 ? "" : "s"}`,
-          ...(meta.length ? { meta } : {}),
-          body: value,
+          ...(facets.length ? { meta: facets } : {}),
+          // The reading is the page's own rows.
+          body: lines.join("\n"),
         };
       },
     },

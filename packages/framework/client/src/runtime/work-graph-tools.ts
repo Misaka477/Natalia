@@ -7,7 +7,7 @@
  * provenance) lands with the B7 graph batch; this slice gives the model the
  * basic "what has this plan touched" read with bounded output.
  */
-import { genericToolCard } from "@anthelia/tools";
+
 import {
   projectedWorkGraphNodes,
   projectedWorkGraphEdges,
@@ -107,12 +107,81 @@ export function createWorkGraphQueryTool(
       },
       additionalProperties: false,
     },
-    output: genericToolCard({
-      family: "work graph",
-      callSummary: "query",
-      resultSummary: "queried",
-      meta: [["total", "total"]],
-    }),
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall(args) {
+        const parsed =
+          args && typeof args === "object"
+            ? (args as Record<string, unknown>)
+            : {};
+        const path = typeof parsed.path === "string" ? parsed.path : undefined;
+        const findingID =
+          typeof parsed.findingID === "string" ? parsed.findingID : undefined;
+        const planID =
+          typeof parsed.planID === "string" ? parsed.planID : undefined;
+        const title = path ?? findingID ?? planID ?? "work graph";
+        return { kind: "generic", title, summary: "query" };
+      },
+      presentationMeta(_args, value) {
+        // ONE decode (S3): the page's nodes and its paging truth.
+        let parsed: Record<string, unknown> = {};
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        return {
+          total: typeof parsed.total === "number" ? parsed.total : 0,
+          truncated: parsed.truncated === true,
+          nodes: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0,
+          edges: Array.isArray(parsed.edges) ? parsed.edges.length : 0,
+        };
+      },
+      presentResult(args, value, meta) {
+        let parsed: Record<string, unknown> = {};
+        try {
+          const decoded = JSON.parse(value) as unknown;
+          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+            parsed = decoded as Record<string, unknown>;
+        } catch {
+          // degrade, never throw
+        }
+        const nodes = Array.isArray(parsed.nodes)
+          ? (parsed.nodes as Array<Record<string, unknown>>)
+          : [];
+        // The reading is the node list: `<kind> · <summary>` one per line.
+        const lines = nodes.map((node) => {
+          const kind = typeof node.kind === "string" ? node.kind : "node";
+          const summary = typeof node.summary === "string" ? node.summary : "";
+          return summary ? `${kind} · ${summary}` : kind;
+        });
+        const parsedArgs =
+          args && typeof args === "object"
+            ? (args as Record<string, unknown>)
+            : {};
+        const path =
+          typeof parsedArgs.path === "string" ? parsedArgs.path : undefined;
+        const findingID =
+          typeof parsedArgs.findingID === "string"
+            ? parsedArgs.findingID
+            : undefined;
+        const planID =
+          typeof parsedArgs.planID === "string" ? parsedArgs.planID : undefined;
+        const total =
+          typeof meta?.total === "number" ? meta.total : nodes.length;
+        const facets: Array<[string, string]> = [["total", String(total)]];
+        if (meta?.truncated === true) facets.push(["truncated", "true"]);
+        return {
+          kind: "generic",
+          title: path ?? findingID ?? planID ?? "work graph",
+          summary: `${nodes.length} node${nodes.length === 1 ? "" : "s"}`,
+          ...(lines.length ? { body: lines.join("\n") } : {}),
+          meta: facets,
+        };
+      },
+    },
     async execute(parsed, context) {
       const args = parsed as {
         path?: string;

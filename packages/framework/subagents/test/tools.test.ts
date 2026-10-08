@@ -111,7 +111,9 @@ test("agent_output projects reading action and output result", () => {
   expect(call.summary).toBe("read output");
   expect(call.meta).toEqual([["collapsible", "true"]]);
   const result = tool.output!.presentResult!({ id: "a1" }, "some output")!;
-  expect(result.summary).toBe("output read");
+  // S3: the captured output is the card's body; the summary counts its lines.
+  expect(result.summary).toBe("1 line");
+  expect(result.body).toBe("some output");
 });
 
 test("agent_retry projects retry action and continuation result", () => {

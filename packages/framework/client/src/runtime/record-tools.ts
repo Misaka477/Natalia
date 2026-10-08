@@ -7,7 +7,7 @@
  * same pure builders the surfaces use — the event vocabulary stays the
  * journal-face one and no prompt ever carries the正文.
  */
-import { genericToolCard } from "@anthelia/tools";
+import { genericToolCard, type ToolOutputDefinition } from "@anthelia/tools";
 import {
   validationClassesFor,
   workLedgerController,
@@ -98,12 +98,10 @@ export function createRecordValidationTool(
       required: ["taskID", "objective", "command"],
       additionalProperties: false,
     },
-    output: genericToolCard({
+    output: evidenceRecordCard({
       family: "evidence",
       callSummary: "validate",
-      resultSummary: "recorded",
       titleKey: "taskID",
-      meta: [["result", "result"]],
     }),
     async execute(parsed, context) {
       const args = parsed as {
@@ -286,10 +284,9 @@ export function createRecordCompletionTool(
       required: ["taskID", "objective", "changeSummary"],
       additionalProperties: false,
     },
-    output: genericToolCard({
+    output: evidenceRecordCard({
       family: "completion",
       callSummary: "record",
-      resultSummary: "recorded",
       titleKey: "taskID",
     }),
     async execute(parsed, context) {
@@ -511,10 +508,9 @@ export function createRecordDecisionTool(
       required: ["decision"],
       additionalProperties: false,
     },
-    output: genericToolCard({
+    output: evidenceRecordCard({
       family: "decision",
       callSummary: "record",
-      resultSummary: "recorded",
       titleKey: "decision",
     }),
     async execute(parsed, context) {
@@ -574,6 +570,92 @@ export function createRecordDecisionTool(
 }
 
 /**
+ * The evidence-family card (S3/S4): an evidence record's answer is WHAT was
+ * written — the ids it minted and the state it reached — not the raw
+ * envelope. One line per fact, the ids as facets.
+ */
+function evidenceRecordCard(input: {
+  family: string;
+  callSummary: string;
+  titleKey?: string;
+}): ToolOutputDefinition {
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      return {
+        kind: "generic",
+        title: typeof key === "string" && key ? key : input.family,
+        summary: input.callSummary,
+      };
+    },
+    presentationMeta(_args, value) {
+      let parsed: Record<string, unknown> = {};
+      try {
+        const decoded = JSON.parse(value) as unknown;
+        if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
+          parsed = decoded as Record<string, unknown>;
+      } catch {
+        // A prose answer carries no facts.
+      }
+      const facts: Record<string, unknown> = {};
+      for (const key of [
+        "evidenceID",
+        "completionID",
+        "taskID",
+        "result",
+        "satisfies",
+        "judgeable",
+        "acknowledged",
+        "status",
+      ]) {
+        if (parsed[key] !== undefined) facts[key] = parsed[key];
+      }
+      return facts;
+    },
+    presentResult(args, value, meta) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      const title = typeof key === "string" && key ? key : input.family;
+      const facts = meta ?? {};
+      // The reading: the minted identity and the state reached, one per line.
+      const lines: string[] = [];
+      if (typeof facts.taskID === "string")
+        lines.push(`task · ${facts.taskID}`);
+      if (typeof facts.evidenceID === "string")
+        lines.push(`evidence · ${facts.evidenceID}`);
+      if (typeof facts.completionID === "string")
+        lines.push(`completion · ${facts.completionID}`);
+      if (typeof facts.result === "string")
+        lines.push(`result · ${facts.result}`);
+      if (typeof facts.satisfies === "string")
+        lines.push(`satisfies · ${facts.satisfies}`);
+      if (typeof facts.status === "string")
+        lines.push(`status · ${facts.status}`);
+      const facets: Array<[string, string]> = [];
+      if (typeof facts.judgeable === "boolean")
+        facets.push(["judgeable", String(facts.judgeable)]);
+      if (typeof facts.acknowledged === "boolean")
+        facets.push(["acknowledged", String(facts.acknowledged)]);
+      return {
+        kind: "generic",
+        title,
+        summary: lines.length > 0 ? lines[0]! : input.callSummary,
+        body: lines.length > 0 ? lines.join("\n") : undefined,
+        ...(facets.length ? { meta: facets } : {}),
+      };
+    },
+  };
+}
+
+/**
  * `drift_acknowledge` — the model's side of the status matrix (EI §8.6): the
  * Main Agent acknowledges an open drift finding with a rationale (explained),
  * disputes it (disputed), or declares a sanctioned detour
@@ -609,10 +691,9 @@ export function createDriftAcknowledgeTool(
       required: ["findingID", "status"],
       additionalProperties: false,
     },
-    output: genericToolCard({
+    output: evidenceRecordCard({
       family: "drift",
       callSummary: "acknowledge",
-      resultSummary: "acknowledged",
     }),
     async execute(parsed, context) {
       const args = parsed as {

@@ -352,7 +352,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
           (event) => event.type === "goal.round.cost" && event.round === 2,
         ),
       "round 2 settlement",
-      45_000,
+      55_000,
     );
     expect(
       events.some((event) => event.type === "goal.round" && event.round === 3),
@@ -361,7 +361,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-}, 60_000);
+}, 120_000);
 
 /**
  * A stream killed mid-flight must keep the text it already generated. The

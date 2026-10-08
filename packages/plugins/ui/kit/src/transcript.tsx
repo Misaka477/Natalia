@@ -10,7 +10,6 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
-  shouldCollapseToolOutput,
   relativizePath,
   toolRowLabel,
   type Attachment,
@@ -18,6 +17,13 @@ import {
   type ToolCall,
   type ToolCard,
 } from "./message";
+import {
+  CHAT_OUTPUT_MAX_LINES,
+  SINGLE_LINE_MAX_CHARS,
+  clipLongLine,
+  headTailCap,
+  toolOutputHidden,
+} from "./head-tail-cap";
 import { TailScrollController } from "./scroll-controller";
 import {
   evaluateTailScroll,
@@ -35,8 +41,6 @@ const BOTTOM_FOLLOW_THRESHOLD_PX = 2;
 const VIRTUAL_OVERSCAN = 24;
 const VIRTUAL_ROW_GAP = 6;
 const VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 600;
-const TOOL_OUTPUT_COLLAPSE_LINES = 14;
-const TOOL_OUTPUT_PREVIEW_LINES = 10;
 
 function uiDebugEnabled() {
   try {
@@ -745,6 +749,13 @@ const MESSAGE_LINE_HEIGHT = 21.5;
 const THINKING_BLOCK_HEIGHT = 46;
 const TOOL_CARD_BASE_HEIGHT = 48;
 const TOOL_OUTPUT_LINE_HEIGHT = 19;
+/**
+ * A collapsed tool output's height: the capped window (S2's 8 lines) plus
+ * the fold toggle. Both height estimators use it, so the deterministic row
+ * height matches what the card draws by default.
+ */
+const TOOL_CARD_COLLAPSED_OUTPUT_HEIGHT =
+  16 + CHAT_OUTPUT_MAX_LINES * TOOL_OUTPUT_LINE_HEIGHT + 28;
 const ATTACHMENT_GAP = 8;
 
 function wrappedLineCount(text: string, charsPerLine: number): number {
@@ -811,12 +822,12 @@ export function estimateMessageHeight(message: Message): number {
 
   for (const toolCall of message.toolCalls ?? []) {
     const output = toolCall.output ?? toolCall.summary ?? "";
-    const outputLines = wrappedLineCount(output, 110);
-    const collapsible = shouldCollapseToolOutput(output);
+    // The collapsed height is the default view: the cap plus the fold
+    // toggle (S2 — every output is capped unless the reader opens it).
     height +=
       TOOL_CARD_BASE_HEIGHT +
-      (collapsible
-        ? 16 + TOOL_OUTPUT_PREVIEW_LINES * TOOL_OUTPUT_LINE_HEIGHT + 28
+      (toolOutputHidden(output) > 0
+        ? TOOL_CARD_COLLAPSED_OUTPUT_HEIGHT
         : estimatedTextHeight(output, 110, TOOL_OUTPUT_LINE_HEIGHT));
   }
 
@@ -865,11 +876,12 @@ export function fixedRowHeight(message: Message): number {
   for (const toolCall of message.toolCalls ?? []) {
     const output = toolCall.output ?? toolCall.summary ?? "";
     const outputLines = wrappedLineCount(output, 110);
-    const collapsible = shouldCollapseToolOutput(output);
+    // The default view is the capped window (S2), so the deterministic row
+    // height is the capped height plus the toggle.
     height +=
       TOOL_CARD_BASE_HEIGHT +
-      (collapsible
-        ? 16 + TOOL_OUTPUT_PREVIEW_LINES * TOOL_OUTPUT_LINE_HEIGHT + 28
+      (toolOutputHidden(output) > 0
+        ? TOOL_CARD_COLLAPSED_OUTPUT_HEIGHT
         : outputLines * TOOL_OUTPUT_LINE_HEIGHT);
   }
   for (const attachment of message.attachments ?? [])
@@ -1410,6 +1422,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
       .map((entry) => entry.line)
       .join("\n");
   const outputLines = () => output().split("\n");
+
   // The collapse criterion is the model layer's (P0.2): it knows the
   // single-line-JSON shape that the old line/char count missed.
   // The session's cwd, for path relativization (P3.3). The host publishes
@@ -1417,14 +1430,30 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // against, which passes paths through unchanged.
   const sessionCwd = () =>
     (globalThis as { __nataliaSessionCwd?: string }).__nataliaSessionCwd;
-  const collapsible = () => shouldCollapseToolOutput(output());
-  // Both paths collapse on the same term: the first N lines of the SAME
-  // line model the expanded state shows, so the toggle never changes what a
-  // line says — only how many of them there are.
-  const shownLines = () =>
-    collapsible() && !expanded()
-      ? bodyLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES)
-      : bodyLines();
+  // S2: every output is capped. The collapsed window is a head slice, the
+  // fold toggle naming what is hidden, and a tail slice — the reference
+  // implementation's shape, so a long output reads as a window into
+  // something longer rather than a wall of text.
+  const allLines = () => bodyLines();
+  const cap = () =>
+    headTailCap(allLines().length, CHAT_OUTPUT_MAX_LINES, expanded());
+  // A single over-long line (the one-line JSON shape) has no head/tail to
+  // split: it collapses to a bounded head of itself.
+  const longSingle = () => {
+    const lines = allLines();
+    return (
+      lines.length === 1 &&
+      Array.from(lines[0]!.line).length > SINGLE_LINE_MAX_CHARS
+    );
+  };
+  const hiddenCount = () => (longSingle() ? 1 : Math.max(0, cap().hidden));
+  const isCollapsed = () => hiddenCount() > 0 && !expanded();
+  const headLines = () =>
+    longSingle()
+      ? [{ line: clipLongLine(allLines()[0]!.line), kind: allLines()[0]!.kind }]
+      : allLines().slice(0, cap().headLines);
+  const tailLines = () =>
+    longSingle() ? [] : allLines().slice(allLines().length - cap().tailLines);
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.
@@ -1489,10 +1518,10 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
       <Show when={output()}>
         <div
           class="natalia-tool-output"
-          data-collapsed={collapsible() && !expanded() ? "true" : undefined}
+          data-collapsed={isCollapsed() ? "true" : undefined}
         >
           <pre>
-            <For each={shownLines()}>
+            <For each={headLines()}>
               {(entry) => (
                 <span
                   class="natalia-tool-output-line"
@@ -1503,14 +1532,39 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
                 </span>
               )}
             </For>
+            {/* The fold toggle sits BETWEEN the head and the tail: a reader
+                sees where the window starts, how much is hidden, and where
+                it resumes — the reference implementation's collapsed shape. */}
+            <Show when={isCollapsed()}>
+              <button
+                type="button"
+                class="natalia-tool-output-toggle"
+                onClick={() => setExpanded(!expanded())}
+              >
+                {`展开全部（${outputLines().length} 行，已折叠 ${hiddenCount()} 行）`}
+              </button>
+            </Show>
+            <Show when={isCollapsed()}>
+              <For each={tailLines()}>
+                {(entry) => (
+                  <span
+                    class="natalia-tool-output-line"
+                    data-line-kind={entry.kind}
+                  >
+                    {entry.line}
+                    {"\n"}
+                  </span>
+                )}
+              </For>
+            </Show>
           </pre>
-          <Show when={collapsible()}>
+          <Show when={!isCollapsed() && hiddenCount() > 0}>
             <button
               type="button"
               class="natalia-tool-output-toggle"
               onClick={() => setExpanded(!expanded())}
             >
-              {expanded() ? "收起" : `展开全部（${outputLines().length} 行）`}
+              收起
             </button>
           </Show>
         </div>

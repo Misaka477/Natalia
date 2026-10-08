@@ -2,17 +2,11 @@ import {
   projectToolCard,
   projectToolCall,
   projectToolRender,
-  shouldCollapseToolOutput,
   toolResultSummary,
 } from "@natalia/ui-model";
 import type { ToolCard } from "@natalia/ui-model";
 
-export {
-  projectToolCall,
-  projectToolRender,
-  shouldCollapseToolOutput,
-  toolResultSummary,
-};
+export { projectToolCall, projectToolRender, toolResultSummary };
 
 export type { ToolCard };
 

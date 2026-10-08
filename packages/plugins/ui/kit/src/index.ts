@@ -38,6 +38,13 @@ export type {
   ToolCallCard,
 } from "./message";
 export { toolCallCard, toolCallRow, toolRowLabel } from "./message";
+export {
+  CHAT_OUTPUT_MAX_LINES,
+  SINGLE_LINE_MAX_CHARS,
+  clipLongLine,
+  headTailCap,
+  toolOutputHidden,
+} from "./head-tail-cap";
 export type { ToolBlockLike } from "./message";
 
 export { applyUiSkin, defineUiLayoutProfile, defineUiSkin } from "./skin";

@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
   EventBatcher,
   humanizeToolResult,
-  shouldCollapseToolOutput,
   ProjectionCache,
   classifyTool,
   collapseToolOutput,
@@ -240,30 +239,4 @@ test("humanizeToolResult answers the pinned tool cases in their grouped form", (
       "ask_user",
     ),
   ).toBe("Answer: yes; no");
-});
-
-test("shouldCollapseToolOutput catches the single-line JSON shape (P0.2)", () => {
-  // The old criterion was lines>14 || chars>2000, so a one-line JSON.stringify
-  // result under 2000 chars never folded: one unreadable line with no
-  // toggle. The single-line JSON term is what catches it.
-  const shortJson = JSON.stringify({ id: "sb_1", status: "running" });
-  expect(shouldCollapseToolOutput(shortJson)).toBe(false);
-  // A single-line JSON over 400 chars folds even though it is one line and
-  // under the char ceiling.
-  const longJson = JSON.stringify({
-    items: Array.from({ length: 12 }, (_, index) => ({
-      path: `packages/some/deeply/nested/file-${index}.ts`,
-      kind: "modify",
-      summary: "a change summary long enough to matter",
-    })),
-  });
-  expect(longJson.includes("\n")).toBe(false);
-  expect(Array.from(longJson).length).toBeGreaterThan(400);
-  expect(shouldCollapseToolOutput(longJson)).toBe(true);
-  // A single-line NON-JSON text does not gain the toggle from this term.
-  const prose = "x".repeat(600);
-  expect(shouldCollapseToolOutput(prose)).toBe(false);
-  // The original two terms still fire.
-  expect(shouldCollapseToolOutput("a\nb\n".repeat(20))).toBe(true);
-  expect(shouldCollapseToolOutput("y".repeat(2_001))).toBe(true);
 });

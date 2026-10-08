@@ -385,40 +385,6 @@ export function elapsedLabel(
   return `${(elapsed / 1000).toFixed(elapsed < 10_000 ? 1 : 0)}s`;
 }
 
-/**
- * Whether a tool result's card must offer the collapse toggle (P0.2).
- *
- * The old criterion counted lines and characters only, so a single-line
- * JSON.stringify result — the shape ~70 of our tools return — of under
- * 2000 chars folded to nothing: one long unreadable line with no way to
- * collapse it. A single-line JSON over 400 chars is exactly that shape,
- * so it collapses on its own term.
- */
-export function shouldCollapseToolOutput(
-  output: string,
-  options: {
-    maxLines?: number;
-    maxChars?: number;
-    jsonSingleLineChars?: number;
-  } = {},
-): boolean {
-  const maxLines = options.maxLines ?? 14;
-  const maxChars = options.maxChars ?? 2_000;
-  const jsonSingleLineChars = options.jsonSingleLineChars ?? 400;
-  if (output.split("\n").length > maxLines) return true;
-  if (Array.from(output).length > maxChars) return true;
-  if (!output.includes("\n")) {
-    // The single-line JSON shape: a JSON document on one line.
-    const trimmed = output.trim();
-    const looksJson =
-      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-      (trimmed.startsWith("[") && trimmed.endsWith("]"));
-    if (looksJson && Array.from(trimmed).length > jsonSingleLineChars)
-      return true;
-  }
-  return false;
-}
-
 export function collapseToolOutput(
   output: string,
   maxLines: number,

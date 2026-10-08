@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { toolResultSummary } from "../src/summary";
+import { toolResultSummary } from "../src/tool-summary";
 
 /**
  * The row's one-line summary, derived from a tool result (dsh's layer-1
@@ -9,6 +9,11 @@ import { toolResultSummary } from "../src/summary";
  * summary, so every JSON-returning tool showed raw JSON on the transcript
  * row. The summary is now MEANING: the tool's own projected sentence, or a
  * count/first-line over the result — never a raw prefix.
+ *
+ * The implementation lives in the contracts leaf because the runtime
+ * publishes it on the event AND a client re-derives it from the durable
+ * record (a stored summary is a hint: an event recorded before a presenter
+ * existed carries a raw prefix forever). One implementation, both readers.
  */
 test("a projected summary wins over any derivation", () => {
   expect(toolResultSummary('{"data":[]}', { summary: "3 records" })).toBe(

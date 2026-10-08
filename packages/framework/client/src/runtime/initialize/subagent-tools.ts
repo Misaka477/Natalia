@@ -177,6 +177,7 @@ export async function createSubagentTools(
         scope.redactToolOutputEnabled(input.exec),
       );
       const projectedRender = tool.output?.presentResult?.(parsed, result);
+      const projectedMeta = tool.output?.presentationMeta?.(parsed, result);
       await scope
         .createToolPolicyLayer(input.exec)
         .postExecute({ ...hookEvent, result });
@@ -192,7 +193,10 @@ export async function createSubagentTools(
         // subagent's JSON-returning tool showed raw JSON on the row.
         summary: toolResultSummary(result, projectedRender),
         result,
-        metadata: projectedRender ? { render: projectedRender } : undefined,
+        // The card and its structured facts ride the event as first-class
+        // fields (UI refactor R0), the same slots the main path fills.
+        ...(projectedRender ? { card: projectedRender } : {}),
+        ...(projectedMeta ? { meta: projectedMeta } : {}),
         endedAt: Date.now(),
       });
       runner.log(`tool ${tool.name}: ${result.slice(0, 240)}`);

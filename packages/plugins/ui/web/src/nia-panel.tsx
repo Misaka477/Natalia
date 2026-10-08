@@ -14,7 +14,6 @@ import { type AppState } from "@natalia/view-store";
 import {
   ContextMeter,
   Transcript,
-  toolCallCard,
   toolCallRow,
   type PagedTranscriptState,
   type TranscriptHandle,
@@ -79,6 +78,13 @@ export function NiaPanel(props: {
               // The arguments stream in fragments; a row cached mid-stream
               // would pin a ToolCall without parsed arguments forever.
               tool.argumentsRaw,
+              // The card and its structured facts are what the row RENDERS
+              // (R0), and the legacy metadata blob is the replay fallback
+              // the decode reads: every field the derivation depends on
+              // belongs in the row's identity.
+              tool.card,
+              tool.meta,
+              tool.metadata,
             ],
             create: () => ({
               id: msg.id,

@@ -723,6 +723,91 @@ test("two calls to the same tool are separate cards", () => {
   expect(state.messages.filter((b) => b.role === "tool")).toHaveLength(2);
 });
 
+test("a tool's card and meta ride the event's structured slots (R0)", () => {
+  // UI refactor R0: the tool's own card and its presentationMeta travel as
+  // first-class event fields, so a consumer renders what the tool said
+  // instead of re-deriving it from the result string. The later event of a
+  // call supersedes the earlier phase's card, exactly like `metadata`.
+  const state = projectEvents([
+    submitted("t1", "read it"),
+    {
+      type: "tool.update",
+      id: "t1",
+      name: "read_file",
+      callID: "c1",
+      status: "running",
+      summary: "reading",
+      card: { kind: "read", title: "note.txt", summary: "read" },
+      startedAt: 10,
+    },
+    {
+      type: "tool.update",
+      id: "t1",
+      name: "read_file",
+      callID: "c1",
+      status: "succeeded",
+      summary: "1 lines",
+      result: "file body",
+      card: { kind: "read", title: "note.txt", summary: "1 lines" },
+      meta: { path: "note.txt", totalLines: 1 },
+      endedAt: 20,
+    },
+  ]);
+  const stateID = toolStateID({ id: "t1", name: "read_file", callID: "c1" });
+  expect(state.tools[stateID]).toMatchObject({
+    // The result card replaces the call card.
+    card: { kind: "read", title: "note.txt", summary: "1 lines" },
+    meta: { path: "note.txt", totalLines: 1 },
+    // The earlier phase's facts still survive the update.
+    startedAt: 10,
+    endedAt: 20,
+  });
+  // The transcript block carries the same block object.
+  expect(state.messages.find((b) => b.id === stateID)?.tool?.card?.kind).toBe(
+    "read",
+  );
+});
+
+test("an event recorded before the slots folds and renders unchanged (replay)", () => {
+  // Replay compatibility is what makes the migration batchable: a journal
+  // entry from before the structured slots carries no card and no meta, and
+  // the block still folds — a client falls back to the legacy metadata blob
+  // (the kit decodes it into the same shape) or to the plain result.
+  const state = projectEvents([
+    submitted("t1", "run it"),
+    {
+      type: "tool.update",
+      id: "t1",
+      name: "run_shell",
+      callID: "c1",
+      status: "succeeded",
+      summary: "ls packages",
+      result: "a.ts\nb.ts",
+      metadata: {
+        render: {
+          kind: "terminal",
+          title: "ls packages",
+          summary: "ls packages",
+          body: "a.ts\nb.ts",
+        },
+      },
+      endedAt: 20,
+    },
+  ]);
+  const stateID = toolStateID({ id: "t1", name: "run_shell", callID: "c1" });
+  expect(state.tools[stateID]?.card).toBeUndefined();
+  expect(state.tools[stateID]?.meta).toBeUndefined();
+  // The legacy blob is preserved verbatim for the client's fallback decode.
+  expect(state.tools[stateID]?.metadata).toEqual({
+    render: {
+      kind: "terminal",
+      title: "ls packages",
+      summary: "ls packages",
+      body: "a.ts\nb.ts",
+    },
+  });
+});
+
 test("pending approvals and questions appear and clear on response", () => {
   let state = projectEvents([
     submitted("t1", "write it"),

@@ -181,10 +181,15 @@ export class ToolRegistry extends Map<string, RuntimeTool> {
  * "the tools you get when you say nothing" is exactly the built-in catalogue this
  * package no longer owns. The host assembles the catalogue from families.
  */
-export { toolResultSummary } from "./summary";
+// The row-line derivation lives in the contracts leaf (the runtime and a
+// client need the same derivation and must not drift); this re-export is
+// the kernel's stable import path for it.
+export {
+  toolResultSummary,
+  type ProjectedToolSummary,
+} from "@anthelia/contracts";
 export { genericToolCard } from "./card";
 export type { GenericToolCardInput } from "./card";
-export type { ProjectedToolSummary } from "./summary";
 
 export function createToolRegistry(tools: RuntimeTool[]): ToolRegistry {
   return new ToolRegistry(tools.map((tool) => [tool.name, tool]));

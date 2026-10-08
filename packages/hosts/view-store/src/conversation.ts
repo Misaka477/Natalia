@@ -564,6 +564,12 @@ function upsertTool(
     ...(event.startedAt !== undefined ? { startedAt: event.startedAt } : {}),
     ...(event.endedAt !== undefined ? { endedAt: event.endedAt } : {}),
     ...(event.metadata !== undefined ? { metadata: event.metadata } : {}),
+    // The structured slots (R0): a later event supersedes the card from an
+    // earlier phase of the same call — the result card over the call card —
+    // exactly like `metadata` above. An event that carries neither (recorded
+    // before the slots existed) leaves whatever the previous ones carried.
+    ...(event.card !== undefined ? { card: event.card } : {}),
+    ...(event.meta !== undefined ? { meta: event.meta } : {}),
   };
   state.tools[stateID] = tool;
   upsertBlock(state, stateID, "tool", event.summary, event.status, { tool });

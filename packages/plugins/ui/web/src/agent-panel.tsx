@@ -23,7 +23,6 @@ import {
   type TranscriptHandle,
 } from "@natalia/ui-kit";
 import type { Message } from "./types";
-import { toolCallCard } from "@natalia/ui-kit";
 import { stableRows, type RowSignature } from "./stable-rows";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 
@@ -262,6 +261,13 @@ export function AgentPanel(props: {
                 // The arguments stream in fragments; a row cached mid-stream
                 // would pin a ToolCall without parsed arguments forever.
                 tool.argumentsRaw,
+                // The card and its structured facts are what the row RENDERS
+                // (R0), and the legacy metadata blob is the replay fallback
+                // the decode reads: every field the derivation depends on
+                // belongs in the row's identity.
+                tool.card,
+                tool.meta,
+                tool.metadata,
               ],
               create: () =>
                 ({

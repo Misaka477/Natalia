@@ -681,9 +681,10 @@ test("a tool with an output definition projects its result into the event", asyn
       event.type === "tool.update" && event.status === "succeeded",
   );
   expect(update).toBeDefined();
-  // read_file declares an output definition, so its card travels with the event
-  // and a client renders it without reclassifying the string.
-  expect(update!.metadata?.render).toMatchObject({
+  // read_file declares an output definition, so its card travels with the
+  // event as a first-class field (UI refactor R0) and a client renders it
+  // without reclassifying the string.
+  expect(update!.card).toMatchObject({
     kind: "read",
     title: "note.txt",
     // The three-state footer rides INSIDE the card's body: a whole small file
@@ -700,7 +701,7 @@ test("a tool with an output definition projects its result into the event", asyn
     (event): event is Extract<RuntimeEvent, { type: "tool.update" }> =>
       event.type === "tool.update" && event.status === "running",
   );
-  expect(running?.metadata?.call).toMatchObject({
+  expect(running?.card).toMatchObject({
     kind: "read",
     title: "note.txt",
     summary: "read",

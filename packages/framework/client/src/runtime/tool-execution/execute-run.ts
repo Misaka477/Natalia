@@ -159,6 +159,13 @@ export async function runExecuteStage(
     }
   }
   await waitIfPaused(exec);
+  // The tool's own card for the call (UI refactor R0): the structured slot
+  // every consumer reads. The legacy `metadata.call` blob the same card used
+  // to travel on is no longer published — a client that is looking at an
+  // event recorded before the slot decodes it from there instead.
+  const projectedCall = tool.output?.presentCall?.(
+    tryParseToolArguments(call.arguments),
+  );
   publish({
     type: "tool.update",
     id: toolID,
@@ -168,11 +175,7 @@ export async function runExecuteStage(
     summary: "running",
     startedAt: Date.now(),
 
-    metadata: tool.output?.presentCall
-      ? {
-          call: tool.output.presentCall(tryParseToolArguments(call.arguments)),
-        }
-      : undefined,
+    ...(projectedCall ? { card: projectedCall } : {}),
   });
   let executionAudited = false;
   let releaseWriteLock: (() => void) | undefined;
@@ -365,7 +368,7 @@ export async function runExecuteStage(
             .join("; ")}`,
       );
     }
-    // The tool.s own final content invariant runs exactly once, pre-redaction.
+    // The tool's own final content invariant runs exactly once, pre-redaction.
     const finalizedContent =
       tool.output?.finalizeContent?.(completeResult) ?? completeResult;
     const bounded = await boundToolOutput(
@@ -373,10 +376,17 @@ export async function runExecuteStage(
       redactToolOutput(finalizedContent, redactToolOutputEnabled(exec)),
     );
     const result = bounded.text;
-    // The tool's own output projection becomes part of the event metadata, so
-    // a client can draw the result as the card the tool described instead of
-    // guessing from the string.
+    // The tool's own output projection travels with the event as a
+    // first-class card (UI refactor R0), so a client can draw the result as
+    // the card the tool described instead of guessing from the string. The
+    // sibling `meta` slot carries the tool's `presentationMeta` output —
+    // the structured facts that used to be re-derived from the result
+    // string by every consumer that wanted them.
     const projectedRender = tool.output?.presentResult?.(
+      tryParseToolArguments(call.arguments),
+      result,
+    );
+    const projectedMeta = tool.output?.presentationMeta?.(
       tryParseToolArguments(call.arguments),
       result,
     );
@@ -405,6 +415,12 @@ export async function runExecuteStage(
       ...(call.thoughtSignature
         ? { thoughtSignature: call.thoughtSignature }
         : {}),
+      // The tool's own card and its structured facts (R0). The legacy
+      // `metadata.render` blob is no longer published here: the card IS
+      // the event's own field now, and an event recorded before that slot
+      // still renders because a client decodes the blob it did carry.
+      ...(projectedRender ? { card: projectedRender } : {}),
+      ...(projectedMeta ? { meta: projectedMeta } : {}),
       metadata: {
         ...(bounded.outputPath
           ? {
@@ -424,7 +440,6 @@ export async function runExecuteStage(
                 : {}),
             }
           : {}),
-        ...(projectedRender ? { render: projectedRender } : {}),
       },
       endedAt: Date.now(),
     });

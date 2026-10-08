@@ -1,4 +1,19 @@
 import { humanizeToolResult } from "./humanize";
+import {
+  TOOL_CARD_KINDS,
+  type ToolCard,
+  type ToolCardFacet,
+} from "@anthelia/contracts";
+
+export type {
+  ToolCard,
+  ToolCardFacet,
+  ToolCardKind,
+} from "@anthelia/contracts";
+// The row-line derivation lives in the contracts leaf so the runtime and a
+// client cannot drift; the kit's row model re-exports it from here.
+export { toolResultSummary } from "@anthelia/contracts";
+export type { ProjectedToolSummary } from "@anthelia/contracts";
 
 export type ToolStatus =
   | "receiving_arguments"
@@ -46,22 +61,17 @@ export type ToolResultPresentation = {
 /**
  * The UI-facing card a tool projects for a call or a result.
  *
- * Tools declare this in their `output` definition (`@anthelia/tools`); it reaches
- * the client through the `tool.update` event's `metadata.call` (running) and
- * `metadata.render` (result). `ui-model` cannot depend on `@anthelia/tools` (a
- * kernel package), so this is a structural mirror the TUI decodes from the
- * event metadata.
+ * This is the contract's {@link ToolCard} union (UI refactor R0). Tools
+ * declare it in their `output` definition (`@anthelia/tools`); it reaches
+ * the client on the `tool.update` event's structured `card` slot (running
+ * and settled alike) and, for events recorded before that slot existed, on
+ * the legacy `metadata.call` / `metadata.render` blobs — which is the same
+ * shape, so one decoder serves both.
  */
-export type ToolRenderIntent = {
-  kind: "generic" | "terminal" | "diff" | "search" | "read" | "web";
-  title: string;
-  summary: string;
-  body?: string;
-  meta?: Array<[label: string, value: string]>;
-};
+export type ToolRenderIntent = ToolCard;
 
 /** Decodes a projected card from a metadata slot, or `undefined` when absent. */
-function decodeIntent(raw: unknown): ToolRenderIntent | undefined {
+function decodeIntent(raw: unknown): ToolCard | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const candidate = raw as Record<string, unknown>;
   if (
@@ -70,20 +80,25 @@ function decodeIntent(raw: unknown): ToolRenderIntent | undefined {
     typeof candidate.summary !== "string"
   )
     return undefined;
+  // A kind outside the vocabulary is malformed, not a new kind: the client
+  // falls back to the plain result rather than dispatching on a guess.
+  if (!TOOL_CARD_KINDS.includes(candidate.kind as ToolCard["kind"]))
+    return undefined;
   return {
-    kind: candidate.kind as ToolRenderIntent["kind"],
+    kind: candidate.kind as ToolCard["kind"],
     title: candidate.title,
     summary: candidate.summary,
     ...(typeof candidate.body === "string" ? { body: candidate.body } : {}),
     ...(Array.isArray(candidate.meta)
-      ? { meta: candidate.meta as Array<[string, string]> }
+      ? { meta: candidate.meta as ToolCardFacet[] }
       : {}),
-  };
+  } as ToolCard;
 }
 
 /**
  * Decodes a tool's self-projected call card from the event metadata
- * (`metadata.call`), or `undefined` when the tool declared none.
+ * (`metadata.call`, the pre-R0 slot a running call travelled on), or
+ * `undefined` when the tool declared none.
  */
 export function projectToolCall(
   metadata: Record<string, unknown> = {},
@@ -93,13 +108,29 @@ export function projectToolCall(
 
 /**
  * Decodes a tool's self-projected result card from the event metadata
- * (`metadata.render`), or `undefined` when the tool declared none. A malformed
- * intent is treated as absent — the client falls back to the plain result.
+ * (`metadata.render`, the pre-R0 slot a settled call travelled on), or
+ * `undefined` when the tool declared none. A malformed intent is treated as
+ * absent — the client falls back to the plain result.
  */
 export function projectToolRender(
   metadata: Record<string, unknown> = {},
 ): ToolRenderIntent | undefined {
   return decodeIntent(metadata.render);
+}
+
+/**
+ * Decodes the card a `tool.update` event carries (UI refactor R0): the
+ * structured `card` slot when the runtime published one, else the legacy
+ * `metadata.call` / `metadata.render` blobs an older event recorded. The
+ * fallback is what makes replay work — a journal written before the slot
+ * existed still renders, under the same shape.
+ */
+export function projectToolCard(event: {
+  card?: ToolCard;
+  metadata?: Record<string, unknown>;
+}): ToolCard | undefined {
+  if (event.card !== undefined) return event.card;
+  return projectToolRender(event.metadata) ?? projectToolCall(event.metadata);
 }
 
 export type ParsedToolArguments = {

@@ -406,6 +406,99 @@ export type ToolStatus =
   | "rejected"
   | "cancelled";
 
+/**
+ * The header every card kind carries.
+ *
+ * `body` is the MIGRATION slot: until a tool's family lands its structured
+ * fields (refactor batches R1-R5) the tool still projects its readable body
+ * as text here, and a client renders it. The five structured kinds stop
+ * carrying `body` when their structured fields land; `generic` keeps it
+ * forever, because an envelope tool's result is its own document and the
+ * tool owns the reading of it.
+ */
+export type ToolCardHeader = {
+  /** Card title: a path, a command, a query. */
+  title: string;
+  /** One-line summary for the collapsed row. */
+  summary: string;
+  /** The tool's own body text (see the note above). */
+  body?: string;
+  /** Label/value facets: exit code, total lines, ... */
+  meta?: ToolCardFacet[];
+};
+
+/**
+ * The card a tool draws for one of its calls (UI refactor R0; dsh's fourth
+ * corner — the `meta` slot beside it is the `presentationMeta` sibling).
+ *
+ * A card is a projection, not presentation: the tool says what the call or
+ * the result MEANS (a file read, a diff, a terminal run, a search) and a
+ * client renders that however it likes. It travels on the `tool.update`
+ * event's structured slot so a replayed event renders like a live one —
+ * the card is recorded beside the result instead of being re-derived from
+ * the result string by whoever happens to be looking at it.
+ *
+ * The union is the whole vocabulary of a card: six kinds, and a client
+ * switches on `kind`, never on a tool name.
+ */
+export type ToolCard =
+  | (ToolCardHeader & {
+      kind: "read";
+      /** The file the window was read from. */
+      path?: string;
+      /** First line shown (1-based). */
+      offset?: number;
+      /** Lines shown. */
+      lines?: number;
+      /** Lines the file has. */
+      totalLines?: number;
+      /** Language hint for the content renderer. */
+      lang?: string;
+    })
+  | (ToolCardHeader & {
+      kind: "diff";
+      path?: string;
+      hunks?: RuntimeStructuredDiffHunk[];
+    })
+  | (ToolCardHeader & {
+      kind: "terminal";
+      command?: string;
+      output?: string;
+      exitCode?: number;
+      cwd?: string;
+    })
+  | (ToolCardHeader & {
+      kind: "search";
+      query?: string;
+      matches?: Array<{ path: string; line: number; text: string }>;
+      truncated?: boolean;
+      nextCursor?: string;
+    })
+  | (ToolCardHeader & {
+      kind: "web";
+      url?: string;
+      answer?: string;
+      sources?: Array<{ title?: string; url: string }>;
+    })
+  | (ToolCardHeader & {
+      kind: "generic";
+    });
+
+/** A card's label/value facets (exit code, total lines, ...). */
+export type ToolCardFacet = [label: string, value: string];
+
+/** The card kinds, in the dispatch order a renderer switches on. */
+export const TOOL_CARD_KINDS = [
+  "read",
+  "diff",
+  "terminal",
+  "search",
+  "web",
+  "generic",
+] as const;
+
+export type ToolCardKind = ToolCard["kind"];
+
 export type CollaborationParticipant = "main_agent" | "live_chat" | "nia";
 
 export type ChatChannel = "navi" | "nia";
@@ -1049,6 +1142,20 @@ type RuntimeEventData =
       argumentsDelta?: string;
       result?: string;
       metadata?: Record<string, unknown>;
+      /**
+       * The tool's own card for this call (UI refactor R0). Set from
+       * `presentCall` while the call runs and from `presentResult` once it
+       * settles; a tool that declared neither leaves it absent and a client
+       * falls back to the legacy `metadata.render` blob (or to the plain
+       * result) — replay compatibility is what makes the migration batchable.
+       */
+      card?: ToolCard;
+      /**
+       * The tool's `presentationMeta` output: structured facts that travel
+       * WITH the result rather than being re-derived from it later. A client
+       * reads these instead of parsing the result string.
+       */
+      meta?: Record<string, unknown>;
       /** Gemini thought signature that must be replayed with this tool call. */
       thoughtSignature?: string;
       startedAt?: number;

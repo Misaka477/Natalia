@@ -206,6 +206,55 @@ test("every transcript host routes its tool rows through the kit's toolCallRow",
   expect(subagentSource.includes("summary: result.slice(0, 200)")).toBe(false);
 });
 
+test("every tool.update publisher fills the structured slots (R0)", () => {
+  // The card and its meta are the event's own fields now (UI refactor R0):
+  // a publisher that still stuffed the card into `metadata.render` would
+  // leave every consumer decoding a blob that no longer travels. There are
+  // exactly two publishers — the main path (execute-run: the call card while
+  // running, the result card once settled) and the subagent channel — and
+  // this pins both, the way the 2026-10-07 summary slice was pinned (a
+  // subagent publisher was missed once already).
+  const repoRoot = join(import.meta.dir, "../../../..");
+  const runtimeSource = readFileSync(
+    join(
+      repoRoot,
+      "packages/framework/client/src/runtime/tool-execution/execute-run.ts",
+    ),
+    "utf8",
+  );
+  const subagentSource = readFileSync(
+    join(
+      repoRoot,
+      "packages/framework/client/src/runtime/initialize/subagent-tools.ts",
+    ),
+    "utf8",
+  );
+  for (const [where, source] of [
+    ["execute-run", runtimeSource],
+    ["subagent-tools", subagentSource],
+  ] as const) {
+    expect(
+      source.includes("...(projectedRender ? { card: projectedRender } : {})"),
+      `${where} must publish the result card on the event's card slot`,
+    ).toBe(true);
+    expect(
+      source.includes("...(projectedMeta ? { meta: projectedMeta } : {})"),
+      `${where} must publish presentationMeta on the event's meta slot`,
+    ).toBe(true);
+    // And the legacy blob is gone from the publisher side: a client still
+    // READS it (an old event carries it), but nothing writes it anymore.
+    expect(
+      source.includes("render: projectedRender"),
+      `${where} must not publish the card as a metadata blob`,
+    ).toBe(false);
+  }
+  // The running phase publishes the tool's own call card.
+  expect(
+    runtimeSource.includes("...(projectedCall ? { card: projectedCall } : {})"),
+  ).toBe(true);
+  expect(runtimeSource.includes("metadata: { call:")).toBe(false);
+});
+
 test("every model-facing tool projects a card (the 2026-10-07 completeness sweep)", () => {
   // The user's report: "绝大多数的工具返回是 json 数据而不是按 dsh 那种
   // 返回". The row's summary is now derived from the result, and the tools

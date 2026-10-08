@@ -2583,6 +2583,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               // forever (the signature never changed) — the keyed cards
               // derive from them, so they are part of the row's identity.
               tool.argumentsRaw,
+              // The card and its structured facts are what the row RENDERS
+              // (R0), and the legacy metadata blob is the replay fallback the
+              // decode reads. Every field the derivation depends on belongs
+              // in the signature — one that misses a field pins a stale row
+              // forever, which is the argumentsRaw lesson applied to the
+              // new slots.
+              tool.card,
+              tool.meta,
+              tool.metadata,
               status,
               Boolean(active),
               isLast,
@@ -2721,6 +2730,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               // The arguments stream in fragments; a row cached mid-stream
               // would pin a ToolCall without parsed arguments forever.
               tool.argumentsRaw,
+              // The card and its structured facts are what the row RENDERS
+              // (R0), and the legacy metadata blob is the replay fallback
+              // the decode reads: every field the derivation depends on
+              // belongs in the row's identity.
+              tool.card,
+              tool.meta,
+              tool.metadata,
             ],
             create: () => ({
               id: msg.id,

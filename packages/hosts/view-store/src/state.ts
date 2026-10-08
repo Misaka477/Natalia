@@ -11,6 +11,7 @@ import type {
   RuntimeSessionSummary,
   SessionID,
   SubmittedTurn,
+  ToolCard,
   WorkspaceSummary,
 } from "@anthelia/contracts";
 /**
@@ -85,6 +86,18 @@ export type ToolBlock = {
   metadata?: Record<string, unknown>;
   /** Accumulated raw arguments, so a consumer can show what was requested. */
   argumentsRaw: string;
+  /**
+   * The tool's own card, carried on the `tool.update` event's structured
+   * slot (UI refactor R0). Absent for an event recorded before that slot
+   * existed: those fall back to the legacy `metadata.render` blob, which
+   * the kit decodes into the same shape.
+   */
+  card?: ToolCard;
+  /**
+   * The tool's `presentationMeta` output — the structured facts that travel
+   * with the result instead of being re-derived from it (R0).
+   */
+  meta?: Record<string, unknown>;
 };
 
 /**

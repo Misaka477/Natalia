@@ -8,29 +8,77 @@ import {
   todoItemsFromBody,
   toolCallCard,
   toolRowLabel,
+  type ToolBlockLike,
 } from "../src/message";
 
 /**
  * The bridge from a tool's self-projected card to the UI's card model.
  *
  * A tool declares its presentation in its `output` definition; the runtime
- * persists it on the `tool.update` event's metadata (`metadata.call` while
- * running, `metadata.render` once settled); `ui-model` decodes it as a
- * `ToolRenderIntent`. This is the last hop: the UI's `ToolCall.card`.
+ * publishes it on the `tool.update` event's structured `card` slot (UI
+ * refactor R0) — and, for events recorded before that slot existed, on the
+ * legacy `metadata.call` / `metadata.render` blobs, which carry the same
+ * shape. This is the last hop: the UI's `ToolCall.card`.
  *
  * The point of the whole chain is that the UI renders what the TOOL said,
  * not a guess from the tool's name — so these guards pin the decode's
- * fidelity and its two fallbacks.
+ * fidelity and its fallbacks.
  */
 
-test("a running call decodes from metadata.call", () => {
-  const card = toolCallCard({
-    call: {
-      kind: "terminal",
-      title: "ls packages/client",
-      summary: "List the client modules",
-    },
+/** A block carrying just what a card decodes from. */
+function block(fields: Partial<ToolBlockLike>): ToolBlockLike {
+  return {
+    name: fields.name ?? "some_tool",
+    status: fields.status ?? "succeeded",
+    summary: fields.summary ?? "",
+    ...fields,
+  };
+}
+
+test("the structured card slot wins (R0)", () => {
+  // A runtime since R0 publishes the tool's card as a first-class field of
+  // the event; the kit reads it verbatim — no decoding, no drift possible.
+  const card = toolCallCard(
+    block({
+      card: {
+        kind: "read",
+        title: "note.txt",
+        summary: "1 lines",
+        meta: [["totalLines", "1"]],
+      },
+      // The legacy blobs are ALSO present (the migration publishes both);
+      // the structured slot is the later truth and must win.
+      metadata: {
+        render: {
+          kind: "generic",
+          title: "stale",
+          summary: "stale",
+        },
+      },
+    }),
+  );
+  expect(card).toEqual({
+    kind: "read",
+    title: "note.txt",
+    summary: "1 lines",
+    meta: [["totalLines", "1"]],
   });
+});
+
+test("a running call decodes from metadata.call", () => {
+  const card = toolCallCard(
+    block({
+      name: "run_shell",
+      status: "running",
+      metadata: {
+        call: {
+          kind: "terminal",
+          title: "ls packages/client",
+          summary: "List the client modules",
+        },
+      },
+    }),
+  );
   expect(card).toEqual({
     kind: "terminal",
     title: "ls packages/client",
@@ -39,14 +87,19 @@ test("a running call decodes from metadata.call", () => {
 });
 
 test("a settled call decodes from metadata.render", () => {
-  const card = toolCallCard({
-    render: {
-      kind: "terminal",
-      title: "ls packages/client",
-      summary: "List the client modules",
-      meta: [["exit", "0"]],
-    },
-  });
+  const card = toolCallCard(
+    block({
+      name: "run_shell",
+      metadata: {
+        render: {
+          kind: "terminal",
+          title: "ls packages/client",
+          summary: "List the client modules",
+          meta: [["exit", "0"]],
+        },
+      },
+    }),
+  );
   expect(card).toEqual({
     kind: "terminal",
     title: "ls packages/client",
@@ -58,53 +111,82 @@ test("a settled call decodes from metadata.render", () => {
 test("the result slot wins over the call slot when both are present", () => {
   // A settled event carries both: the running card and the result card. The
   // result is the later truth, so it is the one a UI shows.
-  const card = toolCallCard({
-    call: { kind: "terminal", title: "stale", summary: "stale" },
-    render: {
-      kind: "terminal",
-      title: "fresh",
-      summary: "fresh",
-      meta: [["exit", "0"]],
-    },
-  });
+  const card = toolCallCard(
+    block({
+      name: "run_shell",
+      metadata: {
+        call: { kind: "terminal", title: "stale", summary: "stale" },
+        render: {
+          kind: "terminal",
+          title: "fresh",
+          summary: "fresh",
+          meta: [["exit", "0"]],
+        },
+      },
+    }),
+  );
   expect(card?.title).toBe("fresh");
   expect(card?.meta).toEqual([["exit", "0"]]);
 });
 
-test("a tool that declared no card yields undefined, not a guess", () => {
+test("an event with no card yields undefined, not a guess", () => {
   // The UI falls back to its generic row; it must not invent a title from
   // the tool name and pass it off as the tool's own words.
-  expect(toolCallCard(undefined)).toBeUndefined();
-  expect(toolCallCard({})).toBeUndefined();
-  expect(toolCallCard({ call: { title: "no kind" } })).toBeUndefined();
+  expect(toolCallCard(block({}))).toBeUndefined();
+  expect(toolCallCard(block({ metadata: {} }))).toBeUndefined();
+  expect(
+    toolCallCard(block({ metadata: { call: { title: "no kind" } } })),
+  ).toBeUndefined();
 });
 
 test("a malformed intent is treated as absent", () => {
-  expect(toolCallCard({ call: "not an object" })).toBeUndefined();
   expect(
-    toolCallCard({ call: { kind: 42, title: "x", summary: "y" } }),
+    toolCallCard(block({ metadata: { call: "not an object" } })),
   ).toBeUndefined();
   expect(
-    toolCallCard({
-      render: { kind: "terminal", title: "ok", summary: "y", meta: "bad" },
-    }),
+    toolCallCard(
+      block({ metadata: { call: { kind: 42, title: "x", summary: "y" } } }),
+    ),
+  ).toBeUndefined();
+  // A kind outside the vocabulary is malformed, not a new kind: the row
+  // renders the plain result rather than dispatching on a guess.
+  expect(
+    toolCallCard(
+      block({
+        metadata: { render: { kind: "hologram", title: "x", summary: "y" } },
+      }),
+    ),
+  ).toBeUndefined();
+  expect(
+    toolCallCard(
+      block({
+        metadata: {
+          render: { kind: "terminal", title: "ok", summary: "y", meta: "bad" },
+        },
+      }),
+    ),
   ).toEqual({ kind: "terminal", title: "ok", summary: "y" });
 });
 
 test("the meta facets survive verbatim, pairs included", () => {
   // The exit pill, the read window badge and the truncation counter all
   // arrive as label:value pairs; a UI must not reshape them.
-  const card = toolCallCard({
-    render: {
-      kind: "read",
-      title: "Read a.ts",
-      summary: "5 - 40",
-      meta: [
-        ["totalLines", "120"],
-        ["truncated", "true"],
-      ],
-    },
-  });
+  const card = toolCallCard(
+    block({
+      name: "read_file",
+      metadata: {
+        render: {
+          kind: "read",
+          title: "Read a.ts",
+          summary: "5 - 40",
+          meta: [
+            ["totalLines", "120"],
+            ["truncated", "true"],
+          ],
+        },
+      },
+    }),
+  );
   expect(card?.meta).toEqual([
     ["totalLines", "120"],
     ["truncated", "true"],
@@ -115,36 +197,56 @@ test("an edit's marked hunk is what the card carries, marks included", () => {
   // The colored-line renderer keys off exactly these prefixes: a tool that
   // stops marking its hunk would silently render a diff as plain text, so the
   // marks are pinned here (the CSS is in a template literal and cannot be
-  // unit-asserted; the contract it keys off CAN be).
-  const card = toolCallCard({
-    render: {
-      kind: "diff",
-      title: "a.txt",
-      summary: "edit",
-      body: "- one\n- two\n+ one\n+ three",
-      meta: [
-        ["removed", "2"],
-        ["added", "2"],
-      ],
-    },
-  });
+  // unit-asserted; the contract it keys off CAN).
+  const card = toolCallCard(
+    block({
+      name: "edit_file",
+      metadata: {
+        render: {
+          kind: "diff",
+          title: "a.txt",
+          summary: "edit",
+          body: "- one\n- two\n+ one\n+ three",
+          meta: [
+            ["removed", "2"],
+            ["added", "2"],
+          ],
+        },
+      },
+    }),
+  );
   expect(card?.kind).toBe("diff");
   const body = card?.body ?? "";
   expect(body.split("\n").every((line) => /^[+-] /u.test(line))).toBe(true);
   // A create's hunk is all added lines, a delete's all removed: both must keep
   // their marks or the renderer's coloring would miss them.
-  const created = toolCallCard({
-    render: {
-      kind: "diff",
-      title: "b.txt",
-      summary: "write",
-      body: "+ new file",
-    },
-  });
+  const created = toolCallCard(
+    block({
+      name: "write_file",
+      metadata: {
+        render: {
+          kind: "diff",
+          title: "b.txt",
+          summary: "write",
+          body: "+ new file",
+        },
+      },
+    }),
+  );
   expect(created?.body).toBe("+ new file");
-  const deleted = toolCallCard({
-    render: { kind: "diff", title: "c.txt", summary: "edit", body: "- gone" },
-  });
+  const deleted = toolCallCard(
+    block({
+      name: "edit_file",
+      metadata: {
+        render: {
+          kind: "diff",
+          title: "c.txt",
+          summary: "edit",
+          body: "- gone",
+        },
+      },
+    }),
+  );
   expect(deleted?.body).toBe("- gone");
 });
 
@@ -287,14 +389,12 @@ test("the same block renders identically whether live or replayed (user 2026-10-
     status: "succeeded",
     summary: "written",
     result: raw,
-    metadata: {
-      render: {
-        kind: "generic",
-        title: "todo",
-        summary: "written",
-        body: raw,
-        meta: [["total", "2"]],
-      },
+    card: {
+      kind: "generic",
+      title: "todo",
+      summary: "written",
+      body: raw,
+      meta: [["total", "2"]],
     },
   });
   expect(liveRow.summary).toBe("written");

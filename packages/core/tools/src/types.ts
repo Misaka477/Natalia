@@ -20,6 +20,7 @@ import type {
   RuntimeTerminalRead,
   SandboxDiffKind,
   SandboxStatus,
+  ToolCard,
 } from "@anthelia/contracts";
 
 export type SubagentStatusView =
@@ -435,22 +436,16 @@ export type ToolSchema = {
 /**
  * The UI-facing card a tool draws for a call or a result.
  *
- * This is a projection, not presentation: the tool says what the call or result
- * means (a file to read, a terminal session, a diff, a search) and keeps the
- * body plain text, and a client renders that however it likes. A card is a
- * suggestion — a client that cannot draw the kind falls back to the plain text.
+ * This is the kernel's name for the contract's `ToolCard` union: a
+ * projection, not presentation — the tool says what the call or result
+ * means (a file to read, a terminal session, a diff, a search) and a client
+ * renders that however it likes. A card is a suggestion; a client that
+ * cannot draw the kind falls back to the plain text.
  */
-export type ToolRenderIntent = {
-  kind: "generic" | "terminal" | "diff" | "search" | "read" | "web";
-  /** Card title, e.g. the file path or the command. */
-  title: string;
-  /** One-line summary for the collapsed card. */
-  summary: string;
-  /** Body shown when the card is expanded. */
-  body?: string;
-  /** Extra label/value lines. */
-  meta?: Array<[label: string, value: string]>;
-};
+export type ToolRenderIntent = ToolCard;
+
+/** The card union, re-exported under its contract name. */
+export type { ToolCard };
 
 /**
  * How a tool's call and result are projected. Optional: a tool without one
@@ -488,9 +483,17 @@ export type ToolOutputDefinition = {
    * Projects the call arguments into a card, shown while the tool runs and as
    * the call's own presentation.
    */
-  presentCall?(args: unknown): ToolRenderIntent | undefined;
+  presentCall?(args: unknown): ToolCard | undefined;
   /** Projects the arguments and the result into a card. */
-  presentResult?(args: unknown, value: string): ToolRenderIntent | undefined;
+  presentResult?(args: unknown, value: string): ToolCard | undefined;
+  /**
+   * The call's STRUCTURED facts, persisted beside the result (dsh's
+   * `presentationMeta`): what a client needs to draw the result without
+   * re-parsing the result string — a read window's numbers, a search's
+   * cursor, a diff's counts. Pure: the same arguments and result always
+   * earn the same meta.
+   */
+  presentationMeta?(args: unknown, value: string): Record<string, unknown>;
   /**
    * The tool's own final content invariant, called exactly once on the raw
    * result before it is redacted and bounded — e.g. stripping page scripts a

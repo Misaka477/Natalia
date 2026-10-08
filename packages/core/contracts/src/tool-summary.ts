@@ -14,6 +14,15 @@
  *   2. a derivation over the result string — a JSON document becomes a
  *      count line (`12 fields`, `7 items`, `3 matches`), plain text its
  *      first line. Never a raw prefix.
+ *
+ * It lives HERE, in the contracts leaf, because BOTH sides need the same
+ * derivation and they must not drift: the runtime publishes `summary` with
+ * the event, and a client re-derives it from the durable record (the stored
+ * value is a hint — an event recorded before a presenter existed carries
+ * `result.slice(0, 200)` forever, so a row is a function of the data, not
+ * of when the event was written). Keeping one implementation in the single
+ * package the kernel and the UI can both depend on is what makes the two
+ * readings agree.
  */
 
 /** The card a tool's presenter projected, when it declared one. */

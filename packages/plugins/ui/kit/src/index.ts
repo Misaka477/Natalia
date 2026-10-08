@@ -34,6 +34,7 @@ export type {
   Message,
   MessageAction,
   ToolCall,
+  ToolCard,
   ToolCallCard,
 } from "./message";
 export { toolCallCard, toolCallRow, toolRowLabel } from "./message";

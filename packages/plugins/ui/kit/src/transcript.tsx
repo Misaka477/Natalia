@@ -20,6 +20,7 @@ import {
   type Attachment,
   type Message,
   type ToolCall,
+  type ToolCard,
 } from "./message";
 import { TailScrollController } from "./scroll-controller";
 import {
@@ -1226,10 +1227,75 @@ function ToolKindIcon(props: { kind: string | undefined }) {
   }
 }
 
+/** One line of a card body, with its visual treatment. */
+type ToolCardLine = {
+  line: string;
+  kind: "plain" | "added" | "removed";
+};
+
+/**
+ * A card renderer: the card's own data in, its display lines out.
+ *
+ * The second argument is the ToolCall ITSELF — never a rebuilt subset of
+ * it (a literal built here once silently dropped `arguments`, which cost
+ * the user a day of stale Q&A rows). A renderer reads what it needs off
+ * that object and nothing else.
+ */
+type ToolCardRenderer = (card: ToolCard, toolCall: ToolCall) => ToolCardLine[];
+
+/** The body's lines, verbatim: a page, an output, a listing. */
+function plainCardLines(text: string): ToolCardLine[] {
+  return text.split("\n").map((line) => ({ line, kind: "plain" as const }));
+}
+
+/**
+ * A diff body's marked lines: the tool writes `+ ` / `- ` so a client
+ * without a diff renderer still reads the hunk. We HAVE a renderer: the
+ * marks become color, which is what makes a hunk scannable at a glance.
+ */
+function diffCardLines(text: string): ToolCardLine[] {
+  return plainCardLines(text).map((entry) =>
+    entry.line.startsWith("+ ")
+      ? { line: entry.line, kind: "added" as const }
+      : entry.line.startsWith("- ")
+        ? { line: entry.line, kind: "removed" as const }
+        : entry,
+  );
+}
+
+/**
+ * The card renderers — ONE per card kind, the framework's whole dispatch
+ * surface (UI refactor R0; the completeness guard in
+ * `card-renderers.test.ts` pins both the set and the one-renderer-per-kind
+ * rule).
+ *
+ * A client switches on the card's KIND, never on a tool name: a tool owns
+ * what its result means (which kind, and the data inside it), the framework
+ * owns how a kind looks. `generic` is the one kind that still speaks prose —
+ * an envelope tool's result is its own document, and reading it (the flatten)
+ * is the kit's job for exactly that kind. Every other kind draws its own
+ * text: a page, a hunk, an output, a listing.
+ *
+ * While a family still carries its readable body as text (the migration
+ * slot in the card union) the renderer draws that text; when the family
+ * lands its structured fields the same renderer draws those instead — the
+ * dispatch does not change, only what sits behind it.
+ */
+const CARD_RENDERERS: Record<ToolCard["kind"], ToolCardRenderer> = {
+  read: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
+  diff: (card, toolCall) => diffCardLines(card.body ?? toolCall.output ?? ""),
+  terminal: (card, toolCall) =>
+    plainCardLines(card.body ?? toolCall.output ?? ""),
+  search: (card, toolCall) =>
+    plainCardLines(card.body ?? toolCall.output ?? ""),
+  web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
+  generic: (card, toolCall) =>
+    plainCardLines(
+      humanizeToolResult(card.body ?? toolCall.output ?? "", toolCall.name),
+    ),
+};
+
 function ToolCallCard(props: { toolCall: ToolCall }) {
-  // The keyed dispatch (presentation plan P2.1): a keyed toolview REPLACES
-  // the generic card, the same dispatch dsh's ToolCallTree performs. The
-  // keyed set lives in message.ts beside the other tool tables.
   // The keyed toolviews (presentation plan P2.1): ask_user's Q&A and the
   // todo checklist REPLACE this card's BODY, never its row — a reader must
   // still see which tool ran, its status and its title (the screenshot that
@@ -1264,20 +1330,36 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // The presentation is a FUNCTION OF THE RESULT, computed here per render
   // (the user's 2026-10-07 ruling): a recorded event and a replayed one
   // render identically, because nothing about "when it was recorded"
-  // enters the derivation. Two sources, in order:
+  // enters the derivation. Three sources, in order:
   //   1. the keyed toolview — a checklist, a Q&A transcript — parsed from
   //      the tool's OWN body when the event carries a card, else from the
   //      raw result (an old event's result parses the same as today's);
-  //   2. the flatten — the same `key: value` reading every other result gets.
-  // The tool's own card body wins for a diff (the marked hunk is not the
-  // raw result string at all) and for a terminal (the command's output).
-  const toolBody = () => card?.body ?? props.toolCall.output ?? "";
-  const output = () => {
+  //   2. the card's kind renderer — the dispatch table above;
+  //   3. the flatten — the same `key: value` reading a presenter-less
+  //      result gets.
+  // The tool's own card wins for a diff (the marked hunk is not the raw
+  // result string at all) and for a terminal (the command's output).
+  const bodyLines = (): ToolCardLine[] => {
     const keyedBody = keyed();
-    return keyedBody
-      ? keyedBody.map((entry) => entry.line).join("\n")
-      : humanizeToolResult(toolBody(), props.toolCall.name);
+    if (keyedBody)
+      return keyedBody.map((entry) => ({
+        line: entry.line,
+        kind:
+          entry.kind === "added" || entry.kind === "answer"
+            ? ("added" as const)
+            : entry.kind === "removed"
+              ? ("removed" as const)
+              : ("plain" as const),
+      }));
+    if (card) return CARD_RENDERERS[card.kind](card, props.toolCall);
+    return plainCardLines(
+      humanizeToolResult(props.toolCall.output ?? "", props.toolCall.name),
+    );
   };
+  const output = () =>
+    bodyLines()
+      .map((entry) => entry.line)
+      .join("\n");
   const outputLines = () => output().split("\n");
   // The collapse criterion is the model layer's (P0.2): it knows the
   // single-line-JSON shape that the old line/char count missed.
@@ -1287,48 +1369,13 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   const sessionCwd = () =>
     (globalThis as { __nataliaSessionCwd?: string }).__nataliaSessionCwd;
   const collapsible = () => shouldCollapseToolOutput(output());
-  const shownOutput = () => {
-    if (!collapsible() || expanded()) return output();
-    return outputLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES).join("\n");
-  };
-  // A diff body's lines are marked by the tool (`- ` removed, `+ ` added) so
-  // that a UI without a diff renderer still reads the hunk. We HAVE a renderer
-  // here: the marks become color, which is what makes a hunk scannable at a
-  // glance. A UI that cannot color them keeps the text verbatim.
-  const isDiff = () => card?.kind === "diff";
-  const outputLineElements = (): Array<{
-    line: string;
-    kind: "added" | "removed" | "plain";
-  }> => {
-    // The keyed model carries its own kinds (Q&A rows, checklist done rows);
-    // the generic path derives them from the diff marks the tool wrote.
-    const keyedBody = keyed();
-    if (keyedBody) {
-      const bounded = keyedBody.slice(
-        0,
-        collapsible() && !expanded()
-          ? TOOL_OUTPUT_PREVIEW_LINES
-          : keyedBody.length,
-      );
-      return bounded.map((entry) => ({
-        line: entry.line,
-        kind:
-          entry.kind === "added" || entry.kind === "answer"
-            ? ("added" as const)
-            : entry.kind === "removed"
-              ? ("removed" as const)
-              : ("plain" as const),
-      }));
-    }
-    return shownOutput()
-      .split("\n")
-      .map((line) => {
-        if (!isDiff()) return { line, kind: "plain" as const };
-        if (line.startsWith("+ ")) return { line, kind: "added" as const };
-        if (line.startsWith("- ")) return { line, kind: "removed" as const };
-        return { line, kind: "plain" as const };
-      });
-  };
+  // Both paths collapse on the same term: the first N lines of the SAME
+  // line model the expanded state shows, so the toggle never changes what a
+  // line says — only how many of them there are.
+  const shownLines = () =>
+    collapsible() && !expanded()
+      ? bodyLines().slice(0, TOOL_OUTPUT_PREVIEW_LINES)
+      : bodyLines();
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.
@@ -1391,7 +1438,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
           data-collapsed={collapsible() && !expanded() ? "true" : undefined}
         >
           <pre>
-            <For each={outputLineElements()}>
+            <For each={shownLines()}>
               {(entry) => (
                 <span
                   class="natalia-tool-output-line"

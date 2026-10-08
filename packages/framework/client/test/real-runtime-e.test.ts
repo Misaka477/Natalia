@@ -2018,7 +2018,11 @@ test("collab_chat enforces direct replies and stops after three automatic rounds
       if (chatCount > 4)
         throw new Error(`collab_chat exceeded its limit: ${chatCount}`);
       return chatCount === 4 && mainWakeWithoutRequiredReply;
-    }, 20_000).catch((error) => {
+      // 45s: the chain is four provider turns with durable writes and a
+      // wake between them; the reference runner measured past 20s under the
+      // concurrent suite (the flake this covers). Still bounded well under
+      // the per-test cap, which is what a budget is for.
+    }, 45_000).catch((error) => {
       const summary = events
         .filter(
           (event) =>

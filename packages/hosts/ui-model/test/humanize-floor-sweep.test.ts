@@ -119,41 +119,64 @@ test("every presenter-less JSON tool's result is flattened, never raw", async ()
   }
 });
 
-test("every transcript host flattens tool output through the model layer", () => {
-  // The P0 hole the user caught: the model layer's flattener covered the
-  // panels' OTHER paths but the transcript's tool rows were built by each
-  // host itself — app-neu had a local flatten, and agent-panel/nia-panel
-  // passed `tool.result` RAW into the card, which is where the raw JSON in
-  // the UI came from. The flatten now lives in exactly one place
-  // (humanizeToolResult) and every host calls it. This guard reads the
-  // sources so the hole cannot reopen quietly.
+test("every transcript host routes its tool rows through the kit's toolCallRow", () => {
+  // The P0 hole the user caught: the transcript's tool rows were built by
+  // each host itself — app-neu had a local flatten, and agent-panel/
+  // nia-panel passed `tool.result` RAW into the card. The presentation is
+  // now ONE function in the kit (`toolCallRow`), which derives the row's
+  // summary from the result and hands the raw result to the kit's
+  // presenters — so a replayed event renders exactly like a live one.
+  // This guard keeps the hosts out of the presentation business.
   const hosts = [
     "packages/plugins/ui/web/src/app-neu.tsx",
     "packages/plugins/ui/web/src/agent-panel.tsx",
     "packages/plugins/ui/web/src/nia-panel.tsx",
-    "packages/plugins/ui/web/src/status-panel.tsx",
   ];
   const repoRoot = join(import.meta.dir, "../../../..");
   for (const host of hosts) {
     const source = readFileSync(join(repoRoot, host), "utf8");
-    // The import may be merged with other ui-model names, so match on the
-    // binding appearing in an import statement from that module.
-    const importsHumanize =
-      /import\s*\{[^}]*\bhumanizeToolResult\b[^}]*\}\s*from\s*"@natalia\/ui-model"/s.test(
+    // The row model comes from the kit.
+    const usesRow =
+      /import\s*\{[^}]*\btoolCallRow\b[^}]*\}\s*from\s*"@natalia\/ui-kit"/s.test(
         source,
       );
-    expect(importsHumanize, `${host} must import the flattener`).toBe(true);
-    // The card-model construction must not pass a raw result through; the
-    // panel path must route its fallback through the flattener.
+    expect(usesRow, `${host} must build rows via toolCallRow`).toBe(true);
+    expect(source.includes("toolCallRow(tool)")).toBe(true);
+    // No host hand-builds a tool row or pre-flattens the result.
     expect(
-      source.includes("output: tool.result ?? tool.summary,"),
-      `${host} must not pass a raw tool result into the card`,
+      source.includes("output: tool.result"),
+      `${host} must not pass a raw tool result into a hand-built card`,
     ).toBe(false);
     expect(
-      source.includes("humanizeToolResult("),
-      `${host} must flatten through humanizeToolResult`,
-    ).toBe(true);
+      source.includes("output: humanizeToolResult("),
+      `${host} must not pre-flatten the result itself`,
+    ).toBe(false);
   }
+  // The kit owns the single flatten point.
+  const kitSource = readFileSync(
+    join(repoRoot, "packages/plugins/ui/kit/src/message.ts"),
+    "utf8",
+  );
+  expect(kitSource.includes("humanizeToolResult")).toBe(true);
+  // The runtime never publishes a raw prefix as a summary again.
+  const runtimeSource = readFileSync(
+    join(
+      repoRoot,
+      "packages/framework/client/src/runtime/tool-execution/execute-run.ts",
+    ),
+    "utf8",
+  );
+  expect(
+    runtimeSource.includes("toolResultSummary(result, projectedRender)"),
+  ).toBe(true);
+  const subagentSource = readFileSync(
+    join(
+      repoRoot,
+      "packages/framework/client/src/runtime/initialize/subagent-tools.ts",
+    ),
+    "utf8",
+  );
+  expect(subagentSource.includes("summary: result.slice(0, 200)")).toBe(false);
 });
 
 test("every model-facing tool projects a card (the 2026-10-07 completeness sweep)", () => {

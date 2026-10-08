@@ -1010,11 +1010,22 @@ test("chat reserves its configured final step and preserves XML-like text", asyn
 
   await client.naviChat!.submit({ text: "send a notice" });
 
-  expect(requests).toHaveLength(2);
-  expect(requests[0]?.tools?.length).toBeGreaterThan(0);
-  expect(requests[1]).toMatchObject({ tools: undefined, toolChoice: "none" });
+  // The session-title turn is a provider call too (it names the session), so
+  // the collection's length is not the chat turn's shape. Select the chat
+  // turn's own calls by content — the ones that carry the user's text.
+  const chatRequests = requests.filter((request) =>
+    request.messages.some((message) =>
+      message.content.includes("send a notice"),
+    ),
+  );
+  expect(chatRequests).toHaveLength(2);
+  expect(chatRequests[0]?.tools?.length).toBeGreaterThan(0);
+  expect(chatRequests[1]).toMatchObject({
+    tools: undefined,
+    toolChoice: "none",
+  });
   expect(
-    requests[1]?.messages.some((message) =>
+    chatRequests[1]?.messages.some((message) =>
       message.content.includes("MAXIMUM STEPS REACHED"),
     ),
   ).toBe(true);
@@ -1401,8 +1412,15 @@ test("the collaboration channel round-robins between Navi and the main agent", a
         const naviTurn = allMessages.includes("<natalia_collaborations>");
         if (!naviTurn) {
           // ADR D1/D2: the main agent's collaboration state is runtime context
-          // appended as a user message, not system prompt content.
-          mainPrompt = allMessages;
+          // appended as a user message, not system prompt content. Latch the
+          // prompt that CARRIES the block: a later title-generation turn is
+          // also a non-navi call and would otherwise replace it (the CI flake
+          // this closes).
+          if (
+            mainPrompt.length === 0 &&
+            allMessages.includes("<live_work_chat>")
+          )
+            mainPrompt = allMessages;
           mainStreamCount++;
           if (mainStreamCount === 1) {
             yield { type: "content" as const, text: "I will use that." };
@@ -2482,10 +2500,15 @@ test("/team forces the agent-team directive into the turn context", async () => 
       provider: "scripted-team",
       model: "scripted-team-model",
       async *stream(request) {
-        sawDirective = request.messages.some(
-          (message) =>
-            message.role === "system" && message.content.includes("agent team"),
-        );
+        // Latched, not overwritten: a later title-generation turn is a
+        // provider call without the directive and would clear it.
+        sawDirective =
+          sawDirective ||
+          request.messages.some(
+            (message) =>
+              message.role === "system" &&
+              message.content.includes("agent team"),
+          );
         yield {
           type: "content",
           text: sawDirective ? "team ready" : "no team",

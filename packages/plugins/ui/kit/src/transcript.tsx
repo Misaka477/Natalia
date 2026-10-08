@@ -1237,11 +1237,11 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // The line model is message.ts's pure function; the shell below is shared
   // with the generic path.
   const keyed = () =>
-    keyedToolviewLines({
-      name: props.toolCall.name,
-      card: card,
-      output: props.toolCall.output,
-    });
+    // The ToolCall ITSELF — never a rebuilt subset: the object literal I
+    // wrote here carried only {name, card, output} and silently dropped
+    // `arguments`, which is exactly the half the Q&A derives from. The
+    // user watched a day of "why is it still the old form" over that.
+    keyedToolviewLines(props.toolCall);
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
   const rowLabel = () => toolRowLabel(props.toolCall.name);

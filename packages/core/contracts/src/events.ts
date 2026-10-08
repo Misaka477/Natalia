@@ -512,6 +512,15 @@ export type ToolCard =
       question?: string;
       options?: string[];
       answers?: string[];
+      /**
+       * A checklist's rows, when the call's answer IS a list of things with
+       * a done state (the todo card): each row's text and whether it is
+       * done. A client draws `[x]`/`[ ]` rows — the way it colors a diff's
+       * marks — and parses nothing. The 2026-10-08 ruling: the checklist
+       * rendered from a parsed envelope body was a name-keyed special case;
+       * this is the same reading as CARD DATA.
+       */
+      checklist?: Array<{ text: string; done: boolean }>;
     });
 
 /** A card's label/value facets (exit code, total lines, ...). */

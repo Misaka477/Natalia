@@ -1358,8 +1358,19 @@ export const CARD_RENDERERS: CardRendererMap = {
   // The body IS the reading: the tool-side flatten (or, since R5.5, the
   // runtime's default projection). A client draws it and parses nothing —
   // the last `humanizeToolResult` call left this file in R6.
-  generic: (card, toolCall) =>
-    plainCardLines(card.body ?? toolCall.output ?? ""),
+  generic: (card, toolCall) => {
+    // A checklist is card data, not a body to parse: the tool declares the
+    // rows and their done state, and the renderer draws them the way it
+    // colors a diff's marks. The 2026-10-08 ruling — the name-keyed
+    // checklist special case was the wrong layer; this is the same reading
+    // on the card itself.
+    if (card.checklist && card.checklist.length > 0)
+      return card.checklist.map((row) => ({
+        line: `${row.done ? "[x]" : "[ ]"} ${row.text}`,
+        kind: row.done ? ("added" as const) : ("plain" as const),
+      }));
+    return plainCardLines(card.body ?? toolCall.output ?? "");
+  },
 };
 
 /**

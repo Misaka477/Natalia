@@ -181,3 +181,29 @@ test("a path search's listing is one line per path", () => {
     { line: "  12: the renderer", kind: "plain" },
   ]);
 });
+
+test("a checklist is card data: the rows are drawn, not parsed (S4)", () => {
+  // The 2026-10-08 ruling: the todo checklist used to be a name-keyed
+  // special case parsing an envelope body. It is now a card field, drawn
+  // the way a diff's marks are.
+  const card: ToolCard = {
+    kind: "generic",
+    title: "todos",
+    summary: "3 items · 1 done",
+    checklist: [
+      { text: "Read the reference", done: true },
+      { text: "Ship the checklist card", done: false },
+    ],
+  };
+  expect(CARD_RENDERERS.generic(card, toolCall())).toEqual([
+    { line: "[x] Read the reference", kind: "added" },
+    { line: "[ ] Ship the checklist card", kind: "plain" },
+  ]);
+  // A card without the field still draws its body — the field is an
+  // upgrade, not a gate (replay of older events keeps working).
+  const plain: ToolCard = { kind: "generic", title: "todos", body: "a\nb" };
+  expect(CARD_RENDERERS.generic(plain, toolCall())).toEqual([
+    { line: "a", kind: "plain" },
+    { line: "b", kind: "plain" },
+  ]);
+});

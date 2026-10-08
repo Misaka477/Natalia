@@ -304,3 +304,43 @@ test("todo_write answers with the same envelope todo_read returns (T-01)", async
       ),
   ).resolves.toBeTruthy();
 });
+
+test("todo_write's card carries the checklist as card data (S4)", () => {
+  // The regression the user ruled on: R6 deleted the name-keyed checklist
+  // and left the shared flatten. The rows are card data now.
+  const value = JSON.stringify({
+    items: [
+      { content: "Read the reference", status: "completed" },
+      { content: "Ship the checklist card", status: "in_progress" },
+      { content: "Wire the renderer", status: "pending" },
+    ],
+    total: 3,
+    truncated: false,
+  });
+  const tool = todoTools.find((entry) => entry.name === "todo_write")!;
+  const meta = tool.output!.presentationMeta!({}, value);
+  const card = tool.output!.presentResult!({}, value, meta);
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "todos",
+    summary: "written",
+    meta: [["total", "3"]],
+    checklist: [
+      { text: "Read the reference", done: true },
+      { text: "Ship the checklist card", done: false },
+      { text: "Wire the renderer", done: false },
+    ],
+  });
+  // The read side answers the same shape, with the counts in its summary.
+  const read = todoTools.find((entry) => entry.name === "todo_read")!;
+  const readCard = read.output!.presentResult!(
+    {},
+    value,
+    read.output!.presentationMeta!({}, value),
+  );
+  expect(readCard).toMatchObject({
+    kind: "generic",
+    title: "todos",
+    summary: "3 items · 1 done",
+  });
+});

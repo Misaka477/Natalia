@@ -8,12 +8,12 @@
  * loads it. The host composes families; the framework ships none.
  */
 import {
-  genericToolCard,
   optionalInteger,
   requireObject,
   requireString,
   type RuntimeTool,
   type ToolFamily,
+  type ToolOutputDefinition,
 } from "@anthelia/tools";
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -27,6 +27,98 @@ import {
 } from "./todo-item";
 
 export const TODO_PLUGIN_ID = "natalia-tool-todo";
+
+/**
+ * The todo family's card (2026-10-08, the R6 regression's fix).
+ *
+ * A todo answer IS a checklist — a list of things with a done state. The
+ * envelope is decoded once (presentationMeta), and the card carries
+ * `checklist` rows a client draws as `[x]`/`[ ]`. No tool name appears in
+ * any renderer; the rows sit on the card the way a diff's hunks do.
+ */
+type TodoFacts = {
+  items: Array<{ content: string; status: string }>;
+  total?: number;
+  truncated?: boolean;
+};
+
+function todoFacts(value: string): TodoFacts {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value) as unknown;
+  } catch {
+    return { items: [] };
+  }
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+    return { items: [] };
+  const record = decoded as Record<string, unknown>;
+  const items = Array.isArray(record.items)
+    ? record.items.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const item = entry as Record<string, unknown>;
+        if (typeof item.content !== "string") return [];
+        return [
+          {
+            content: item.content,
+            status: typeof item.status === "string" ? item.status : "pending",
+          },
+        ];
+      })
+    : [];
+  return {
+    items,
+    ...(typeof record.total === "number" ? { total: record.total } : {}),
+    ...(record.truncated === true ? { truncated: true } : {}),
+  };
+}
+
+function todoToolCard(input: {
+  callSummary: string;
+  resultSummary?: string;
+}): ToolOutputDefinition {
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall() {
+      return { kind: "generic", title: "todos", summary: input.callSummary };
+    },
+    presentationMeta(_args, value) {
+      // ONE decode: the counts travel the event's meta slot.
+      const facts = todoFacts(value);
+      return {
+        total: facts.total,
+        truncated: facts.truncated === true,
+        done: facts.items.filter((item) => item.status === "completed").length,
+        shown: facts.items.length,
+      };
+    },
+    presentResult(_args, value, meta) {
+      const facts = todoFacts(value);
+      const shown =
+        typeof meta?.shown === "number" ? meta.shown : facts.items.length;
+      const total = typeof meta?.total === "number" ? meta.total : facts.total;
+      const truncated = meta?.truncated === true;
+      const done = facts.items.filter(
+        (item) => item.status === "completed",
+      ).length;
+      const summary =
+        input.resultSummary ??
+        (truncated && total !== undefined
+          ? `${shown} of ${total} items · ${done} done`
+          : `${shown} items · ${done} done`);
+      return {
+        kind: "generic",
+        title: "todos",
+        summary,
+        // The reading IS the checklist.
+        checklist: facts.items.map((item) => ({
+          text: item.content,
+          done: item.status === "completed",
+        })),
+        ...(total === undefined ? {} : { meta: [["total", String(total)]] }),
+      };
+    },
+  };
+}
 
 function todoReadTool(): RuntimeTool {
   return {
@@ -50,50 +142,8 @@ function todoReadTool(): RuntimeTool {
       },
       additionalProperties: false,
     },
-    output: {
-      schema: {
-        type: "object",
-        properties: {
-          items: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                content: { type: "string" },
-                status: { type: "string", enum: [...TODO_STATUSES] },
-              },
-              required: ["content", "status"],
-              additionalProperties: false,
-            },
-          },
-          total: { type: "integer" },
-          truncated: { type: "boolean" },
-        },
-        required: ["items", "total", "truncated"],
-        additionalProperties: false,
-      },
-      presentCall() {
-        return { kind: "generic", title: "todos", summary: "read" };
-      },
-      presentResult(_args, value) {
-        const parsed = JSON.parse(value) as {
-          items?: Array<{ status?: string; content?: string }>;
-          total?: number;
-          truncated?: boolean;
-        };
-        const items = parsed.items ?? [];
-        const done = items.filter((item) => item.status === "completed").length;
-        const summary = parsed.truncated
-          ? `${items.length} of ${parsed.total} items · ${done} done`
-          : `${items.length} items · ${done} done`;
-        return {
-          kind: "generic",
-          title: "todos",
-          summary,
-          body: value,
-        };
-      },
-    },
+    // The family card: one decode, and the checklist as card data.
+    output: todoToolCard({ callSummary: "read" }),
     async execute(input, context) {
       const limit = optionalInteger(requireObject(input).limit, "limit");
       const items = await readTodos(
@@ -153,12 +203,8 @@ function todoWriteTool(): RuntimeTool {
       required: ["items"],
       additionalProperties: false,
     },
-    output: genericToolCard({
-      family: "todo",
-      callSummary: "write",
-      resultSummary: "written",
-      meta: [["total", "total"]],
-    }),
+    // The family card: the write's answer is the list as it now stands.
+    output: todoToolCard({ callSummary: "write", resultSummary: "written" }),
     async execute(input, context) {
       const args = requireObject(input);
       if (!Array.isArray(args.items)) throw new Error("items must be an array");

@@ -129,6 +129,7 @@ export const WORKER_ROUTE_MEMBERS = {
   "planDoc.delete": "planDocDelete",
   "planDoc.status": "planDocStatus",
   "planDoc.updateStatus": "planDocUpdateStatus",
+  "planDoc.pause": "planDocPause",
   "planDoc.active": "planDocActive",
   "planDoc.activate": "planDocActivate",
   "planDoc.deactivate": "planDocDeactivate",
@@ -288,6 +289,7 @@ type WorkerRequest = {
     | "planDoc.delete"
     | "planDoc.status"
     | "planDoc.updateStatus"
+    | "planDoc.pause"
     | "planDoc.active"
     | "planDoc.activate"
     | "planDoc.deactivate"
@@ -974,6 +976,11 @@ export function createWorkerRuntimeClient(
     async planDocUpdateStatus(input) {
       return (await request("planDoc.updateStatus", input)) as Awaited<
         ReturnType<NonNullable<RuntimeClient["planDocUpdateStatus"]>>
+      >;
+    },
+    async planDocPause(input) {
+      return (await request("planDoc.pause", input)) as Awaited<
+        ReturnType<NonNullable<RuntimeClient["planDocPause"]>>
       >;
     },
     async planDocActive(sessionID) {
@@ -1766,6 +1773,8 @@ export async function handleWorkerRequest(
   }
   if (request.method === "planDoc.updateStatus")
     return await client.planDocUpdateStatus?.(request.value as never);
+  if (request.method === "planDoc.pause")
+    return await client.planDocPause?.(request.value as never);
   if (request.method === "planDoc.active")
     return await client.planDocActive?.(
       (request.value as { sessionID?: string } | undefined)?.sessionID,

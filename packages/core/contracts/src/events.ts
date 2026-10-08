@@ -4683,6 +4683,12 @@ export type RuntimeClient = {
        */
       revision: number;
       markedAt?: string;
+      /**
+       * The status this plan had before it was paused, so a resume returns
+       * the plan's OWN state (the 2026-10-08 audit's P0-3: a pause round
+       * trip used to land every plan on `executing`).
+       */
+      statusBeforePause?: string;
     }>
   >;
   /** Reads a Markdown plan document by planID or path. */
@@ -4749,6 +4755,22 @@ export type RuntimeClient = {
     status: string;
     sessionID?: string;
   }): Promise<{ updated: boolean; reason?: string }>;
+  /**
+   * Pause/resume that keeps the plan's OWN status: a pause records the
+   * status the plan had before it and a resume returns that status, so
+   * `audit_gaps` round trips as `audit_gaps` — never as a hardcoded
+   * `executing` (the 2026-10-08 audit's P0-3).
+   */
+  planDocPause?(input: {
+    planID: string;
+    paused: boolean;
+    sessionID?: string;
+  }): Promise<{
+    updated: boolean;
+    status?: string;
+    previousStatus?: string;
+    reason?: string;
+  }>;
   /**
    * Reads the session-scoped active plan pointer. Plan documents themselves are
    * workspace-level; activation is independent per session.

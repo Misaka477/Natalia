@@ -19,6 +19,12 @@ export type PlanDocRuntime = {
       updatedAt: string;
       revision: number;
       markedAt?: string;
+      /**
+       * The status this plan had before it was paused, so a resume returns
+       * the plan's OWN state (the 2026-10-08 audit's P0-3: a pause round
+       * trip used to land every plan on `executing`).
+       */
+      statusBeforePause?: string;
     }>
   >;
   planDocRead(input: {
@@ -58,6 +64,23 @@ export type PlanDocRuntime = {
     status: string;
     sessionID?: string;
   }): Promise<{ updated: boolean; reason?: string }>;
+  /**
+   * Pause/resume that keeps the plan's OWN status. A pause records the
+   * status the plan had before it (in the index, beside the plan) and a
+   * resume returns that status — so `audit_gaps` pauses and resumes as
+   * `audit_gaps`, never as the hardcoded `executing` the 2026-10-08 audit
+   * caught (P0-3: a round trip used to lose the caller's state).
+   */
+  planDocPause(input: {
+    planID: string;
+    paused: boolean;
+    sessionID?: string;
+  }): Promise<{
+    updated: boolean;
+    status?: string;
+    previousStatus?: string;
+    reason?: string;
+  }>;
   /** Workspace-level plan registry snapshot for synchronous prompt building. */
   planDocSnapshot(): PlanDocRecord[];
   /** Workspace-level lookup by planID. */

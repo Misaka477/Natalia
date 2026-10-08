@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { SessionID } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "../src";
+import { createPlanDocTickTool } from "../src/runtime/plan-doc-tools";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   officialPluginWorkspace,
   useWorkspaceCleanup,
@@ -207,3 +210,114 @@ test("Phase 4 E2E: plan_doc_tick appends a 落地日志 section to a checkbox-le
 
   await client.dispose?.();
 }, 30_000);
+
+/**
+ * Drive `plan_doc_tick` the way the runtime does: the same factory the
+ * services wire, executed against the live workspace.
+ */
+async function tick(
+  root: string,
+  planID: string,
+  task: string,
+  done: boolean,
+): Promise<string> {
+  const tool = createPlanDocTickTool({
+    ports: {
+      getReady: () => Promise.resolve(),
+      getWorkspaceRoot: () => root,
+      getSessionID: () => SESSION,
+      planDocRuntime: {
+        planDocRead: async (input: { planID: string }) => {
+          const index = JSON.parse(
+            await readFile(
+              join(root, ".natalia", "plans", "index.json"),
+              "utf8",
+            ),
+          ) as Record<string, { documentPath: string }>;
+          const record = index[input.planID];
+          if (!record) throw new Error("unknown plan");
+          const content = await readFile(
+            join(root, ".natalia", "plans", record.documentPath),
+            "utf8",
+          );
+          return {
+            planID: input.planID,
+            documentPath: record.documentPath,
+            content,
+          };
+        },
+        planDocWrite: async (input: { path: string; content: string }) => {
+          await writeFile(
+            join(root, ".natalia", "plans", input.path),
+            input.content,
+            "utf8",
+          );
+          return { written: true };
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createPlanDocTickTool>[0]);
+  return await tool.execute({ planID, task, done }, {
+    sessionID: SESSION,
+    workspaceRoot: root,
+  } as unknown as Parameters<typeof tool.execute>[1]);
+}
+
+test("an untick that changes nothing is a refusal, not ok:true (P0-4)", async () => {
+  // The 2026-10-08 audit's P0-4: plan_doc_tick(done:false) answered
+  // {ok:true, action:"unticked"} while the document still carried the tick.
+  const root = await officialPluginWorkspace("plan-tick-noop");
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: SESSION,
+    permissionMode: "auto",
+    provider: createScriptedProvider({
+      main: [{ text: "standby" }],
+      navi: [{ text: "standby" }],
+      nia: [{ text: "standby" }],
+    }),
+  });
+  client.start(() => undefined);
+  await client.sessionAttach!(SESSION);
+  await client.planDocWrite!({
+    path: "plans/tick-noop.md",
+    content: [
+      "# Tick noop",
+      "",
+      "## 落地日志",
+      "",
+      "- [x] AUDIT-PROBE-TEMP-DO-NOT-SHIP",
+      "",
+    ].join("\n"),
+    title: "Tick noop",
+  });
+  const marked = await client.planDocMark!({
+    path: "plans/tick-noop.md",
+    title: "Tick noop",
+  });
+  // The landing-log entry IS the checkbox, so this one really retracts.
+  const retracted = await tick(
+    root,
+    marked.planID,
+    "AUDIT-PROBE-TEMP-DO-NOT-SHIP",
+    false,
+  );
+  expect(JSON.parse(String(retracted))).toMatchObject({
+    ok: true,
+    action: "unticked",
+  });
+  const doc = await client.planDocRead!({ planID: marked.planID });
+  expect(doc.content).toContain("- [ ] AUDIT-PROBE-TEMP-DO-NOT-SHIP");
+  expect(doc.content).not.toContain("- [x] AUDIT-PROBE-TEMP-DO-NOT-SHIP");
+  // A second untick changes nothing: the answer says so instead of lying.
+  const again = await tick(
+    root,
+    marked.planID,
+    "AUDIT-PROBE-TEMP-DO-NOT-SHIP",
+    false,
+  );
+  expect(JSON.parse(String(again))).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("nothing to retract"),
+  });
+});

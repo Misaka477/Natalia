@@ -484,5 +484,73 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       // status — tombstone in .kilo/plans/landing/plan-audit-line.
       return { updated: true };
     },
+
+    async planDocPause(input) {
+      // P0-3: a pause round trip must return the plan's OWN status. The
+      // status it had before the pause travels with the plan (in the
+      // index), so a resume restores it instead of writing `executing`.
+      await ctx.ports.getReady();
+      const entries = await readIndex(ctx);
+      const record = entries[input.planID];
+      if (!record) return { updated: false };
+      // T-20 (terminal protection), the same rule the update path enforces:
+      // a completed or handed-off plan is a closed lifecycle fact and refuses
+      // both directions, naming the terminal status.
+      if (isTerminalPlanStatus(record.status))
+        return {
+          updated: false,
+          status: record.status,
+          reason:
+            `plan ${input.planID} is ${record.status} (a terminal status); ` +
+            `it cannot be paused or resumed. A finished plan stays finished — ` +
+            `mark a new plan document to continue the work.`,
+        };
+      // Both directions publish the durable status fact (the same one the
+      // update path writes), so replay and the plan panel agree.
+      const publishStatus = (status: string) =>
+        publish(
+          requireWorkLedger().buildPlanDocStatus({
+            id: `${input.planID}:status:${ctx.ports.nextPlanSequence()}`,
+            planID: input.planID,
+            status,
+            at: new Date().toISOString(),
+          }),
+          input.sessionID,
+        );
+      if (input.paused) {
+        // Already paused: idempotent, and it names the status the plan
+        // will resume to.
+        if (record.status === "paused")
+          return {
+            updated: false,
+            status: record.status,
+            previousStatus: record.statusBeforePause ?? record.status,
+            reason: `plan ${input.planID} is already paused`,
+          };
+        const previousStatus = record.status;
+        record.statusBeforePause = previousStatus;
+        record.status = "paused";
+        record.updatedAt = new Date().toISOString();
+        entries[input.planID] = record;
+        await writeIndex(ctx, entries);
+        publishStatus("paused");
+        return { updated: true, status: "paused", previousStatus };
+      }
+      // Resume: the plan's own status, never a hardcoded one.
+      if (record.status !== "paused")
+        return {
+          updated: false,
+          status: record.status,
+          reason: `plan ${input.planID} is not paused (it is ${record.status})`,
+        };
+      const restored = record.statusBeforePause ?? "executing";
+      delete record.statusBeforePause;
+      record.status = restored;
+      record.updatedAt = new Date().toISOString();
+      entries[input.planID] = record;
+      await writeIndex(ctx, entries);
+      publishStatus(restored);
+      return { updated: true, status: restored, previousStatus: "paused" };
+    },
   };
 }

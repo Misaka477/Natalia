@@ -321,6 +321,7 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "planDocDelete",
     "planDocStatus",
     "planDocUpdateStatus",
+    "planDocPause",
     "planDocActive",
     "planDocActivate",
     "planDocDeactivate",

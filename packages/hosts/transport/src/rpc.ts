@@ -320,6 +320,7 @@ export const RPC_ROUTE_MEMBERS = {
   "planDoc.delete": "planDocDelete",
   "planDoc.status": "planDocStatus",
   "planDoc.updateStatus": "planDocUpdateStatus",
+  "planDoc.pause": "planDocPause",
   "planDoc.active": "planDocActive",
   "planDoc.activate": "planDocActivate",
   "planDoc.deactivate": "planDocDeactivate",
@@ -3399,6 +3400,27 @@ export async function handleRPCMessage(
         result: await client.planDocUpdateStatus?.({
           planID,
           status,
+          ...(typeof params?.sessionID === "string"
+            ? { sessionID: params.sessionID }
+            : {}),
+        }),
+      };
+    }
+    if (body.method === "planDoc.pause") {
+      optionsGuard(client, "planDocPause");
+      const params = body.params as Record<string, unknown> | undefined;
+      const planID = params?.planID;
+      const paused = params?.paused;
+      if (typeof planID !== "string" || !planID)
+        throw invalidParams("planDoc.pause requires a planID string");
+      if (typeof paused !== "boolean")
+        throw invalidParams("planDoc.pause requires a paused boolean");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.planDocPause?.({
+          planID,
+          paused,
           ...(typeof params?.sessionID === "string"
             ? { sessionID: params.sessionID }
             : {}),

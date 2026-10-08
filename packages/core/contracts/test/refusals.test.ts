@@ -57,6 +57,7 @@ test("the members whose refusal must be a value are named, and each names its fi
     "planDocDeactivate",
     "planDocDelete",
     "planDocMark",
+    "planDocPause",
     "planDocUpdateStatus",
     "planDocWrite",
     "pluginInstall",

@@ -798,6 +798,11 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "updated",
     note: "updates a plan document lifecycle status",
   },
+  planDocPause: {
+    refusal: "value",
+    expressedBy: "updated",
+    note: "pauses or resumes a plan, keeping the plan's own status for the resume",
+  },
   planDocActive: {
     refusal: "none",
     note: "pure read of a session's active plan pointer",

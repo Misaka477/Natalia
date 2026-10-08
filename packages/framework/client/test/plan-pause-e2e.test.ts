@@ -88,10 +88,15 @@ test("plan_pause sets a durable paused status and resumes (EI §3.5)", async () 
     )
     .map((event) => event.status);
   expect(statuses).toContain("paused");
-  expect(statuses).toContain("executing");
+  // P0-3: the resume returns the plan's OWN status, which is `marked` here
+  // (the plan was marked and never advanced). The old hardcoded
+  // `executing` was the audit's finding — a round trip that rewrote the
+  // caller's state.
+  expect(statuses).toContain("marked");
+  expect(statuses).not.toContain("executing");
   // The plan panel reads the final status.
   const list = await client.planDocList!();
-  expect(list.find((plan) => plan.planID === planID)?.status).toBe("executing");
+  expect(list.find((plan) => plan.planID === planID)?.status).toBe("marked");
   await client.dispose?.();
 }, 30_000);
 
@@ -203,3 +208,67 @@ test("a terminal plan refuses pause and resume (T-20)", async () => {
   expect(list.find((plan) => plan.planID === planID)?.status).toBe("completed");
   await client.dispose?.();
 }, 30_000);
+
+test("a pause round trip returns the plan's own status, not executing (P0-3)", async () => {
+  // The 2026-10-08 audit's P0-3: audit_gaps -> paused -> resume used to
+  // land on `executing` (a hardcoded value), losing the caller's state.
+  let planID = "";
+  const root = await officialPluginWorkspace("plan-own-status");
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: "ses_plan_own_status" as SessionID,
+    permissionMode: "auto",
+    provider: {
+      provider: "scripted-own-status",
+      model: "scripted-own-status-model",
+      async *stream() {
+        yield { type: "content" as const, text: "paused" };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start(() => undefined);
+  try {
+    await client.sessionAttach!("ses_plan_own_status" as SessionID);
+    await client.planDocWrite!({
+      path: "plans/own-status.md",
+      content: "# Own status\n\n- one step\n",
+      title: "Own status",
+    });
+    planID = (
+      await client.planDocMark!({
+        path: "plans/own-status.md",
+        title: "Own status",
+      })
+    ).planID;
+    // The plan's own state before the pause.
+    await client.planDocUpdateStatus!({
+      planID,
+      status: "audit_gaps",
+      sessionID: "ses_plan_own_status" as SessionID,
+    });
+    // Pause, then resume, through the same port the tool uses.
+    const paused = await client.planDocPause!({
+      planID,
+      paused: true,
+      sessionID: "ses_plan_own_status" as SessionID,
+    });
+    expect(paused).toMatchObject({
+      updated: true,
+      status: "paused",
+      previousStatus: "audit_gaps",
+    });
+    const resumed = await client.planDocPause!({
+      planID,
+      paused: false,
+      sessionID: "ses_plan_own_status" as SessionID,
+    });
+    expect(resumed).toMatchObject({ updated: true, status: "audit_gaps" });
+    const list = await client.planDocList!();
+    expect(list.find((plan) => plan.planID === planID)?.status).toBe(
+      "audit_gaps",
+    );
+  } finally {
+    await client.dispose?.();
+  }
+});

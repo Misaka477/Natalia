@@ -186,3 +186,44 @@ test("applyPlanDocTick is idempotent and refuses an empty task", () => {
   const empty = applyPlanDocTick(doc, { task: "   ", done: true });
   expect(empty.ok).toBe(false);
 });
+
+test("a no-op untick on a checkbox-less plan is a refusal, not ok:true (P0-4)", () => {
+  // The 2026-10-08 audit's P0-4: plan_doc_tick(done:false) answered
+  // {ok:true, action:"unticked"} while the document still carried the tick.
+  // A plan with no checkbox for the task has nothing to retract, and the
+  // caller must be told so instead of a success that changed nothing.
+  const prose = [
+    "# A prose plan",
+    "",
+    "## Phase A",
+    "Do the thing.",
+    "",
+    "## 落地日志",
+    "",
+    "- [x] AUDIT-PROBE-TEMP-DO-NOT-SHIP",
+    "",
+  ].join("\n");
+  const result = applyPlanDocTick(prose, {
+    task: "AUDIT-PROBE-TEMP-DO-NOT-SHIP",
+    done: false,
+  });
+  // The landing log's entry IS the checkbox, so this one really unticks.
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error("unreachable");
+  expect(result.action).toBe("unticked");
+  expect(result.content).toContain("- [ ] AUDIT-PROBE-TEMP-DO-NOT-SHIP");
+  expect(result.content).not.toContain("- [x] AUDIT-PROBE-TEMP-DO-NOT-SHIP");
+
+  // A task with no checkbox anywhere, on a prose plan that carries a landing
+  // log: the ledger APPENDS an unticked entry (the log is the record), so the
+  // tool's own guard is what must refuse the no-op. That guard is asserted in
+  // the client's plan tools; here the ledger's answer is the append.
+  const appended = applyPlanDocTick(prose, {
+    task: "a task that is not in this plan",
+    done: false,
+  });
+  expect(appended.ok).toBe(true);
+  if (!appended.ok) throw new Error("unreachable");
+  expect(appended.action).toBe("logged");
+  expect(appended.content).toContain("- [ ] a task that is not in this plan");
+});

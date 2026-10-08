@@ -9,6 +9,7 @@ import {
   discoverSkills,
   SkillRegistry,
   formatSkillForModel,
+  skillLoadOutput,
   pullRemoteSkills,
   readSkillResource,
   resolveSkillResource,
@@ -489,4 +490,43 @@ test("removing a skill deletes it, and refuses a source it does not own", async 
   );
   // The refusal is a refusal: the files are still there.
   expect(existsSync(join(pluginDir, "shipped", "SKILL.md"))).toBe(true);
+});
+
+test("skill_load's card carries the skill's own document (S3)", () => {
+  // The card is a document read, not the model-facing envelope: the
+  // `<skill_content>` wrapper and the sampled file list come off, and the
+  // SKILL.md body rides as the numbered page.
+  const envelope = [
+    '<skill_content name="audit">',
+    "# Skill: audit",
+    "",
+    "Run the audit.",
+    "",
+    "Base directory for this skill: /w/.natalia/skills/audit",
+    "Relative paths in this skill are relative to this base directory.",
+    "Note: file list is sampled.",
+    "",
+    "<skill_files>",
+    "<file>run.sh</file>",
+    "</skill_files>",
+    "</skill_content>",
+  ].join("\n");
+  const output = skillLoadOutput();
+  const meta = output.presentationMeta!({ name: "audit" }, envelope);
+  const card = output.presentResult!({ name: "audit" }, envelope, meta);
+  expect(card).toMatchObject({
+    kind: "read",
+    title: "audit",
+    content: "Run the audit.",
+    lang: "markdown",
+  });
+  expect(card && card.kind === "read" && card.lines).toEqual([
+    { number: 1, text: "Run the audit." },
+  ]);
+  // A value that is not the envelope (a refusal) still renders as text.
+  const refused = output.presentResult!(
+    { name: "audit" },
+    "skill registry is not initialized",
+  );
+  expect(refused).toMatchObject({ kind: "read", title: "audit" });
 });

@@ -1,6 +1,10 @@
 import type { SessionID } from "@anthelia/contracts";
 import type { RuntimeContext } from "@anthelia/substrate";
-import { genericToolCard, type RuntimeTool } from "@anthelia/tools";
+import {
+  genericToolCard,
+  type RuntimeTool,
+  type ToolOutputDefinition,
+} from "@anthelia/tools";
 import { estimateTokens } from "@anthelia/runtime";
 import { workspaceStoreID } from "@anthelia/platform";
 import {
@@ -39,6 +43,161 @@ const PACK_MAX_BUDGET = 8000;
 const PACK_CANDIDATE_CAP = 50;
 
 type SessionAnswer = { sessionID: string } | { error: string; note?: string };
+
+/** The context pack's card (S3): the pack is the reading. */
+function contextPackCard(): ToolOutputDefinition {
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const agent =
+        typeof parsed.agentID === "string" ? parsed.agentID : undefined;
+      return {
+        kind: "generic",
+        title: agent ? `context pack · ${agent}` : "context pack",
+        summary: "pack",
+      };
+    },
+    presentationMeta(_args, value) {
+      try {
+        const decoded = JSON.parse(value) as {
+          data?: {
+            tokens?: unknown;
+            truncated?: unknown;
+            items?: unknown;
+          };
+        } | null;
+        const pack = decoded?.data;
+        return {
+          tokens: typeof pack?.tokens === "number" ? pack.tokens : undefined,
+          truncated: pack?.truncated === true,
+          items: Array.isArray(pack?.items) ? pack.items.length : 0,
+        };
+      } catch {
+        return {};
+      }
+    },
+    presentResult(args, value, meta) {
+      let rows: Array<Record<string, unknown>> = [];
+      try {
+        const decoded = JSON.parse(value) as {
+          data?: { items?: unknown };
+        } | null;
+        if (Array.isArray(decoded?.data?.items))
+          rows = decoded.data.items as Array<Record<string, unknown>>;
+      } catch {
+        // A prose answer (an error) has no pack.
+      }
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const agent =
+        typeof parsed.agentID === "string" ? parsed.agentID : undefined;
+      const lines = rows.map((row) => {
+        const type =
+          typeof row.recordType === "string" ? row.recordType : "record";
+        const entityKey =
+          typeof row.entityKey === "string" ? row.entityKey : "";
+        const summary = typeof row.summary === "string" ? row.summary : "";
+        const head = entityKey ? `${type} · ${entityKey}` : type;
+        return summary ? `${head} — ${summary}` : head;
+      });
+      return {
+        kind: "generic",
+        title: agent ? `context pack · ${agent}` : "context pack",
+        summary: `${rows.length} record${rows.length === 1 ? "" : "s"}`,
+        body: lines.join("\n"),
+        meta: [
+          ...(typeof meta?.tokens === "number"
+            ? ([["tokens", String(meta.tokens)]] as Array<[string, string]>)
+            : []),
+          ...(meta?.truncated === true
+            ? ([["truncated", "true"]] as Array<[string, string]>)
+            : []),
+        ],
+      };
+    },
+  };
+}
+
+/**
+ * The vault faces' card (S3): a record read is a LIST of records, so the
+ * card carries the records themselves — one line each, `<type> · <key> —
+ * <summary>` — and the counts as facets. The generic flatten used to render
+ * the raw envelope's `data: [...]` array.
+ */
+function contextRecordCard(input: {
+  family: string;
+  callSummary: string;
+  resultSummary: string;
+  titleKey?: string;
+}): ToolOutputDefinition {
+  const records = (value: string): Array<Record<string, unknown>> => {
+    try {
+      const decoded = JSON.parse(value) as { data?: unknown } | null;
+      if (!decoded || typeof decoded !== "object") return [];
+      return Array.isArray(decoded.data)
+        ? (decoded.data as Array<Record<string, unknown>>)
+        : [];
+    } catch {
+      return [];
+    }
+  };
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      return {
+        kind: "generic",
+        title: typeof key === "string" && key ? key : input.family,
+        summary: input.callSummary,
+      };
+    },
+    presentationMeta(_args, value) {
+      return { total: records(value).length };
+    },
+    presentResult(args, value, meta) {
+      const rows = records(value);
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const key = input.titleKey ? parsed[input.titleKey] : undefined;
+      const title = typeof key === "string" && key ? key : input.family;
+      const total = typeof meta?.total === "number" ? meta.total : rows.length;
+      const lines = rows.map((row) => {
+        const type =
+          typeof row.recordType === "string" ? row.recordType : "record";
+        const entityKey =
+          typeof row.entityKey === "string" ? row.entityKey : "";
+        const summary = typeof row.summary === "string" ? row.summary : "";
+        const head = entityKey ? `${type} · ${entityKey}` : type;
+        return summary ? `${head} — ${summary}` : head;
+      });
+      return {
+        kind: "generic",
+        title,
+        summary:
+          total > 0
+            ? `${input.resultSummary} · ${total} record${total === 1 ? "" : "s"}`
+            : input.resultSummary,
+        // The reading is the record list itself.
+        body: lines.join("\n"),
+        ...(total > 0
+          ? { meta: [["total", String(total)] as [string, string]] }
+          : {}),
+      };
+    },
+  };
+}
 
 export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
   const currentSession = (
@@ -106,12 +265,11 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         },
         additionalProperties: false,
       },
-      output: genericToolCard({
+      output: contextRecordCard({
         family: "records",
         callSummary: "recall",
         resultSummary: "recalled",
         titleKey: "query",
-        meta: [["total", "total"]],
       }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
@@ -199,12 +357,11 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["query"],
         additionalProperties: false,
       },
-      output: genericToolCard({
+      output: contextRecordCard({
         family: "records",
         callSummary: "search",
         resultSummary: "found",
         titleKey: "query",
-        meta: [["total", "total"]],
       }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
@@ -281,12 +438,11 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["recordID"],
         additionalProperties: false,
       },
-      output: genericToolCard({
+      output: contextRecordCard({
         family: "record",
         callSummary: "read",
         resultSummary: "read",
         titleKey: "recordID",
-        meta: [["type", "recordType"]],
       }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
@@ -356,14 +512,10 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         },
         additionalProperties: false,
       },
-      output: genericToolCard({
+      output: contextRecordCard({
         family: "records",
         callSummary: "list",
         resultSummary: "listed",
-        meta: [
-          ["total", "total"],
-          ["returned", "returned"],
-        ],
       }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
@@ -425,11 +577,11 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["recordID"],
         additionalProperties: false,
       },
-      output: genericToolCard({
+      output: contextRecordCard({
         family: "history",
         callSummary: "history",
         resultSummary: "listed",
-        meta: [["total", "total"]],
+        titleKey: "recordID",
       }),
       async execute(parsed, context) {
         await ctx.ports.getReady();
@@ -504,15 +656,7 @@ export function createRinaContextTools(ctx: RuntimeContext): RuntimeTool[] {
         required: ["agentID"],
         additionalProperties: false,
       },
-      output: genericToolCard({
-        family: "context pack",
-        callSummary: "pack",
-        resultSummary: "packed",
-        meta: [
-          ["tokens", "tokens"],
-          ["truncated", "truncated"],
-        ],
-      }),
+      output: contextPackCard(),
       async execute(parsed, context) {
         await ctx.ports.getReady();
         const args = parsed as {

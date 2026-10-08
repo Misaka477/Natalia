@@ -18,7 +18,11 @@ import {
   resolve,
 } from "node:path";
 import { selectExecutor } from "@anthelia/shell";
-import type { RuntimeTool, ToolExecutionContext } from "@anthelia/tools";
+import type {
+  RuntimeTool,
+  ToolExecutionContext,
+  ToolOutputDefinition,
+} from "@anthelia/tools";
 import type {
   SkillMetadata,
   SkillPolicy,
@@ -331,6 +335,41 @@ export async function readSkillResource(skill: Skill, path: string) {
   return await readFile(resolveSkillResource(skill, path), "utf8");
 }
 
+/**
+ * The skill's own document out of the model-facing envelope.
+ *
+ * `formatSkillForModel` wraps the SKILL.md body in `<skill_content>` tags
+ * plus a sampled file list; the CARD shows the document, so the wrapper
+ * comes off here — the tool owns the reading of its own result.
+ */
+function skillBodyFrom(value: string): string | undefined {
+  const open = value.indexOf("<skill_content");
+  if (open < 0) return undefined;
+  const bodyStart = value.indexOf(">", open);
+  const bodyEnd = value.indexOf("</skill_content>", bodyStart);
+  if (bodyStart < 0 || bodyEnd < 0) return undefined;
+  const inner = value.slice(bodyStart + 1, bodyEnd);
+  // The envelope's chrome comes off both ends: the `# Skill:` header above,
+  // and the base-directory note plus the sampled `<skill_files>` list
+  // below. What is left is the SKILL.md body — the document.
+  const lines = inner.split("\n");
+  // The tag line leaves an empty first element; the header is
+  // `# Skill: <name>` followed by a blank line. The document is everything
+  // from there to the base-directory note (the envelope's own chrome).
+  const headerAt = lines.findIndex((line) => line.startsWith("# Skill:"));
+  const start = headerAt === -1 ? 0 : headerAt + 2;
+  const chromeAt = lines.findIndex(
+    (line, index) =>
+      index >= start && line.startsWith("Base directory for this skill:"),
+  );
+  const end = chromeAt === -1 ? lines.length : chromeAt;
+  return lines
+    .slice(start, end)
+    .join("\n")
+    .replace(/^\n+/, "")
+    .replace(/\n+$/, "");
+}
+
 export async function formatSkillForModel(skill: Skill) {
   const files = (
     await readdir(skill.root, { recursive: true }).catch((error) => {
@@ -362,6 +401,57 @@ export async function formatSkillForModel(skill: Skill) {
   ].join("\n");
 }
 
+/** The skill-load card: the loaded skill's own document (S3). */
+export function skillLoadOutput(): ToolOutputDefinition {
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const name = (args as { name?: unknown }).name;
+      return {
+        kind: "read",
+        // The spelling: the verb is in the title ("Load skill <name>").
+        title: `Load skill ${typeof name === "string" ? name : ""}`.trim(),
+        summary: "load",
+      };
+    },
+    presentationMeta(args, value) {
+      // ONE decode of the loaded skill's own envelope (S3): the body is
+      // the document, the rest are its facets.
+      const name = (args as { name?: unknown }).name;
+      const body = skillBodyFrom(value);
+      return {
+        name: typeof name === "string" ? name : undefined,
+        ...(body === undefined ? {} : { totalLines: body.split("\n").length }),
+      };
+    },
+    presentResult(args, value, meta) {
+      // The loaded skill IS a document: its body is the page, numbered
+      // the way a file read's is, and its identity rides as facets. The
+      // old card carried the whole model-facing envelope as one text
+      // block, tags included.
+      const name = (args as { name?: unknown }).name;
+      const body = skillBodyFrom(value) ?? value;
+      const total =
+        typeof meta?.totalLines === "number"
+          ? meta.totalLines
+          : body.split("\n").length;
+      return {
+        kind: "read",
+        title: typeof name === "string" ? name : "skill",
+        summary: `${total} lines`,
+        // The page is the skill's own body, verbatim.
+        content: body,
+        lines: body.split("\n").map((line, index) => ({
+          number: index + 1,
+          text: line,
+        })),
+        totalLines: total,
+        lang: "markdown",
+      };
+    },
+  };
+}
+
 export function createSkillLoadTool(options: {
   registry: () => SkillRegistry | undefined;
   onLoad?: (
@@ -380,29 +470,7 @@ export function createSkillLoadTool(options: {
       required: ["name"],
       additionalProperties: false,
     },
-    output: {
-      schema: { type: "object", properties: {} },
-      presentCall(args) {
-        const name = (args as { name?: unknown }).name;
-        return {
-          kind: "generic",
-          // The spelling: the verb is in the title ("Load skill <name>").
-          title: `Load skill ${typeof name === "string" ? name : ""}`.trim(),
-          summary: "load",
-        };
-      },
-      presentResult(args, value) {
-        // The loaded skill's model-facing text is the value; the card names
-        // the skill and keeps the whole body (P1.4).
-        const name = (args as { name?: unknown }).name;
-        return {
-          kind: "generic",
-          title: typeof name === "string" ? name : "skill",
-          summary: "loaded",
-          body: value,
-        };
-      },
-    },
+    output: skillLoadOutput(),
     async execute(input, context) {
       if (!input || typeof input !== "object" || Array.isArray(input))
         throw new Error("skill_load arguments must be an object");

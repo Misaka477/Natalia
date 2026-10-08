@@ -480,3 +480,58 @@ test("a recorded validation reaches the context faces through the real runtime (
   ).toBe(true);
   await client.dispose?.();
 }, 30_000);
+
+test("a context read's card carries the records, not the envelope (S3)", () => {
+  // The record faces answered with a `data: [...]` envelope and the generic
+  // flatten rendered that array. The card now carries the records themselves
+  // — one line each — and the count as a facet.
+  const ctx = {
+    ports: { getReady: () => Promise.resolve(), getSessionID: () => CURRENT },
+  } as unknown as RuntimeContext;
+  const tools = createRinaContextTools(ctx);
+  const read = tools.find((tool) => tool.name === "context_list")!;
+  const value = JSON.stringify({
+    data: [
+      {
+        id: "ses_1:r1",
+        recordType: "decision",
+        entityKey: "use-sqlite",
+        summary: "chose sqlite for the vault",
+        sessionID: "ses_1",
+        createdAt: "2026-10-09T00:00:00.000Z",
+        seq: 1,
+        rank: 0,
+        score: 1,
+      },
+      {
+        id: "ses_1:r2",
+        recordType: "evidence",
+        entityKey: "t-16",
+        summary: "typecheck green",
+        sessionID: "ses_1",
+        createdAt: "2026-10-09T00:00:01.000Z",
+        seq: 2,
+        rank: 0,
+        score: 1,
+      },
+    ],
+  });
+  const meta = read.output!.presentationMeta!({}, value);
+  const card = read.output!.presentResult!({}, value, meta);
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "records",
+    summary: "listed · 2 records",
+    body: [
+      "decision · use-sqlite — chose sqlite for the vault",
+      "evidence · t-16 — typecheck green",
+    ].join("\n"),
+    meta: [["total", "2"]],
+  });
+  // An error answer (no `data`) reads as the call verb, never a crash.
+  const refused = read.output!.presentResult!(
+    {},
+    JSON.stringify({ error: "vault_unavailable" }),
+  );
+  expect(refused).toMatchObject({ kind: "generic", summary: "listed" });
+});

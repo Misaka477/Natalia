@@ -148,10 +148,19 @@ export class TailScrollController {
       asHtmlElement(event.currentTarget) ?? this.getScrollElement();
     if (!element) return;
 
+    // A programmatic follow-scroll lands at the END — that is what makes it
+    // recognizable. The flag only swallows an event that actually is one: a
+    // reader's scroll that arrives while the flag is still set (the wheel-up
+    // that races the streaming frame's scrollTop write) is the READER's
+    // event and must be honoured, not eaten. Eating it re-armed follow and
+    // the next frame yanked the viewport back to the bottom — the reported
+    // "I scroll up during streaming and it jumps back".
     if (this.ignoreNextProgrammaticScroll) {
       this.ignoreNextProgrammaticScroll = false;
-      this.setFollowing(true);
-      return;
+      if (this.isAtBottom(element)) {
+        this.setFollowing(true);
+        return;
+      }
     }
 
     this.setFollowing(this.isAtBottom(element));

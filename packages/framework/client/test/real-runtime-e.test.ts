@@ -1556,7 +1556,12 @@ test("an idle Navi answers Natalia's question immediately without a user chat", 
         // The Navi wake turn's context carries her sister's pending questions;
         // the main agent's context never does.
         const naviTurn = allMessages.includes("<natalia_collaborations>");
-        if (!naviTurn) {
+        // The session-title turn is a provider call with neither the
+        // collaborations block nor the main agent's context; it is not a
+        // main prompt and must not land in this collection (the CI flake
+        // this closes — the title turn's prompt has neither marker).
+        const titleTurn = system.startsWith("Create a concise session topic");
+        if (!naviTurn && !titleTurn) {
           mainPrompts.push(allMessages);
           if (streamCalls === 1) {
             yield {
@@ -2552,15 +2557,23 @@ test("/team has no product behavior when the team plugin is disabled", async () 
       provider: "scripted-team-disabled",
       model: "scripted-team-disabled-model",
       async *stream(request) {
-        sawDirective = request.messages.some(
-          (message) =>
-            message.role === "system" && message.content.includes("agent team"),
-        );
-        sawLiteralInput = request.messages.some(
-          (message) =>
-            message.role === "user" &&
-            message.content.includes("/team build the game"),
-        );
+        // Latched: this test asserts the directive NEVER appears, so a
+        // later turn must not be able to clear (or fake) what an earlier
+        // one saw.
+        sawDirective =
+          sawDirective ||
+          request.messages.some(
+            (message) =>
+              message.role === "system" &&
+              message.content.includes("agent team"),
+          );
+        sawLiteralInput =
+          sawLiteralInput ||
+          request.messages.some(
+            (message) =>
+              message.role === "user" &&
+              message.content.includes("/team build the game"),
+          );
         yield { type: "content", text: "ordinary turn" };
         yield { type: "done" };
       },

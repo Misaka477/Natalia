@@ -1,11 +1,12 @@
 import {
+  humanizeToolResult,
   projectToolCall,
   projectToolRender,
   shouldCollapseToolOutput,
 } from "@natalia/ui-model";
 import type { ToolRenderIntent } from "@natalia/ui-model";
 
-export { shouldCollapseToolOutput };
+export { humanizeToolResult, shouldCollapseToolOutput };
 
 /**
  * Decodes a tool's self-projected card from the raw event metadata, or
@@ -186,19 +187,25 @@ export function keyedToolviewLines(toolCall: {
               ? ("choices" as const)
               : ("plain" as const),
     }));
-  const items = todoItemsFromBody(body);
-  return items.length > 0
-    ? items.map((item) => ({
-        line: `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`,
-        kind:
-          item.status === "completed" ? ("added" as const) : ("plain" as const),
-      }))
-    : // The envelope is absent (a prose result, an error sentence): show
-      // what the tool actually said rather than fabricating an empty list.
-      body
-        .split(String.fromCharCode(10))
-        .filter((line) => line.length > 0)
-        .map((line) => ({ line, kind: "plain" as const }));
+  // The card's own body first (a live call's), the raw result second (a
+  // replayed event's): both are the tool's answer, so both parse the same.
+  const card = toolCall.card;
+  const items = todoItemsFromBody(card?.body ?? body);
+  if (items.length > 0)
+    return items.map((item) => ({
+      line: `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`,
+      kind:
+        item.status === "completed" ? ("added" as const) : ("plain" as const),
+    }));
+  // An EMPTY envelope is a real answer ("no items"), not a parse failure.
+  if (card?.body !== undefined || body.trim().startsWith("{"))
+    return [{ line: "(no items)", kind: "plain" as const }];
+  // Not the envelope at all (a prose result, an error sentence): show what
+  // the tool actually said rather than fabricating a list.
+  return body
+    .split(String.fromCharCode(10))
+    .filter((line) => line.length > 0)
+    .map((line) => ({ line, kind: "plain" as const }));
 }
 
 /**
@@ -220,6 +227,107 @@ export function todoItemsFromBody(body: string): TodoChecklistItem[] {
     // Not the envelope.
   }
   return [];
+}
+
+/**
+ * The raw tool block the view-store carries (mirrored here so the kit needs
+ * no dependency on the store package).
+ */
+export type ToolBlockLike = {
+  name: string;
+  status: string;
+  /** The event's stored summary — a HINT, never trusted for display. */
+  summary: string;
+  /** The durable result the presentation is derived from. */
+  result?: string;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * The transcript row for a tool call — a FUNCTION OF THE DATA (the user's
+ * 2026-10-07 ruling): the same block renders identically whether it was
+ * recorded a minute ago or replayed from the journal tomorrow.
+ *
+ * That is why the stored `summary` is not used: it is a snapshot the event
+ * carried when it was written, so an event recorded before the presentation
+ * existed shows raw JSON forever. The row's one-liner is derived from the
+ * RESULT (the durable fact) and the tool's own projected card wins whenever
+ * the event carries one; the body is the raw result, which the kit presents
+ * (keyed checklist or the flatten) — again per call, never per recording.
+ */
+export function toolCallRow(tool: ToolBlockLike): ToolCall {
+  const card = toolCallCard(tool.metadata);
+  const raw = tool.result ?? tool.summary;
+  return {
+    name: tool.name,
+    output: raw,
+    status: tool.status,
+    summary: card?.summary ?? toolRowSummary(raw),
+    ...(card ? { card } : {}),
+  };
+}
+
+/**
+ * The row's one-liner from the result alone (the derivation the runtime
+ * publishes, mirrored without the kernel dependency).
+ */
+function toolRowSummary(result: string): string {
+  const text = result.trim();
+  if (text.length === 0) return "done";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    const first = text.split("\n").find((line) => line.trim().length > 0);
+    return first === undefined ? "done" : clipLine(first.trim());
+  }
+  if (Array.isArray(parsed)) {
+    const count = parsed.length;
+    return `${count} ${count === 1 ? "entry" : "entries"}`;
+  }
+  if (parsed && typeof parsed === "object") {
+    const record = parsed as Record<string, unknown>;
+    const counted = countEnvelope(record);
+    if (counted !== undefined) return counted;
+    const keys = Object.keys(record);
+    return `${keys.length} field${keys.length === 1 ? "" : "s"}`;
+  }
+  return clipLine(String(parsed));
+}
+
+function clipLine(text: string): string {
+  const chars = Array.from(text);
+  return chars.length > 96 ? `${chars.slice(0, 96).join("")}…` : text;
+}
+
+function countEnvelope(record: Record<string, unknown>): string | undefined {
+  for (const [key, singular, plural] of [
+    ["items", "item", "items"],
+    ["matches", "match", "matches"],
+    ["nodes", "node", "nodes"],
+    ["candidates", "candidate", "candidates"],
+    ["messages", "message", "messages"],
+    ["results", "result", "results"],
+    ["data", "entry", "entries"],
+    ["changes", "change", "changes"],
+    ["errors", "error", "errors"],
+    ["rules", "rule", "rules"],
+    ["decisions", "decision", "decisions"],
+    ["plans", "plan", "plans"],
+    ["edges", "edge", "edges"],
+    ["validations", "validation", "validations"],
+  ] as const) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      const count = value.length;
+      return `${count} ${count === 1 ? singular : plural}`;
+    }
+  }
+  if (typeof record.total === "number") return `${record.total} total`;
+  if (record.ok === false || record.error !== undefined)
+    return `failed: ${typeof record.error === "string" ? record.error : "an error occurred"}`;
+  if (record.ok === true) return "done";
+  return undefined;
 }
 
 export function toolCallCard(

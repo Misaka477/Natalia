@@ -36,7 +36,8 @@ export type {
   ToolCall,
   ToolCallCard,
 } from "./message";
-export { toolCallCard, toolRowLabel } from "./message";
+export { toolCallCard, toolCallRow, toolRowLabel } from "./message";
+export type { ToolBlockLike } from "./message";
 
 export { applyUiSkin, defineUiLayoutProfile, defineUiSkin } from "./skin";
 export type {

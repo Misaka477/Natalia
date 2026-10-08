@@ -15,6 +15,7 @@ import {
   ContextMeter,
   Transcript,
   toolCallCard,
+  toolCallRow,
   type PagedTranscriptState,
   type TranscriptHandle,
 } from "@natalia/ui-kit";
@@ -23,7 +24,6 @@ import { SessionUsageBar } from "./components/SessionUsageBar";
 import { NeuSelect } from "./components/NeuSelect";
 import type { Attachment, Message } from "./types";
 import { stableRows, type RowSignature } from "./stable-rows";
-import { humanizeToolResult } from "@natalia/ui-model";
 
 export function NiaPanel(props: {
   state: AppState;
@@ -76,18 +76,7 @@ export function NiaPanel(props: {
               id: msg.id,
               role: "assistant",
               content: "",
-              toolCalls: [
-                {
-                  name: tool.name,
-                  output: humanizeToolResult(
-                    tool.result ?? tool.summary,
-                    tool.name,
-                  ),
-                  status: tool.status,
-                  summary: tool.summary,
-                  card: toolCallCard(tool.metadata),
-                },
-              ],
+              toolCalls: [toolCallRow(tool)],
             }),
           };
         }

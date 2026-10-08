@@ -27,13 +27,14 @@ import {
   PagedTranscriptController,
   PendingBadge,
   Transcript,
-  toolCallCard,
+  toolCallRow,
   type Attachment,
   type PagedTranscriptState,
   type TranscriptHandle,
 } from "@natalia/ui-kit";
 import type { UiPanelDefinition } from "@natalia/ui-host";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
+import { toolResultSummary } from "@anthelia/tools";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { QueueDock } from "./components/QueueDock";
@@ -2412,27 +2413,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     await props.ctx.runtime.naviChat?.setModelProfile?.(next, sessionID);
   }
   const toolOutputCache = new Map<string, string>();
-  function formatToolOutput(name: string, output: string): string {
-    const cacheKey = `${name}\n${output}`;
-    const cached = toolOutputCache.get(cacheKey);
-    if (cached !== undefined) return cached;
-    const formatted = formatToolOutputUncached(name, output);
-    if (toolOutputCache.size >= 512) {
-      const oldest = toolOutputCache.keys().next().value;
-      if (oldest !== undefined) toolOutputCache.delete(oldest);
-    }
-    toolOutputCache.set(cacheKey, formatted);
-    return formatted;
-  }
-
-  function formatToolOutputUncached(name: string, output: string): string {
-    // The model layer's single flattener (ui-model's humanizeToolResult):
-    // every JSON result becomes `key: value` lines with the known-tool
-    // special cases (ask_user's answers, the mailbox pages, the plans).
-    // This used to be a LOCAL flatten, which is how the Navi/Nia panels
-    // ended up showing raw JSON — they never had the flatten at all.
-    return humanizeToolResult(output, name);
-  }
 
   async function loadOlderHistory(): Promise<boolean> {
     if (
@@ -2623,18 +2603,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     ],
                   }
                 : {}),
-              toolCalls: [
-                {
-                  name: tool.name,
-                  output: formatToolOutput(
-                    tool.name,
-                    tool.result ?? tool.summary,
-                  ),
-                  status: tool.status,
-                  summary: tool.summary,
-                  card: toolCallCard(tool.metadata),
-                },
-              ],
+              toolCalls: [toolCallRow(tool)],
             }),
           };
         }
@@ -2745,16 +2714,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               id: msg.id,
               role: "assistant",
               content: "",
-              toolCalls: [
-                {
-                  name: tool.name,
-                  output: formatToolOutput(
-                    tool.name,
-                    tool.result ?? tool.summary,
-                  ),
-                  card: toolCallCard(tool.metadata),
-                },
-              ],
+              toolCalls: [toolCallRow(tool)],
             }),
           };
         }

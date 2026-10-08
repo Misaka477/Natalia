@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   hasKeyedToolview,
+  keyedToolviewLines,
   relativizePath,
-  relativizePath,
+  toolCallRow,
   parseAskTranscript,
   todoItemsFromBody,
   toolCallCard,
@@ -244,4 +245,58 @@ test("a path title is relativized for the row (P3.3)", () => {
       "~/project/src/main.ts",
     );
   }
+});
+
+test("the same block renders identically whether live or replayed (user 2026-10-07)", () => {
+  // The ruling that ended the raw-JSON fight: a UI's presentation is a
+  // FUNCTION OF THE DATA. A tool recorded today and replayed from the
+  // journal tomorrow must read the same, so the row NEVER trusts the
+  // event's stored summary — it derives from the result and from the
+  // tool's own card. The historical smoke session is the proof case: its
+  // events carry `summary: result.slice(0,200)` and no metadata at all.
+  const raw = JSON.stringify({
+    items: [
+      { content: "盘点全部工具", status: "completed" },
+      { content: "逐项测试", status: "pending" },
+    ],
+    total: 2,
+    truncated: false,
+  });
+  // An OLD event: the stored summary is raw JSON, the metadata is empty.
+  const oldEvent = {
+    name: "todo_write",
+    status: "succeeded",
+    summary: raw.slice(0, 200),
+    result: raw,
+  };
+  const oldRow = toolCallRow(oldEvent);
+  expect(oldRow.summary).toBe("2 items");
+  // And the body is the checklist, not the flatten — parsed from the
+  // result, exactly as a live call's card would render.
+  const lines = keyedToolviewLines(oldRow);
+  expect(lines).toEqual([
+    { line: "[x] 盘点全部工具", kind: "added" },
+    {
+      line: "[ ] 逐项测试",
+      kind: "pending" === "completed" ? "added" : "plain",
+    },
+  ]);
+  // A NEW event with the tool's own card renders the same way.
+  const liveRow = toolCallRow({
+    name: "todo_write",
+    status: "succeeded",
+    summary: "written",
+    result: raw,
+    metadata: {
+      render: {
+        kind: "generic",
+        title: "todo",
+        summary: "written",
+        body: raw,
+        meta: [["total", "2"]],
+      },
+    },
+  });
+  expect(liveRow.summary).toBe("written");
+  expect(keyedToolviewLines(liveRow)).toEqual(lines);
 });

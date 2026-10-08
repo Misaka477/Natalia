@@ -10,6 +10,7 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
+  humanizeToolResult,
   keyedToolviewLines,
   parseAskTranscript,
   shouldCollapseToolOutput,
@@ -1235,7 +1236,12 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   // taught this: a keyed row that said only `(no items)` named no tool).
   // The line model is message.ts's pure function; the shell below is shared
   // with the generic path.
-  const keyed = () => keyedToolviewLines(props.toolCall);
+  const keyed = () =>
+    keyedToolviewLines({
+      name: props.toolCall.name,
+      card: card,
+      output: props.toolCall.output,
+    });
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
   const rowLabel = () => toolRowLabel(props.toolCall.name);
@@ -1255,15 +1261,22 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
       return relativized.slice(rowLabel().length + 1);
     return relativized;
   };
-  // The tool's own body wins: for a diff it is the marked hunk (the raw result
-  // string is not the same text at all), for a terminal it is the command's
-  // output. The raw result is the fallback for a tool that declared no card.
-  const rawOutput = () => card?.body ?? props.toolCall.output ?? "";
+  // The presentation is a FUNCTION OF THE RESULT, computed here per render
+  // (the user's 2026-10-07 ruling): a recorded event and a replayed one
+  // render identically, because nothing about "when it was recorded"
+  // enters the derivation. Two sources, in order:
+  //   1. the keyed toolview — a checklist, a Q&A transcript — parsed from
+  //      the tool's OWN body when the event carries a card, else from the
+  //      raw result (an old event's result parses the same as today's);
+  //   2. the flatten — the same `key: value` reading every other result gets.
+  // The tool's own card body wins for a diff (the marked hunk is not the
+  // raw result string at all) and for a terminal (the command's output).
+  const toolBody = () => card?.body ?? props.toolCall.output ?? "";
   const output = () => {
     const keyedBody = keyed();
     return keyedBody
       ? keyedBody.map((entry) => entry.line).join("\n")
-      : rawOutput();
+      : humanizeToolResult(toolBody(), props.toolCall.name);
   };
   const outputLines = () => output().split("\n");
   // The collapse criterion is the model layer's (P0.2): it knows the

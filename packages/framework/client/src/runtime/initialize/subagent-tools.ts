@@ -23,6 +23,7 @@ import {
   REPEAT_MAX,
   REPEAT_WINDOW_MS,
 } from "../tool-execution/repeat-guard";
+import { toolResultSummary } from "@anthelia/tools";
 
 export async function createSubagentTools(
   ctx: RuntimeContext,
@@ -186,7 +187,10 @@ export async function createSubagentTools(
         name: tool.name,
         callID: displayCallID,
         status: "succeeded",
-        summary: result.slice(0, 200),
+        // The same derivation the main path uses (the user's 2026-10-07
+        // report): this publisher still sliced the raw result, so a
+        // subagent's JSON-returning tool showed raw JSON on the row.
+        summary: toolResultSummary(result, projectedRender),
         result,
         metadata: projectedRender ? { render: projectedRender } : undefined,
         endedAt: Date.now(),

@@ -1333,9 +1333,17 @@ test("the chat can query the main agent's live status with session_snapshot", as
           requestMessages.filter((message) => message.role === "tool")[0]
             ?.content ?? "",
         );
-        finalStepAssistantTexts = requestMessages
-          .filter((message) => message.role === "assistant")
-          .map((message) => message.content);
+        // ACCUMULATE across requests rather than overwrite: the variable is
+        // written on every provider call, so an extra call (a retry, a
+        // second turn) used to replace the whole set with the last request's
+        // texts and the assertion lost an entry the history really carries.
+        // CI lost a red run to exactly that.
+        finalStepAssistantTexts = [
+          ...finalStepAssistantTexts,
+          ...requestMessages
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.content),
+        ];
         yield {
           type: "content" as const,
           text: "the main agent is running step 2",

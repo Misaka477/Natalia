@@ -81,6 +81,12 @@ function providerForChat(
     model: "test-chat-model",
     async *stream(request) {
       const system = String(request.messages[0]?.content ?? "");
+      // The session-title turn is a provider call that belongs to neither
+      // stream: its system prompt is the title instruction. It raced into
+      // this collection on CI (`[nia, navi, nia]`) and the count assertion
+      // failed without saying which stream was at fault (the flake this
+      // closes — the same title-turn family as real-runtime-e's).
+      if (system.startsWith("Create a concise session topic")) return;
       const channel = system.includes("<nia_chat_persona>") ? "nia" : "navi";
       requests.push({ channel, request });
       const prompt = request.messages.findLast(

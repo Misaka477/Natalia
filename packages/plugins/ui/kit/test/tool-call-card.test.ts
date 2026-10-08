@@ -300,3 +300,43 @@ test("the same block renders identically whether live or replayed (user 2026-10-
   expect(liveRow.summary).toBe("written");
   expect(keyedToolviewLines(liveRow)).toEqual(lines);
 });
+
+test("ask_user's Q&A derives from the arguments and result, not the recorded card (user 2026-10-08)", () => {
+  // The screenshot: five choices on one line. The cause was that the card's
+  // body — a string composed when the event was RECORDED — was replayed
+  // verbatim, so an event recorded before the per-line spelling (or none at
+  // all) stayed cramped forever. The Q&A is now derived from the durable
+  // halves: the call's arguments (question + choices) and the result (the
+  // answers). Live and replayed render identically.
+  const raw = JSON.stringify({
+    answers: [["创建验证证据、完成卡和工程决策记录（Recommended）"]],
+  });
+  const row = toolCallRow({
+    name: "ask_user",
+    status: "succeeded",
+    summary: raw.slice(0, 200),
+    result: raw,
+    argumentsRaw: JSON.stringify({
+      question: "请选择允许范围",
+      options: ["第一个选项", "第二个选项", "第三个选项"],
+    }),
+  });
+  expect(keyedToolviewLines(row)).toEqual([
+    { line: "Q: 请选择允许范围", kind: "question" },
+    { line: "Options:", kind: "choices" },
+    { line: "  · 第一个选项", kind: "choices" },
+    { line: "  · 第二个选项", kind: "choices" },
+    { line: "  · 第三个选项", kind: "choices" },
+    {
+      line: "A: 创建验证证据、完成卡和工程决策记录（Recommended）",
+      kind: "answer",
+    },
+  ]);
+  // An event with NO arguments at all still renders (the recorded body).
+  expect(
+    keyedToolviewLines({ name: "ask_user", output: "Q: old\nA: new" }),
+  ).toEqual([
+    { line: "Q: old", kind: "question" },
+    { line: "A: new", kind: "answer" },
+  ]);
+});

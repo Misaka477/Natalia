@@ -151,6 +151,28 @@ export function parseAskTranscript(body: string): QATranscriptLine[] {
 /** One checklist row, decoded from a todo result envelope. */
 export type TodoChecklistItem = { content: string; status: string };
 
+/** A non-empty string argument, or undefined. */
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** The picked answers from an ask_user result envelope. */
+function parseAskAnswers(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as { answers?: unknown };
+    if (!Array.isArray(parsed.answers)) return [];
+    return parsed.answers
+      .map((answer) =>
+        Array.isArray(answer)
+          ? answer.map((item) => String(item)).join(", ")
+          : String(answer),
+      )
+      .filter((entry) => entry.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 /** A keyed card's rendered line: the text and its visual treatment. */
 export type KeyedToolviewLine = {
   line: string;
@@ -175,10 +197,42 @@ export function keyedToolviewLines(toolCall: {
   name: string;
   output?: string;
   card?: { body?: string };
+  /** The call's arguments — the durable half of a keyed card's input. */
+  arguments?: Record<string, unknown>;
 }): KeyedToolviewLine[] | undefined {
   if (!KEYED_TOOLVIEW_NAMES.has(toolCall.name)) return undefined;
   const body = toolCall.card?.body ?? toolCall.output ?? "";
-  if (toolCall.name === "ask_user")
+  if (toolCall.name === "ask_user") {
+    // The Q&A is DERIVED from the durable halves — the call's arguments
+    // (the question and the choices) plus the result (the answers) — not
+    // from the card body the event recorded. A replayed event carries no
+    // card at all, and one recorded before the transcript existed carried
+    // the old single-line spelling; deriving makes both render the current
+    // shape (the user's 2026-10-08 screenshot: five choices on one line).
+    const args = toolCall.arguments;
+    const question = optionalText(args?.question);
+    const options = Array.isArray(args?.options)
+      ? (args.options as unknown[]).map((option) => String(option))
+      : [];
+    if (question !== undefined) {
+      const answers = parseAskAnswers(toolCall.output ?? body);
+      const lines: KeyedToolviewLine[] = [
+        { line: `Q: ${question}`, kind: "question" as const },
+      ];
+      if (options.length > 0) {
+        lines.push({ line: "Options:", kind: "choices" as const });
+        for (const option of options)
+          lines.push({ line: `  · ${option}`, kind: "choices" as const });
+      }
+      lines.push({
+        line:
+          answers.length > 0
+            ? `A: ${answers.join("; ")}`
+            : "A: (no answer recorded)",
+        kind: "answer" as const,
+      });
+      return lines;
+    }
     return parseAskTranscript(body).map((entry) => ({
       line: entry.text,
       kind:
@@ -190,6 +244,7 @@ export function keyedToolviewLines(toolCall: {
               ? ("choices" as const)
               : ("plain" as const),
     }));
+  }
   // The card's own body first (a live call's), the raw result second (a
   // replayed event's): both are the tool's answer, so both parse the same.
   const card = toolCall.card;
@@ -244,6 +299,8 @@ export type ToolBlockLike = {
   /** The durable result the presentation is derived from. */
   result?: string;
   metadata?: Record<string, unknown>;
+  /** The reassembled raw arguments (streamed in fragments by the runtime). */
+  argumentsRaw?: string;
 };
 
 /**
@@ -261,13 +318,30 @@ export type ToolBlockLike = {
 export function toolCallRow(tool: ToolBlockLike): ToolCall {
   const card = toolCallCard(tool.metadata);
   const raw = tool.result ?? tool.summary;
+  const args = parseArguments(tool.argumentsRaw);
   return {
     name: tool.name,
     output: raw,
     status: tool.status,
     summary: card?.summary ?? toolRowSummary(raw),
     ...(card ? { card } : {}),
+    ...(args ? { arguments: args } : {}),
   };
+}
+
+/** The reassembled arguments, or undefined when there are none / they are not JSON. */
+function parseArguments(
+  argumentsRaw: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!argumentsRaw) return undefined;
+  try {
+    const parsed = JSON.parse(argumentsRaw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -382,6 +456,14 @@ export interface ToolCall {
   summary?: string;
   /** The tool's self-projected card, when it declared one. */
   card?: ToolCallCard;
+  /**
+   * The call's parsed arguments — the DURABLE half of a keyed card's input
+   * (ask_user's question and options live here, its result holds only the
+   * answers). Carried so a replayed event renders exactly like a live one:
+   * the presentation is derived from arguments + result, never from the
+   * card body the event happened to record.
+   */
+  arguments?: Record<string, unknown>;
 }
 
 export interface MessageAction {

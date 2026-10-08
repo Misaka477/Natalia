@@ -67,26 +67,74 @@ function recordLine(item: unknown, depth: number): string {
 }
 
 /**
- * The generic object flatten: one `key: value` line per top-level key.
+ * The generic object flatten — a REAL recursion (the user's 2026-10-08
+ * report: `data: {items=[{...}]}` and `breakdown={fts=...}` — a nested
+ * object's structured value must expand onto its own lines at every depth,
+ * never inline as a `{k=v}` blob):
  *
- * An array of records under a key renders ONE ELEMENT PER LINE, indented —
- * the shape every envelope tool returns (`data`, `items`, `nodes`,
- * `candidates`, `messages`). The old spelling inlined the whole array onto
- * the key's line (`data: [{a=1}, {b=2}]`), which is a JSON dump with the
- * punctuation swapped — the user's 2026-10-07 verdict: "拍扁就以为不是
- * json 是吧". A reader now scans one record per line.
+ *   {a: 1, list: [{x, y}]}   a: 1
+ *                            list:
+ *                              · x=..., y=...
+ *   {outer: {inner: [{x}]}}  outer:
+ *                              inner:
+ *                                · x=...
  */
 function flattenObject(value: Record<string, unknown>, depth = 0): string {
   return Object.entries(value)
-    .map(([key, item]) => {
-      if (Array.isArray(item) && item.some(isPlainObject))
-        return `${key}:\n${item
-          .map((element) => `  · ${recordLine(element, depth)}`)
-          .join("\n")}`;
-      return `${key}: ${flattenValue(item, depth + 1)}`;
-    })
+    .map(([key, item]) => renderMember(key, item, depth))
     .join("\n");
 }
+
+/** One object member: the key, then its value's rendering. */
+function renderMember(key: string, item: unknown, depth: number): string {
+  const pad = "  ".repeat(depth);
+  if (Array.isArray(item) && item.some(isPlainObject))
+    return `${pad}${key}:\n${item
+      .map((element) => renderRecord(element, depth + 1))
+      .join("\n")}`;
+  // An object expands whenever it is not absurdly deep: its lines are
+  // cheap and a clipped `{…}` hides exactly the fields a reader opened the
+  // card for (the score decomposition, the change set).
+  if (
+    isPlainObject(item) &&
+    Object.keys(item).length > 0 &&
+    depth < OBJECT_DEPTH
+  )
+    return `${pad}${key}:\n${flattenObject(item, depth + 1)}`;
+  return `${pad}${key}: ${flattenValue(item, depth + 1)}`;
+}
+
+/**
+ * One record: its scalar members inline (`a=1, b=2`), each STRUCTURED
+ * member as its own indented block beneath. The split is what keeps a
+ * record readable — inlining a nested object mid-line (the old
+ * `breakdown={fts=0.9, ...}`) breaks the line's own comma structure.
+ */
+function renderRecord(element: unknown, depth: number): string {
+  const pad = "  ".repeat(depth);
+  if (!isPlainObject(element)) return `${pad}· ${flattenValue(element, depth)}`;
+  const entries = Object.entries(element);
+  const scalars = entries.filter(([, value]) => !isStructured(value));
+  const structured = entries.filter(([, value]) => isStructured(value));
+  const inline = scalars
+    .map(([key, value]) => `${key}=${flattenValue(value, depth + 1)}`)
+    .join(", ");
+  const blocks = structured
+    .map(([key, value]) => renderMember(key, value, depth + 1))
+    .join("\n");
+  return `${pad}· ${inline}${blocks ? `\n${blocks}` : ""}`;
+}
+
+/** Whether a value must expand onto its own lines rather than inline. */
+function isStructured(value: unknown): boolean {
+  return (
+    (Array.isArray(value) && value.some(isPlainObject)) ||
+    (isPlainObject(value) && Object.keys(value).length > 0)
+  );
+}
+
+/** The object-expansion budget (deeper than the scalar clip). */
+const OBJECT_DEPTH = 6;
 
 /** The generic array flatten: one element per line, objects as `a=1, b=2`. */
 function flattenArray(value: unknown[]): string {

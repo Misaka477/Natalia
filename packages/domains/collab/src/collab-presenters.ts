@@ -97,6 +97,91 @@ export function collabResultCard(input: {
   };
 }
 
+/**
+ * The collab delivery family's card (S4-d).
+ *
+ * A delivery's answer is WHO the message reached and WHAT the runtime
+ * decided: the message id, the thread, the recipient, whether a reply is
+ * expected. The shared flatten rendered the envelope's keys; this card
+ * reads them, one fact per line.
+ */
+/**
+ * The recipient a delivery's call names: `to` for a chat, `planID`/`path` for
+ * a plan write. It is what the row leads with, so the answer keeps it.
+ */
+function deliveryTitle(args: unknown, fallback: string): string {
+  const parsed =
+    args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const to = typeof parsed.to === "string" && parsed.to ? parsed.to : undefined;
+  const planID =
+    typeof parsed.planID === "string" && parsed.planID
+      ? parsed.planID
+      : undefined;
+  const path =
+    typeof parsed.path === "string" && parsed.path ? parsed.path : undefined;
+  return to ?? planID ?? path ?? fallback;
+}
+
+export function collabDeliveryCard(input: {
+  callTitle: string;
+  callSummary: string;
+  resultSummary: string;
+  /** Envelope keys that ride as label:value pills. */
+  pills?: ReadonlyArray<readonly [string, string]>;
+  /** Envelope keys that ride as body lines, in this order. */
+  facts?: ReadonlyArray<string>;
+}): ToolOutputDefinition {
+  return {
+    schema: ENVELOPE_SCHEMA,
+    presentCall(args) {
+      return {
+        kind: "generic",
+        title: deliveryTitle(args, input.callTitle),
+        summary: input.callSummary,
+      };
+    },
+    presentationMeta(_args, value) {
+      return envelopeFacts(value, [
+        ...(input.pills ?? []),
+        ...(input.facts ?? []).map((key) => [key, key] as const),
+      ]);
+    },
+    presentResult(args, value, meta) {
+      const callTitle = deliveryTitle(args, input.callTitle);
+      const facts =
+        meta === undefined
+          ? envelopeFacts(value, [
+              ...(input.pills ?? []),
+              ...(input.facts ?? []).map((key) => [key, key] as const),
+            ])
+          : (meta as Record<string, unknown>);
+      const pills = (input.pills ?? [])
+        .map(([label, key]) => {
+          const found = facts[key];
+          return found === undefined || found === null || found === ""
+            ? undefined
+            : ([label, String(found)] as [string, string]);
+        })
+        .filter((pair): pair is [string, string] => pair !== undefined);
+      const lines = (input.facts ?? []).flatMap((key) => {
+        const found = facts[key];
+        return found === undefined || found === null || found === ""
+          ? []
+          : [`${key} · ${String(found)}`];
+      });
+      return {
+        kind: "generic",
+        // The call's own title (the recipient, the plan path) is what the
+        // row leads with; the envelope's title only fills in when the call
+        // named none.
+        title: callTitle ?? text(facts.title) ?? input.callTitle,
+        summary: lines[0] ?? input.resultSummary,
+        ...(lines.length > 1 ? { body: lines.join("\n") } : {}),
+        ...(pills.length ? { meta: pills } : {}),
+      };
+    },
+  };
+}
 /** The output block these tools declare: schema + the two presenters. */
 export function collabOutput(input: {
   callTitle: string;

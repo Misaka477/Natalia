@@ -425,7 +425,23 @@ function sandboxMergeTool(): RuntimeTool {
     requiresApproval: true,
     parameters: {
       type: "object",
-      properties: { id: { type: "string" }, maxLines: { type: "number" } },
+      properties: {
+        id: { type: "string" },
+        maxLines: { type: "number" },
+        // P0-2: the validation command, as a caller-supplied override. The
+        // 2026-10-08 audit found a CMake workspace could never promote —
+        // the gate's contract is exactly `npm run typecheck` plus a
+        // package.json, with no parameter to say otherwise, while
+        // `team_review` has carried one all along.
+        buildCommand: {
+          type: "string",
+          description:
+            "The command that verifies this project, run in the workspace root before the merge lands. " +
+            "Omit it and the workspace's own project marker decides (package.json -> npm run typecheck, " +
+            "CMakeLists.txt -> cmake, Cargo.toml -> cargo check, pyproject.toml -> compileall); " +
+            "a workspace with no marker needs either this or `sandbox.promoteCommand`.",
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
@@ -465,8 +481,18 @@ function sandboxMergeTool(): RuntimeTool {
           | { sandbox?: { promoteCommand?: string } }
           | undefined
       )?.sandbox?.promoteCommand?.trim();
+      // P0-2: an explicit `buildCommand` outranks the configured default and
+      // the marker, the way `team_review`'s per-PR command does. A caller
+      // that names the project's own toolchain gets its merge validated by
+      // it; the marker still decides when nobody says.
+      const explicit =
+        typeof args.buildCommand === "string" && args.buildCommand.trim()
+          ? args.buildCommand.trim()
+          : undefined;
       const command =
-        configured ?? detectPromoteCommand(context.workspaceRoot)?.command;
+        explicit ??
+        configured ??
+        detectPromoteCommand(context.workspaceRoot)?.command;
       if (!command)
         throw new Error(
           "sandbox_merge needs a validation command for this workspace: " +

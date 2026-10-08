@@ -20,6 +20,7 @@ import {
   planDocReadOutput as planDocReadOutputForTest,
   planWriteCard as planWriteCardForTest,
 } from "../src/chat-tools";
+import { collabDeliveryCard } from "../src/collab-presenters";
 import { collabOutput } from "../src/collab-presenters";
 
 const source = readFileSync(
@@ -235,4 +236,36 @@ test("plan_doc_write's card reads what changed (S4)", () => {
     "plan_doc_write requires path and content",
   );
   expect(refused).toMatchObject({ kind: "generic", summary: "write" });
+});
+
+test("a collab delivery's card reads who it reached and what came back (S4-d)", () => {
+  // A delivery's answer is the message identity, the thread, the recipient —
+  // one fact per line — not the shared flatten of the envelope.
+  const output = collabDeliveryCard({
+    callTitle: "mailbox",
+    callSummary: "send",
+    resultSummary: "queued",
+    pills: [["messageID", "messageID"]],
+    facts: ["messageID", "intent"],
+  });
+  const value = JSON.stringify({
+    sent: true,
+    messageID: "mbx_1",
+    intent: "notice",
+  });
+  const meta = output.presentationMeta!({ to: "live_chat" }, value);
+  const card = output.presentResult!({ to: "live_chat" }, value, meta);
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "live_chat",
+    summary: "messageID · mbx_1",
+    body: "messageID · mbx_1\nintent · notice",
+    meta: [["messageID", "mbx_1"]],
+  });
+  // A prose refusal (the delivery never happened) reads as the verb.
+  const refused = output.presentResult!(
+    {},
+    "mailbox_send requires a non-empty text",
+  );
+  expect(refused).toMatchObject({ kind: "generic", summary: "queued" });
 });

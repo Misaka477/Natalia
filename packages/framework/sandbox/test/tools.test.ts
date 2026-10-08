@@ -361,6 +361,48 @@ test("sandbox_merge validates with the marker's command, the config's, or refuse
   expect(commands[1]).toBe("true");
 });
 
+test("sandbox_merge's buildCommand outranks the marker and the config (P0-2)", async () => {
+  // The 2026-10-08 audit's P0-2: a CMake workspace could never promote,
+  // because the gate's contract is `npm run typecheck` + package.json and no
+  // parameter could say otherwise — while `team_review` carries one. Now the
+  // caller names the project's own toolchain.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-cmd-"));
+  await writeFile(join(root, "CMakeLists.txt"), "project(merge)\n");
+  const commands: string[] = [];
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: {
+      async promoteWithValidation(_id: string, input: { command: string }) {
+        commands.push(input.command);
+        return { changedFiles: [] };
+      },
+      updateEvent: () => ({}),
+      auditEvent: () => ({}),
+    },
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "configured-cmd" } }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+
+  await tools
+    .get("sandbox_merge")!
+    .execute({ id: "sb.1", buildCommand: "  make -j4  " }, context);
+  // The explicit command wins over both the config and the marker, and its
+  // whitespace is trimmed.
+  expect(commands).toEqual(["make -j4"]);
+  // The parameter is declared, so a model can discover it.
+  const properties = (
+    tools.get("sandbox_merge")!.parameters as {
+      properties: Record<string, unknown>;
+    }
+  ).properties;
+  expect(Object.keys(properties)).toContain("buildCommand");
+});
+
 test("sandbox_merge refuses a workspace with no marker and no configured command", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-bare-"));
   const tools = new Map(

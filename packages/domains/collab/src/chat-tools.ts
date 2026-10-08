@@ -27,7 +27,7 @@ import {
   type CollaborationService,
 } from "@natalia/collaboration";
 import { chatToolCard, chatToolSummary } from "./chat-summary";
-import { collabOutput } from "./collab-presenters";
+import { collabDeliveryCard, collabOutput } from "./collab-presenters";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
@@ -424,12 +424,12 @@ export function planDocMarkTool(
       required: ["path"],
       additionalProperties: false,
     },
-    output: collabOutput({
+    output: collabDeliveryCard({
       callTitle: "plan",
       callSummary: "mark",
-      resultTitle: "plan",
       resultSummary: "marked",
-      meta: [["planID", "planID"]],
+      pills: [["planID", "planID"]],
+      facts: ["planID", "documentPath"],
     }),
     async execute(parsed) {
       const args = parsed as { path?: string; title?: string };
@@ -564,12 +564,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["suggestion"],
           additionalProperties: false,
         },
-        output: collabOutput({
+        output: collabDeliveryCard({
           callTitle: "suggestion",
           callSummary: "send",
-          resultTitle: "suggestion",
           resultSummary: "sent",
-          meta: [["messageID", "messageID"]],
+          pills: [["messageID", "messageID"]],
+          facts: ["messageID", "threadID", "to"],
         }),
         async execute(parsed, context) {
           const args = parsed as {
@@ -628,12 +628,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["questionID", "answer"],
           additionalProperties: false,
         },
-        output: collabOutput({
+        output: collabDeliveryCard({
           callTitle: "answer",
           callSummary: "reply",
-          resultTitle: "answer",
           resultSummary: "sent",
-          meta: [["messageID", "messageID"]],
+          pills: [["messageID", "messageID"]],
+          facts: ["messageID", "threadID"],
         }),
         async execute(parsed, context) {
           const args = parsed as {
@@ -697,12 +697,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["intent", "text"],
           additionalProperties: false,
         },
-        output: collabOutput({
+        output: collabDeliveryCard({
           callTitle: "mailbox",
           callSummary: "send",
-          resultTitle: "mailbox",
           resultSummary: "queued",
-          meta: [["messageID", "messageID"]],
+          pills: [["messageID", "messageID"]],
+          facts: ["messageID", "intent"],
         }),
         async execute(parsed) {
           const args = parsed as {
@@ -746,12 +746,12 @@ export function createChatTools(ctx: RuntimeContext) {
           required: ["messageID"],
           additionalProperties: false,
         },
-        output: collabOutput({
+        output: collabDeliveryCard({
           callTitle: "mailbox",
           callSummary: "cancel",
-          resultTitle: "mailbox",
           resultSummary: "cancelled",
-          meta: [["cancelled", "cancelled"]],
+          pills: [["cancelled", "cancelled"]],
+          facts: ["cancelled"],
         }),
         async execute(parsed) {
           const args = parsed as { messageID?: string; reason?: string };

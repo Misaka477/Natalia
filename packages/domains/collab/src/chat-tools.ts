@@ -17,6 +17,7 @@ import {
   requireObject,
   requireString,
   type RuntimeTool,
+  type ToolOutputDefinition,
 } from "@anthelia/tools";
 import { niaShellPolicyDenial } from "./nia-shell-policy";
 import type { SessionID } from "@anthelia/contracts";
@@ -173,6 +174,92 @@ export async function mailboxMessagesForStatus(
   return exec.factStateComplete === true && exec.factState
     ? sessionFactMailboxMessages(exec.factState)
     : projectedMailboxMessages(exec.session.events);
+}
+
+/**
+ * The plan-document read card (S3).
+ *
+ * A plan document is a DOCUMENT, not an envelope: the card carries the
+ * document's own lines (numbered, the way a file read does) and the plan's
+ * identity as facets. The old card showed the raw JSON envelope — the
+ * screenshot the user ruled on.
+ */
+export function planDocReadOutput(): ToolOutputDefinition {
+  const facts = (value: string): Record<string, unknown> => {
+    try {
+      const decoded = JSON.parse(value) as Record<string, unknown> | null;
+      return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+        ? decoded
+        : {};
+    } catch {
+      return {};
+    }
+  };
+  const text = (
+    source: Record<string, unknown>,
+    meta: Record<string, unknown> | undefined,
+    key: string,
+  ) => {
+    const fromMeta = meta?.[key];
+    if (typeof fromMeta === "string") return fromMeta;
+    const fromValue = source[key];
+    return typeof fromValue === "string" ? fromValue : undefined;
+  };
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      const path = typeof parsed.path === "string" ? parsed.path : undefined;
+      const planID =
+        typeof parsed.planID === "string" ? parsed.planID : undefined;
+      return {
+        kind: "read",
+        title: path ?? planID ?? "plan",
+        summary: "read",
+      };
+    },
+    presentationMeta(_args, value) {
+      const record = facts(value);
+      const content = typeof record.content === "string" ? record.content : "";
+      return {
+        ...(typeof record.planID === "string" ? { planID: record.planID } : {}),
+        ...(typeof record.title === "string" ? { title: record.title } : {}),
+        ...(typeof record.documentPath === "string"
+          ? { documentPath: record.documentPath }
+          : {}),
+        totalLines: content.split("\n").length,
+      };
+    },
+    presentResult(args, value, meta) {
+      const record = facts(value);
+      const content =
+        typeof record.content === "string" ? record.content : value;
+      const planID = text(record, meta, "planID");
+      const documentPath = text(record, meta, "documentPath");
+      const title = text(record, meta, "title");
+      const numbered = content.split("\n").map((line, index) => ({
+        number: index + 1,
+        text: line,
+      }));
+      return {
+        kind: "read",
+        title: documentPath ?? title ?? "plan",
+        summary: `${numbered.length} lines`,
+        // The document is the page: its own lines, numbered.
+        content,
+        lines: numbered,
+        totalLines: numbered.length,
+        lang: "markdown",
+        meta: [
+          ...(planID ? [["planID", planID] as [string, string]] : []),
+          ...(title ? [["title", title] as [string, string]] : []),
+        ],
+      };
+    },
+  };
 }
 
 export function planDocWriteTool(
@@ -766,13 +853,7 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
-        output: collabOutput({
-          callTitle: "plan",
-          callSummary: "read",
-          resultTitle: "plan",
-          resultSummary: "read",
-          meta: [["planID", "planID"]],
-        }),
+        output: planDocReadOutput(),
         async execute(parsed) {
           const args = parsed as { planID?: string; path?: string };
           if (!args.planID && !args.path)
@@ -936,13 +1017,7 @@ export function createChatTools(ctx: RuntimeContext) {
           },
           additionalProperties: false,
         },
-        output: collabOutput({
-          callTitle: "plan",
-          callSummary: "read",
-          resultTitle: "plan",
-          resultSummary: "read",
-          meta: [["planID", "planID"]],
-        }),
+        output: planDocReadOutput(),
         async execute(parsed) {
           const args = parsed as { planID?: string; path?: string };
           if (!args.planID && !args.path)

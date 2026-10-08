@@ -16,6 +16,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chatToolCard } from "../src/chat-summary";
+import { planDocReadOutput as planDocReadOutputForTest } from "../src/chat-tools";
 import { collabOutput } from "../src/collab-presenters";
 
 const source = readFileSync(
@@ -152,4 +153,59 @@ test("a chat tool's card rides the event and the durable row (R4)", () => {
   });
   // And a tool that declares no output definition at all still publishes.
   expect(chatToolCard(undefined, args, value)).toEqual({});
+});
+
+test("plan_doc_read's card carries the document, not the envelope (S3)", () => {
+  // The screenshot the user ruled on: the raw JSON envelope as the card
+  // body. A plan document is a DOCUMENT — the card carries its own lines,
+  // numbered, and the plan's identity as facets.
+  const document = [
+    "# NEON Rename + Circuit",
+    "",
+    "## Phase 1",
+    "- [ ] one",
+    "- [ ] two",
+  ].join("\n");
+  const value = JSON.stringify({
+    planID: "plan_neon-plan_mlt5srlp",
+    title: "plan_neon-plan_mlt5srlp",
+    documentPath: "neon-plan.md",
+    content: document,
+  });
+  const output = planDocReadOutputForTest();
+  const meta = output.presentationMeta!(
+    { planID: "plan_neon-plan_mlt5srlp" },
+    value,
+  );
+  const card = output.presentResult!(
+    { planID: "plan_neon-plan_mlt5srlp" },
+    value,
+    meta,
+  );
+  expect(card).toMatchObject({
+    kind: "read",
+    title: "neon-plan.md",
+    summary: "5 lines",
+    content: document,
+    lang: "markdown",
+    meta: [
+      ["planID", "plan_neon-plan_mlt5srlp"],
+      ["title", "plan_neon-plan_mlt5srlp"],
+    ],
+  });
+  // The document's own lines, numbered from 1.
+  expect(card && card.kind === "read" && card.lines).toEqual([
+    { number: 1, text: "# NEON Rename + Circuit" },
+    { number: 2, text: "" },
+    { number: 3, text: "## Phase 1" },
+    { number: 4, text: "- [ ] one" },
+    { number: 5, text: "- [ ] two" },
+  ]);
+  // A prose answer (an error, a refusal) still renders: the card falls back
+  // to the text itself, never a thrown presenter.
+  const refused = output.presentResult!(
+    { path: "x.md" },
+    "plan document not found: x.md",
+  );
+  expect(refused).toMatchObject({ kind: "read", title: "plan" });
 });

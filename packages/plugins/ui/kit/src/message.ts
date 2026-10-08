@@ -1,5 +1,6 @@
 import {
   humanizeToolResult,
+  projectToolCard,
   projectToolCall,
   projectToolRender,
   shouldCollapseToolOutput,
@@ -352,18 +353,13 @@ function parseArguments(
  * The tool's own projected card for this block (UI refactor R0), or
  * `undefined` when the event carried none.
  *
- * Two sources, in order:
- *   1. the event's structured `card` slot — what a runtime since R0
- *      publishes, from the tool's own `presentCall`/`presentResult`;
- *   2. the legacy `metadata.call` / `metadata.render` blobs — what an event
- *      recorded before that slot carries. Both are the same
- *      {@link ToolCard} shape, so a replayed call renders exactly like a
- *      live one; the fallback is the replay compatibility that makes the
- *      migration batchable.
+ * The "structured slot first, legacy blob second" rule lives in ONE place —
+ * {@link projectToolCard} — because every later batch that touches how a
+ * card arrives must change one decoder, not two. The kit keeps this wrapper
+ * for its own type (`ToolBlockLike`) and for the row's fallback summary.
  */
 export function toolCallCard(tool: ToolBlockLike): ToolCard | undefined {
-  if (tool.card !== undefined) return tool.card;
-  return projectToolRender(tool.metadata) ?? projectToolCall(tool.metadata);
+  return projectToolCard(tool);
 }
 
 /**

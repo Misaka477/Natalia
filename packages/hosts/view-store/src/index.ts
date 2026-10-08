@@ -33,6 +33,7 @@
  *     live list in `facts`; constitution/decision/evidence/plan/mailbox/workgraph
  *     now have production writers and project here for any host.
  */
+import { defaultToolCard } from "@anthelia/contracts";
 import { subagentHistoryRowKey, type ToolBlock } from "./state";
 import type {
   ChatMessageRow,
@@ -485,10 +486,14 @@ function chatRowToBlock(row: ChatMessageRow): {
         ...(row.tool.result !== undefined ? { result: row.tool.result } : {}),
         argumentsRaw: row.tool.argumentsRaw ?? "",
         // The tool's own card and facts (R4): the durable chat row has
-        // carried them since the publisher started projecting them; this
-        // path used to drop them, so a hydrated chat row rendered as a
-        // plain sentence while its live twin rendered a card.
-        ...(row.tool.card !== undefined ? { card: row.tool.card } : {}),
+        // carried them since the publisher started projecting them. R6: a
+        // row without one gets the default projection, so a hydrated chat
+        // row renders card data like every other row.
+        card:
+          row.tool.card ??
+          (row.tool.result === undefined
+            ? undefined
+            : defaultToolCard(row.tool.name, row.tool.result)),
         ...(row.tool.meta !== undefined ? { meta: row.tool.meta } : {}),
         ...(row.tool.startedAt !== undefined
           ? { startedAt: row.tool.startedAt }

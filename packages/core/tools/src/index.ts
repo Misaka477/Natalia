@@ -190,7 +190,9 @@ export {
   type ProjectedToolSummary,
 } from "@anthelia/contracts";
 export { genericToolCard } from "./card";
-export { defaultToolCard } from "./default-card";
+// The default card lives in the contracts leaf (R6): the runtime and
+// the view-store both build it. This re-export is the kernel's stable path.
+export { defaultToolCard } from "@anthelia/contracts";
 export type { GenericToolCardInput } from "./card";
 
 export function createToolRegistry(tools: RuntimeTool[]): ToolRegistry {

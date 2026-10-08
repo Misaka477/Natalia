@@ -16,9 +16,10 @@ import { join } from "node:path";
  *   2. **框架无工具名** — the card dispatch names KINDS, never tools. A
  *      tool owns what its result means; the framework owns how a kind
  *      looks. The allowed tool-name sugar (the row-label table, the keyed
- *      toolviews still living out their migration) stays in message.ts, and
- *      this guard keeps it out of transcript.tsx — the dispatch surface.
- *      Each later batch shrinks the allowed set; R6 deletes it entirely.
+ *      table in message.ts (the display layer's one nod to a name); this
+ *      guard keeps every tool name out of transcript.tsx — the dispatch
+ *      surface. R6 deleted the keyed-toolview set, so nothing else is
+ *      allowed.
  */
 
 const kitRoot = join(import.meta.dir, "..");
@@ -61,25 +62,19 @@ function rendererKeys(): string[] {
   return [...block![1]!.matchAll(/^\s{2}(\w+):/gmu)].map((match) => match[1]!);
 }
 
-/** The tool names the kit's own tables allow outside the dispatch surface. */
+/**
+ * The tool names the kit allows outside the dispatch surface: the row-label
+ * table and NOTHING else. R6 retired the keyed-toolview set (ask_user's Q&A
+ * is card data now, the todo checklist renders from the tool's own card), so
+ * the sugar this guard tolerates shrank to the label table — and a batch
+ * that needs another tool name in the framework layer has to say why here.
+ */
 function allowedToolNames(): string[] {
-  const names: string[] = [];
   const labels = /const TOOL_ROW_LABELS[^{]*\{([\s\S]*?)\n\};/u.exec(message);
-  if (labels)
-    names.push(
-      ...[...labels[1]!.matchAll(/^\s{2}(?:"([a-z0-9_]+)"|([a-z0-9_]+)):/gmu)]
-        .map((match) => match[1] ?? match[2]!)
-        .filter(Boolean),
-    );
-  const keyed =
-    /const KEYED_TOOLVIEW_NAMES: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/u.exec(
-      message,
-    );
-  if (keyed)
-    names.push(
-      ...[...keyed[1]!.matchAll(/"([a-z0-9_]+)"/gu)].map((m) => m[1]!),
-    );
-  return names;
+  if (!labels) return [];
+  return [...labels[1]!.matchAll(/^\s{2}(?:"([a-z0-9_]+)"|([a-z0-9_]+)):/gmu)]
+    .map((match) => match[1] ?? match[2]!)
+    .filter(Boolean);
 }
 
 test("the card vocabulary and the decoder's kind list agree", () => {

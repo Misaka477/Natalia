@@ -795,8 +795,16 @@ test("an event recorded before the slots folds and renders unchanged (replay)", 
     },
   ]);
   const stateID = toolStateID({ id: "t1", name: "run_shell", callID: "c1" });
-  expect(state.tools[stateID]?.card).toBeUndefined();
   expect(state.tools[stateID]?.meta).toBeUndefined();
+  // R6: the block carries the DEFAULT card the fold synthesizes for a
+  // card-less event — the same projection the runtime publishes — so the UI
+  // renders card data for every event whatever its vintage.
+  expect(state.tools[stateID]?.card).toEqual({
+    kind: "generic",
+    title: "run_shell",
+    summary: "a.ts",
+    body: "a.ts\nb.ts",
+  });
   // The legacy blob is preserved verbatim for the client's fallback decode.
   expect(state.tools[stateID]?.metadata).toEqual({
     render: {

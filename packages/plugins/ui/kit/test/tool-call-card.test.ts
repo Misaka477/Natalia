@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import {
-  hasKeyedToolview,
-  keyedToolviewLines,
   relativizePath,
   toolCallRow,
-  parseAskTranscript,
-  todoItemsFromBody,
   toolCallCard,
   toolRowLabel,
   type ToolBlockLike,
@@ -272,58 +268,6 @@ test("toolRowLabel gives every tool its family label", () => {
   expect(toolRowLabel("some_new_tool")).toBe("some_new_tool");
 });
 
-test("the keyed toolview table names exactly the keyed tools (P2.1)", () => {
-  // A keyed hit REPLACES the generic card (dsh's ToolCallTree dispatch);
-  // every other name falls through to the generic card.
-  expect(hasKeyedToolview("ask_user")).toBe(true);
-  expect(hasKeyedToolview("todo_read")).toBe(true);
-  expect(hasKeyedToolview("todo_write")).toBe(true);
-  // A tool nobody has keyed falls through — the honest default.
-  expect(hasKeyedToolview("run_shell")).toBe(false);
-  expect(hasKeyedToolview("read_file")).toBe(false);
-});
-
-test("the Q&A transcript parses into its three line kinds (P2.2)", () => {
-  const lines = parseAskTranscript(
-    [
-      "Q: which database wins?",
-      "Options: sqlite (Recommended) · postgres",
-      "A: sqlite",
-    ].join(String.fromCharCode(10)),
-  );
-  expect(lines.map((line) => line.kind)).toEqual([
-    "question",
-    "choices",
-    "answer",
-  ]);
-  expect(lines.map((line) => line.text)).toEqual([
-    "Q: which database wins?",
-    "Options: sqlite (Recommended) · postgres",
-    "A: sqlite",
-  ]);
-  // A body that is not the transcript still shows its lines (as plain).
-  const fallback = parseAskTranscript("some raw result text");
-  expect(fallback).toEqual([{ text: "some raw result text", kind: "plain" }]);
-});
-
-test("the todo checklist decodes the shared envelope (P2.3)", () => {
-  const items = todoItemsFromBody(
-    JSON.stringify({
-      items: [
-        { content: "write the parser", status: "completed" },
-        { content: "add tests", status: "in_progress" },
-      ],
-      total: 2,
-      truncated: false,
-    }),
-  );
-  expect(items).toEqual([
-    { content: "write the parser", status: "completed" },
-    { content: "add tests", status: "in_progress" },
-  ]);
-  // A prose result has no checklist, not a crash.
-  expect(todoItemsFromBody("no items")).toEqual([]);
-});
 test("a path title is relativized for the row (P3.3)", () => {
   // dsh's relativizeToCwd + abbreviateHomePath: the row shows the short
   // form, the full path stays in the card's body. The home fold uses the
@@ -356,6 +300,10 @@ test("the same block renders identically whether live or replayed (user 2026-10-
   // event's stored summary — it derives from the result and from the
   // tool's own card. The historical smoke session is the proof case: its
   // events carry `summary: result.slice(0,200)` and no metadata at all.
+  //
+  // R6: nothing is derived HERE any more. The one-liner is the shared
+  // derivation over the result; the BODY is whatever the card carries —
+  // the tool's own reading, recorded with the event.
   const raw = JSON.stringify({
     items: [
       { content: "盘点全部工具", status: "completed" },
@@ -365,25 +313,15 @@ test("the same block renders identically whether live or replayed (user 2026-10-
     truncated: false,
   });
   // An OLD event: the stored summary is raw JSON, the metadata is empty.
-  const oldEvent = {
+  const oldRow = toolCallRow({
     name: "todo_write",
     status: "succeeded",
     summary: raw.slice(0, 200),
     result: raw,
-  };
-  const oldRow = toolCallRow(oldEvent);
+  });
   expect(oldRow.summary).toBe("2 items");
-  // And the body is the checklist, not the flatten — parsed from the
-  // result, exactly as a live call's card would render.
-  const lines = keyedToolviewLines(oldRow);
-  expect(lines).toEqual([
-    { line: "[x] 盘点全部工具", kind: "added" },
-    {
-      line: "[ ] 逐项测试",
-      kind: "pending" === "completed" ? "added" : "plain",
-    },
-  ]);
-  // A NEW event with the tool's own card renders the same way.
+  // The live twin with the tool's own card reads the same one-liner,
+  // because the summary is a function of the result either way.
   const liveRow = toolCallRow({
     name: "todo_write",
     status: "succeeded",
@@ -398,47 +336,7 @@ test("the same block renders identically whether live or replayed (user 2026-10-
     },
   });
   expect(liveRow.summary).toBe("written");
-  expect(keyedToolviewLines(liveRow)).toEqual(lines);
-});
-
-test("ask_user's Q&A derives from the arguments and result, not the recorded card (user 2026-10-08)", () => {
-  // The screenshot: five choices on one line. The cause was that the card's
-  // body — a string composed when the event was RECORDED — was replayed
-  // verbatim, so an event recorded before the per-line spelling (or none at
-  // all) stayed cramped forever. The Q&A is now derived from the durable
-  // halves: the call's arguments (question + choices) and the result (the
-  // answers). Live and replayed render identically.
-  const raw = JSON.stringify({
-    answers: [["创建验证证据、完成卡和工程决策记录（Recommended）"]],
-  });
-  const row = toolCallRow({
-    name: "ask_user",
-    status: "succeeded",
-    summary: raw.slice(0, 200),
-    result: raw,
-    argumentsRaw: JSON.stringify({
-      question: "请选择允许范围",
-      options: ["第一个选项", "第二个选项", "第三个选项"],
-    }),
-  });
-  expect(keyedToolviewLines(row)).toEqual([
-    { line: "Q: 请选择允许范围", kind: "question" },
-    { line: "Options:", kind: "choices" },
-    { line: "  · 第一个选项", kind: "choices" },
-    { line: "  · 第二个选项", kind: "choices" },
-    { line: "  · 第三个选项", kind: "choices" },
-    {
-      line: "A: 创建验证证据、完成卡和工程决策记录（Recommended）",
-      kind: "answer",
-    },
-  ]);
-  // An event with NO arguments at all still renders (the recorded body).
-  expect(
-    keyedToolviewLines({ name: "ask_user", output: "Q: old\nA: new" }),
-  ).toEqual([
-    { line: "Q: old", kind: "question" },
-    { line: "A: new", kind: "answer" },
-  ]);
+  expect(liveRow.card?.body).toBe(raw);
 });
 
 test("ask_user's Q&A reads the card's structured fields first (R4)", () => {
@@ -461,30 +359,11 @@ test("ask_user's Q&A reads the card's structured fields first (R4)", () => {
       answers: ["第二个选项"],
     },
   });
-  expect(keyedToolviewLines(row)).toEqual([
-    { line: "Q: 请选择允许范围", kind: "question" },
-    { line: "Options:", kind: "choices" },
-    { line: "  · 第一个选项", kind: "choices" },
-    { line: "  · 第二个选项", kind: "choices" },
-    { line: "A: 第二个选项", kind: "answer" },
-  ]);
-  // No answer recorded is a state, not a missing line.
-  const unanswered = toolCallRow({
-    name: "ask_user",
-    status: "failed",
-    summary: "failed",
-    result: "",
-    card: {
-      kind: "generic",
-      title: "q",
-      summary: "failed",
-      question: "q",
-      options: [],
-      answers: [],
-    },
+  // R6: the Q&A is CARD DATA now — the row carries the tool's structured
+  // fields, and a client renders them without deriving anything.
+  expect(row.card).toMatchObject({
+    question: "请选择允许范围",
+    options: ["第一个选项", "第二个选项"],
+    answers: ["第二个选项"],
   });
-  expect(keyedToolviewLines(unanswered)).toEqual([
-    { line: "Q: q", kind: "question" },
-    { line: "A: (no answer recorded)", kind: "answer" },
-  ]);
 });

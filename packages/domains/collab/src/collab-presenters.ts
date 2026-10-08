@@ -15,6 +15,7 @@
  * throws takes the whole transcript row down with it.
  */
 import type { ToolOutputDefinition } from "@anthelia/tools";
+import { toolResultBody } from "@anthelia/contracts";
 
 /** The permissive output schema these tools' envelopes satisfy. */
 const ENVELOPE_SCHEMA = { type: "object", properties: {} } as const;
@@ -87,6 +88,10 @@ export function collabResultCard(input: {
       kind: "generic",
       title: text(facts.title) ?? input.title,
       summary: input.summary,
+      // The envelope as a READING (R6): the tool-side flatten, so a client
+      // renders text and parses nothing. A card without a body used to
+      // leave the row showing the raw JSON.
+      body: toolResultBody(value),
       ...(pills && pills.length ? { meta: pills } : {}),
     };
   };

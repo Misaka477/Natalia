@@ -14,6 +14,7 @@ import type {
   CollaborationParticipant,
   RuntimeEvent,
 } from "@anthelia/contracts";
+import { defaultToolCard } from "@anthelia/contracts";
 import {
   appendWithRetrySkip,
   splitMarkdownAtSafeBoundary,
@@ -566,9 +567,17 @@ function upsertTool(
     ...(event.metadata !== undefined ? { metadata: event.metadata } : {}),
     // The structured slots (R0): a later event supersedes the card from an
     // earlier phase of the same call — the result card over the call card —
-    // exactly like `metadata` above. An event that carries neither (recorded
-    // before the slots existed) leaves whatever the previous ones carried.
-    ...(event.card !== undefined ? { card: event.card } : {}),
+    // exactly like `metadata` above.
+    //
+    // R6: a card-less event (a journal written before cards existed, or a
+    // publisher older than R5.5) still gets one HERE — the same default
+    // projection the runtime publishes — so the UI renders card data and
+    // nothing else, for every event whatever its vintage.
+    card:
+      event.card ??
+      (event.result === undefined
+        ? previous?.card
+        : defaultToolCard(event.name, event.result)),
     ...(event.meta !== undefined ? { meta: event.meta } : {}),
   };
   state.tools[stateID] = tool;
@@ -965,8 +974,13 @@ function applyAgentChatEvent(
         ...(event.result !== undefined ? { result: event.result } : {}),
         // The tool's own card and facts (R4): a live chat row gets the same
         // projection a main-transcript row does, because the publisher
-        // fills it — the fold used to drop it.
-        ...(event.card !== undefined ? { card: event.card } : {}),
+        // fills it. R6: a card-less chat event gets the default one here,
+        // exactly like the main path.
+        card:
+          event.card ??
+          (event.result === undefined
+            ? undefined
+            : defaultToolCard(event.toolName, event.result)),
         ...(event.meta !== undefined ? { meta: event.meta } : {}),
         ...(event.startedAt !== undefined
           ? { startedAt: event.startedAt }

@@ -10,12 +10,8 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
-  humanizeToolResult,
-  keyedToolviewLines,
-  parseAskTranscript,
   shouldCollapseToolOutput,
   relativizePath,
-  todoItemsFromBody,
   toolRowLabel,
   type Attachment,
   type Message,
@@ -1339,10 +1335,11 @@ export const CARD_RENDERERS: CardRendererMap = {
         ? plainCardLines(card.paths.join("\n"))
         : plainCardLines(card.body ?? toolCall.output ?? ""),
   web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
+  // The body IS the reading: the tool-side flatten (or, since R5.5, the
+  // runtime's default projection). A client draws it and parses nothing —
+  // the last `humanizeToolResult` call left this file in R6.
   generic: (card, toolCall) =>
-    plainCardLines(
-      humanizeToolResult(card.body ?? toolCall.output ?? "", toolCall.name),
-    ),
+    plainCardLines(card.body ?? toolCall.output ?? ""),
 };
 
 /**
@@ -1368,18 +1365,6 @@ function renderCard(card: ToolCard, toolCall: ToolCall): ToolCardLine[] {
 }
 
 function ToolCallCard(props: { toolCall: ToolCall }) {
-  // The keyed toolviews (presentation plan P2.1): ask_user's Q&A and the
-  // todo checklist REPLACE this card's BODY, never its row — a reader must
-  // still see which tool ran, its status and its title (the screenshot that
-  // taught this: a keyed row that said only `(no items)` named no tool).
-  // The line model is message.ts's pure function; the shell below is shared
-  // with the generic path.
-  const keyed = () =>
-    // The ToolCall ITSELF — never a rebuilt subset: the object literal I
-    // wrote here carried only {name, card, output} and silently dropped
-    // `arguments`, which is exactly the half the Q&A derives from. The
-    // user watched a day of "why is it still the old form" over that.
-    keyedToolviewLines(props.toolCall);
   const card = props.toolCall.card;
   const [expanded, setExpanded] = createSignal(false);
   const rowLabel = () => toolRowLabel(props.toolCall.name);
@@ -1411,23 +1396,15 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
   //      result gets.
   // The tool's own card wins for a diff (the marked hunk is not the raw
   // result string at all) and for a terminal (the command's output).
-  const bodyLines = (): ToolCardLine[] => {
-    const keyedBody = keyed();
-    if (keyedBody)
-      return keyedBody.map((entry) => ({
-        line: entry.line,
-        kind:
-          entry.kind === "added" || entry.kind === "answer"
-            ? ("added" as const)
-            : entry.kind === "removed"
-              ? ("removed" as const)
-              : ("plain" as const),
-      }));
-    if (card) return renderCard(card, props.toolCall);
-    return plainCardLines(
-      humanizeToolResult(props.toolCall.output ?? "", props.toolCall.name),
-    );
-  };
+  // R6: the row is the card's own data — one dispatch, no name-keyed
+  // special case, no client-side parse. A ToolCall without a card is a
+  // hand-built row (a test, a host that skipped the fold); it shows its
+  // output as plain lines rather than a reading, which is the honest
+  // answer for a row nobody projected.
+  const bodyLines = (): ToolCardLine[] =>
+    card
+      ? renderCard(card, props.toolCall)
+      : plainCardLines(props.toolCall.output ?? "");
   const output = () =>
     bodyLines()
       .map((entry) => entry.line)

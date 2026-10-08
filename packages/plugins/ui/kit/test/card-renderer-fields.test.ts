@@ -53,26 +53,26 @@ test("a terminal without the field falls back to its body, then the result", () 
   ]);
 });
 
-test("generic is the one kind whose text is flattened", () => {
-  // An envelope tool's result is its own document, and reading it (the
-  // flatten) is the kit's job for exactly this kind: a record array reads
-  // one record per line, never inlined onto the key.
-  const envelope = JSON.stringify({
-    items: [{ id: "a" }, { id: "b" }],
-    total: 2,
-  });
+test("generic draws its body — the tool-side reading — verbatim (R6)", () => {
+  // R6: the flatten is no longer the kit's job for ANY kind. The body a
+  // generic card carries IS the reading (the tool-side flatten, or the
+  // runtime's default projection since R5.5), so the renderer draws it and
+  // parses nothing. The reading's shape is pinned where it is produced —
+  // `toolResultBody` in the contracts leaf.
+  const reading = ["items:", "  · id=a", "  · id=b", "total: 2"].join("\n");
   const card: ToolCard = {
     kind: "generic",
     title: "todo",
     summary: "written",
-    body: envelope,
+    body: reading,
   };
-  const lines = CARD_RENDERERS.generic(card, toolCall());
-  expect(lines.map((entry) => entry.line)).toEqual([
-    "items:",
-    "  · id=a",
-    "  · id=b",
-    "total: 2",
+  expect(
+    CARD_RENDERERS.generic(card, toolCall()).map((entry) => entry.line),
+  ).toEqual(["items:", "  · id=a", "  · id=b", "total: 2"]);
+  // A card with no body falls back to the row's own output, still verbatim.
+  const bare: ToolCard = { kind: "generic", title: "todo", summary: "written" };
+  expect(CARD_RENDERERS.generic(bare, toolCall("RAW"))).toEqual([
+    { line: "RAW", kind: "plain" },
   ]);
 });
 

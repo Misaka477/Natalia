@@ -49,35 +49,24 @@ function terminalInputCard(input: {
 }): NonNullable<
   import("@anthelia/tools").ToolOutputDefinition["presentResult"]
 > {
-  return (_args, value) => {
-    let parsed: Record<string, unknown> | undefined;
-    try {
-      const decoded = JSON.parse(value) as unknown;
-      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-        parsed = decoded as Record<string, unknown>;
-    } catch {
-      // degrade, never throw
-    }
-    const delivery =
-      typeof parsed?.delivery === "string" ? parsed.delivery : undefined;
-    const bytes =
-      typeof parsed?.writtenBytes === "number"
-        ? parsed.writtenBytes
-        : undefined;
+  return (args, value, meta) => {
+    const facts = (meta ?? terminalFacts(value)) as TerminalFacts;
+    const delivery = facts.delivery;
+    const bytes = facts.writtenBytes;
     const summary =
       delivery === "duplicate"
         ? "duplicate input"
         : bytes !== undefined
           ? `sent ${bytes} bytes`
           : input.callSummary;
-    const meta: Array<[string, string]> = [];
-    if (bytes !== undefined) meta.push(["bytes", String(bytes)]);
-    if (delivery) meta.push(["delivery", delivery]);
+    const pills: Array<[string, string]> = [];
+    if (bytes !== undefined) pills.push(["bytes", String(bytes)]);
+    if (delivery) pills.push(["delivery", delivery]);
     return {
       kind: "terminal",
-      title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+      title: facts.id ?? optionalString(requireObject(args).id) ?? "terminal",
       summary,
-      ...(meta.length ? { meta } : {}),
+      ...(pills.length ? { meta: pills } : {}),
     };
   };
 }
@@ -94,21 +83,20 @@ function terminalReadCard(input: {
 }): NonNullable<
   import("@anthelia/tools").ToolOutputDefinition["presentResult"]
 > {
-  return (_args, value) => {
-    let parsed: Record<string, unknown> | undefined;
-    try {
-      const decoded = JSON.parse(value) as unknown;
-      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-        parsed = decoded as Record<string, unknown>;
-    } catch {
-      // A non-JSON result degrades to the generic card, never throws.
-    }
-    const num = (key: string): number | undefined =>
-      typeof parsed?.[key] === "number" ? (parsed![key] as number) : undefined;
-    const meta: Array<[string, string]> = [];
-    const window = parsed?.window as
-      | { startLine?: number; endLine?: number; lineCount?: number }
-      | undefined;
+  return (args, value, meta) => {
+    const facts = (meta ?? terminalFacts(value)) as TerminalFacts;
+    const num = (
+      key:
+        | "totalLines"
+        | "startByte"
+        | "endByte"
+        | "totalBytes"
+        | "cursorX"
+        | "cursorY",
+    ): number | undefined =>
+      typeof facts[key] === "number" ? (facts[key] as number) : undefined;
+    const pills: Array<[string, string]> = [];
+    const window = facts.window;
     const start = window?.startLine;
     const end = window?.endLine;
     const total = num("totalLines") ?? window?.lineCount;
@@ -116,21 +104,80 @@ function terminalReadCard(input: {
       start !== undefined && end !== undefined && total !== undefined
         ? `lines ${start}-${end} of ${total}`
         : input.callSummary;
-    if (total !== undefined) meta.push(["lines", String(total)]);
+    if (total !== undefined) pills.push(["lines", String(total)]);
     if (num("startByte") !== undefined && num("endByte") !== undefined)
-      meta.push([
+      pills.push([
         "bytes",
         `${num("startByte")}-${num("endByte")}${num("totalBytes") !== undefined ? ` of ${num("totalBytes")}` : ""}`,
       ]);
     if (num("cursorX") !== undefined && num("cursorY") !== undefined)
-      meta.push(["cursor", `${num("cursorX")},${num("cursorY")}`]);
+      pills.push(["cursor", `${num("cursorX")},${num("cursorY")}`]);
     return {
       kind: "read",
-      title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+      title: facts.id ?? optionalString(requireObject(args).id) ?? "terminal",
       summary,
-      ...(meta.length ? { meta } : {}),
+      // The window the host actually served is the read's page — the pane's
+      // own lines on the card's structured `content`, the same field a file
+      // read carries (R2). The extents stay the pills they were.
+      ...(facts.text === undefined ? {} : { content: facts.text }),
+      ...(facts.truncated ? { truncated: true } : {}),
+      ...(pills.length ? { meta: pills } : {}),
     };
   };
+}
+
+/**
+ * The facts one terminal envelope carries — the family's ONE decode (R3).
+ *
+ * Every tool in this family answers with a pane record plus a delivery fact,
+ * so one decoder serves all fourteen: `presentationMeta` runs it once and the
+ * facts travel the event's `meta` slot; `presentResult` composes its card from
+ * them instead of parsing the result string a second time. The runtime hands
+ * the very object back, so a presenter reads it with a plain cast — and a
+ * caller without it (a direct unit call) recomputes over the same pure decode.
+ */
+type TerminalFacts = {
+  id?: string;
+  status?: string;
+  pid?: number;
+  /** The last command's own line, when the pane reports one. */
+  commandLine?: string | null;
+  exitCode?: number;
+  cwd?: string;
+  rows?: number;
+  cols?: number;
+  totalLines?: number;
+  cursorX?: number;
+  cursorY?: number;
+  startByte?: number;
+  endByte?: number;
+  totalBytes?: number;
+  window?: { startLine?: number; endLine?: number; lineCount?: number };
+  delivery?: string;
+  writtenBytes?: number;
+  mode?: string;
+  changed?: boolean;
+  humanRequested?: boolean;
+  reason?: string;
+  truncated?: boolean;
+  nextCursor?: { startLine: number };
+  /** A scrollback search's hits, each with its line and text. */
+  matches?: Array<{ line: number; text: string }>;
+  /** The served window's own text (a read), or the pane's screen (a snapshot). */
+  text?: string;
+  screen?: string;
+};
+
+function terminalFacts(value: string): TerminalFacts {
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+      ? (decoded as TerminalFacts)
+      : {};
+  } catch {
+    // A non-JSON result degrades to an empty fact set, never throws.
+    return {};
+  }
 }
 
 function requireNativeTerminal(context: ToolExecutionContext) {
@@ -185,24 +232,22 @@ function interactiveStartTool(): RuntimeTool {
           summary: "start",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const facts = (meta ?? terminalFacts(value)) as TerminalFacts;
         return {
           kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
-          summary:
-            typeof parsed?.status === "string" ? parsed.status : "started",
+          title:
+            facts.id ?? optionalString(requireObject(args).id) ?? "terminal",
+          summary: facts.status ?? "started",
+          // The command the pane runs is the card's structured field (from
+          // the arguments, which is where a call knows it), the pid a facet.
+          command: optionalString(requireObject(args).command),
+          ...(facts.cwd ? { cwd: facts.cwd } : {}),
           meta:
-            typeof parsed?.pid === "number"
-              ? [["pid", String(parsed.pid)]]
-              : [],
+            typeof facts.pid === "number" ? [["pid", String(facts.pid)]] : [],
         };
       },
     },
@@ -261,6 +306,9 @@ function interactiveReadTool(): RuntimeTool {
           title: requireString(requireObject(args).id, "id"),
           summary: "read",
         };
+      },
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
       },
       presentResult: terminalReadCard({ callSummary: "read" }),
     },
@@ -441,31 +489,42 @@ function interactiveSearchTool(): RuntimeTool {
           summary: `search: ${requireString(requireObject(args).query, "query")}`,
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
-        const matches = Array.isArray(parsed?.matches) ? parsed!.matches! : [];
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const parsed = (meta ?? terminalFacts(value)) as TerminalFacts;
+        const matches = Array.isArray(parsed.matches) ? parsed.matches : [];
         const summary =
           matches.length === 0
             ? "no matches"
             : `${matches.length} match${matches.length === 1 ? "" : "es"}`;
-        const meta: Array<[string, string]> = [];
-        if (typeof parsed?.truncated === "boolean" && parsed.truncated)
-          meta.push(["truncated", "true"]);
-        if (parsed?.nextCursor !== undefined)
-          meta.push(["nextCursor", String(parsed.nextCursor)]);
+        const pills: Array<[string, string]> = [];
+        if (parsed.truncated === true) pills.push(["truncated", "true"]);
+        if (parsed.nextCursor !== undefined)
+          pills.push(["nextCursor", String(parsed.nextCursor.startLine)]);
+        // The hits are the card's structured `matches`: the pane is the
+        // "path" (a search inside one document has no file), the line and
+        // the text are the match's. A client draws them the way it draws a
+        // grep's; the pane text is no longer flattened into a body.
         return {
-          kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
-          summary,
-          ...(meta.length ? { meta } : {}),
-          body: value,
+          kind: "search",
+          title:
+            parsed.id ?? optionalString(requireObject(args).id) ?? "terminal",
+          // A capped page must never read as a complete one.
+          summary:
+            parsed.nextCursor === undefined ? summary : `${summary} · more`,
+          query: requireString(requireObject(args).query, "query"),
+          matches: matches.map((match) => ({
+            path: parsed.id ?? "terminal",
+            line: match.line,
+            text: match.text,
+          })),
+          ...(parsed.truncated === true ? { truncated: true } : {}),
+          ...(parsed.nextCursor === undefined
+            ? {}
+            : { nextCursor: String(parsed.nextCursor.startLine) }),
+          ...(pills.length ? { meta: pills } : {}),
         };
       },
     },
@@ -544,30 +603,31 @@ function terminalLastCommandTool(): RuntimeTool {
           summary: "last command",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const facts = (meta ?? terminalFacts(value)) as TerminalFacts;
         const command =
-          typeof parsed?.commandLine === "string"
-            ? parsed.commandLine
-            : parsed?.commandLine === null
+          typeof facts.commandLine === "string"
+            ? facts.commandLine
+            : facts.commandLine === null
               ? "no command yet"
               : "last command";
-        const exitCode = parsed?.exitCode;
-        const meta: Array<[string, string]> = [];
-        if (typeof exitCode === "number") meta.push(["exit", String(exitCode)]);
+        const exitCode = facts.exitCode;
+        const pills: Array<[string, string]> = [];
+        if (typeof exitCode === "number")
+          pills.push(["exit", String(exitCode)]);
         return {
           kind: "terminal",
           title: command,
           summary:
             typeof exitCode === "number" ? `exit ${exitCode}` : "last command",
-          ...(meta.length ? { meta } : {}),
+          // The command and its exit are the card's structured fields (the
+          // exit is also what makes a row read as failed).
+          command,
+          ...(typeof exitCode === "number" ? { exitCode } : {}),
+          ...(pills.length ? { meta: pills } : {}),
         };
       },
     },
@@ -676,20 +736,17 @@ function terminalObserveTool(): RuntimeTool {
           summary: typeof parsed.mode === "string" ? parsed.mode : "full",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
-        const mode = typeof parsed?.mode === "string" ? parsed.mode : "observe";
-        const changed = parsed?.changed === true;
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const parsed = (meta ?? terminalFacts(value)) as TerminalFacts;
+        const mode = parsed.mode ?? "observe";
+        const changed = parsed.changed === true;
         return {
           kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          title:
+            parsed.id ?? optionalString(requireObject(args).id) ?? "terminal",
           summary: changed ? `${mode} · new output` : mode,
           meta: changed ? [["changed", "true"]] : [],
         };
@@ -818,6 +875,9 @@ function interactiveWriteTool(): RuntimeTool {
           summary: "write",
         };
       },
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
       presentResult: terminalInputCard({ callSummary: "write" }),
     },
     async execute(input, context) {
@@ -862,6 +922,9 @@ function interactiveSendLineTool(): RuntimeTool {
           title: requireString(requireObject(args).id, "id"),
           summary: "send line",
         };
+      },
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
       },
       presentResult: terminalInputCard({ callSummary: "send line" }),
     },
@@ -920,6 +983,9 @@ function interactiveKeyTool(): RuntimeTool {
           title: requireString(requireObject(args).id, "id"),
           summary: "send keys",
         };
+      },
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
       },
       presentResult: terminalInputCard({ callSummary: "send keys" }),
     },
@@ -987,6 +1053,9 @@ function interactiveInputTool(): RuntimeTool {
                 : "run input"
               : "input",
         };
+      },
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
       },
       presentResult: terminalInputCard({ callSummary: "input" }),
     },
@@ -1064,12 +1133,20 @@ function interactiveSnapshotTool(): RuntimeTool {
           summary: "snapshot",
         };
       },
-      presentResult(args, value) {
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const facts = (meta ?? terminalFacts(value)) as TerminalFacts;
+        const id = optionalString(requireObject(args).id) ?? "";
         return {
           kind: "terminal",
-          title: String(requireObject(args).id ?? ""),
+          title: id,
           summary: "screen",
-          body: value,
+          // The screen is the pane's own text: the terminal card's
+          // structured `output` field, not a body a client would flatten.
+          ...(typeof facts.screen === "string" ? { output: facts.screen } : {}),
+          meta: [["screen", `${facts.rows ?? 0}x${facts.cols ?? 0}`]],
         };
       },
     },
@@ -1110,25 +1187,25 @@ function interactiveResizeTool(): RuntimeTool {
           summary: "resize",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
-        const meta: Array<[string, string]> = [];
-        if (typeof parsed?.rows === "number")
-          meta.push(["rows", String(parsed.rows)]);
-        if (typeof parsed?.cols === "number")
-          meta.push(["cols", String(parsed.cols)]);
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const parsed = (meta ?? terminalFacts(value)) as TerminalFacts;
+        const pills: Array<[string, string]> = [];
+        if (typeof parsed.rows === "number")
+          pills.push(["rows", String(parsed.rows)]);
+        if (typeof parsed.cols === "number")
+          pills.push(["cols", String(parsed.cols)]);
         return {
           kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          title:
+            parsed.id ?? optionalString(requireObject(args).id) ?? "terminal",
           summary: "resized",
-          ...(meta.length ? { meta } : {}),
+          // The new grid is the card's structured fact pair.
+          ...(typeof parsed.rows === "number" ? { rows: parsed.rows } : {}),
+          ...(typeof parsed.cols === "number" ? { cols: parsed.cols } : {}),
+          ...(pills.length ? { meta: pills } : {}),
         };
       },
     },
@@ -1179,22 +1256,22 @@ function interactiveRequestHumanTool(): RuntimeTool {
           summary: "ask the human",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const parsed = (meta ?? terminalFacts(value)) as TerminalFacts;
         return {
           kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
+          title:
+            parsed.id ?? optionalString(requireObject(args).id) ?? "terminal",
           summary:
-            parsed?.humanRequested === true
+            parsed.humanRequested === true
               ? "human asked to take over"
               : "human request",
+          ...(parsed.humanRequested === true
+            ? { meta: [["humanRequested", "true"]] }
+            : {}),
         };
       },
     },
@@ -1241,20 +1318,16 @@ function interactiveStopTool(): RuntimeTool {
           summary: "stop",
         };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
+      presentationMeta(_args, value) {
+        return terminalFacts(value) as Record<string, unknown>;
+      },
+      presentResult(args, value, meta) {
+        const parsed = (meta ?? terminalFacts(value)) as TerminalFacts;
         return {
           kind: "terminal",
-          title: typeof parsed?.id === "string" ? parsed.id : "terminal",
-          summary:
-            typeof parsed?.status === "string" ? parsed.status : "stopped",
+          title:
+            parsed.id ?? optionalString(requireObject(args).id) ?? "terminal",
+          summary: parsed.status ?? "stopped",
         };
       },
     },
@@ -1282,27 +1355,35 @@ function interactiveListTool(): RuntimeTool {
       presentCall() {
         return { kind: "terminal", title: "terminals", summary: "list" };
       },
-      presentResult(_args, value) {
+      presentationMeta(_args, value) {
         let parsed: unknown;
         try {
           parsed = JSON.parse(value);
         } catch {
           // degrade, never throw
         }
-        const count = Array.isArray(parsed) ? parsed.length : 0;
-        const running = Array.isArray(parsed)
-          ? parsed.filter(
-              (item) =>
-                Boolean(item) &&
-                typeof item === "object" &&
-                (item as { status?: unknown }).status === "running",
-            ).length
-          : 0;
+        const items = Array.isArray(parsed) ? parsed : [];
+        return {
+          total: items.length,
+          running: items.filter(
+            (item) =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              (item as { status?: unknown }).status === "running",
+          ).length,
+        };
+      },
+      presentResult(_args, value, meta) {
+        const facts = (meta ?? {}) as { total?: number; running?: number };
+        const count = facts.total ?? 0;
+        const running = facts.running ?? 0;
         return {
           kind: "terminal",
           title: "terminals",
           summary: `${count} listed · ${running} running`,
           meta: [["running", String(running)]],
+          // A listing is an envelope: the list itself stays the body, and
+          // the counts are the facts.
           body: value,
         };
       },

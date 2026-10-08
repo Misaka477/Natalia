@@ -37,6 +37,113 @@ function requireSubagents(context: ToolExecutionContext) {
   return context.subagents;
 }
 
+/**
+ * The family's fact readers (R3) — one decode each, in `presentationMeta`.
+ *
+ * A subagent's results are mostly the tool's own TEXT (a status sentence, a
+ * stop outcome), which has no envelope to parse once: the derivations that
+ * exist (a status word in brackets, a continuation number) live here, in ONE
+ * place, so the card is composed from facts and the `meta` slot carries them
+ * for any consumer that would otherwise re-derive from the text.
+ */
+function spawnFacts(value: string): { taskID?: string } {
+  try {
+    const decoded = JSON.parse(value) as {
+      id?: unknown;
+      taskID?: unknown;
+    } | null;
+    const taskID =
+      typeof decoded?.taskID === "string"
+        ? decoded.taskID
+        : typeof decoded?.id === "string"
+          ? decoded.id
+          : undefined;
+    return taskID === undefined ? {} : { taskID };
+  } catch {
+    return {};
+  }
+}
+
+function cleanupFacts(value: string): { removed: number } {
+  try {
+    const decoded = JSON.parse(value) as { removed?: unknown } | null;
+    return {
+      removed: Array.isArray(decoded?.removed) ? decoded.removed.length : 0,
+    };
+  } catch {
+    return { removed: 0 };
+  }
+}
+
+function cleanupCard(value: string) {
+  const { removed } = cleanupFacts(value);
+  return {
+    kind: "generic" as const,
+    title: "subagents",
+    summary: `removed ${removed}`,
+  };
+}
+
+function waitFacts(value: string): {
+  completed: number;
+  pending: number;
+  timedOut: boolean;
+} {
+  try {
+    const decoded = JSON.parse(value) as {
+      completed?: unknown;
+      pending?: unknown;
+      timedOut?: unknown;
+    } | null;
+    return {
+      completed: Array.isArray(decoded?.completed)
+        ? decoded.completed.length
+        : 0,
+      pending: Array.isArray(decoded?.pending) ? decoded.pending.length : 0,
+      timedOut: decoded?.timedOut === true,
+    };
+  } catch {
+    return { completed: 0, pending: 0, timedOut: false };
+  }
+}
+
+/** A status sentence's own word, between the brackets. */
+function statusFact(value: string): { status: string } {
+  return { status: /\[([^\]]+)\]/u.exec(value)?.[1] ?? "unknown" };
+}
+
+/** A continuation's number, from the start sentence. */
+function retryFact(value: string): { continuation?: number } {
+  const found = /started continuation (\d+)/u.exec(value)?.[1];
+  return found === undefined ? {} : { continuation: Number(found) };
+}
+
+/** The stop outcomes, as the row reads them. */
+function stopSummary(outcome: unknown): string {
+  return outcome === "force_stopped"
+    ? "force stopped · interrupted active agent"
+    : outcome === "stopped"
+      ? "stopped"
+      : outcome === "protected"
+        ? "protected · agent still active"
+        : outcome === "not_found"
+          ? "not found"
+          : "not running";
+}
+
+/** A stop's outcome, from its own sentence. */
+function stopFact(value: string): { outcome: string } {
+  if (value.startsWith("Stopped "))
+    return {
+      outcome: value.includes("force interrupted")
+        ? "force_stopped"
+        : "stopped",
+    };
+  if (value.startsWith("Protected ")) return { outcome: "protected" };
+  if (value === "Agent not found") return { outcome: "not_found" };
+  return { outcome: "not_running" };
+}
+
 function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
   // Rendered once at registration and refreshed on config reload: the request
   // builder reads `description` per step, so updating it in place keeps the
@@ -105,12 +212,14 @@ function agentSpawnTool(agentTypes: readonly SubagentTypeView[]): RuntimeTool {
             ) ?? "spawn",
         };
       },
-      presentResult(_args, value) {
-        const result = JSON.parse(value) as {
-          id?: string;
-          taskID?: string;
-        } | null;
-        const taskID = result?.taskID ?? result?.id;
+      presentationMeta(_args, value) {
+        return spawnFacts(value) as Record<string, unknown>;
+      },
+      presentResult(_args, value, meta) {
+        // ONE parse, in presentationMeta: the handle is the fact the card
+        // and the meta slot both read.
+        const facts = (meta ?? spawnFacts(value)) as { taskID?: string };
+        const taskID = facts.taskID;
         return {
           kind: "generic",
           title: "subagent",
@@ -204,11 +313,23 @@ function agentStatusTool(): RuntimeTool {
     true,
     {},
     idCall("check", true),
-    (args, value) => ({
-      kind: "generic",
-      title: requireString(requireObject(args).id, "id"),
-      summary: `status ${/\[([^\]]+)\]/u.exec(value)?.[1] ?? "unknown"}`,
-    }),
+    (args, value, meta) => {
+      // The status word is the tool's own text fact — derived once (in
+      // presentationMeta) rather than re-matched by whoever draws the row.
+      const status =
+        meta === undefined
+          ? statusFact(value).status
+          : typeof (meta as { status?: unknown }).status === "string"
+            ? (meta as { status: string }).status
+            : "unknown";
+      return {
+        kind: "generic",
+        title: requireString(requireObject(args).id, "id"),
+        summary: `status ${status}`,
+      };
+    },
+    undefined,
+    (_args, value) => statusFact(value),
   );
 }
 
@@ -265,20 +386,17 @@ function agentStopTool(): RuntimeTool {
       force: { type: "boolean" },
     },
     idCall("stop"),
-    (args, value) => ({
+    (args, value, meta) => ({
       kind: "generic",
       title: requireString(requireObject(args).id, "id"),
-      summary: value.startsWith("Stopped ")
-        ? value.includes("force interrupted")
-          ? "force stopped · interrupted active agent"
-          : "stopped"
-        : value.startsWith("Protected ")
-          ? "protected · agent still active"
-          : value === "Agent not found"
-            ? "not found"
-            : "not running",
+      summary: stopSummary(
+        meta === undefined
+          ? stopFact(value).outcome
+          : (meta as { outcome?: unknown }).outcome,
+      ),
     }),
     ["id", "reason"],
+    (_args, value) => stopFact(value),
   );
 }
 
@@ -316,11 +434,20 @@ function agentRetryTool(): RuntimeTool {
     true,
     {},
     idCall("retry"),
-    (args, value) => ({
+    (args, value, meta) => ({
       kind: "generic",
       title: requireString(requireObject(args).id, "id"),
-      summary: `continuation ${/started continuation (\d+)/u.exec(value)?.[1] ?? "unavailable"}`,
+      summary: `continuation ${
+        meta === undefined
+          ? (retryFact(value).continuation ?? "unavailable")
+          : typeof (meta as { continuation?: unknown }).continuation ===
+              "number"
+            ? String((meta as { continuation: number }).continuation)
+            : "unavailable"
+      }`,
     }),
+    undefined,
+    (_args, value) => retryFact(value),
   );
 }
 
@@ -374,14 +501,7 @@ function agentCleanupTool(): RuntimeTool {
     false,
     {},
     () => ({ kind: "generic", title: "subagents", summary: "cleanup" }),
-    (_args, value) => {
-      const removed = (JSON.parse(value) as { removed?: unknown[] }).removed;
-      return {
-        kind: "generic",
-        title: "subagents",
-        summary: `removed ${removed?.length ?? 0}`,
-      };
-    },
+    (_args, value) => cleanupCard(value),
   );
 }
 
@@ -429,22 +549,21 @@ function agentWaitTool(): RuntimeTool {
           meta: [["collapsible", "true"]],
         };
       },
-      presentResult(_args, value) {
-        let parsed: {
-          completed?: unknown[];
-          pending?: unknown[];
-          timedOut?: boolean;
+      presentationMeta(_args, value) {
+        return waitFacts(value) as Record<string, unknown>;
+      },
+      presentResult(_args, value, meta) {
+        // ONE parse, in presentationMeta: the counts are the facts.
+        const facts = (meta ?? waitFacts(value)) as {
+          completed: number;
+          pending: number;
+          timedOut: boolean;
         };
-        try {
-          parsed = JSON.parse(value);
-        } catch {
-          return { kind: "generic", title: "wait", summary: "completed" };
-        }
-        const completed = (parsed.completed ?? []).length;
-        const pending = (parsed.pending ?? []).length;
+        const completed = facts.completed;
+        const pending = facts.pending;
         const total = completed + pending;
         let summary: string;
-        if (parsed.timedOut) {
+        if (facts.timedOut) {
           summary =
             pending > 0 ? `timed out · ${pending} pending` : "timed out";
         } else if (pending === 0) {
@@ -622,6 +741,7 @@ function agentAuditTool(): RuntimeTool {
 
 type PresentCall = NonNullable<ToolOutputDefinition["presentCall"]>;
 type PresentResult = NonNullable<ToolOutputDefinition["presentResult"]>;
+type PresentMeta = NonNullable<ToolOutputDefinition["presentationMeta"]>;
 
 function idCall(summary: string, collapsible = false): PresentCall {
   return (args) => ({
@@ -663,6 +783,7 @@ function agentRegistryTool(
   presentCall?: PresentCall,
   presentResult?: PresentResult,
   requiredProperties?: string[],
+  presentMeta?: PresentMeta,
 ): RuntimeTool {
   return {
     name,
@@ -683,6 +804,7 @@ function agentRegistryTool(
     output: {
       schema: { type: "object", properties: {} },
       presentCall,
+      presentationMeta: presentMeta,
       presentResult,
     },
     async execute(input, context) {

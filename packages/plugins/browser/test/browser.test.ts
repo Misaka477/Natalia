@@ -316,3 +316,60 @@ test("browser bridge 4xx answers pass through without retry advice (T-16)", asyn
     await server.stop(true);
   }
 });
+
+test("a browser call's card carries the page as its structured url (R5)", () => {
+  // ONE decode: the facts travel the event's meta slot and come back to the
+  // presenter, and the page is the web card's own field — not a pill a
+  // client re-reads.
+  const tool = browserTools.find(
+    (candidate) => candidate.name === "browser_open",
+  )!;
+  const value = JSON.stringify({
+    ok: true,
+    url: "https://example.com",
+    tabId: 7,
+    status: 200,
+  });
+  const meta = tool.output!.presentationMeta!(
+    { url: "https://example.com" },
+    value,
+  );
+  expect(
+    tool.output!.presentResult!({ url: "x" }, "POISON", meta),
+  ).toMatchObject({
+    kind: "web",
+    title: "https://example.com",
+    summary: "open",
+    url: "https://example.com",
+    meta: [
+      ["url", "https://example.com"],
+      ["tab", "7"],
+      ["status", "200"],
+    ],
+  });
+  // A failed call says so on the row, from the same facts.
+  const failed = tool.output!.presentationMeta!(
+    {},
+    JSON.stringify({ ok: false, url: "https://x.test" }),
+  );
+  expect(tool.output!.presentResult!({}, "POISON", failed)).toMatchObject({
+    summary: "open · failed",
+  });
+  // The listing's counts are its facts; the tabs stay the body.
+  const tabs = browserTools.find(
+    (candidate) => candidate.name === "browser_tabs",
+  )!;
+  const listValue = JSON.stringify({
+    tabs: [
+      { id: 1, active: true },
+      { id: 2, active: false },
+    ],
+  });
+  expect(
+    tabs.output!.presentResult!(
+      {},
+      listValue,
+      tabs.output!.presentationMeta!({}, listValue),
+    ),
+  ).toMatchObject({ summary: "2 tabs · 1 active" });
+});

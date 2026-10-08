@@ -486,18 +486,21 @@ export function mcpToolToRuntimeTool(
       presentCall() {
         return { kind: "generic", title: label, summary: "call" };
       },
-      presentResult(_args, value) {
-        // The MCP result envelope: isError is the outcome fact, content the
-        // payload. A malformed result degrades to the generic card.
-        let parsed: Record<string, unknown> | undefined;
+      presentationMeta(_args, value) {
+        // The envelope's outcome fact, decoded once (R5).
         try {
           const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
+          return decoded &&
+            typeof decoded === "object" &&
+            !Array.isArray(decoded)
+            ? { isError: (decoded as Record<string, unknown>).isError === true }
+            : {};
         } catch {
-          // degrade, never throw
+          return {};
         }
-        const failed = parsed?.isError === true;
+      },
+      presentResult(_args, value, meta) {
+        const failed = meta?.isError === true;
         return {
           kind: "generic",
           title: label,

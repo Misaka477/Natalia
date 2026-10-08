@@ -69,9 +69,8 @@ export function createTeamFanoutTool(input: {
           summary: `${tasks.length} task${tasks.length === 1 ? "" : "s"}`,
         };
       },
-      presentResult(_args, value) {
-        // The PR queue is the value: ready/total is the one-line state, and
-        // the full queue rides as the body. Malformed degrades.
+      presentationMeta(_args, value) {
+        // The queue's counts, decoded once (R5).
         let parsed: unknown;
         try {
           parsed = JSON.parse(value);
@@ -79,16 +78,24 @@ export function createTeamFanoutTool(input: {
           // degrade, never throw
         }
         const prs = Array.isArray(parsed) ? parsed : [];
-        const done = prs.filter(
-          (pr) =>
-            Boolean(pr) &&
-            typeof pr === "object" &&
-            (pr as { status?: unknown }).status === "completed",
-        ).length;
+        return {
+          total: prs.length,
+          ready: prs.filter(
+            (pr) =>
+              Boolean(pr) &&
+              typeof pr === "object" &&
+              (pr as { status?: unknown }).status === "completed",
+          ).length,
+        };
+      },
+      presentResult(_args, value, meta) {
+        const facts = (meta ?? {}) as { total?: number; ready?: number };
+        const total = facts.total ?? 0;
+        const done = facts.ready ?? 0;
         return {
           kind: "generic",
           title: "fan-out",
-          summary: `${done}/${prs.length} PR${prs.length === 1 ? "" : "s"} ready`,
+          summary: `${done}/${total} PR${total === 1 ? "" : "s"} ready`,
           meta: [["ready", String(done)]],
           body: value,
         };

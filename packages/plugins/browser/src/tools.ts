@@ -26,41 +26,66 @@ export const BROWSER_BRIDGE_EXTENSION_MISSING_ERROR =
  * tab id when there is no URL) and the outcome rides as the summary/pill.
  * A malformed result degrades to the generic card rather than throwing.
  */
+/**
+ * The family's facts (R5): ONE decode, shared by the event's meta slot and
+ * the card. A browser answer carries the page's url, the tab it happened in,
+ * and the bridge's own status — the three facts a reader scans without
+ * opening the card.
+ */
+function browserFacts(value: string): Record<string, unknown> {
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+      ? (decoded as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The output block's `presentationMeta`, for the family's shared shape. */
+function browserMeta(_args: unknown, value: string) {
+  return browserFacts(value);
+}
+
 function browserCard(input: {
   callSummary: string;
+  /**
+   * The card kind: a call that names a page draws the `web` card (its url
+   * is the card's structured field); a call about the browser itself is a
+   * generic envelope card.
+   */
+  kind?: "web" | "generic";
 }): NonNullable<
   import("@anthelia/tools").ToolOutputDefinition["presentResult"]
 > {
-  return (_args, value) => {
-    let parsed: Record<string, unknown> | undefined;
-    try {
-      const decoded = JSON.parse(value) as unknown;
-      if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-        parsed = decoded as Record<string, unknown>;
-    } catch {
-      // degrade, never throw
-    }
-    const url = typeof parsed?.url === "string" ? parsed.url : undefined;
-    const tabId = parsed?.tabId ?? parsed?.activeId;
+  const kind = input.kind ?? "web";
+  return (_args, value, meta) => {
+    const facts = meta === undefined ? browserFacts(value) : meta;
+    const url = typeof facts.url === "string" ? facts.url : undefined;
+    const tabId = facts.tabId ?? facts.activeId;
     const title =
       url ??
       (typeof tabId === "string" || typeof tabId === "number"
         ? String(tabId)
         : "browser");
-    const ok = parsed?.ok;
+    const ok = facts.ok;
     const summary =
       ok === false ? `${input.callSummary} · failed` : input.callSummary;
-    const meta: Array<[string, string]> = [];
-    if (url) meta.push(["url", url]);
+    const meta2: Array<[string, string]> = [];
+    if (url) meta2.push(["url", url]);
     if (tabId !== undefined && tabId !== null)
-      meta.push(["tab", String(tabId)]);
-    if (typeof parsed?.status === "number")
-      meta.push(["status", String(parsed.status)]);
+      meta2.push(["tab", String(tabId)]);
+    if (typeof facts.status === "number")
+      meta2.push(["status", String(facts.status)]);
     return {
-      kind: "generic",
+      kind,
       title,
       summary,
-      ...(meta.length ? { meta } : {}),
+      // The page is the web card's structured field; a client renders it
+      // rather than reading the url off a pill.
+      ...(kind === "web" && url !== undefined ? { url } : {}),
+      ...(meta2.length ? { meta: meta2 } : {}),
     };
   };
 }
@@ -200,6 +225,7 @@ function browserScreenshotTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "screenshot" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       if (context.settings?.browserEnabled === false)
@@ -270,6 +296,7 @@ function browserOpenTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "open" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -308,6 +335,7 @@ function browserCloseTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "close" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -342,28 +370,31 @@ function browserTabsTool(): RuntimeTool {
       presentCall() {
         return { kind: "generic", title: "browser", summary: "tabs" };
       },
-      presentResult(_args, value) {
-        let parsed: Record<string, unknown> | undefined;
-        try {
-          const decoded = JSON.parse(value) as unknown;
-          if (decoded && typeof decoded === "object" && !Array.isArray(decoded))
-            parsed = decoded as Record<string, unknown>;
-        } catch {
-          // degrade, never throw
-        }
-        const tabs = Array.isArray(parsed?.tabs) ? parsed!.tabs! : [];
-        const active = tabs.filter(
-          (tab) =>
-            Boolean(tab) &&
-            typeof tab === "object" &&
-            (tab as { active?: unknown }).active === true,
-        ).length;
+      presentationMeta(_args, value) {
+        // The listing's counts are its facts; the listing itself stays the
+        // generic card's body (a reader scans it).
+        const facts = browserFacts(value);
+        const tabs = Array.isArray(facts.tabs) ? facts.tabs : [];
+        return {
+          total: tabs.length,
+          active: tabs.filter(
+            (tab) =>
+              Boolean(tab) &&
+              typeof tab === "object" &&
+              (tab as { active?: unknown }).active === true,
+          ).length,
+        };
+      },
+      presentResult(_args, value, meta) {
+        const facts = meta === undefined ? browserFacts(value) : meta;
+        const total = typeof facts.total === "number" ? facts.total : 0;
+        const active = typeof facts.active === "number" ? facts.active : 0;
         return {
           kind: "generic",
           title: "browser",
-          summary: `${tabs.length} tab${tabs.length === 1 ? "" : "s"} · ${active} active`,
+          summary: `${total} tab${total === 1 ? "" : "s"} · ${active} active`,
           meta: [
-            ["tabs", String(tabs.length)],
+            ["tabs", String(total)],
             ["active", String(active)],
           ],
           body: value,
@@ -407,6 +438,7 @@ function browserScanTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "scan" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -455,6 +487,7 @@ function browserExecuteJsTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "execute js" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -499,6 +532,7 @@ function browserNavigateTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "navigate" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -544,6 +578,7 @@ function browserClickTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "click" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);
@@ -587,6 +622,7 @@ function browserInputTool(): RuntimeTool {
         };
       },
       presentResult: browserCard({ callSummary: "input" }),
+      presentationMeta: browserMeta,
     },
     async execute(input, context) {
       const args = requireObject(input);

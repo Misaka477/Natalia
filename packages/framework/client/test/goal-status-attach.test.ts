@@ -155,11 +155,12 @@ test("same-id attach re-publishes an existing goal as a live goal.status", async
 });
 
 /**
- * The status-bar toggle and inline editor must act on the *running* round:
- * `pause` hard-stops it (not just the next round), and `edit` steers it at the
- * next step while the durable edit makes the next round use the new objective.
+ * The status-bar toggle and inline editor act on the *running* round the dsh
+ * way: `pause` DISARMS it (the round finishes, the next one never starts —
+ * the user's 2026-10-07 ruling), and `edit` steers it at the next step while
+ * the durable edit makes the next round use the new objective.
  */
-test("pause hard-stops the running goal round and edit steers it", async () => {
+test("pause disarms — the running goal round finishes and no next one starts (user 2026-10-07)", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-goal-steer-"));
   const sessionID = "ses_goal_steer" as SessionID;
 
@@ -196,7 +197,8 @@ test("pause hard-stops the running goal round and edit steers it", async () => {
   await seeder.close();
 
   // Provider call 0 blocks (round 1 step 1) so the round stays in flight while
-  // the human edits/pauses; call 2 blocks (round 2 step 1) for the hard-stop.
+  // the human edits/pauses; call 2 blocks (round 2 step 1) so the paused
+  // round is provably still running after the pause.
   let calls = 0;
   const releases = new Map<number, () => void>();
   const provider: StreamingProvider = {
@@ -299,7 +301,8 @@ test("pause hard-stops the running goal round and edit steers it", async () => {
     );
 
     // The edit preserves continuation authority, so round 2 is driven and its
-    // first provider call blocks. Pausing then hard-stops that in-flight round.
+    // first provider call blocks. Pausing then DISARMS: round 2 finishes, no
+    // round 3 starts (the user's 2026-10-07 dsh-parity ruling).
     await waitUntil(
       () =>
         events.some(
@@ -315,26 +318,42 @@ test("pause hard-stops the running goal round and edit steers it", async () => {
         ),
       "round 2 turn start",
     );
+    // Pausing DISARMS: the in-flight round runs to completion and the next
+    // one is never started (the user's 2026-10-07 dsh-parity ruling — the
+    // old behaviour hard-cancelled the round, which the user rejected).
     const paused = await client.goalControl?.("pause", sessionID);
     expect(paused).toMatchObject({ ok: true, action: "pause" });
-    await waitUntil(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "turn.cancelled" && event.id.includes("round_2"),
-        ),
-      "round 2 hard-stop",
-    );
     expect(
       events.some(
         (event) => event.type === "goal.changed" && event.operation === "pause",
       ),
     ).toBe(true);
+    // The in-flight round SURVIVES the pause (no hard-stop) — dsh's
+    // semantics: pause disarms, it does not cancel.
+    expect(
+      events.some(
+        (event) =>
+          event.type === "turn.cancelled" && event.id.includes("round_2"),
+      ),
+    ).toBe(false);
+    // Let round 2 finish: its cost is booked, and NO round 3 is admitted —
+    // the paused phase is the driver's gate.
+    releases.get(2)?.();
+    await waitUntil(
+      () =>
+        events.some(
+          (event) => event.type === "goal.round.cost" && event.round === 2,
+        ),
+      "round 2 settlement",
+    );
+    expect(
+      events.some((event) => event.type === "goal.round" && event.round === 3),
+    ).toBe(false);
   } finally {
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-});
+}, 60_000);
 
 /**
  * A stream killed mid-flight must keep the text it already generated. The

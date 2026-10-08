@@ -1275,6 +1275,46 @@ function plainCardLines(text: string): ToolCardLine[] {
  * without a diff renderer still reads the hunk. We HAVE a renderer: the
  * marks become color, which is what makes a hunk scannable at a glance.
  */
+/**
+ * A diff's hunks as the marked lines a reader navigates by (S5).
+ *
+ * Each line carries the file's OWN number — the new line's for an addition
+ * or context, the old line's for a removal — so `+ 42: …` says the change
+ * lands on line 42. The mark text alone cannot say that, which is why the
+ * structured hunks exist.
+ */
+function hunkLines(
+  hunks: Array<{
+    oldStart: number;
+    newStart: number;
+    lines: Array<{
+      type: "context" | "add" | "delete" | "hunk";
+      text: string;
+      oldLineNumber: number | null;
+      newLineNumber: number | null;
+    }>;
+  }>,
+): ToolCardLine[] {
+  const out: ToolCardLine[] = [];
+  for (const hunk of hunks) {
+    if (hunks.length > 1)
+      out.push({
+        line: `@@ -${hunk.oldStart} +${hunk.newStart} @@`,
+        kind: "plain",
+      });
+    for (const line of hunk.lines) {
+      const number = line.newLineNumber ?? line.oldLineNumber;
+      const at = number === null ? "" : `${number}: `;
+      if (line.type === "add")
+        out.push({ line: `+ ${at}${line.text}`, kind: "added" });
+      else if (line.type === "delete")
+        out.push({ line: `- ${at}${line.text}`, kind: "removed" });
+      else out.push({ line: `  ${at}${line.text}`, kind: "plain" });
+    }
+  }
+  return out;
+}
+
 function diffCardLines(text: string): ToolCardLine[] {
   return plainCardLines(text).map((entry) =>
     entry.line.startsWith("+ ")
@@ -1339,7 +1379,13 @@ export const CARD_RENDERERS: CardRendererMap = {
           kind: "plain" as const,
         }))
       : plainCardLines(card.content ?? card.body ?? toolCall.output ?? ""),
-  diff: (card, toolCall) => diffCardLines(card.body ?? toolCall.output ?? ""),
+  // A write's hunks, drawn with the file's own line numbers (S5): the
+  // structured field wins over the mark text, so a reader sees WHERE each
+  // change sits. The mark text stays the fallback for an older event.
+  diff: (card, toolCall) =>
+    card.hunks && card.hunks.length > 0
+      ? hunkLines(card.hunks)
+      : diffCardLines(card.body ?? toolCall.output ?? ""),
   // A terminal's own text: the structured `output` field once the family
   // projects one (R1), the migration body before that, the raw result for a
   // card that carries neither.

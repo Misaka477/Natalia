@@ -319,34 +319,55 @@ test("write_file projects a diff card whose lines are marked additions", () => {
   // change. Before this the family used a generic card, so a write looked like
   // any other tool call and no diff renderer ever saw it.
   const tool = writeFileTools.find((t) => t.name === "write_file")!;
-  expect(
-    tool.output?.presentCall?.({ path: "a.txt", content: "x\ny" }),
-  ).toEqual({
+  const call = tool.output?.presentCall?.({ path: "a.txt", content: "x\ny" });
+  expect(call).toMatchObject({
     kind: "diff",
     title: "Write a.txt",
     summary: "write",
-    body: "+ x\n+ y",
     meta: [["lines", "2"]],
   });
+  // S5: the create's hunks are REAL ones — the file's own line numbers, the
+  // same engine the sandbox family draws its merge hunks with — so a reader
+  // navigates by them instead of counting rows.
+  expect(call && call.kind === "diff" && call.hunks).toEqual([
+    {
+      oldStart: 1,
+      oldCount: 0,
+      newStart: 1,
+      newCount: 2,
+      lines: [
+        { type: "add", text: "x", oldLineNumber: null, newLineNumber: 1 },
+        { type: "add", text: "y", oldLineNumber: null, newLineNumber: 2 },
+      ],
+    },
+  ]);
+  // The mark text still rides along for a renderer without the hunks.
+  expect(call?.body).toBe(" +x\n +y");
   // The RESULT state repeats the diff. The diff model says it outright: a
   // completed update replaces the pending card's content, so a result card
   // carrying the plain result string ERASES the diff. The measured screenshot
   // of a live run showed exactly that — `edited <path>` where the change
   // belonged. The tool's sentence to the model rides as a facet instead.
-  expect(
-    tool.output?.presentResult?.(
-      { path: "a.txt", content: "x\ny" },
-      "wrote a.txt",
-    ),
-  ).toEqual({
+  const result = tool.output?.presentResult?.(
+    { path: "a.txt", content: "x\ny" },
+    "wrote a.txt",
+  );
+  expect(result).toMatchObject({
     kind: "diff",
     title: "Write a.txt",
     summary: "wrote",
-    body: "+ x\n+ y",
+    body: " +x\n +y",
     meta: [
       ["lines", "2"],
       ["result", "wrote a.txt"],
     ],
+  });
+  // S5: the result state carries the same real hunks the call did.
+  expect(result && result.kind === "diff" && result.hunks?.[0]).toMatchObject({
+    oldStart: 1,
+    oldCount: 0,
+    newStart: 1,
+    newCount: 2,
   });
 });
 
@@ -361,29 +382,44 @@ test("a write's marked lines are what a diff renderer colors (user screenshot)",
     "wrote .natalia/tool-smoke/direct.txt",
   );
   expect(card?.kind).toBe("diff");
-  expect((card?.body ?? "").split("\n").every((l) => l.startsWith("+ "))).toBe(
-    true,
-  );
-  expect(card?.body).toBe("+ alpha");
+  // The body is the change itself, marked the way every renderer reads it —
+  // and S5's real hunks carry the line numbers beside it.
+  expect(card?.body).toBe(" +alpha");
+  expect(card && card.kind === "diff" && card.hunks).toEqual([
+    {
+      oldStart: 1,
+      oldCount: 0,
+      newStart: 1,
+      newCount: 1,
+      lines: [
+        { type: "add", text: "alpha", oldLineNumber: null, newLineNumber: 1 },
+      ],
+    },
+  ]);
 });
 
 test("an edit's result state repeats the hunk instead of replacing it", () => {
   const tool = writeFileTools.find((t) => t.name === "edit_file")!;
-  expect(
-    tool.output?.presentResult?.(
-      { path: "a.txt", oldText: "one", newText: "two" },
-      "edited a.txt",
-    ),
-  ).toEqual({
+  const result = tool.output?.presentResult?.(
+    { path: "a.txt", oldText: "one", newText: "two" },
+    "edited a.txt",
+  );
+  expect(result).toMatchObject({
     kind: "diff",
     title: "Edit a.txt",
     summary: "edited",
-    body: "- one\n+ two",
+    body: " -one\n +two",
     meta: [
       ["removed", "1"],
       ["added", "1"],
       ["result", "edited a.txt"],
     ],
+  });
+  expect(result && result.kind === "diff" && result.hunks?.[0]).toMatchObject({
+    oldStart: 1,
+    oldCount: 1,
+    newStart: 1,
+    newCount: 1,
   });
 });
 
@@ -412,9 +448,12 @@ test("apply_edits projects one hunk per edit, not a summary sentence", () => {
     title: "apply_edits: 3 edits",
     summary: "applied",
   });
+  // S5: each hunk is a real one, so the marked text carries the engine's
+  // context lines and the card carries the hunks themselves.
   expect(card?.body).toBe(
-    "--- a.txt\n- one\n+ two\n+++ b.txt\n+ fresh\n--- c.txt (deleted)",
+    "--- a.txt\n -one\n +two\n+++ b.txt\n +fresh\n--- c.txt (deleted)",
   );
+  expect(card && card.kind === "diff" && card.hunks?.length).toBe(2);
   expect(card?.meta).toContainEqual([
     "result",
     "apply_edits: all 3 edits applied; 3 files changed.",
@@ -428,17 +467,24 @@ test("edit_file projects the marked hunk and its line counts", () => {
     oldText: "one\ntwo",
     newText: "one\nthree",
   });
-  expect(intent).toEqual({
+  expect(intent).toMatchObject({
     kind: "diff",
     title: "Edit a.txt",
     summary: "edit",
-    // Removed lines first, then added: the shape a diff renderer reads, so
-    // every UI agrees and none re-derives a diff it may get wrong.
-    body: "- one\n- two\n+ one\n+ three",
     meta: [
       ["removed", "2"],
       ["added", "2"],
     ],
+  });
+  // S5: a REAL hunk — the unchanged first line is context, and the change
+  // carries its position. The old shape was "removed then added", which told
+  // a reader nothing about where in the file either block sat.
+  expect(intent?.body).toBe(" one\n -two\n +three");
+  expect(intent && intent.kind === "diff" && intent.hunks?.[0]).toMatchObject({
+    oldStart: 1,
+    oldCount: 2,
+    newStart: 1,
+    newCount: 2,
   });
   // A create-style edit (empty oldText) is all added lines; a delete is all
   // removed. Neither may produce an empty hunk that reads as "nothing".
@@ -448,9 +494,9 @@ test("edit_file projects the marked hunk and its line counts", () => {
       oldText: "",
       newText: "brand new",
     })?.body,
-  ).toBe("+ brand new");
+  ).toBe(" +brand new");
   expect(
     tool.output?.presentCall?.({ path: "a.txt", oldText: "gone", newText: "" })
       ?.body,
-  ).toBe("- gone");
+  ).toBe(" -gone");
 });

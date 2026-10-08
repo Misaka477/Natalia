@@ -26,3 +26,8 @@ export {
   type SnapshotIndex,
 } from "./snapshot-store";
 export { detectPromoteCommand, sandboxToolFamily, sandboxTools } from "./tools";
+// The diff engine the sandbox family draws its hunks with. The write family
+// (write_file/edit_file/apply_edits) composes its diff card from the same
+// engine, so a write's hunks are real (context lines, correct line numbers)
+// rather than a naive "all removed, then all added" block (S5).
+export { diffText, unifiedPatchToStructured } from "./diff";

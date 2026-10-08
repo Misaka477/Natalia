@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@anthelia/tools": "workspace:*",
-    "@anthelia/plugin": "workspace:*"
+    "@anthelia/plugin": "workspace:*",
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/sandbox": "workspace:*"
   }
 }

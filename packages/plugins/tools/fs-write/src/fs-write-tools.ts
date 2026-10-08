@@ -46,6 +46,55 @@ function argsRecord(args: unknown): Record<string, unknown> {
     : {};
 }
 
+/**
+ * The REAL hunks for a write's card (S5).
+ *
+ * The naive shape — every removed line, then every added line — loses the
+ * two things a reader uses: WHERE in the file the change is, and what
+ * context surrounds it. The engine the sandbox family already draws its
+ * hunks with answers both; the write family composes its card from the same
+ * engine, so a write's hunks are as real as a merge's.
+ *
+ * The mark text is still computed here (the `+ `/`- ` convention every
+ * renderer reads) so a UI without the structured field keeps a readable
+ * hunk — and now that text comes from the real diff, with its hunk headers.
+ */
+function realHunks(
+  path: string,
+  oldText: string,
+  newText: string,
+): { body: string; hunks?: RuntimeStructuredDiffHunk[] } {
+  // A create has no prior text: every line is an addition, and the engine
+  // says so with oldCount 0.
+  const patch = diffText(path, oldText, newText).patch;
+  if (!patch) return { body: "" };
+  const structured = unifiedPatchToStructured(patch);
+  return {
+    body: markPatch(patch),
+    ...(structured.hunks.length ? { hunks: structured.hunks } : {}),
+  };
+}
+
+/** The patch as the marked lines a diff renderer reads (`+ `/`- `). */
+function markPatch(patch: string): string {
+  // The patch's own chrome comes off: the file headers, and the hunk headers
+  // (whose line numbers ride the structured hunks). What is left is the
+  // change itself, marked the way every renderer reads it.
+  return patch
+    .split("\n")
+    .filter(
+      (line) =>
+        line.length > 0 &&
+        !line.startsWith("---") &&
+        !line.startsWith("+++") &&
+        !line.startsWith("@@"),
+    )
+    .map((line) =>
+      line.startsWith("+") || line.startsWith("-") ? ` ${line}` : line,
+    )
+    .join("\n");
+}
+
 function markedAdditions(text: string): string {
   if (text === "") return "";
   return text
@@ -61,6 +110,8 @@ function unifiedHunk(oldText: string, newText: string): string {
   return [...removed, ...added].join("\n");
 }
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
+import { diffText, unifiedPatchToStructured } from "@anthelia/sandbox";
+import type { RuntimeStructuredDiffHunk } from "@anthelia/contracts";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 
@@ -102,20 +153,23 @@ function writeFileTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        // A write is a diff card: a create has no prior text (the
-        // FileDiff uses oldText: null for exactly that), and an overwrite
-        // cannot know the old content at call time — so the card carries the
-        // new text as the whole-file change. The lines are MARKED (`+ `):
-        // that is the convention every renderer reads (the kit colors `+ `
-        // lines, keeps unmarked text plain), and an unmarked body is why a
-        // live run showed a Write with no diff at all.
-        const content =
-          optionalString((args as { content?: unknown }).content) ?? "";
+        // A write is a diff card. A create has no prior text (the FileDiff
+        // model uses oldText: null for exactly that), so its hunks are real
+        // ones over an empty base — with the file's own line numbers, which
+        // is what a reader navigates by. An overwrite cannot know the old
+        // content at call time (reading it in a presenter would make it I/O,
+        // not a projection), so its hunks are the new text as the complete
+        // change — the same thing the FileDiff shows for `oldText: null`.
+        const parsed = argsRecord(args);
+        const path = optionalString(parsed.path) ?? "file";
+        const content = optionalString(parsed.content) ?? "";
+        const { body, hunks } = realHunks(path, "", content);
         return {
           kind: "diff",
-          title: `Write ${requireObject(args).path as string}`,
+          title: `Write ${path}`,
           summary: "write",
-          body: markedAdditions(content),
+          body,
+          ...(hunks ? { hunks } : {}),
           meta: [["lines", String(countLines(content))]],
         };
       },
@@ -141,11 +195,17 @@ function writeFileTool(): RuntimeTool {
         const content = optionalString(parsed.content) ?? "";
         const lines =
           typeof meta?.lines === "number" ? meta.lines : countLines(content);
+        const { body, hunks } = realHunks(
+          optionalString(parsed.path) ?? "file",
+          "",
+          content,
+        );
         return {
           kind: "diff",
-          title: `Write ${parsed.path as string}`,
+          title: `Write ${optionalString(parsed.path) ?? "file"}`,
           summary: "wrote",
-          body: markedAdditions(content),
+          body,
+          ...(hunks ? { hunks } : {}),
           meta: [
             ["lines", String(lines)],
             ["result", value],
@@ -207,18 +267,22 @@ function editFileTool(): RuntimeTool {
         additionalProperties: false,
       },
       presentCall(args) {
-        const parsed = requireObject(args);
+        const parsed = argsRecord(args);
+        const path = optionalString(parsed.path) ?? "file";
         const oldText = optionalString(parsed.oldText) ?? "";
         const newText = optionalString(parsed.newText) ?? "";
+        // S5: the hunk is a REAL one — the same engine the sandbox family
+        // draws its merge hunks with — so it carries the change's position
+        // and its context lines, not just a block of removals followed by a
+        // block of additions. The text a renderer reads is computed HERE so
+        // every renderer agrees and none has to derive a diff.
+        const { body, hunks } = realHunks(path, oldText, newText);
         return {
           kind: "diff",
-          title: `Edit ${parsed.path as string}`,
+          title: `Edit ${path}`,
           summary: "edit",
-          // The hunk the model asked for, in the shape a diff renderer
-          // reads: the removed lines, then the added ones, each marked.
-          // Same text a UI would derive, computed HERE so every renderer
-          // agrees and none has to.
-          body: unifiedHunk(oldText, newText),
+          body,
+          ...(hunks ? { hunks } : {}),
           meta: [
             ["removed", String(countLines(oldText))],
             ["added", String(countLines(newText))],
@@ -240,6 +304,7 @@ function editFileTool(): RuntimeTool {
         // See write_file: the hunk survives the completed state, and the
         // result sentence rides as a facet rather than replacing the diff.
         const parsed = argsRecord(args);
+        const path = optionalString(parsed.path) ?? "file";
         const oldText = optionalString(parsed.oldText) ?? "";
         const newText = optionalString(parsed.newText) ?? "";
         const removed =
@@ -248,11 +313,13 @@ function editFileTool(): RuntimeTool {
             : countLines(oldText);
         const added =
           typeof meta?.added === "number" ? meta.added : countLines(newText);
+        const { body, hunks } = realHunks(path, oldText, newText);
         return {
           kind: "diff",
-          title: `Edit ${parsed.path as string}`,
+          title: `Edit ${path}`,
           summary: "edited",
-          body: unifiedHunk(oldText, newText),
+          body,
+          ...(hunks ? { hunks } : {}),
           meta: [
             ["removed", String(removed)],
             ["added", String(added)],
@@ -364,8 +431,14 @@ function applyEditsTool(): RuntimeTool {
         required: ["files"],
         additionalProperties: false,
       },
-      presentCall() {
-        return { kind: "diff", title: "workspace", summary: "apply edits" };
+      presentCall(args) {
+        const parsed = argsRecord(args);
+        const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
+        return {
+          kind: "diff",
+          title: `apply_edits: ${edits.length} edit${edits.length === 1 ? "" : "s"}`,
+          summary: "apply edits",
+        };
       },
       presentationMeta(args) {
         // The batch's shape, from the arguments: how many edits and of what
@@ -382,28 +455,32 @@ function applyEditsTool(): RuntimeTool {
       presentResult(args, value, meta) {
         // Every edit in the batch is its own hunk, so a reader sees the whole
         // change set rather than a summary sentence that names the files.
+        // S5: each hunk is a REAL one — the batch's hunks ride the card the
+        // way a merge's do, so a reader navigates by line number.
         const parsed = argsRecord(args);
         const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
         const hunks: string[] = [];
+        const structured: RuntimeStructuredDiffHunk[] = [];
         for (const entry of edits) {
-          const edit = requireObject(entry);
+          const edit = argsRecord(entry);
           const path = optionalString(edit.path) ?? "?";
           const operation = optionalString(edit.operation) ?? "replace";
-          if (operation === "delete") hunks.push(`--- ${path} (deleted)`);
-          else if (operation === "create")
-            hunks.push(
-              `+++ ${path}\n${(optionalString(edit.newText) ?? "")
-                .split("\n")
-                .map((line) => `+ ${line}`)
-                .join("\n")}`,
-            );
-          else
-            hunks.push(
-              `--- ${path}\n${unifiedHunk(
-                optionalString(edit.oldText) ?? "",
-                optionalString(edit.newText) ?? "",
-              )}`,
-            );
+          const oldText = optionalString(edit.oldText) ?? "";
+          const newText = optionalString(edit.newText) ?? "";
+          if (operation === "delete") {
+            hunks.push(`--- ${path} (deleted)`);
+            structured.push(...(realHunks(path, oldText, "").hunks ?? []));
+            continue;
+          }
+          if (operation === "create") {
+            const created = realHunks(path, "", newText);
+            hunks.push(`+++ ${path}\n${created.body}`);
+            structured.push(...(created.hunks ?? []));
+            continue;
+          }
+          const replaced = realHunks(path, oldText, newText);
+          hunks.push(`--- ${path}\n${replaced.body}`);
+          structured.push(...(replaced.hunks ?? []));
         }
         const editsCount =
           typeof meta?.edits === "number" ? meta.edits : edits.length;
@@ -412,6 +489,7 @@ function applyEditsTool(): RuntimeTool {
           title: `apply_edits: ${editsCount} edit${editsCount === 1 ? "" : "s"}`,
           summary: "applied",
           body: hunks.join("\n"),
+          ...(structured.length ? { hunks: structured } : {}),
           meta: [
             ["edits", String(editsCount)],
             ["result", value],

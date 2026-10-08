@@ -207,3 +207,67 @@ test("a checklist is card data: the rows are drawn, not parsed (S4)", () => {
     { line: "b", kind: "plain" },
   ]);
 });
+
+test("a diff's hunks are drawn with the file's own line numbers (S5)", () => {
+  // The structured hunks win over the mark text: a reader sees WHERE each
+  // change sits, which is the whole point of a real hunk.
+  const card: ToolCard = {
+    kind: "diff",
+    title: "a.txt",
+    summary: "edit",
+    body: " -one\n +two",
+    hunks: [
+      {
+        oldStart: 1,
+        oldCount: 1,
+        newStart: 1,
+        newCount: 1,
+        lines: [
+          {
+            type: "delete",
+            text: "one",
+            oldLineNumber: 1,
+            newLineNumber: null,
+          },
+          { type: "add", text: "two", oldLineNumber: null, newLineNumber: 1 },
+        ],
+      },
+    ],
+  };
+  expect(CARD_RENDERERS.diff(card, toolCall())).toEqual([
+    { line: "- 1: one", kind: "removed" },
+    { line: "+ 1: two", kind: "added" },
+  ]);
+  // A batch with several hunks labels each one, so a reader can tell the
+  // files (or the regions) apart.
+  const batch: ToolCard = {
+    kind: "diff",
+    title: "apply_edits: 2 edits",
+    hunks: [
+      {
+        oldStart: 10,
+        oldCount: 1,
+        newStart: 10,
+        newCount: 1,
+        lines: [
+          { type: "add", text: "x", oldLineNumber: null, newLineNumber: 10 },
+        ],
+      },
+      {
+        oldStart: 40,
+        oldCount: 1,
+        newStart: 41,
+        newCount: 1,
+        lines: [
+          { type: "add", text: "y", oldLineNumber: null, newLineNumber: 41 },
+        ],
+      },
+    ],
+  };
+  expect(CARD_RENDERERS.diff(batch, toolCall())).toEqual([
+    { line: "@@ -10 +10 @@", kind: "plain" },
+    { line: "+ 10: x", kind: "added" },
+    { line: "@@ -40 +41 @@", kind: "plain" },
+    { line: "+ 41: y", kind: "added" },
+  ]);
+});

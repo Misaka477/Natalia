@@ -808,6 +808,57 @@ test("an event recorded before the slots folds and renders unchanged (replay)", 
   });
 });
 
+test("a chat tool call carries its card through the fold and hydration (R4)", () => {
+  // A Chat turn publishes the tool's own projection (it executes its tools
+  // directly); the live fold and the hydrated row both carry it now. Before
+  // R4 both dropped it, so a chat row rendered as a plain sentence while
+  // its live twin on the main transcript rendered a card.
+  const card = {
+    kind: "generic" as const,
+    title: "mailbox",
+    summary: "queued",
+  };
+  const live = projectEvents([
+    {
+      type: "navi.chat.tool.used",
+      id: "chat:t1:tool:1",
+      messageID: "chat:t1",
+      toolName: "mailbox_send",
+      status: "succeeded",
+      summary: "queued mailbox intent: constraint",
+      result: JSON.stringify({ queued: true }),
+      card,
+      meta: { queued: true },
+      at: "t0",
+    },
+  ]);
+  const liveRow = live.navi.messages.find((block) => block.tool);
+  expect(liveRow?.tool?.card).toEqual(card);
+  expect(liveRow?.tool?.meta).toEqual({ queued: true });
+  // The durable projection's row keeps the same card through hydration.
+  const hydrated = initialState();
+  hydrateNaviMessages(hydrated, [
+    {
+      messageID: "chat:t1",
+      role: "chat",
+      text: "queued mailbox intent: constraint",
+      at: "t0",
+      kind: "tool",
+      tool: {
+        eventID: "chat:t1:tool:1",
+        name: "mailbox_send",
+        status: "succeeded",
+        summary: "queued mailbox intent: constraint",
+        result: JSON.stringify({ queued: true }),
+        card,
+        meta: { queued: true },
+      },
+    },
+  ]);
+  expect(hydrated.navi.messages.at(-1)?.tool?.card).toEqual(card);
+  expect(hydrated.navi.messages.at(-1)?.tool?.meta).toEqual({ queued: true });
+});
+
 test("pending approvals and questions appear and clear on response", () => {
   let state = projectEvents([
     submitted("t1", "write it"),

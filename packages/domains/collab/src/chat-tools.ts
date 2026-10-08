@@ -25,7 +25,7 @@ import {
   COLLABORATION_SERVICE,
   type CollaborationService,
 } from "@natalia/collaboration";
-import { chatToolSummary } from "./chat-summary";
+import { chatToolCard, chatToolSummary } from "./chat-summary";
 import { collabOutput } from "./collab-presenters";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
@@ -273,6 +273,7 @@ export function createChatTools(ctx: RuntimeContext) {
     naviChatTools,
     niaChatTools,
     chatToolSummary,
+    chatToolCard,
   };
 
   function naviChatTools(

@@ -36,20 +36,48 @@ function text(value: unknown): string | undefined {
 }
 
 /**
+ * The envelope's facts (R4): what decoded, its title, and the pills' own
+ * values — ONE decode, shared by the meta slot and the card.
+ */
+function envelopeFacts(
+  value: string,
+  keys: ReadonlyArray<readonly [string, string]>,
+): Record<string, unknown> {
+  const parsed = decode(value);
+  if (!parsed) return {};
+  const record: Record<string, unknown> = { decoded: true };
+  for (const [, key] of keys) {
+    const found = parsed[key];
+    if (found !== undefined && found !== null && found !== "")
+      record[key] = found;
+  }
+  const title = text(parsed.title);
+  if (title !== undefined) record.title = title;
+  return record;
+}
+
+/**
  * A generic card over a decoded envelope: the caller names the title and
  * summary, the optional label/value pairs ride as pills. A result that
  * does not decode falls back to the summary alone.
+ *
+ * R4: the facts arrive on the third argument (the meta slot the runtime
+ * just filled), so the envelope is decoded once — by
+ * {@link envelopeFacts} — instead of a second time here.
  */
 export function collabResultCard(input: {
   title: string;
   summary: string;
   meta?: Array<[string, string]>;
 }): NonNullable<ToolOutputDefinition["presentResult"]> {
-  return (_args, value) => {
-    const parsed = decode(value);
-    const meta = input.meta
+  return (_args, value, meta) => {
+    const facts =
+      meta === undefined
+        ? envelopeFacts(value, input.meta ?? [])
+        : (meta as Record<string, unknown>);
+    const pills = input.meta
       ?.map(([label, key]) => {
-        const found = parsed?.[key];
+        const found = facts[key];
         if (found === undefined || found === null || found === "")
           return undefined;
         return [label, String(found)] as [string, string];
@@ -57,9 +85,9 @@ export function collabResultCard(input: {
       .filter((pair): pair is [string, string] => pair !== undefined);
     return {
       kind: "generic",
-      title: parsed ? (text(parsed.title) ?? input.title) : input.title,
+      title: text(facts.title) ?? input.title,
       summary: input.summary,
-      ...(meta && meta.length ? { meta } : {}),
+      ...(pills && pills.length ? { meta: pills } : {}),
     };
   };
 }
@@ -80,6 +108,10 @@ export function collabOutput(input: {
         title: input.callTitle,
         summary: input.callSummary,
       };
+    },
+    presentationMeta(_args, value) {
+      // ONE decode (R4), the same one the card composes from.
+      return envelopeFacts(value, input.meta ?? []);
     },
     presentResult: collabResultCard({
       title: input.resultTitle,

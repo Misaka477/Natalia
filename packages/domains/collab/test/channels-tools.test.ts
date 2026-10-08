@@ -15,6 +15,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { chatToolCard } from "../src/chat-summary";
+import { collabOutput } from "../src/collab-presenters";
 
 const source = readFileSync(
   join(
@@ -112,4 +114,42 @@ test("the subagent channel inherits the same registry, not a copy", () => {
   // `visibleTools` and wires them into the provider call it makes here.
   expect(runner).toMatch(/visibleTools/u);
   expect(runner).toMatch(/send_to_parent/u);
+});
+
+/** The family's own output block, spelled for this test's stand-in tool. */
+function collabOutputFor(
+  callTitle: string,
+  callSummary: string,
+  resultTitle: string,
+  resultSummary: string,
+) {
+  return collabOutput({ callTitle, callSummary, resultTitle, resultSummary });
+}
+
+test("a chat tool's card rides the event and the durable row (R4)", () => {
+  // A Chat turn executes its tools directly, so the projection is made at
+  // the publish site — and then carried through the projection into the
+  // hydrated row. Both halves used to be dropped (the live fold ignored
+  // card/meta; the durable row never had them).
+  //
+  // The publisher's projection is the same one the shared stage makes: read
+  // the tool's output definition, compute the facts once, compose the card.
+  // This uses the family's own presenter as the stand-in tool.
+  const tool = {
+    output: collabOutputFor("mailbox", "send", "mailbox", "queued"),
+  };
+  const args = { intent: "constraint" };
+  const value = JSON.stringify({ queued: true, messageID: "msg_2" });
+  const projected = chatToolCard(tool.output, args, value);
+  expect(projected.card).toMatchObject({ kind: "generic", title: "mailbox" });
+  expect(projected.meta).toMatchObject({ decoded: true });
+  // ONE decode: POISON in the value changes nothing the card reads.
+  const meta = tool.output.presentationMeta!(args, value);
+  expect(tool.output.presentResult!(args, "POISON", meta)).toMatchObject({
+    kind: "generic",
+    title: "mailbox",
+    summary: "queued",
+  });
+  // And a tool that declares no output definition at all still publishes.
+  expect(chatToolCard(undefined, args, value)).toEqual({});
 });

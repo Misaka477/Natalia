@@ -109,6 +109,7 @@ export function wireFeatures(
   ports.naviChatTools = chatTools.naviChatTools;
   ports.niaChatTools = chatTools.niaChatTools;
   ports.chatToolSummary = chatTools.chatToolSummary;
+  ports.chatToolCard = chatTools.chatToolCard;
   ports.runNaviChatTurn = createNaviChatTurn(ctx).runNaviChatTurn;
   ports.runNiaChatTurn = createNiaChatTurn(ctx).runNiaChatTurn;
   ports.providerFromEnvironment = providerFromEnvironment;

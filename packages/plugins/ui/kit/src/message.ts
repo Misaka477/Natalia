@@ -201,12 +201,37 @@ export function keyedToolviewLines(toolCall: {
   if (!KEYED_TOOLVIEW_NAMES.has(toolCall.name)) return undefined;
   const body = toolCall.card?.body ?? toolCall.output ?? "";
   if (toolCall.name === "ask_user") {
-    // The Q&A is DERIVED from the durable halves — the call's arguments
-    // (the question and the choices) plus the result (the answers) — not
-    // from the card body the event recorded. A replayed event carries no
-    // card at all, and one recorded before the transcript existed carried
-    // the old single-line spelling; deriving makes both render the current
-    // shape (the user's 2026-10-08 screenshot: five choices on one line).
+    // R4: the Q&A's STRUCTURED fields come first — the tool composes them
+    // from the arguments and the result, which is where both halves already
+    // live. Replay-safe by construction: an event recorded with the fields
+    // renders them, and one recorded before them (or with no card at all)
+    // falls back to deriving the same shape from the durable halves — the
+    // call's arguments (question, choices) plus the result (the answers).
+    // The user's 2026-10-08 screenshot (five choices on one line) is why
+    // the derivation exists; R6 retires it when every event carries fields.
+    const card = toolCall.card as
+      | { question?: string; options?: string[]; answers?: string[] }
+      | undefined;
+    if (typeof card?.question === "string") {
+      const answers = card.answers ?? [];
+      const options = card.options ?? [];
+      const lines: KeyedToolviewLine[] = [
+        { line: `Q: ${card.question}`, kind: "question" },
+      ];
+      if (options.length > 0) {
+        lines.push({ line: "Options:", kind: "choices" });
+        for (const option of options)
+          lines.push({ line: `  · ${option}`, kind: "choices" });
+      }
+      lines.push({
+        line:
+          answers.length > 0
+            ? `A: ${answers.join("; ")}`
+            : "A: (no answer recorded)",
+        kind: "answer",
+      });
+      return lines;
+    }
     const args = toolCall.arguments;
     const question = optionalText(args?.question);
     const options = Array.isArray(args?.options)

@@ -68,6 +68,18 @@ export function genericToolCard(
     const value = optionalString(parsed[input.titleKey]);
     return value ?? input.family;
   };
+  /** The envelope's facts: what decoded, its title, and the pills' values. */
+  const envelopeFacts = (value: string): Record<string, unknown> => {
+    const parsed = decode(value);
+    if (!parsed) return {};
+    const record: Record<string, unknown> = { decoded: true };
+    for (const [, key] of input.meta ?? []) {
+      const pill = pillValue(parsed[key]);
+      if (pill !== undefined) record[key] = pill;
+    }
+    if (typeof parsed.title === "string") record.title = parsed.title;
+    return record;
+  };
   return {
     schema: { type: "object", properties: {} },
     presentCall(args) {
@@ -77,21 +89,31 @@ export function genericToolCard(
         summary: input.callSummary,
       };
     },
-    presentResult(args, value) {
-      const parsed = decode(value);
-      const meta = (input.meta ?? [])
+    presentationMeta(_args, value) {
+      // ONE decode (R4): the envelope's facts travel the event's meta slot
+      // and are handed straight back to the presenter, so the result string
+      // is never parsed a second time.
+      return envelopeFacts(value);
+    },
+    presentResult(args, value, meta) {
+      const facts =
+        meta === undefined
+          ? envelopeFacts(value)
+          : (meta as Record<string, unknown>);
+      const pills = (input.meta ?? [])
         .map(([label, key]) => {
-          const pill = pillValue(parsed?.[key]);
-          return pill === undefined
+          const found = facts[key];
+          return found === undefined
             ? undefined
-            : ([label, pill] as [string, string]);
+            : ([label, String(found)] as [string, string]);
         })
         .filter((pair): pair is [string, string] => pair !== undefined);
       return {
         kind: "generic",
-        title: callTitle(args),
-        summary: parsed ? input.resultSummary : input.callSummary,
-        ...(meta.length > 0 ? { meta } : {}),
+        title: typeof facts.title === "string" ? facts.title : callTitle(args),
+        summary:
+          facts.decoded === true ? input.resultSummary : input.callSummary,
+        ...(pills.length > 0 ? { meta: pills } : {}),
         body: value,
       };
     },

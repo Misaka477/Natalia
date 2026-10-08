@@ -279,6 +279,19 @@ export type RuntimePorts = {
     args: Record<string, unknown>,
     result: string,
   ) => string;
+  /**
+   * The tool's own card and facts for a Chat call (UI refactor R4). A Chat
+   * turn executes its tools directly, so the projection the shared
+   * execution stage makes at publish time is made here instead.
+   */
+  chatToolCard: (
+    output: import("@anthelia/tools").ToolOutputDefinition | undefined,
+    args: Record<string, unknown>,
+    result: string,
+  ) => {
+    card?: import("@anthelia/contracts").ToolCard;
+    meta?: Record<string, unknown>;
+  };
   planDocRuntime: PlanDocRuntime;
   getSelectedAgent: () => AgentDefinition | undefined;
   getSelectedModel: () => { modelID?: string; variant?: string } | undefined;

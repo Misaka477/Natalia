@@ -1270,6 +1270,11 @@ export function projectedChatMessages(
           ...(event.argumentsRaw !== undefined
             ? { argumentsRaw: event.argumentsRaw }
             : {}),
+          // The tool's own card and facts (R4): carried so a replayed chat
+          // row renders exactly like a live one — the projection was always
+          // published; the durable row used to drop it.
+          ...(event.card !== undefined ? { card: event.card } : {}),
+          ...(event.meta !== undefined ? { meta: event.meta } : {}),
           ...(event.startedAt !== undefined
             ? { startedAt: event.startedAt }
             : {}),
@@ -1463,6 +1468,11 @@ function projectChatStream(
           ...(event.argumentsRaw !== undefined
             ? { argumentsRaw: event.argumentsRaw }
             : {}),
+          // The tool's own card and facts (R4): carried so a replayed chat
+          // row renders exactly like a live one — the projection was always
+          // published; the durable row used to drop it.
+          ...(event.card !== undefined ? { card: event.card } : {}),
+          ...(event.meta !== undefined ? { meta: event.meta } : {}),
           ...(event.startedAt !== undefined
             ? { startedAt: event.startedAt }
             : {}),

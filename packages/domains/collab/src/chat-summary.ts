@@ -6,6 +6,33 @@
  * arguments or raw results.
  */
 
+import type { ToolCard } from "@anthelia/contracts";
+
+/**
+ * The tool's own card and facts for a Chat call (UI refactor R4).
+ *
+ * A Chat turn executes its tools directly rather than through the shared
+ * runtime stage, so the projection the main path makes at publish time is
+ * made HERE instead — otherwise a chat row's card was silently dropped
+ * (defect: `chatRowToBlock` had nothing to carry). Purity holds: the same
+ * decode the runtime's presenters run, over the same arguments and result.
+ */
+export function chatToolCard(
+  output: ToolOutputDefinition | undefined,
+  args: Record<string, unknown>,
+  result: string,
+): { card?: ToolCard; meta?: Record<string, unknown> } {
+  if (!output) return {};
+  const meta = output.presentationMeta?.(args, result);
+  const card = output.presentResult?.(args, result, meta);
+  return {
+    ...(card ? { card } : {}),
+    ...(meta ? { meta } : {}),
+  };
+}
+
+import type { ToolOutputDefinition } from "@anthelia/tools";
+
 /** A concise, secret-safe summary of a Chat tool call for the conversation. */
 export function chatToolSummary(
   toolName: string,

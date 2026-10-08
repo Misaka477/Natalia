@@ -104,6 +104,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
       naviChatTools,
       effectiveMaxSteps,
       chatToolSummary,
+      chatToolCard,
       redactToolOutput,
       getWorkspaceRoot,
     } = ctx.ports;
@@ -638,6 +639,14 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
             ),
             result,
             argumentsRaw: call.arguments,
+            // The tool's own card and facts (R4): computed here because a
+            // Chat turn executes its tools directly, and a chat row that
+            // carries no card renders as a plain sentence.
+            ...chatToolCard(
+              tool.output,
+              parsed as Record<string, unknown>,
+              result,
+            ),
             // Pairs this result with the assistant toolCalls entry when the
             // history is rebuilt for the next turn (issue: P30).
             ...(call.id ? { toolCallID: call.id } : {}),

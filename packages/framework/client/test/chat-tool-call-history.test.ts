@@ -212,6 +212,33 @@ async function makeHarness(): Promise<Harness> {
       getWorkspaceRoot: () => root,
       getReady: async () => undefined,
       chatToolSummary: (toolName: string) => `summary of ${toolName}`,
+      // The card projection a Chat publisher makes (R4): the real wiring
+      // reads the tool's output definition, so the harness does the same
+      // rather than stubbing it away.
+      chatToolCard: (
+        output:
+          | {
+              presentResult?: (
+                args: unknown,
+                value: string,
+                meta?: Record<string, unknown>,
+              ) => unknown;
+              presentationMeta?: (args: unknown, value: string) => unknown;
+            }
+          | undefined,
+        args: Record<string, unknown>,
+        result: string,
+      ) => {
+        if (!output) return {};
+        const meta = output.presentationMeta?.(args, result) as
+          | Record<string, unknown>
+          | undefined;
+        const card = output.presentResult?.(args, result, meta);
+        return {
+          ...(card ? { card } : {}),
+          ...(meta ? { meta } : {}),
+        };
+      },
       resolveService: (name: string) =>
         name === attachmentServiceToken.id ? attachmentService : undefined,
       getSessionPersistenceForSession: () => Promise.resolve(),

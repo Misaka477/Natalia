@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import {
   boundToolOutput,
+  genericToolCard,
   cleanupToolOutput,
   MAX_TOOL_OUTPUT_BYTES,
   MAX_TOOL_OUTPUT_LINES,
@@ -114,4 +115,45 @@ test("tool output cleanup removes only expired managed output files", async () =
   await expect(readFile(old, "utf8")).rejects.toThrow();
   expect(await readFile(recent, "utf8")).toBe("recent");
   expect(await readFile(unrelated, "utf8")).toBe("keep");
+});
+
+test("the generic card factory decodes the envelope once (R4)", () => {
+  // The facts travel the event's meta slot AND are handed back to the
+  // presenter. A presenter that decodes `value` again would read POISON
+  // here and lose the pills — which is the regression this pins.
+  const output = genericToolCard({
+    family: "plan",
+    callSummary: "read",
+    resultSummary: "read",
+    titleKey: "planID",
+    meta: [
+      ["status", "status"],
+      ["total", "total"],
+    ],
+  });
+  const value = JSON.stringify({
+    title: "Plan for the audit",
+    status: "accepted",
+    total: 3,
+  });
+  const meta = output.presentationMeta!({ planID: "plan_1" }, value);
+  expect(meta).toMatchObject({
+    decoded: true,
+    title: "Plan for the audit",
+    status: "accepted",
+    total: "3",
+  });
+  // The card is composed from the facts: poison in `value` changes nothing
+  // except the body (which IS the envelope text).
+  const card = output.presentResult!({ planID: "plan_1" }, "POISON", meta);
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "Plan for the audit",
+    summary: "read",
+    meta: [
+      ["status", "accepted"],
+      ["total", "3"],
+    ],
+    body: "POISON",
+  });
 });

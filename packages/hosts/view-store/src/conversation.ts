@@ -963,6 +963,11 @@ function applyAgentChatEvent(
         summary: event.summary,
         argumentsRaw: event.argumentsRaw ?? "",
         ...(event.result !== undefined ? { result: event.result } : {}),
+        // The tool's own card and facts (R4): a live chat row gets the same
+        // projection a main-transcript row does, because the publisher
+        // fills it — the fold used to drop it.
+        ...(event.card !== undefined ? { card: event.card } : {}),
+        ...(event.meta !== undefined ? { meta: event.meta } : {}),
         ...(event.startedAt !== undefined
           ? { startedAt: event.startedAt }
           : {}),

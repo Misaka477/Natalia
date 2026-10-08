@@ -497,6 +497,17 @@ export type ToolCard =
     })
   | (ToolCardHeader & {
       kind: "generic";
+      /**
+       * A Q&A's structure, when the tool is a question (dsh's
+       * AskQuestionCard): the question asked, the choices offered, the
+       * answers picked. Composed by the TOOL, which holds both halves — the
+       * arguments and the result — so no consumer re-derives them (the
+       * 2026-10-08 Q&A fight: a UI deriving the question from a re-plumbed
+       * arguments chain broke for a day).
+       */
+      question?: string;
+      options?: string[];
+      answers?: string[];
     });
 
 /** A card's label/value facets (exit code, total lines, ...). */
@@ -585,6 +596,14 @@ type ChatEventData<Namespace extends ChatEventNamespace> =
       summary: string;
       result?: string;
       argumentsRaw?: string;
+      /**
+       * The tool's own card for this call (UI refactor R4), computed by the
+       * publisher from the tool's output definition exactly as the main
+       * runtime path does. A chat turn executes its tools directly, so the
+       * projection is made here rather than by the shared execution stage.
+       */
+      card?: ToolCard;
+      meta?: Record<string, unknown>;
       /**
        * The provider call's id, the ONLY thing that pairs a tool result with
        * the assistant `toolCalls` entry an OpenAI-compatible gateway requires.
@@ -692,6 +711,9 @@ type LegacyChatEventData =
       summary: string;
       result?: string;
       argumentsRaw?: string;
+      /** The tool's own card, when the publisher projected one. */
+      card?: ToolCard;
+      meta?: Record<string, unknown>;
       startedAt?: number;
       endedAt?: number;
       at: string;
@@ -5511,6 +5533,9 @@ export type ChatMessageRow = {
     summary: string;
     result?: string;
     argumentsRaw?: string;
+    /** The tool's own card, so a replayed chat row renders like a live one. */
+    card?: ToolCard;
+    meta?: Record<string, unknown>;
     startedAt?: number;
     endedAt?: number;
   };

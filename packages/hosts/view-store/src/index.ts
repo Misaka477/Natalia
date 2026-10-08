@@ -484,6 +484,12 @@ function chatRowToBlock(row: ChatMessageRow): {
         summary: row.tool.summary,
         ...(row.tool.result !== undefined ? { result: row.tool.result } : {}),
         argumentsRaw: row.tool.argumentsRaw ?? "",
+        // The tool's own card and facts (R4): the durable chat row has
+        // carried them since the publisher started projecting them; this
+        // path used to drop them, so a hydrated chat row rendered as a
+        // plain sentence while its live twin rendered a card.
+        ...(row.tool.card !== undefined ? { card: row.tool.card } : {}),
+        ...(row.tool.meta !== undefined ? { meta: row.tool.meta } : {}),
         ...(row.tool.startedAt !== undefined
           ? { startedAt: row.tool.startedAt }
           : {}),

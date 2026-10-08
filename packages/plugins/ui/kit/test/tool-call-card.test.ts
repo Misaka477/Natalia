@@ -440,3 +440,51 @@ test("ask_user's Q&A derives from the arguments and result, not the recorded car
     { line: "A: new", kind: "answer" },
   ]);
 });
+
+test("ask_user's Q&A reads the card's structured fields first (R4)", () => {
+  // The tool composes the Q&A from the arguments and the result (both of
+  // which it already holds), so the kit reads the fields — and an event
+  // recorded without them still derives the same shape from the durable
+  // halves.
+  const raw = JSON.stringify({ answers: [["第二个选项"]] });
+  const row = toolCallRow({
+    name: "ask_user",
+    status: "succeeded",
+    summary: "answered",
+    result: raw,
+    card: {
+      kind: "generic",
+      title: "请选择允许范围",
+      summary: "answered",
+      question: "请选择允许范围",
+      options: ["第一个选项", "第二个选项"],
+      answers: ["第二个选项"],
+    },
+  });
+  expect(keyedToolviewLines(row)).toEqual([
+    { line: "Q: 请选择允许范围", kind: "question" },
+    { line: "Options:", kind: "choices" },
+    { line: "  · 第一个选项", kind: "choices" },
+    { line: "  · 第二个选项", kind: "choices" },
+    { line: "A: 第二个选项", kind: "answer" },
+  ]);
+  // No answer recorded is a state, not a missing line.
+  const unanswered = toolCallRow({
+    name: "ask_user",
+    status: "failed",
+    summary: "failed",
+    result: "",
+    card: {
+      kind: "generic",
+      title: "q",
+      summary: "failed",
+      question: "q",
+      options: [],
+      answers: [],
+    },
+  });
+  expect(keyedToolviewLines(unanswered)).toEqual([
+    { line: "Q: q", kind: "question" },
+    { line: "A: (no answer recorded)", kind: "answer" },
+  ]);
+});

@@ -336,8 +336,9 @@ test("pause disarms — the running goal round finishes and no next one starts (
           event.type === "turn.cancelled" && event.id.includes("round_2"),
       ),
     ).toBe(false);
-    // Let round 2 finish: its cost is booked, and NO round 3 is admitted —
-    // the paused phase is the driver's gate.
+    // Let round 2 finish: its turn ENDS after the pause (never cancelled —
+    // that is the whole point of the disarm), and NO round 3 is admitted,
+    // because the paused phase is the driver's gate.
     releases.get(2)?.();
     await waitUntil(
       () =>
@@ -345,6 +346,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
           (event) => event.type === "goal.round.cost" && event.round === 2,
         ),
       "round 2 settlement",
+      40_000,
     );
     expect(
       events.some((event) => event.type === "goal.round" && event.round === 3),

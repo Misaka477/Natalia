@@ -140,6 +140,13 @@ export interface SkillService {
   resolve(name: string): SkillMetadata;
   list(): SkillMetadata[];
   /**
+   * The catalog's version, bumped whenever the LISTED SET changes (P2-21). A
+   * session that loaded a skill at version N compares against this to learn its
+   * snapshot is stale — the 2026-10-08 audit found the skills changing three
+   * times mid-session with nothing saying so.
+   */
+  version?(): number;
+  /**
    * The only autonomous skill write (Discovery D4): proposals are
    * validated at THIS boundary — action whitelist (create/update only),
    * name/size rules, frontmatter rebuilt by the implementation. Rejected

@@ -32,6 +32,12 @@ export type SkillsRuntimeInput = {
     active(sessionID: SessionID): Skill | undefined;
     activate(sessionID: SessionID, skill: Skill): void;
   };
+  /** Where a catalog change is announced (P2-21). */
+  onCatalogChange?: (change: {
+    version: number;
+    added: string[];
+    removed: string[];
+  }) => void;
 };
 
 export default function skillsPlugin(): Plugin {

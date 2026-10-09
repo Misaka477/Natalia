@@ -65,6 +65,30 @@ export function createPluginAssembly(
           });
         },
       },
+      // P2-21: a catalog change mid-session is announced, not silently
+      // absorbed. A session that loaded a skill at version N learns the listed
+      // set moved (and exactly which skills arrived or left), so its snapshot
+      // is knowingly stale rather than quietly wrong — the 2026-10-08 audit
+      // watched the skills change three times mid-session with nothing said.
+      onCatalogChange: (change: {
+        version: number;
+        added: string[];
+        removed: string[];
+      }) => {
+        const parts = [
+          `skills catalog is now version ${change.version}`,
+          ...(change.added.length ? [`added: ${change.added.join(", ")}`] : []),
+          ...(change.removed.length
+            ? [`removed: ${change.removed.join(", ")}`]
+            : []),
+        ];
+        ctx.ports.publish({
+          type: "diagnostic",
+          level: "info",
+          owner: "natalia-skills",
+          message: `${parts.join("; ")}. A skill loaded earlier in this session was loaded against the previous catalog — reload it if the change affects it.`,
+        });
+      },
       onLoad: (
         skill: SkillMetadata,
         output: string,

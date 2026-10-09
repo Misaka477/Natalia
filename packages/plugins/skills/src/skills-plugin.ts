@@ -45,6 +45,15 @@ export function createSkillsPlugin(input: {
   userRoot?: string;
   remoteURLs?: string[];
   /**
+   * Where a catalog change is announced (P2-21). The host wires this to its
+   * event bus; the plugin only knows the listed set moved.
+   */
+  onCatalogChange?: (change: {
+    version: number;
+    added: string[];
+    removed: string[];
+  }) => void;
+  /**
    * The loaded plugins' declared skills directories, read live at each
    * discovery (the controller's catalog is the source; the fingerprint
    * mechanism reloads this plugin when it changes).
@@ -74,6 +83,11 @@ export function createSkillsPlugin(input: {
     manifest: SKILLS_PLUGIN_MANIFEST,
     async setup(api) {
       const skills = await discover();
+      // P2-21: every reload that changes the LISTED SET is announced, so a
+      // session holding a loaded skill learns its snapshot went stale instead
+      // of discovering it by behaving oddly (the 2026-10-08 audit watched the
+      // skills change three times mid-session, disabled to enabled among them).
+      if (input.onCatalogChange) skills.onCatalogChange = input.onCatalogChange;
       api.services.provide(skillService.id, skills);
       api.tools.register(
         createSkillLoadTool({ registry: () => skills, onLoad: input.onLoad }),

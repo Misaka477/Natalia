@@ -121,6 +121,33 @@ export class SkillRegistry implements SkillService {
   origin?: SkillDiscoverInput;
   /** The workspace's durable off-switch, stamped onto every discovered skill. */
   disabled: Set<string> = new Set();
+  /**
+   * The catalog's version (P2-21): bumped whenever a discovery changes WHAT is
+   * listed — a skill added, removed, or its content re-read. A session that
+   * loaded a skill at version N can tell that its snapshot is stale without
+   * comparing every digest itself, which is what the 2026-10-08 audit found
+   * missing (the skills changed three times mid-session, from disabled to
+   * enabled, and nothing said the loaded snapshot no longer matched).
+   */
+  private catalogVersion = 0;
+  /**
+   * Where a catalog change is announced (P2-21). The host wires it; the
+   * registry only knows THAT the listed set changed, not who should hear
+   * about it.
+   */
+  onCatalogChange?: (change: {
+    version: number;
+    added: string[];
+    removed: string[];
+  }) => void;
+  /** The version as of the last discovery. */
+  version(): number {
+    return this.catalogVersion;
+  }
+  /** The listed skills' identities, for a change report. */
+  listedNames(): string[] {
+    return this.list().map((skill) => skill.qualifiedName);
+  }
 
   register(skill: Skill) {
     if (this.skills.has(skill.qualifiedName))
@@ -217,6 +244,7 @@ export class SkillRegistry implements SkillService {
     fetch?: typeof fetch;
     pluginDirs?: readonly string[];
   }) {
+    const before = this.listedNames();
     const next = await discoverSkills(input);
     this.skills = next.skills;
     this.selected = next.selected;
@@ -225,6 +253,21 @@ export class SkillRegistry implements SkillService {
     // discoverSkills, or its writes have no root to write to.
     this.origin = { ...input };
     this.disabled = next.disabled;
+    // P2-21: the version moves only when the LISTED SET actually changed, so a
+    // reload that rediscovers the same skills is not news.
+    const after = this.listedNames();
+    if (before.join("\n") !== after.join("\n")) {
+      this.catalogVersion += 1;
+      // Say what changed, not just that something did: a session holding a
+      // loaded skill needs to know whether ITS skill moved.
+      const beforeSet = new Set(before);
+      const afterSet = new Set(after);
+      this.onCatalogChange?.({
+        version: this.catalogVersion,
+        added: after.filter((name) => !beforeSet.has(name)),
+        removed: before.filter((name) => !afterSet.has(name)),
+      });
+    }
   }
 
   authorizeTool(skill: Skill, tool: string, policy: SkillPolicy) {
@@ -480,7 +523,13 @@ export function createSkillLoadTool(options: {
       const registry = options.registry();
       if (!registry) throw new Error("skill registry is not initialized");
       const skill = registry.resolve(name);
-      const output = await formatSkillForModel(skill);
+      // P2-21: the catalog version rides the answer — ONE answer, so the
+      // context entry and the tool's return are the same string and a session
+      // that loaded it can tell later whether its snapshot is still current.
+      // The 2026-10-08 audit watched the skills change three times mid-session
+      // (disabled to enabled among them) with nothing saying the loaded copy
+      // might no longer match.
+      const output = `${await formatSkillForModel(skill)}\n\n[skill catalog version ${registry.version()}]`;
       options.onLoad?.(skill, output, context);
       return output;
     },

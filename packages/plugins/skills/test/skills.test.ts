@@ -530,3 +530,50 @@ test("skill_load's card carries the skill's own document (S3)", () => {
   );
   expect(refused).toMatchObject({ kind: "read", title: "audit" });
 });
+
+test("the catalog version moves when the listed set changes, and says what (P2-21)", async () => {
+  // The 2026-10-08 audit's P2-21: the skills changed three times mid-session
+  // (disabled to enabled among them) and nothing said the loaded snapshot no
+  // longer matched. The version is the catalog's identity, and a change names
+  // what moved.
+  const root = await mkdtemp(join(tmpdir(), "natalia-skill-version-"));
+  const skillRoot = join(root, ".natalia", "skills", "review");
+  await mkdir(skillRoot, { recursive: true });
+  await writeFile(
+    join(skillRoot, "SKILL.md"),
+    "---\nname: review\ndescription: Review\n---\nReview guidance",
+  );
+  const registry = await discoverSkills({ workspaceRoot: root });
+  const changes: Array<{
+    version: number;
+    added: string[];
+    removed: string[];
+  }> = [];
+  registry.onCatalogChange = (change) => changes.push(change);
+  expect(registry.version()).toBe(0);
+  // A reload that rediscovers the same set is not news.
+  await registry.reload({ workspaceRoot: root });
+  expect(registry.version()).toBe(0);
+  expect(changes).toHaveLength(0);
+  // A NEW skill is.
+  const other = join(root, ".natalia", "skills", "audit");
+  await mkdir(other, { recursive: true });
+  await writeFile(
+    join(other, "SKILL.md"),
+    "---\nname: audit\ndescription: Audit\n---\nAudit guidance",
+  );
+  await registry.reload({ workspaceRoot: root });
+  expect(registry.version()).toBe(1);
+  // The qualified name, so a change names WHICH skill (a project skill and a
+  // user skill can share a short name).
+  expect(changes).toEqual([
+    { version: 1, added: ["project:audit"], removed: [] },
+  ]);
+  // And the version rides the load answer, so the session that loaded a skill
+  // can tell later whether its snapshot is current.
+  const tool = createSkillLoadTool({ registry: () => registry });
+  const output = String(
+    await tool.execute({ name: "review" }, { workspaceRoot: root }),
+  );
+  expect(output).toContain("[skill catalog version 1]");
+});

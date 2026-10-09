@@ -11,6 +11,7 @@ import {
   capabilityGroupOf,
 } from "@anthelia/contracts";
 import type { RuntimeClient } from "@anthelia/contracts";
+import { runtimeToolNames } from "../../../framework/client/src/capabilities/tool-family-capabilities";
 import {
   RPC_INTENTIONALLY_LOCAL,
   RPC_ROUTE_MEMBERS,
@@ -1411,6 +1412,84 @@ function zodReferences(expr: string): string[] {
   return out;
 }
 
+/**
+ * The per-agent tool surface (P2-20).
+ *
+ * The 2026-10-08 audit could not tell which tools an agent actually has: the
+ * names it had seen in earlier audits (`diff_workspace`, `mailbox_send`,
+ * `plan_doc_write`, `plan_generation`, `audit_report`) were a mixture of live
+ * tools, per-channel tools and names that do not exist at all, and nothing in
+ * the docs said which was which. The surface is now STATED here, derived from
+ * the same sets the runtime reads — the three chat whitelists in chat-tools.ts
+ * and the tool catalogue — so it cannot drift from the code.
+ */
+function agentToolSurfaceLines(): string[] {
+  const chatTools = readFileSync(
+    join(
+      process.cwd(),
+      "packages",
+      "domains",
+      "collab",
+      "src",
+      "chat-tools.ts",
+    ),
+    "utf8",
+  );
+  const setOf = (name: string) => {
+    const match = new RegExp(
+      `const ${name} = new Set\\(\\[([^\\]]*)\\]\\)`,
+      "u",
+    ).exec(chatTools);
+    if (!match) throw new Error(`chat-tools.ts lost the ${name} set`);
+    return (
+      match[1]!
+        .split(/[,\n]/u)
+        .map((entry) => entry.trim().replace(/"/gu, ""))
+        // The sets carry explanatory `//` comments between entries; a name is
+        // an identifier, so anything else is prose.
+        .filter((entry) => /^[a-z][a-z0-9_]*$/u.test(entry))
+        .sort()
+    );
+  };
+  const readOnly = setOf("CHAT_READ_ONLY_TOOLS");
+  const shared = setOf("CHAT_SHARED_INTELLIGENCE_TOOLS");
+  const naviExtra = setOf("NAVI_EXTRA_TOOLS");
+  const niaExtra = setOf("NIA_EXTRA_TOOLS");
+  const main = [...new Set(runtimeToolNames() as string[])].sort();
+  const names = (list: string[]) =>
+    list.length ? list.map((n) => `\`${n}\``).join(" · ") : "(none)";
+  return [
+    `### Agent tool surfaces (${main.length} tools · 4 channels)`,
+    ``,
+    `Which tools each agent surface actually sees. Derived from the runtime's own sets — the three chat whitelists in \`packages/domains/collab/src/chat-tools.ts\` and the tool catalogue — so this table cannot drift from the code.`,
+    ``,
+    markdownTable(
+      ["Surface", "Tools"],
+      [
+        [
+          "Main agent",
+          `every tool the registry holds (${main.length}): ${names(main)}`,
+        ],
+        [
+          "Navi (live work chat)",
+          `${names([...readOnly, ...shared, ...naviExtra])} + the collaboration tools it owns (\`collab_suggest\`, \`collab_answer\`, \`mailbox_*\`, \`plan_*\`)`,
+        ],
+        [
+          "Nia (audit)",
+          `${names([...readOnly, ...shared, ...niaExtra])} + the audit tools it owns (\`audit_report\`, \`constitution_rule_read\`, \`detour_review\`)`,
+        ],
+        [
+          "Subagent",
+          `the parent's registry minus the collaboration and spawn surfaces (it runs through its own runner and scope)`,
+        ],
+      ],
+    ),
+    ``,
+    `Names that appear in older audits but are NOT tools of any surface: \`plan_generation\` — the generation tools are \`propose_generation\`, \`apply_generation\`, \`list_generation_candidates\`, \`cancel_generation\` and \`rollback_generation\`. \`diff_workspace\`, \`mailbox_send\`, \`plan_doc_write\` and \`audit_report\` ARE real tools — they belong to the chat surfaces above, not to the main agent's catalogue.`,
+    ``,
+  ];
+}
+
 function markdownTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((header, i) =>
     Math.max(header.length, ...rows.map((row) => (row[i] ?? "").length)),
@@ -1549,6 +1628,7 @@ export function renderGeneratedSections(): string {
       ]),
     ),
     ``,
+    ...agentToolSurfaceLines(),
     `### Runtime event dictionary (source scan of \`packages/core/contracts/src/events.ts\`)`,
     ``,
     markdownTable(
@@ -1750,3 +1830,24 @@ if (process.env.API_REFERENCE_WRITE && import.meta.main) {
     `updated ${API_REFERENCE_PATH}, ${API_REFERENCE_ZH_PATH}, ${TYPES_REFERENCE_PATH}, ${TYPES_REFERENCE_ZH_PATH}, ${CONFIG_REFERENCE_PATH}, ${CONFIG_REFERENCE_ZH_PATH}`,
   );
 }
+
+test("the agent tool surfaces section names the drifted audit names (P2-20)", () => {
+  // The 2026-10-08 audit's P2-20: names from earlier audits
+  // (`diff_workspace`, `mailbox_send`, `plan_doc_write`, `plan_generation`,
+  // `audit_report`) were a mixture of live tools, per-channel tools and a name
+  // that does not exist, and nothing said which was which. The generated
+  // section now states the surface AND resolves the confusion.
+  const lines = agentToolSurfaceLines().join("\n");
+  expect(lines).toContain("### Agent tool surfaces");
+  expect(lines).toContain("Main agent");
+  expect(lines).toContain("Navi (live work chat)");
+  expect(lines).toContain("Nia (audit)");
+  expect(lines).toContain("Subagent");
+  // The real per-channel sets are in it.
+  expect(lines).toContain("`plan_propose`");
+  expect(lines).toContain("`work_contract_read`");
+  // And the drifted names are resolved rather than left ambiguous.
+  expect(lines).toContain("`plan_generation`");
+  expect(lines).toContain("`propose_generation`");
+  expect(lines).toContain("belong to the chat surfaces above");
+});

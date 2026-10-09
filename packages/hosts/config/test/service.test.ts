@@ -44,7 +44,12 @@ test("partial terminal overlay keeps the default pty backend", async () => {
   expect(
     (await resolveConfig({ workspaceRoot: root, globalPath })).config.runtime
       .terminal,
-  ).toEqual({ windowMode: "window", backend: "pty" });
+  ).toEqual({
+    windowMode: "window",
+    backend: "pty",
+    // P2-19: the exited-pane TTL's default.
+    maxIdleMinutes: 60,
+  });
 });
 
 test("collaboration auto rounds default to three and accept project overrides", async () => {

@@ -193,6 +193,12 @@ export type TerminalToolService = {
     sessionID?: string;
   }): Promise<TerminalSessionView>;
   list(): TerminalSessionView[] | Promise<TerminalSessionView[]>;
+  /**
+   * Reclaim the exited panes that have been idle past the TTL (P2-19),
+   * returning the ids it dropped. Optional: a backend that does not own pane
+   * lifetimes (wezterm) leaves it out and the tool says so.
+   */
+  collectExited?(input: { maxIdleMinutes: number }): Promise<string[]>;
   reconcile(): Promise<TerminalSessionView[]>;
   read(
     id: string,

@@ -1423,3 +1423,44 @@ test("a pane's identity is stable across start, list and stop (P1-11)", async ()
   expect(afterExit?.status).toBe("exited");
   await controller.close();
 });
+
+test("cleanup reclaims exited panes and keeps the ones a reader still holds (P2-19)", async () => {
+  // The 2026-10-08 audit's P2-19: the terminal family had no cleanup at all,
+  // so an exited pane stayed in `list` forever — the audit's own session still
+  // showed two exited records at the end.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-cleanup-"));
+  const { factory, processes } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const finished = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_done",
+    sessionID: "ses_cleanup",
+  });
+  const live = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_live",
+    sessionID: "ses_cleanup",
+  });
+  // One exits, one keeps running.
+  (processes[0] as PtyProcess & { exit(code?: number): void }).exit(0);
+  await Bun.sleep(20);
+  // The TTL of 0 reclaims any exited pane; the running one is never a
+  // candidate.
+  const collect = controller.collectExited;
+  if (!collect) throw new Error("the PTY controller owns pane lifetimes");
+  const collected = await collect.call(controller, { maxIdleMinutes: 0 });
+  expect(collected).toEqual([finished.id]);
+  const remaining = (await controller.list("ses_cleanup")).map(
+    (session) => session.id,
+  );
+  expect(remaining).toEqual([live.id]);
+  // And the pane that was reclaimed is really gone.
+  await expect(
+    controller.observe(finished.id, 0, { timeoutMs: 50 }),
+  ).rejects.toThrow();
+  await controller.close();
+});

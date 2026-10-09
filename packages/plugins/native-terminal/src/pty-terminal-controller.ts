@@ -1666,6 +1666,40 @@ export function createPtyTerminalController(
     );
   }
 
+  /**
+   * Reclaim the exited panes that nobody will read again (P2-19).
+   *
+   * The 2026-10-08 audit found the terminal family had no cleanup at all: an
+   * `exited` pane stayed in `list` forever — the audit's own session still
+   * showed two exited records at the end. A pane is only collected once it
+   * has exited AND stayed quiet past the TTL, so a reader who wants the last
+   * screen still gets it and one who has moved on does not carry it.
+   */
+  async function collectExited(input: { maxIdleMinutes: number }) {
+    const before =
+      input.maxIdleMinutes > 0
+        ? Date.now() - input.maxIdleMinutes * 60_000
+        : undefined;
+    const collected: string[] = [];
+    for (const session of [...sessions.values()]) {
+      if (session.status !== "exited") continue;
+      if (session.attached) continue;
+      if (before !== undefined) {
+        const idleSince = session.lastOutputAt ?? Date.parse(session.startedAt);
+        if (idleSince > before) continue;
+      }
+      collected.push(session.id);
+    }
+    for (const id of collected) {
+      const session = sessions.get(id);
+      if (!session) continue;
+      for (const disposer of session.disposers) disposer.dispose();
+      session.disposers = [];
+      sessions.delete(id);
+    }
+    return collected;
+  }
+
   async function close() {
     if (closed) return;
     closed = true;
@@ -1716,6 +1750,7 @@ export function createPtyTerminalController(
     setActiveSession,
     subscribeOutput,
     stopForSession,
+    collectExited,
     close,
   };
 }

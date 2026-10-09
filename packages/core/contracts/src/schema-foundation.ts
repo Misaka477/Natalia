@@ -39,6 +39,14 @@ export const terminalWindowConfigSchema = z.object({
    * document is honest about there being no other answer.
    */
   backend: z.literal("pty").default("pty"),
+  /**
+   * Minutes an exited pane must stay idle before `interactive_terminal_cleanup`
+   * reclaims it (P2-19). `0` means "reclaim any exited pane on the next
+   * cleanup". The 2026-10-08 audit found the terminal family had no cleanup
+   * at all, so exited panes accumulated in `list` forever — its own session
+   * still showed two at the end.
+   */
+  maxIdleMinutes: z.number().min(0).default(60),
 });
 
 /**

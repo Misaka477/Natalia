@@ -1400,6 +1400,82 @@ function interactiveListTool(): RuntimeTool {
   };
 }
 
+/**
+ * `interactive_terminal_cleanup` (the 2026-10-08 audit's P2-19).
+ *
+ * The terminal family had no cleanup at all: an `exited` pane stayed in
+ * `list` forever, so a session's pane list grew without bound and a reader
+ * could not tell a live pane from a grave. This is the read family's reclaim:
+ * exited panes past the TTL are dropped, and the answer names what went.
+ *
+ * A pane that is still ATTACHED (a human or the model is reading it) is never
+ * collected, and neither is a running one — the same rule the sandbox
+ * family's collection uses.
+ */
+function interactiveCleanupTool(): RuntimeTool {
+  return {
+    name: "interactive_terminal_cleanup",
+    description:
+      "Reclaim exited terminal panes that have been idle past the configured TTL. Read-only for anything still attached or running; the answer names the panes it dropped.",
+    requiresApproval: false,
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: {
+      schema: { type: "object", properties: {} },
+      presentCall() {
+        return {
+          kind: "terminal",
+          title: "terminals",
+          summary: "cleanup",
+        };
+      },
+      presentationMeta(_args, value) {
+        let parsed: { collected?: unknown } | undefined;
+        try {
+          parsed = JSON.parse(value) as { collected?: unknown };
+        } catch {
+          // degrade, never throw
+        }
+        const collected = Array.isArray(parsed?.collected)
+          ? parsed!.collected!
+          : [];
+        return { total: collected.length };
+      },
+      presentResult(_args, value, meta) {
+        const facts = (meta ?? {}) as { total?: number };
+        const count = facts.total ?? 0;
+        return {
+          kind: "terminal",
+          title: "terminals",
+          summary:
+            count === 0
+              ? "nothing to reclaim"
+              : `reclaimed ${count} exited pane${count === 1 ? "" : "s"}`,
+          meta: [["reclaimed", String(count)]],
+          body: value,
+        };
+      },
+    },
+    async execute(_input, context) {
+      const controller = requireNativeTerminal(context);
+      if (!controller.collectExited)
+        return JSON.stringify({
+          collected: [],
+          reason:
+            "this terminal backend does not own pane lifetimes, so there is nothing to reclaim",
+        });
+      const maxIdleMinutes = (
+        context.runtimeConfig?.() as
+          | { terminal?: { maxIdleMinutes?: number } }
+          | undefined
+      )?.terminal?.maxIdleMinutes;
+      const collected = await controller.collectExited({
+        maxIdleMinutes: maxIdleMinutes ?? 60,
+      });
+      return JSON.stringify({ collected }, null, 2);
+    },
+  };
+}
+
 /** Every interactive terminal tool, including the observe entry point. */
 export function terminalTools(): RuntimeTool[] {
   return [
@@ -1420,6 +1496,10 @@ export function terminalTools(): RuntimeTool[] {
     interactiveRequestHumanTool(),
     interactiveStopTool(),
     interactiveListTool(),
+    // Sits after the list tool on purpose: the pair is what makes the
+    // lifecycle discoverable — list shows what exists, cleanup reclaims what
+    // nobody will read again.
+    interactiveCleanupTool(),
   ];
 }
 

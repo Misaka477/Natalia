@@ -215,6 +215,8 @@ const interactiveTerminalToolAliases = {
   interactive_resize: "interactive_terminal_resize",
   interactive_stop: "interactive_terminal_stop",
   interactive_list: "interactive_terminal_list",
+  // P2-19: the lifecycle's short spelling, next to the list it follows.
+  interactive_cleanup: "interactive_terminal_cleanup",
 } as const;
 
 export { interactiveTerminalToolAliases };

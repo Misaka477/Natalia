@@ -27,7 +27,9 @@ function outputOf(name: string) {
 }
 
 test("every terminal tool declares presentationMeta (R3)", () => {
-  expect(tools.size).toBe(14);
+  // P2-19: interactive_terminal_cleanup joined the family, so exited panes
+  // stop accumulating forever.
+  expect(tools.size).toBe(15);
   for (const [name, tool] of tools) {
     expect(
       typeof tool.output?.presentationMeta,

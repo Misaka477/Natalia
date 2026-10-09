@@ -688,6 +688,12 @@ export interface TerminalController {
   subscribeOutput?(id: string, listener: (chunk: string) => void): () => void;
   /** Stop every running pane owned by a Natalia session. */
   stopForSession?(sessionID: string): Promise<void>;
+  /**
+   * Reclaim the exited panes nobody will read again (P2-19), returning the
+   * ids it dropped. Optional because the wezterm host does not own pane
+   * lifetimes the way the PTY controller does.
+   */
+  collectExited?(input: { maxIdleMinutes: number }): Promise<string[]>;
   close(): Promise<void>;
 }
 

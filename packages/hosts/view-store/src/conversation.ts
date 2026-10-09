@@ -465,10 +465,17 @@ export function applyConversationEvent(
         "system",
         `cancelled: ${event.reason}`,
       );
-      // A cancelled turn must not leave a pending request nobody will answer, or
-      // a consumer renders a prompt forever.
-      state.pendingApprovals = [];
-      state.pendingQuestions = [];
+      // A pending request leaves the projection ONLY through the response
+      // that echoes its stable id — never through a turn ending, a projection
+      // refresh, or a reconnect. This used to wipe ALL pending approvals and
+      // questions here, which silently dropped every request belonging to
+      // OTHER turns (a recovered approval whose turn already died, a second
+      // turn's terminal approval) on the strength of one turn being
+      // cancelled. The cancelled turn's own requests are settled the durable
+      // way — the waiter's abort path publishes their `approval.response`
+      // echo — and a request with no waiter at all stays pending and
+      // answerable, which is exactly R4(b)/(d): nobody answering is not the
+      // same as somebody stopping the work.
       return true;
     case "turn.finished":
       markTurnStarted(state, event.id);
@@ -507,10 +514,9 @@ export function applyConversationEvent(
             : event.stopReason === "waiting_human"
               ? "Waiting for a human on a terminal"
               : `turn ${event.stopReason}${event.reason ? `: ${event.reason}` : ""}`;
-      if (event.stopReason !== "done") {
-        state.pendingApprovals = [];
-        state.pendingQuestions = [];
-      }
+      // Same echo discipline as the cancel path: an abnormal stop reason does
+      // not delete OTHER turns' pending requests (or this turn's, if nothing
+      // settled them durably). The response echo is the only removal.
       return true;
     default:
       return false;

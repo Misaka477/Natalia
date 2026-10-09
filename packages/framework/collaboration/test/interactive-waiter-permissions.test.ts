@@ -272,3 +272,25 @@ test("a terminal_low approval never expires", async () => {
   expect(request?.risk).toBe("terminal_low");
   expect(request?.expiresAt).toBeUndefined();
 });
+
+test("an approval request carries its durable tool/turn/call mapping", async () => {
+  // T4-2: the approval-id → (tool, turn, call) mapping used to live only in
+  // the waiter's in-memory work-graph map, so a restart left a recovered
+  // request with no tool name and no turn: the UI could not say what was
+  // being approved and the answer could not be attributed. Both are known
+  // when the request is published, so the journal is the mapping now.
+  const h = harness();
+  await h.waiter.requireApproval(
+    "a",
+    tool("write_file"),
+    call("a", "write_file"),
+    "turn_x",
+  );
+  const request = h.events.find(
+    (event): event is Extract<RuntimeEvent, { type: "approval.request" }> =>
+      event.type === "approval.request",
+  );
+  expect(request?.toolName).toBe("write_file");
+  expect(request?.turnID).toBe("turn_x");
+  expect(request?.toolCallID).toBe("a");
+});

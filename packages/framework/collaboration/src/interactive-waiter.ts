@@ -165,6 +165,12 @@ export function createInteractiveWaiter(
       ...(options?.force ? { allowSession: false, allowProject: false } : {}),
       permissionFamily,
       agentID,
+      // The durable mapping (T4-2): the tool, the turn and the call ride the
+      // request itself. The in-memory work-graph map still exists for the
+      // live path, but a restart no longer erases what was being approved.
+      toolName: tool.name,
+      turnID,
+      toolCallID: call.id,
     });
     try {
       const response = await waitForResponse(
@@ -189,14 +195,18 @@ export function createInteractiveWaiter(
       });
       return { reason: rejectedToolMessage(tool.name, response.feedback) };
     } catch (error) {
-      // A cancellation is a deliberate stop and still ends the turn. A timeout
-      // is not: nobody answered, and discarding the whole turn after a long
-      // wait loses more work than telling the model the request expired. Both
-      // must settle the durable request, or the UI re-opens it forever.
+      // A cancellation is a deliberate stop and still ends the turn. Anything
+      // else is the wait machinery failing to produce an answer — the
+      // fail-closed fourth state (R4's `unavailable`): there is no answerer,
+      // or the answerer failed, and the call is refused with a reason that
+      // says so rather than one that blames a clock that no longer exists.
+      // Both paths must settle the durable request, or the UI re-opens it
+      // forever.
       const aborted = deps.abortSignal(turnID)?.aborted === true;
+      const detail = error instanceof Error ? error.message : String(error);
       const reason = aborted
         ? "turn cancelled before an answer"
-        : "approval expired without an answer";
+        : `approval could not be completed: ${detail}`;
       settleApproval(session, approvalID, reason, agentID);
       if (aborted) throw error;
       deps.publishForSession(session, {
@@ -208,7 +218,7 @@ export function createInteractiveWaiter(
         reason,
         agentID,
       });
-      return { reason: expiredToolMessage(tool.name) };
+      return { reason: approvalUnavailableMessage(tool.name, detail) };
     } finally {
       pendingApprovalRequests.delete(approvalID);
       approvalFamilyByID.delete(approvalID);
@@ -856,7 +866,12 @@ function rejectedToolMessage(toolName: string, feedback?: string) {
 /**
  * An unanswered approval must never read as permission. The model is told the
  * call did not run so it can continue without it rather than assume success.
+ *
+ * No approval expires any more (R4(b)), so the only way to reach this is the
+ * wait machinery itself failing — which is the fourth state, and the wording
+ * says THAT: the approval could not be completed. It is deliberately not
+ * "rejected" (a human did not say no) and not "expired" (no clock ran out).
  */
-function expiredToolMessage(toolName: string) {
-  return `approval for tool "${toolName}" expired without an answer, so the call did not run. Do not assume it was allowed; continue without it or state what you need.`;
+function approvalUnavailableMessage(toolName: string, detail: string) {
+  return `approval for tool "${toolName}" could not be completed (${detail}), so the call did not run. Do not assume it was allowed; the request is settled and can be answered again if the runtime is healthy.`;
 }

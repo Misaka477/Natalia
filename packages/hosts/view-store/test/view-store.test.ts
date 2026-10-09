@@ -1291,7 +1291,14 @@ test("a settled turn releases its streaming buffers", () => {
   ]);
 });
 
-test("a cancelled or failed turn leaves no request nobody will answer", () => {
+test("only a response echo removes a pending request — never a turn ending", () => {
+  // R4's echo discipline: a pending request leaves the projection ONLY through
+  // the response carrying its stable id. A cancelled turn, a failed turn and
+  // a projection refresh must not delete it — and above all must not delete
+  // ANOTHER turn's request. The old behaviour wiped every pending approval on
+  // any abnormal stop, so cancelling turn t1 silently dropped t2's terminal
+  // approval (and a recovered approval whose turn had already died) with no
+  // response anywhere in the journal to explain it.
   const pending: RuntimeEvent[] = [
     submitted("t1", "write it"),
     {
@@ -1305,22 +1312,71 @@ test("a cancelled or failed turn leaves no request nobody will answer", () => {
     ...pending,
     { type: "turn.cancelled", id: "t1", reason: "user cancelled" },
   ]);
-  expect(cancelled.pendingApprovals).toEqual([]);
+  // The request is still pending: nobody answered it, so nothing removed it.
+  expect(cancelled.pendingApprovals.map((item) => item.id)).toEqual(["a1"]);
   expect(cancelled.lastStopReason).toBe("cancelled");
 
   const failed = projectEvents([
     ...pending,
     { type: "turn.finished", id: "t1", stopReason: "error" },
   ]);
-  expect(failed.pendingApprovals).toEqual([]);
+  expect(failed.pendingApprovals.map((item) => item.id)).toEqual(["a1"]);
 
-  // A normal completion is the case where an approval could still be live, so
-  // clearing must be tied to the abnormal stop reasons only.
   const done = projectEvents([
     ...pending,
     { type: "turn.finished", id: "t1", stopReason: "done" },
   ]);
   expect(done.pendingApprovals.map((item) => item.id)).toEqual(["a1"]);
+
+  // The echo is the removal — and ONLY its own id.
+  const echoed = reduceState(done, {
+    type: "approval.response",
+    id: "a1",
+    decision: "once",
+  });
+  expect(echoed.pendingApprovals).toEqual([]);
+});
+
+test("one turn's cancellation does not drop another turn's pending request", () => {
+  // The concrete silent-drop this discipline closes: t2's terminal approval
+  // is a different turn's business, and t1 being cancelled says nothing
+  // about it.
+  let state = projectEvents([
+    submitted("t1", "first"),
+    submitted("t2", "second"),
+    {
+      type: "approval.request",
+      id: "t1:call_a",
+      title: "Approve t1 write",
+      preview: "one",
+    },
+    {
+      type: "approval.request",
+      id: "t2:call_b",
+      title: "Approve t2 terminal write",
+      preview: "two",
+    },
+    { type: "question.request", id: "t2:call_c:question", title: "Which?" },
+  ]);
+  state = reduceState(state, {
+    type: "turn.cancelled",
+    id: "t1",
+    reason: "user cancelled",
+  });
+  expect(state.pendingApprovals.map((item) => item.id)).toEqual([
+    "t1:call_a",
+    "t2:call_b",
+  ]);
+  expect(state.pendingQuestions.map((item) => item.id)).toEqual([
+    "t2:call_c:question",
+  ]);
+  // t1's own request is settled by its echo, like any other.
+  state = reduceState(state, {
+    type: "approval.response",
+    id: "t1:call_a",
+    decision: "reject",
+  });
+  expect(state.pendingApprovals.map((item) => item.id)).toEqual(["t2:call_b"]);
 });
 
 test("reduceState does not mutate the state it was given", () => {

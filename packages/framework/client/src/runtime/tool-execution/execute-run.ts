@@ -120,6 +120,34 @@ export async function runExecuteStage(
     decision: approvalRequired ? "approval_required" : "allow",
   });
   if (approvalRequired) {
+    // The fail-closed fourth state (R4's `unavailable`): an approval is
+    // required and there is no answerer to ask. The call is REFUSED with a
+    // reason that names the missing service — never a raw TypeError from
+    // calling into undefined, and never a silent allow because the funnel
+    // could not run.
+    if (!interactive) {
+      const reason = `tool "${tool.name}" requires approval, but no approval service is composed in this runtime; the call did not run`;
+      publish({
+        type: "tool.update",
+        id: toolID,
+        name: tool.name,
+        callID: call.id,
+        status: "rejected",
+        summary: reason,
+        result: reason,
+        argumentsDelta: call.arguments,
+        endedAt: Date.now(),
+      });
+      publishWorkGraphToolCall(turnID, call.id, tool.name, "rejected");
+      await toolLayer.postExecute({
+        turnID,
+        toolName: tool.name,
+        toolCallID: call.id,
+        arguments: call.arguments,
+        error: reason,
+      });
+      throw new Error(reason);
+    }
     const refusal = await interactive.requireApproval(
       toolID,
       tool,

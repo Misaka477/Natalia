@@ -18,6 +18,18 @@ import { createWorkLedgerController } from "@natalia/work-ledger";
 
 type Published = { session: SessionID; event: RuntimeEvent };
 
+const tool = {
+  name: "write_file",
+  description: "write",
+  requiresApproval: true,
+  parameters: { type: "object", properties: {} },
+  async execute() {
+    return "ok";
+  },
+} as unknown as Parameters<
+  ReturnType<typeof createInteractiveWaiter>["requireApproval"]
+>[1];
+
 function harness(options: {
   attached?: SessionID;
   isPending?: (
@@ -180,4 +192,61 @@ test("a response to a non-pending generic interactive is refused", () => {
     accepted: false,
     reason: "the interactive request is no longer pending",
   });
+});
+
+test("a failed approval wait fails closed as unavailable, not as a rejection", async () => {
+  // R4's fourth state: the approval wait ended WITHOUT an answer and WITHOUT
+  // this turn's cancellation — the machinery failed. The call is refused with
+  // a reason that says the approval could not be completed. It is
+  // deliberately not "rejected" (no human said no) and not "expired" (no
+  // clock runs any more).
+  //
+  // The simulation is faithful to the state, not to a mechanism: the signal
+  // the WAIT listens to aborts, while the signal the catch consults for "was
+  // this turn cancelled" does not. That is exactly "the wait failed for a
+  // reason that was not this turn being stopped".
+  const waitController = new AbortController();
+  let abortReads = 0;
+  const published: Published[] = [];
+  const attached = "ses_a" as SessionID;
+  const waiter = createInteractiveWaiter({
+    publish: (event) => published.push({ session: attached, event }),
+    publishForSession: (session, event) => published.push({ session, event }),
+    sessionID: () => attached,
+    sessionIDForTurn: () => attached,
+    permissionMode: () => "ask",
+    abortSignal: () => {
+      abortReads += 1;
+      // First read is the wait's; every later read (the catch's) sees a
+      // signal that never aborted.
+      return abortReads <= 1 ? waitController.signal : undefined;
+    },
+    activeTurnID: () => undefined,
+    // The request is pending in the journal: that is what lets the failure
+    // settle it durably instead of leaving the UI to re-open it forever.
+    isPending: (_session, id, kind) => kind === "approval" && id === "a1",
+    agentIDForTurn: () => undefined,
+    workLedger: () =>
+      createWorkLedgerController({ openFindingIDs: () => new Set() }),
+  });
+  const pending = waiter.requireApproval(
+    "a1",
+    { ...tool, name: "write_file" },
+    { id: "a1", name: "write_file", arguments: "{}" },
+    "turn_a",
+  );
+  waitController.abort(new Error("the answerer went away"));
+  const refusal = await pending;
+  expect(refusal?.reason).toContain("could not be completed");
+  expect(refusal?.reason).toContain("the answerer went away");
+  // The durable request is settled, so the UI does not re-open it forever —
+  // and its feedback carries the real reason, not a clock or a human "no".
+  const settled = published.find(
+    ({ event }) => event.type === "approval.response",
+  );
+  expect(settled).toBeDefined();
+  if (settled?.event.type === "approval.response") {
+    expect(settled.event.id).toBe("a1");
+    expect(settled.event.feedback).toContain("could not be completed");
+  }
 });

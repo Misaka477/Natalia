@@ -2326,6 +2326,17 @@ type RuntimeEventData =
       /** False when the approval cannot be granted for the whole project. */
       allowProject?: boolean;
       permissionFamily?: import("./permission-families").PermissionFamily;
+      /**
+       * The tool this approval gates, and the turn/call it belongs to — the
+       * durable half of the approval-id mapping. It used to live only in the
+       * waiter's in-memory work-graph map, so after a restart a recovered
+       * request carried no tool name and no turn: the UI could not say what
+       * was being approved, and the answer could not be attributed. Both are
+       * known when the request is published, so the journal is the mapping.
+       */
+      toolName?: string;
+      turnID?: string;
+      toolCallID?: string;
     }
   | {
       type: "approval.response";

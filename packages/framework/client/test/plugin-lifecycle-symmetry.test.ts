@@ -227,3 +227,40 @@ test("installed discovery uses the complete lifecycle", async () => {
   await controller.close();
   assertAbsent(kernel);
 });
+
+test("a plugins.enabled id that resolves to no plugin is reported, not silent (P1-5)", async () => {
+  // The 2026-10-08 audit's P1-5: `natalia-task-module` was in the config yet
+  // proposing it was refused with "unknown plugin id (not in the desired
+  // catalog)". The two lists had drifted apart and nothing said so — the
+  // model found out by being refused.
+  const { root, pluginStoreRoot } = await installedFixture();
+  const kernel = new CapabilityRegistry();
+  const tools = createToolRegistry([]);
+  const events: Array<{ type: string; message?: string }> = [];
+  const controller = createPluginsController({
+    pluginStoreRoot,
+    workspaceRoot: root,
+    tools,
+    capabilityRegistry: kernel,
+    publish: (event) => events.push(event as never),
+  });
+  controller.init();
+  await controller.reconcileDesired([], {
+    packages: {},
+    // An id that is neither a built-in nor installed in the store.
+    enabled: { [pluginID]: true, "natalia-task-module": true },
+  });
+  const dangling = events.find(
+    (event) =>
+      event.type === "diagnostic" &&
+      String(event.message ?? "").includes("natalia-task-module"),
+  );
+  expect(dangling).toBeDefined();
+  expect(String(dangling?.message)).toContain("plugins.enabled names");
+  expect(String(dangling?.message)).toContain(
+    "never enters the desired catalog",
+  );
+  // The catalog itself is unaffected — the real plugin still loaded.
+  expect(controller.catalog().map((entry) => entry.id)).toContain(pluginID);
+  await controller.close();
+});

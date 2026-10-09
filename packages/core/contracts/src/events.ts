@@ -3133,7 +3133,21 @@ export type NativeTerminalOwnershipChange = {
 export type RuntimeNativeTerminalSession = {
   id: string;
   host: "wezterm" | "pty";
+  /**
+   * The pane's identity: the process the controller spawned, named once and
+   * never changed afterwards. A reader correlates a `start` answer with a
+   * later `list`/`observe` row through this, so it must not drift — and it
+   * must not become 0 when the pane exits (the 2026-10-08 audit's P1-11:
+   * `start` reported the bridge pid, the handshake later replaced it with the
+   * shell's pid one higher, and `stop` zeroed it).
+   */
   paneID: number;
+  /**
+   * The shell inside the pane, once its handshake names it. Optional because
+   * it arrives asynchronously; a DIFFERENT fact from `paneID`, not a
+   * correction of it.
+   */
+  shellPID?: number;
   windowID: number;
   muxWindowID: number;
   tabID: number;

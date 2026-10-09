@@ -69,6 +69,12 @@ const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 
 export type PtyProcess = {
   pid: number;
+  /**
+   * The shell inside the pane, once the bridge's `{"pid":N}` handshake names
+   * it — a DIFFERENT process from `pid` (the bridge), which is why the two
+   * are separate fields rather than one that mutates (P1-11).
+   */
+  shellPID?: number;
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
@@ -153,6 +159,14 @@ type PtySession = {
   lastOutputAt?: number;
   lastActivityAt: number;
   pty?: PtyProcess;
+  /**
+   * The pane's identity, frozen at spawn (P1-11). Never changes afterwards,
+   * so `start`, `list` and `observe` name the same pane — and it survives the
+   * pane's exit, where the pty object is dropped.
+   */
+  panePID?: number;
+  /** The shell inside the pane, once its handshake names it. */
+  shellPID?: number;
   disposers: Array<{ dispose(): void }>;
 };
 
@@ -398,6 +412,7 @@ function spawnPtyBridge(
     (event: { exitCode: number; signal?: number }) => void
   >();
   let pid = child.pid;
+  let shellPID: number | undefined;
   let leftover = Buffer.alloc(0);
   let header: { kind: string; size: number } | undefined;
   let exited = false;
@@ -419,7 +434,10 @@ function spawnPtyBridge(
         if (line.startsWith("{")) {
           try {
             const parsed = JSON.parse(line) as { pid?: number };
-            if (typeof parsed.pid === "number") pid = parsed.pid;
+            // The shell inside the pane. `pid` stays the bridge's: the
+            // controller freezes THAT as the pane's identity, so a reader can
+            // correlate start/list/observe (the 2026-10-08 audit's P1-11).
+            if (typeof parsed.pid === "number") shellPID = parsed.pid;
           } catch {
             // ignore malformed handshake
           }
@@ -461,6 +479,9 @@ function spawnPtyBridge(
   return {
     get pid() {
       return pid;
+    },
+    get shellPID() {
+      return shellPID;
     },
     write(data) {
       send({ type: "input", data });
@@ -751,10 +772,21 @@ export function createPtyTerminalController(
   }
 
   function publicSession(session: PtySession): RuntimeNativeTerminalSession {
+    // The handshake's pid, read once when it first appears and then cached:
+    // a fact that arrives asynchronously and does not change afterwards.
+    session.shellPID ??= session.pty?.shellPID;
     return {
       id: session.id,
       host: "pty",
-      paneID: session.pty?.pid ?? 0,
+      // P1-11: the pane's identity, frozen at spawn. It used to read the
+      // live `pty.pid`, which the handshake replaces with the SHELL's pid
+      // once that arrives — so `start` answered the bridge's pid and every
+      // later `list`/`observe` answered the shell's, one higher, and `stop`
+      // zeroed it (the pty object is dropped). A reader cannot correlate a
+      // pane across those three answers, which is exactly what the audit
+      // measured. The handshake's pid rides as its own fact instead.
+      paneID: session.panePID ?? 0,
+      ...(session.shellPID === undefined ? {} : { shellPID: session.shellPID }),
       windowID: 0,
       muxWindowID: 0,
       tabID: 0,
@@ -934,9 +966,16 @@ export function createPtyTerminalController(
       input.settlement?.deliverForSession(session.sessionID!, {
         subject: session.id,
         reason: scrolled ? "scrolled" : "settled",
+        // P1-10: the summary used to read `terminal <id> settled`, which a
+        // reader takes as "that command finished" — while the pane is still
+        // RUNNING (this branch returns early unless it is). The 2026-10-08
+        // audit measured four such notices and had to cross-check with
+        // list+observe each time to learn the terminal was alive. The word
+        // now says what actually happened: the screen went quiet and
+        // changed, and the pane is still running.
         summary: scrolled
-          ? `terminal ${session.id} scrolled a screen of new output`
-          : `terminal ${session.id} settled`,
+          ? `terminal ${session.id} scrolled a screen of new output (still running)`
+          : `terminal ${session.id} went quiet with a new screen (still running; not finished)`,
         sourceKind: SETTLEMENT_SOURCE_KINDS.terminalSettled,
       });
     }, input.frameSettleMs ?? 400);
@@ -1321,6 +1360,10 @@ export function createPtyTerminalController(
       command: startInput.command,
     });
     session.pty = pty;
+    // The pane's identity is the process the controller spawned, captured
+    // once. The handshake below names the shell INSIDE it, which is a
+    // different fact and rides separately.
+    session.panePID = pty.pid;
     session.disposers.push(
       pty.onData((chunk) => {
         appendOutput(session, chunk);

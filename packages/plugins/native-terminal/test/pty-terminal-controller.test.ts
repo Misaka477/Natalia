@@ -16,11 +16,26 @@ function fakePty(): { factory: PtyFactory; processes: PtyProcess[] } {
     const exitListeners = new Set<
       (event: { exitCode: number; signal?: number }) => void
     >();
+    const bridgePID = nextPid++;
+    // The bridge REPLACES its own pid with the shell's once the handshake
+    // arrives (spawnPtyBridge does exactly this), so `pid` reads one value
+    // before and another after — the off-by-one the 2026-10-08 audit
+    // measured (1316127 vs 1316128).
+    let handed = false;
     const process: PtyProcess & {
       emit(data: string): void;
       exit(code?: number): void;
+      handshake(): void;
     } = {
-      pid: nextPid++,
+      get pid() {
+        return handed ? bridgePID + 1 : bridgePID;
+      },
+      get shellPID() {
+        return handed ? bridgePID + 1 : undefined;
+      },
+      handshake() {
+        handed = true;
+      },
       write(data) {
         // A real pty's echo applies ONLCR: the newline reaches the
         // reader as CRLF. The fake mirrors that, so the rendered screen
@@ -930,6 +945,11 @@ test("a quiet pane emits one settled frame notice and stays quiet", async () => 
       sourceKind: "terminal-settled",
     },
   });
+  // P1-10: the notice's WORD must not claim the pane finished — it is still
+  // running (the audit read four `terminal … settled` notices as "done" and
+  // had to cross-check with list+observe each time).
+  expect(String(notices[0]!.notice.summary)).toContain("still running");
+  expect(String(notices[0]!.notice.summary)).toContain("not finished");
   // The same screen after another quiet window: no second notice.
   (processes[0] as PtyProcess & { emit(data: string): void }).emit("");
   await Bun.sleep(80);
@@ -1353,5 +1373,53 @@ test("observe is the model's waiting face, and it agrees with read across a resi
   // And snapshot — whose tool description tells the model to use it "to check
   // where you are" — is a MODEL face too, so it agrees as well.
   expect((await controller.snapshot(started.id)).text).toContain("answer");
+  await controller.close();
+});
+
+test("a pane's identity is stable across start, list and stop (P1-11)", async () => {
+  // The 2026-10-08 audit's P1-11: `start` answered one paneID and every
+  // later `list`/`observe` answered another one higher, and `stop` reported
+  // 0 — so a caller could not correlate a pane across its own lifecycle.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pty-identity-"));
+  const { factory, processes } = fakePty();
+  const controller = createPtyTerminalController(
+    controllerInput(root, factory),
+  );
+  const started = await controller.start({
+    command: "bash",
+    cwd: root,
+    id: "term_identity",
+    sessionID: "ses_identity",
+  });
+  const atStart = started.paneID;
+  expect(atStart).toBeGreaterThan(0);
+  // Before the handshake the shell's pid is unknown — honestly so, rather
+  // than a paneID that will change under the reader.
+  expect(started.shellPID).toBeUndefined();
+  // The handshake lands: the bridge now reports the shell's pid, one higher.
+  (processes[0] as PtyProcess & { handshake(): void }).handshake();
+  // The same pane, read later: the identity holds.
+  const listed = (await controller.list("ses_identity")).find(
+    (session) => session.id === "term_identity",
+  );
+  // The identity is unchanged — and the shell's pid is a SEPARATE fact that
+  // differs from it by one, exactly as the audit measured.
+  expect(listed?.paneID).toBe(atStart);
+  expect(listed?.shellPID).toBe(atStart + 1);
+  // observe answers the pane's FRAME, so the identity check lives on the
+  // session surfaces — which is what a reader correlates through anyway.
+  expect(
+    (await controller.observe("term_identity", 0, { timeoutMs: 50 })).session
+      .revision,
+  ).toBeGreaterThanOrEqual(0);
+  // After the pane exits the identity still names it — the pty object is
+  // dropped, which used to zero the field.
+  (processes[0] as PtyProcess & { exit(code?: number): void }).exit(0);
+  await Bun.sleep(20);
+  const afterExit = (await controller.list("ses_identity")).find(
+    (session) => session.id === "term_identity",
+  );
+  expect(afterExit?.paneID).toBe(atStart);
+  expect(afterExit?.status).toBe("exited");
   await controller.close();
 });

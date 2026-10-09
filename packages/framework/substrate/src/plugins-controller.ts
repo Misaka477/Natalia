@@ -114,6 +114,37 @@ export function createPluginsController(input: {
     });
   }
 
+  /**
+   * A `plugins.enabled` id that resolved to NO catalog entry (P1-5).
+   *
+   * The 2026-10-08 audit hit this from the model's side: proposing
+   * `natalia-task-module` — an id the config carries — was refused with
+   * `unknown plugin id … (not in the desired catalog)`. The two lists had
+   * drifted apart silently: an id in the config that is neither a built-in
+   * nor installed in the plugin store simply never enters the catalog, and
+   * nothing said so. The drift is now REPORTED where it happens, once per
+   * reconcile, instead of surfacing later as an unexplainable refusal.
+   */
+  function reportDanglingEnabledIDs(
+    enabled: Record<string, boolean> | undefined,
+    entries: readonly { id: string }[],
+  ) {
+    if (!enabled) return;
+    const known = new Set(entries.map((entry) => entry.id));
+    const dangling = Object.keys(enabled).filter((id) => !known.has(id));
+    if (!dangling.length) return;
+    input.publish({
+      type: "diagnostic",
+      level: "warning",
+      owner: "plugins",
+      message:
+        `plugins.enabled names ${dangling.length} id(s) that resolve to no plugin: ` +
+        `${dangling.sort().join(", ")}. Such an id is neither a built-in nor ` +
+        `installed in the plugin store, so it never enters the desired catalog ` +
+        `and any tool that takes a plugin id will refuse it.`,
+    });
+  }
+
   async function reconcileDesired(
     injectedEntries: DesiredPluginEntry[],
     config: PluginConfigSnapshot,
@@ -149,6 +180,7 @@ export function createPluginsController(input: {
       // The resolved catalog is the runtime's plugin composition: the
       // generation record snapshots it by identity and fingerprint.
       lastCatalog = catalog.entries;
+      reportDanglingEnabledIDs(snapshot.enabled, catalog.entries);
       return catalog;
     }, snapshot.settings);
   }

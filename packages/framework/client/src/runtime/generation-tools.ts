@@ -179,7 +179,22 @@ export function createProposeGenerationTool(ctx: RuntimeContext): RuntimeTool {
       for (const override of args.plugins ?? []) {
         const target = catalog.find((entry) => entry.id === override.id);
         if (!target)
-          return `unknown plugin id: ${override.id} (not in the desired catalog)`;
+          // P1-5: the refusal used to stop at "not in the desired catalog",
+          // leaving the model to guess what the catalog DOES contain — the
+          // 2026-10-08 audit lost a round to exactly that. The answer now
+          // names the ids, and says where an id would have to come from.
+          return (
+            `unknown plugin id: ${override.id} (not in the desired catalog). ` +
+            `The catalog holds ${catalog.length} plugin(s): ` +
+            `${
+              catalog
+                .map((entry) => entry.id)
+                .sort()
+                .join(", ") || "(none)"
+            }. ` +
+            `An id enters it by being a built-in or by being installed in the ` +
+            `plugin store; a plugins.enabled entry alone does not.`
+          );
         target.enabled = override.enabled;
       }
       const candidate = buildGeneration({

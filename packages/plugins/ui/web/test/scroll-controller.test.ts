@@ -292,6 +292,17 @@ test("a message's own body carries no height bound and no inner scrollbar", () =
   const body = rule(".natalia-message-body");
   expect(body).not.toContain("max-height");
   expect(body).not.toContain("overflow");
+  // AND there is exactly one rule for it. The 2026-10-10 hunt's last trap: a
+  // SECOND `.natalia-message-text` rule sat later in the sheet with
+  // `max-height: 860px; overflow-y: auto`, overriding the first — so fixing the
+  // first changed nothing on screen. A rule that only holds when it is the only
+  // one is not a rule; the count is pinned.
+  // The rule that survives is the one just checked (it is grouped with
+  // `.natalia-thinking-text`), and no other standalone one exists.
+  const standalone = css.split(".natalia-message-text {").length - 1;
+  expect(standalone).toBe(0);
+  expect(css).not.toContain("max-height: 860px");
+  expect(css).not.toContain("max-height: 420px");
   // The composer is the one box that legitimately bounds itself (the input
   // grows to a cap, the way the reference implementation's does).
   expect(rule(".natalia-composer-textarea")).toContain("max-height");

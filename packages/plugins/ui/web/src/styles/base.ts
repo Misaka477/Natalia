@@ -5532,14 +5532,14 @@ button.wg-node-row:hover {
   max-width: 100%;
   overflow-wrap: break-word;
 }
-/* Scroll Phase 5: the markdown body is clamped to the fixed-height row model's
-   line budget (MAX_MARKDOWN_BODY_LINES) so the rendered row matches the
-   deterministic fixedRowHeight estimate and the virtualizer needs no DOM
-   measurement. Overflow scrolls within the bounded row. */
-.natalia-message-text {
-  max-height: 860px;
-  overflow-y: auto;
-}
+/* Scroll Phase 5's clamp, removed on 2026-10-10 (the user's ruling, third
+   screenshot): the markdown body was clamped to the fixed-height row model's
+   line budget so the rendered row matched the deterministic fixedRowHeight
+   estimate and the virtualizer needed no DOM measurement -- and the cost was a
+   fixed box with an inner scrollbar in the middle of every long reply. The row
+   model it served is gone with it (fixedRowHeight is the content's real height
+   now), so there is nothing left for this to match. A reply renders at its own
+   height and the conversation's single scrollbar is the pane's. */
 .natalia-message-header,
 .natalia-message-meta,
 .natalia-tool-header {

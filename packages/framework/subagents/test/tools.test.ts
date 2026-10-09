@@ -90,7 +90,8 @@ test("agent_stop projects stopping and stopped/not-running result", () => {
   expect(stopped.summary).toBe("stopped");
   const protectedResult = tool.output!.presentResult!(
     { id: "a1", reason: "still active" },
-    "Protected a1",
+    // P1-3: the refusal names how to get past it.
+    "Protected a1 (still active; retry with force=true to interrupt it)",
   )!;
   expect(protectedResult.summary).toBe("protected · agent still active");
   const forced = tool.output!.presentResult!(
@@ -514,4 +515,46 @@ test("no agent tool requires an argument its schema does not declare", () => {
         `${tool.name} requires "${field}" without declaring it`,
       ).toBeDefined();
   }
+});
+
+test("agent_message reports an undeliverable message as such (P1-4)", () => {
+  // The 2026-10-08 audit: a message to a COMPLETED agent answered
+  // {"route":"queued"} — a success that could never be delivered, because a
+  // terminal agent can neither be resumed nor retried.
+  const tool = agentTools().find((t) => t.name === "agent_message")!;
+  const card = tool.output!.presentResult!(
+    { id: "a1", description: "steer", message: "stop" },
+    JSON.stringify({
+      route: "undeliverable",
+      status: "completed",
+      reason: "subagent a1 is completed; it can neither be resumed nor retried",
+    }),
+  )!;
+  expect(card).toMatchObject({
+    kind: "generic",
+    title: "subagent",
+    summary: "undeliverable · completed",
+    body: "subagent a1 is completed; it can neither be resumed nor retried",
+  });
+  // A live delivery still reads as a delivery.
+  const live = tool.output!.presentResult!(
+    { id: "a1", description: "steer", message: "stop" },
+    JSON.stringify({ route: "delivered" }),
+  )!;
+  expect(live.summary).toBe("message delivered");
+});
+
+test("agent_stop's refusal names how to get past it (P1-3)", async () => {
+  // The 2026-10-08 audit hit `Protected a3` twice and had to GUESS that
+  // `force` existed. The sentence the model reads must say so.
+  const stop = agentTools().find((t) => t.name === "agent_stop")!;
+  const answer = await stop.execute({ id: "a3", reason: "stalled" }, {
+    workspaceRoot: "/tmp",
+    subagents: {
+      requestStop: () => ({ outcome: "protected", id: "a3" }),
+    } as never,
+  } as never);
+  expect(answer).toBe(
+    "Protected a3 (still active; retry with force=true to interrupt it)",
+  );
 });

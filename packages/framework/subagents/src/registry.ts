@@ -317,7 +317,11 @@ export class SubagentRegistry {
     id: SubagentID,
     message: string,
     callerSession?: string,
-  ): Promise<{ route: string }> {
+  ): Promise<{
+    route: string;
+    status?: string;
+    reason?: string;
+  }> {
     const record = this.records.get(id);
     if (!record) return { route: "not_found" };
     // Only the parent may steer: anything else is a stranger that has no
@@ -330,6 +334,16 @@ export class SubagentRegistry {
       throw new Error(
         `subagent ${id} belongs to another session; only its parent may steer it`,
       );
+    // P1-4: a TERMINAL agent can never be resumed or retried, so a message
+    // queued for it is a dead letter — the 2026-10-08 audit sent one to a
+    // completed agent and got `{"route":"queued"}`, a success that could
+    // never be delivered. Say so, and say what the agent's real state is.
+    if (["completed", "failed", "stopped"].includes(record.status))
+      return {
+        route: "undeliverable",
+        status: record.status,
+        reason: `subagent ${id} is ${record.status}; it can neither be resumed nor retried, so this message will never be delivered`,
+      };
     const routed = this.steerHooks.get(id)?.(message);
     if (routed) return { route: routed };
     this.setPendingMessages(id, [...(record.pendingMessages ?? []), message]);

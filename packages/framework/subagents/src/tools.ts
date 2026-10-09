@@ -383,7 +383,10 @@ function agentStopTool(): RuntimeTool {
             ? `Stopped ${id} (force interrupted an active agent)`
             : `Stopped ${id}`;
         case "protected":
-          return `Protected ${id}`;
+          // P1-3: the refusal used to be `Protected a3` — a reader could not
+          // tell it was REFUSABLE, let alone how. The 2026-10-08 audit hit
+          // exactly this twice and had to discover `force` by guessing.
+          return `Protected ${id} (still active; retry with force=true to interrupt it)`;
         case "not_found":
           return "Agent not found";
         case "not_running":
@@ -688,7 +691,20 @@ function agentMessageTool(): RuntimeTool {
         };
       },
       presentResult(_args, value) {
-        const parsed = JSON.parse(value) as { route?: string } | null;
+        const parsed = JSON.parse(value) as {
+          route?: string;
+          status?: string;
+          reason?: string;
+        } | null;
+        // P1-4: an undeliverable message reads as what it is, with the
+        // agent's real state — not as "message queued".
+        if (parsed?.route === "undeliverable")
+          return {
+            kind: "generic",
+            title: "subagent",
+            summary: `undeliverable · ${parsed.status ?? "terminal"}`,
+            body: parsed.reason,
+          };
         return {
           kind: "generic",
           title: "subagent",

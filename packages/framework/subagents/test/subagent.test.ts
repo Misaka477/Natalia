@@ -1088,3 +1088,30 @@ test("a registry that never persisted restores nothing, and the poll says so", a
   // about giving the durable store time, never about inventing records.
   expect(restored).toEqual([]);
 });
+
+test("a message to a terminal agent is a dead letter, not a queued success (P1-4)", async () => {
+  // The 2026-10-08 audit sent a message to a COMPLETED agent and got
+  // {"route":"queued"}; that agent can neither be resumed nor retried, so the
+  // message could never be delivered — and nothing said so.
+  const registry = new SubagentRegistry({
+    runner: immediateRunner,
+    workDir: await tempDir(),
+  });
+  const record = await registry.spawn("finish", {
+    parentSessionID: "ses_owner",
+  });
+  // Complete it the way the runtime does.
+  registry.stop(record.id);
+  const answer = await registry.sendMessage(
+    record.id,
+    "one more thing",
+    "ses_owner",
+  );
+  expect(answer).toMatchObject({
+    route: "undeliverable",
+    status: "completed",
+  });
+  expect(answer.reason).toContain("never be delivered");
+  // Nothing was queued for it.
+  expect(registry.get(record.id)?.pendingMessages).toBeUndefined();
+});

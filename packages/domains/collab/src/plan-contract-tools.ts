@@ -914,8 +914,16 @@ export function createConstitutionRuleReadTool(
       if (!ruleID) return "constitution_rule_read requires ruleID";
       const exec = resolveExec(ctx, context.sessionID);
       if (!exec) return "no session";
-      const rules = await sessionConstitutionRules(ctx, exec);
-      const active = rules.find((rule) => rule.ruleID === ruleID);
+      // The workspace-tier fold, not only this session's. A rule proposed and
+      // approved in an EARLIER session (or by the CLI face) lives in the
+      // instance store, so reading only the session fold answered `unknown`
+      // for a rule that exists — the 2026-10-08 audit's P1-1, measured on
+      // `C-TERM-001` (real) and `C-NOPE-999` (fabricated) answering alike.
+      const views = governanceViews(ctx.ports.getWorkspaceRoot());
+      const sessionRules = await sessionConstitutionRules(ctx, exec);
+      const active =
+        sessionRules.find((rule) => rule.ruleID === ruleID) ??
+        views.rules.find((rule) => rule.ruleID === ruleID);
       if (active)
         return JSON.stringify({
           status: "active",
@@ -931,25 +939,32 @@ export function createConstitutionRuleReadTool(
             ...(active.appliesTo ? { appliesTo: active.appliesTo } : {}),
           },
         });
-      // The disabled face is not in the effective projection, so the fold's
-      // own state is consulted directly.
-      const factState = exec.factState;
-      if (factState?.constitution.disabled.has(ruleID))
+      // The disabled face is not in the effective projection, so the folds'
+      // own state is consulted directly — the instance fold first, because a
+      // rule disabled in another session is disabled here too.
+      const disabled =
+        views.disabled.find((rule) => rule.ruleID === ruleID) ??
+        (exec.factState?.constitution.disabled.has(ruleID)
+          ? exec.factState.constitution.rules.get(ruleID)
+          : undefined);
+      if (disabled)
         return JSON.stringify({
           status: "disabled",
-          rule: factState.constitution.rules.get(ruleID)
-            ? {
-                ruleID,
-                statement: factState.constitution.rules.get(ruleID)!.statement,
-                enforcement:
-                  factState.constitution.rules.get(ruleID)!.enforcement,
-                scope: factState.constitution.rules.get(ruleID)!.scope,
-                priority: factState.constitution.rules.get(ruleID)!.priority,
-                source: factState.constitution.rules.get(ruleID)!.source,
-              }
-            : undefined,
+          rule: {
+            ruleID,
+            statement: disabled.statement,
+            enforcement: disabled.enforcement,
+            scope: disabled.scope,
+            priority: disabled.priority,
+            source: disabled.source,
+            ...(disabled.proposedBy === undefined
+              ? {}
+              : { proposedBy: disabled.proposedBy }),
+            ...(disabled.approvedBy === undefined
+              ? {}
+              : { approvedBy: disabled.approvedBy }),
+          },
         });
-      const views = governanceViews(ctx.ports.getWorkspaceRoot());
       const removed = views.removed.find((entry) => entry.ruleID === ruleID);
       if (removed)
         return JSON.stringify({
@@ -957,6 +972,15 @@ export function createConstitutionRuleReadTool(
           ruleID,
           removedAt: removed.at,
           removedBy: removed.removedBy,
+        });
+      // An unreadable store is not an absent rule. Saying `unknown` for both
+      // is what made the audit's two probes indistinguishable.
+      if (views.degraded)
+        return JSON.stringify({
+          status: "unreadable",
+          ruleID,
+          reason:
+            "the workspace constitution store could not be read — this is a read failure, not an absent rule",
         });
       return JSON.stringify({ status: "unknown", ruleID });
     },

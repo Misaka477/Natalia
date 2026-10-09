@@ -49,15 +49,33 @@ export function collaborationTools(
     async onAcknowledge(messageIDs, context) {
       const sessionID = context.sessionID as SessionID | undefined;
       const events = sessionEvents(sessionID);
-      if (!sessionID || !events) return;
+      const acknowledged: string[] = [];
+      const skipped: Array<{
+        messageID: string;
+        reason: "unknown" | "not_delivered";
+      }> = [];
+      if (!sessionID || !events)
+        return {
+          acknowledged,
+          skipped: messageIDs.map((messageID) => ({
+            messageID,
+            reason: "unknown" as const,
+          })),
+        };
       const at = new Date().toISOString();
+      const messages = projectedMailboxMessages(events);
       for (const messageID of messageIDs) {
-        const message = projectedMailboxMessages(events).find(
-          (candidate) =>
-            candidate.messageID === messageID &&
-            candidate.status === "delivered",
+        const message = messages.find(
+          (candidate) => candidate.messageID === messageID,
         );
-        if (!message) continue;
+        if (!message) {
+          skipped.push({ messageID, reason: "unknown" });
+          continue;
+        }
+        if (message.status !== "delivered") {
+          skipped.push({ messageID, reason: "not_delivered" });
+          continue;
+        }
         ports.publish(
           sessionID,
           buildMailboxStatus({
@@ -67,7 +85,9 @@ export function collaborationTools(
             at,
           }),
         );
+        acknowledged.push(messageID);
       }
+      return { acknowledged, skipped };
     },
   });
 

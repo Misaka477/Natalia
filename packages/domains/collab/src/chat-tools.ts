@@ -480,7 +480,9 @@ export function createChatTools(ctx: RuntimeContext) {
         visible.push(
           tool.name === "run_shell"
             ? withCollaboratorShellPolicy(tool, "Navi")
-            : tool,
+            : tool.name === "plan_propose"
+              ? withNaviPlanHandoff(tool)
+              : tool,
         );
     visible.push(
       {
@@ -982,6 +984,23 @@ export function createChatTools(ctx: RuntimeContext) {
     // is already fixed, but registry insertion order can shift with plugin
     // load/unload; sort by name so the set and order stay stable across turns.
     return stableToolOrder(visible);
+  }
+
+  /**
+   * Navi's `plan_propose`: the shared instance's description is
+   * surface-agnostic (the main agent is told the accepted plan is routed,
+   * because it has no mailbox tool), and Navi is the one surface that HOLDS
+   * `mailbox_send` — so her copy is the one that names it. The 2026-10-10
+   * sweep's F6: the main agent was told to call a tool it does not have.
+   */
+  function withNaviPlanHandoff(tool: RuntimeTool): RuntimeTool {
+    return {
+      ...tool,
+      description: tool.description.replace(
+        "When accepted, the runtime routes the accepted plan to Natalia — you are done with this plan.",
+        "When accepted, hand the plan off with mailbox_send next_plan_handoff (Navi's own mailbox tool).",
+      ),
+    };
   }
 
   function withCollaboratorShellPolicy(

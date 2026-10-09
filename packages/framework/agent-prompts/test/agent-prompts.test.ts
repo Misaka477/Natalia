@@ -30,28 +30,100 @@ test("extra static text is appended after the persona", () => {
   expect(prompt.endsWith("Use the tools for filesystem work.")).toBe(true);
 });
 
-test("Navi and Nia are wired to the read-only context tools (Phase2b-2)", () => {
-  // The RINA study's prompt wiring: both sisters search the structured
-  // memory first and page the transcript only for exact wording. The five
-  // tool names are the contract between the prompt and the registry.
+test("each agent's prompt names only the tools its surface holds (2026-10-10)", () => {
+  // The 2026-10-10 sweep's finding: Nia's prompt named five cold-vault
+  // context tools her surface never received, and the main agent's
+  // `plan_propose` told it to hand off with `mailbox_send` — a tool only
+  // Navi holds. An agent sees its own surface and nothing else: a prompt
+  // naming a tool the registry does not hand that agent is a lie the model
+  // pays for.
+  const held = {
+    navi: [
+      "read_file",
+      "glob",
+      "grep",
+      "web_fetch",
+      "web_search",
+      "session_history",
+      "work_contract_read",
+      "work_graph_query",
+      "plan_propose",
+      "run_shell",
+      "session_snapshot",
+      "mailbox_status",
+      "collab_chat",
+      "mailbox_send",
+      "mailbox_cancel",
+      "collab_suggest",
+      "collab_answer",
+      "plan_doc_read",
+      "plan_doc_list",
+      "plan_doc_write",
+    ],
+    nia: [
+      "read_file",
+      "glob",
+      "grep",
+      "web_fetch",
+      "web_search",
+      "session_history",
+      "work_contract_read",
+      "work_graph_query",
+      "run_shell",
+      "session_snapshot",
+      "mailbox_status",
+      "collab_chat",
+      "audit_report",
+      "diff_workspace",
+      "plan_doc_read",
+      "plan_doc_list",
+      "plan_doc_write",
+    ],
+    main: [
+      "read_file",
+      "glob",
+      "grep",
+      "web_fetch",
+      "web_search",
+      "session_history",
+      "work_contract_read",
+      "work_graph_query",
+      "plan_propose",
+      "plan_doc_read",
+      "plan_doc_tick",
+      "plan_pause",
+      "record_validation",
+      "record_completion",
+      "todo_read",
+      "todo_write",
+      "ask_user",
+    ],
+  } as const;
+  // The cold-vault tools are the main agent's alone.
+  const mainOnly = [
+    "context_search",
+    "context_list",
+    "context_read",
+    "context_history",
+    "context_pack",
+  ];
   for (const agent of ["navi", "nia"] as const) {
     const prompt = agentSystemPrompt(agent);
-    for (const tool of [
-      "context_search",
-      "context_list",
-      "context_read",
-      "context_history",
-      "context_pack",
-    ])
-      expect(prompt).toContain(tool);
-    // Retrieval-first: the context tools precede the transcript fallback.
-    expect(prompt).toContain("context tools first");
-    // The honest degradation: no vault -> page the log instead.
-    expect(prompt).toContain("vault_unavailable");
-    expect(prompt).toContain("session_history");
-    // The isolation rule the tools enforce is stated to the model too.
-    expect(prompt).toContain("another session is refused");
+    for (const tool of held[agent])
+      expect(prompt, `${agent} must be told about ${tool}`).toContain(tool);
+    for (const tool of mainOnly)
+      expect(prompt, `${agent} must NOT be told about ${tool}`).not.toContain(
+        tool,
+      );
+    // And the surface is stated as its own, not as someone else's.
+    expect(prompt).toContain("YOUR tools");
   }
+  // The main agent's prompt is persona-level and does not enumerate its
+  // catalogue (the catalogue itself is the surface it sees); what matters is
+  // that it never names another agent's tool.
+  const main = agentSystemPrompt("natalia");
+  for (const tool of ["mailbox_send", "mailbox_cancel", "collab_suggest"])
+    expect(main, `main must NOT be told about ${tool}`).not.toContain(tool);
 });
 
 test("all three agents carry a Chinese name — the family is not two-thirds named", () => {

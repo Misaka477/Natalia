@@ -117,11 +117,33 @@ function correctAbsorbedDrift(
  * change invalidates the *draft* (the projection marks it stale), never a
  * user-approved contract.
  */
-export function createPlanProposeTool(ctx: RuntimeContext): RuntimeTool {
+export function createPlanProposeTool(
+  ctx: RuntimeContext,
+  input?: {
+    /**
+     * What to do once the proposal is accepted. Only a surface that HOLDS
+     * `mailbox_send` may name it: the 2026-10-10 sweep found the main agent
+     * being told to hand off with a tool it does not have (F6), and Nia's
+     * prompt naming five context tools her surface never received. An agent
+     * sees its own surface, and nothing else.
+     */
+    handoff?: string;
+  },
+): RuntimeTool {
+  const handoff =
+    input?.handoff ??
+    // The default is the surface-agnostic form: the plan is accepted and the
+    // runtime routes it. A caller that holds the mailbox tool passes the
+    // mailbox sentence instead.
+    "When accepted, the runtime routes the accepted plan to Natalia — you are done with this plan.";
+  // The accepted answer's hint obeys the same rule as the description.
+  const handoffHint =
+    input?.handoff === undefined
+      ? "the accepted plan is routed to Natalia by the runtime"
+      : "hand the plan off with mailbox_send next_plan_handoff with this relatedPlanID";
   return {
     name: "plan_propose",
-    description:
-      "Propose the WorkContract (scope/verification/constraints) for a marked plan document and request the user's approval. Extract the fields from the plan you just wrote — grounding, not invention. Placeholder entries (single characters or pure generic words like all/everything/相关) are rejected; an all-empty proposal is accepted as unverifiable (advisory-only). A scope entry that names a path a deny constitution rule covers is also rejected before the gate — re-propose within the rule. This tool blocks until the user Allow / Reject; on Reject you get the feedback and can re-propose. When accepted, hand the plan off with mailbox_send next_plan_handoff.",
+    description: `Propose the WorkContract (scope/verification/constraints) for a marked plan document and request the user's approval. Extract the fields from the plan you just wrote — grounding, not invention. Placeholder entries (single characters or pure generic words like all/everything/相关) are rejected; an all-empty proposal is accepted as unverifiable (advisory-only). A scope entry that names a path a deny constitution rule covers is also rejected before the gate — re-propose within the rule. This tool blocks until the user Allow / Reject; on Reject you get the feedback and can re-propose. ${handoff}`,
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -291,7 +313,7 @@ export function createPlanProposeTool(ctx: RuntimeContext): RuntimeTool {
           ...(unverifiable ? { unverifiable: true } : {}),
         },
         ...(unverifiable ? { unverifiable: true } : {}),
-        hint: "hand the plan off with mailbox_send next_plan_handoff with this relatedPlanID",
+        hint: handoffHint,
       });
     },
   };

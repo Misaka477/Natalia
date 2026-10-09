@@ -176,3 +176,32 @@ test("a Nia who never reports fails with a timeout, never a hang", async () => {
     await cleanup();
   }
 }, 40_000);
+
+test("the audit document never carries the candidate's credentials (P0-1)", async () => {
+  // The 2026-10-08 audit's P0-1: this face writes a Markdown document INTO
+  // THE WORKSPACE, and the candidate's config carries the live providers'
+  // keys. `security.redactToolOutput` had not saved it — that flag guards the
+  // tool-output layer, not files on disk. The document is redacted before the
+  // write, and gated after.
+  const { client, capture, cleanup } = await attach("passed");
+  let path = "";
+  try {
+    const check = await niaFace(client, {
+      timeoutMs: 20_000,
+      onAuditPlan: (_planID, planPath) => {
+        capture.planID = _planID;
+        path = planPath;
+      },
+    })(candidate());
+    expect(check.ok).toBe(true);
+    const doc = await client.planDocRead!({ planID: capture.planID });
+    // The key the candidate carried is nowhere in the document.
+    expect(doc.content).not.toContain("test-secret");
+    expect(doc.content).toContain("[REDACTED]");
+    // The document is still a readable, valid plan.
+    expect(doc.content).toContain("## Config");
+    expect(doc.content).toContain('"apiKey"');
+  } finally {
+    await cleanup();
+  }
+});

@@ -9,6 +9,7 @@ import type {
   RuntimeReasoningEffort,
   SessionID,
 } from "@anthelia/contracts";
+import { redactCredentials } from "@anthelia/contracts";
 import {
   projectedNaviChatMessages,
   projectedNiaChatMessages,
@@ -94,12 +95,12 @@ type StreamSurface = {
 };
 type RuntimeClientSurface = RuntimeServiceClient;
 
+// The shared redactor (P0-1): one regex set, in contracts, covering the JSON
+// shape a stringified config produces as well as the bare `key: value` this
+// local copy used to handle. The local copy missed `"apiKey": "sk-…"` — which
+// is exactly how a generation snapshot carried live keys into a file.
 function redactToolOutput(output: string) {
-  return output.replace(
-    /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*[^\s]+/giu,
-    (match) =>
-      `${match.slice(0, match.indexOf("=") >= 0 ? match.indexOf("=") + 1 : match.indexOf(":") + 1)}[REDACTED]`,
-  );
+  return redactCredentials(output);
 }
 
 async function streamExec(ctx: RuntimeContext, sessionID?: string) {

@@ -7,7 +7,11 @@ import type {
   VerificationFace,
 } from "@anthelia/composition";
 import type { StreamingProvider } from "@anthelia/runtime";
-import { configV3Schema } from "@anthelia/contracts";
+import {
+  configV3Schema,
+  credentialSafeText,
+  redactCredentials,
+} from "@anthelia/contracts";
 import { resolveConfig } from "@anthelia/config";
 import { createRealRuntimeClient } from "./main";
 
@@ -57,7 +61,13 @@ export function smokeFace(options: { timeoutMs?: number } = {}) {
     const workspaceRoot = join(base, "workspace");
     const configPath = join(base, "config.json");
     await mkdir(workspaceRoot, { recursive: true });
-    await writeFile(configPath, JSON.stringify(generation.config, null, 2));
+    // The smoke runs a scripted provider, so the candidate's real provider
+    // keys are never used — and a temp file outside the workspace is still a
+    // file. Redact before writing (P0-1): the config validates either way.
+    await writeFile(
+      configPath,
+      redactCredentials(JSON.stringify(generation.config, null, 2)),
+    );
     const events: RuntimeEvent[] = [];
     let client: ReturnType<typeof createRealRuntimeClient> | undefined;
     try {
@@ -235,10 +245,24 @@ export function niaFace(
       "```",
       "",
     ].join("\n");
+    // P0-1: this document lands IN THE WORKSPACE as a Markdown file a model
+    // reads and audits. The candidate's config carries the live providers'
+    // keys (mergeConfig copies the running config), and the 2026-10-08 audit
+    // found three live apiKey values in exactly this file — `redactToolOutput`
+    // had not saved it, because that flag guards the tool-output layer, not
+    // files on disk. Redact first, then GATE: if a credential survives, the
+    // write is refused rather than persisted.
+    const safe = credentialSafeText(summary);
+    if (!safe.ok)
+      return {
+        check: "nia",
+        ok: false,
+        detail: `refusing to write the audit document: ${safe.reason}`,
+      };
     try {
       await client.planDocWrite!({
         path,
-        content: summary,
+        content: safe.text,
         title: "Generation audit",
       });
       const marked = await client.planDocMark!({

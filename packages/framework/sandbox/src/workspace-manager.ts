@@ -33,6 +33,10 @@ export type SandboxManifest = {
   changedFiles: SandboxChange[];
   runningResources: string[];
   envAllowlist: string[];
+  /** When the sandbox was created (ISO). */
+  createdAt: string;
+  /** When anything last happened to it (ISO): the TTL reads this. */
+  updatedAt: string;
 };
 
 export type SandboxResourceInfo = {
@@ -115,6 +119,7 @@ export class WorkspaceSandboxManager
     await this.initialize();
     const root = resolve(this.baseRoot, id);
     await mkdir(root, { recursive: true });
+    const now = new Date().toISOString();
     const manifest: SandboxManifest = {
       id,
       root,
@@ -122,6 +127,8 @@ export class WorkspaceSandboxManager
       changedFiles: [],
       runningResources: [],
       envAllowlist: ["PATH", "HOME", "LANG", "TERM"],
+      createdAt: now,
+      updatedAt: now,
     };
     this.sandboxes.set(id, manifest);
     await this.persist(manifest);
@@ -466,6 +473,41 @@ export class WorkspaceSandboxManager
     }
   }
 
+  /**
+   * Collect the sandboxes the TTL and the cap name (P2-18).
+   *
+   * A sandbox with UNMERGED changes is never collected — that is a reader's
+   * unfinished work, not garbage — and neither is one with running
+   * resources. Returns the ids it deleted, so a caller can say what happened.
+   */
+  async collectIdle(input: {
+    maxIdleHours: number;
+    maxSandboxes?: number;
+  }): Promise<string[]> {
+    await this.initialize();
+    const now = Date.now();
+    const idleBefore =
+      input.maxIdleHours > 0 ? now - input.maxIdleHours * 3_600_000 : undefined;
+    const candidates = [...this.sandboxes.values()]
+      .filter((manifest) => manifest.changedFiles.length === 0)
+      .filter((manifest) => manifest.runningResources.length === 0)
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+    const collected: string[] = [];
+    const cap = input.maxSandboxes ?? 0;
+    for (const manifest of candidates) {
+      const idle =
+        idleBefore !== undefined && Date.parse(manifest.updatedAt) < idleBefore;
+      // The cap counts EVERY sandbox, so the clean ones go first until the
+      // workspace is back under it — a dirty one is simply not a candidate,
+      // it is never collected.
+      const overCap = cap > 0 && this.sandboxes.size - collected.length > cap;
+      if (!idle && !overCap) continue;
+      collected.push(manifest.id);
+    }
+    for (const id of collected) await this.delete(id);
+    return collected;
+  }
+
   async delete(id: string) {
     await this.initialize();
     const manifest = this.mustGet(id);
@@ -586,6 +628,9 @@ export class WorkspaceSandboxManager
   }
 
   private async persist(manifest: SandboxManifest) {
+    // Every write to a manifest is activity: the TTL reads this, so a
+    // sandbox someone is working in is never collected as idle.
+    manifest.updatedAt = new Date().toISOString();
     await mkdir(manifest.root, { recursive: true, mode: 0o700 });
     await writeFile(
       join(manifest.root, ".natalia-manifest.json"),

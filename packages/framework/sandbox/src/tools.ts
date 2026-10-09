@@ -91,8 +91,10 @@ type SandboxFacts = {
   resourceID?: string;
   pid?: number;
   path?: string;
-  /** A change set's counts (diff, merge, delete). */
+  /** A change set's counts (diff, merge, delete) and a list's row count. */
   total?: number;
+  /** How many rows of a list answer hold unmerged changes (sandbox_list). */
+  unmerged?: number;
   additions?: number;
   deletions?: number;
   restored?: boolean;
@@ -305,7 +307,26 @@ function sandboxCreateTool(): RuntimeTool {
     async execute(input, context) {
       const args = requireObject(input);
       const id = requireString(args.id, "id");
-      const sandbox = await requireSandboxes(context).create(id);
+      const manager = requireSandboxes(context);
+      // P2-18: the cap is enforced here, so a workspace cannot grow past it
+      // without anyone noticing — the 2026-10-08 audit found 14 stale
+      // sandboxes (56MB) precisely because nothing ever reclaimed one. A
+      // sandbox with unmerged work is never collected (the manager's rule).
+      const sandboxConfig = (
+        context.runtimeConfig?.() as
+          | { sandbox?: { maxIdleHours?: number; maxSandboxes?: number } }
+          | undefined
+      )?.sandbox;
+      const maxIdleHours = sandboxConfig?.maxIdleHours ?? 168;
+      const maxSandboxes = sandboxConfig?.maxSandboxes ?? 0;
+      // `maxSandboxes - 1`: one is about to be created, and the cap is the
+      // number that may EXIST afterwards.
+      if (maxIdleHours > 0 || maxSandboxes > 0)
+        await manager.collectIdle({
+          maxIdleHours,
+          ...(maxSandboxes > 0 ? { maxSandboxes: maxSandboxes - 1 } : {}),
+        });
+      const sandbox = await manager.create(id);
       context.onSandboxEvent?.(requireSandboxes(context).updateEvent(id));
       context.onSandboxEvent?.(
         requireSandboxes(context).auditEvent(id, "create"),
@@ -319,6 +340,57 @@ function sandboxCreateTool(): RuntimeTool {
             | undefined
         )?.sandbox?.backend ?? "snapshot";
       return JSON.stringify({ ...sandbox, backend }, null, 2);
+    },
+  };
+}
+
+/**
+ * `sandbox_list` (the 2026-10-08 audit's P2-18).
+ *
+ * The model could not see the sandboxes that exist: create/write/execute/
+ * diff/merge/rollback/delete all take an id, and nothing enumerated them — so
+ * a model could not tell which sandboxes were its own, which were left over,
+ * or that a workspace had accumulated 14 of them (56MB) with no way to notice.
+ * This is the read face of the family, over the manager's own list.
+ */
+function sandboxListTool(): RuntimeTool {
+  return {
+    name: "sandbox_list",
+    description:
+      "List this workspace's sandboxes: each id, when it was created, whether it has unmerged changes and how many files, and whether it is running resources. Read-only.",
+    requiresApproval: false,
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: sandboxToolCard({
+      title: "family",
+      callSummary: "list",
+      kind: "generic",
+      resultSummary: (facts) =>
+        facts.total === undefined
+          ? "listed"
+          : `${facts.total} sandbox${facts.total === 1 ? "" : "s"}`,
+      facets: (facts) => [
+        ...(facts.total === undefined
+          ? []
+          : [pill("total", String(facts.total))]),
+        ...(facts.unmerged === undefined || facts.unmerged === 0
+          ? []
+          : [pill("unmerged", String(facts.unmerged))]),
+      ],
+    }),
+    async execute(_input, context) {
+      const manager = requireSandboxes(context);
+      const sandboxes = await manager.list();
+      // The list is the reading: one line per sandbox, with the two facts a
+      // reader acts on — does it hold unmerged work, and is anything running
+      // inside it. `changedFiles` itself stays on the raw answer for a
+      // caller that wants the paths.
+      const rows = sandboxes.map((sandbox) => ({
+        id: sandbox.id,
+        isolationLevel: sandbox.isolationLevel,
+        changedFiles: sandbox.changedFiles.length,
+        runningResources: sandbox.runningResources.length,
+      }));
+      return JSON.stringify({ total: rows.length, sandboxes: rows }, null, 2);
     },
   };
 }
@@ -844,6 +916,7 @@ function sandboxReadTool(
 export function sandboxTools(): RuntimeTool[] {
   return [
     sandboxCreateTool(),
+    sandboxListTool(),
     sandboxExecuteTool(),
     sandboxWriteTool(),
     sandboxDiffTool(),

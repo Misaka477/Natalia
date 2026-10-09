@@ -332,6 +332,15 @@ export type SandboxResourceView = {
 export type SandboxToolService = {
   create(id: string): Promise<SandboxManifestView>;
   list(): Promise<SandboxManifestView[]>;
+  /**
+   * Collect the sandboxes the TTL and the cap name (P2-18), returning the ids
+   * it deleted. A sandbox with unmerged changes or running resources is never
+   * collected.
+   */
+  collectIdle(input: {
+    maxIdleHours: number;
+    maxSandboxes?: number;
+  }): Promise<string[]>;
   execute(
     id: string,
     command: string,

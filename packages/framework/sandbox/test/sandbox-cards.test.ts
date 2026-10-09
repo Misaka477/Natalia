@@ -24,7 +24,8 @@ function outputOf(name: string) {
 }
 
 test("every sandbox tool declares the projection (R5)", () => {
-  expect(tools.size).toBe(11);
+  // P2-18: sandbox_list joined the family, so the model can see what exists.
+  expect(tools.size).toBe(12);
   for (const [name, tool] of tools) {
     expect(
       typeof tool.output?.presentationMeta,

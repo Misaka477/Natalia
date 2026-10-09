@@ -138,6 +138,7 @@ export function runtimeToolNames(): string[] {
     "run_shell",
     "sandbox_create",
     "sandbox_delete",
+    "sandbox_list",
     "sandbox_diff",
     "sandbox_execute",
     "sandbox_merge",

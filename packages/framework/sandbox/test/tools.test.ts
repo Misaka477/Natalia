@@ -599,3 +599,86 @@ test("sandbox_delete's discarded count is the number of paths, not of rows (P1-1
   expect(deleted.discardedPaths).toEqual(["a.txt", "b.txt"]);
   expect(deleted.discardedChanges).toBe(2);
 });
+
+test("sandbox_list shows what exists, and what holds unmerged work (P2-18)", async () => {
+  // The 2026-10-08 audit's P2-18: the model could not see the sandboxes at
+  // all — every sandbox tool takes an id, and nothing enumerated them, so a
+  // workspace accumulated 14 sandboxes (56MB) with no way to notice.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-list-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "seen.1" }, context);
+  await tools.get("sandbox_create")!.execute({ id: "dirty.1" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute(
+      { id: "dirty.1", path: "unmerged.txt", content: "never merged\n" },
+      context,
+    );
+  const listed = JSON.parse(
+    await tools.get("sandbox_list")!.execute({}, context),
+  ) as {
+    total: number;
+    sandboxes: Array<{ id: string; changedFiles: number }>;
+  };
+  expect(listed.total).toBe(2);
+  // One line per sandbox, and the two facts a reader acts on.
+  expect(listed.sandboxes.map((entry) => entry.id).sort()).toEqual([
+    "dirty.1",
+    "seen.1",
+  ]);
+  expect(
+    listed.sandboxes.find((entry) => entry.id === "dirty.1")?.changedFiles,
+  ).toBe(1);
+  expect(
+    listed.sandboxes.find((entry) => entry.id === "seen.1")?.changedFiles,
+  ).toBe(0);
+});
+
+test("idle collection reclaims clean sandboxes and keeps unmerged work (P2-18)", async () => {
+  // The 2026-10-08 audit's P2-18, second half: a workspace had accumulated
+  // 14 stale sandboxes (56MB) with nothing able to reclaim them.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-ttl-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    // The TTL config the create tool reads.
+    runtimeConfig: () => ({ sandbox: { maxIdleHours: 0, maxSandboxes: 2 } }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "old.1" }, context);
+  await tools.get("sandbox_create")!.execute({ id: "old.2" }, context);
+  await tools.get("sandbox_create")!.execute({ id: "old.3" }, context);
+  // One of them holds unmerged work: that is a reader's unfinished work, not
+  // garbage, and it is never collected.
+  await tools
+    .get("sandbox_write")!
+    .execute({ id: "old.3", path: "keep.txt", content: "unmerged\n" }, context);
+  // The next create enforces the cap: the workspace is back to two.
+  await tools.get("sandbox_create")!.execute({ id: "new.1" }, context);
+  const ids = (await manager.list()).map((entry) => entry.id);
+  expect(ids).toHaveLength(2);
+  expect(ids).toContain("new.1");
+  expect(ids).toContain("old.3");
+  // The oldest CLEAN one went, not the one with work in it.
+  expect(ids).not.toContain("old.1");
+});

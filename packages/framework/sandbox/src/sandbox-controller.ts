@@ -76,6 +76,8 @@ export function createSandboxController(input: {
     init,
     create: async (id) => await requireManager().create(id),
     list: async () => await requireManager().list(),
+    collectIdle: async (collectInput) =>
+      await requireManager().collectIdle(collectInput),
     execute: async (id, command, options) =>
       await requireManager().execute(id, command, options),
     write: async (id, path, content, mode) =>

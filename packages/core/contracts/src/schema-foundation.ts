@@ -79,6 +79,19 @@ export const sandboxConfigSchema = z.object({
    * rejected; the runtime never promotes on a silent no-op command.
    */
   promoteCommand: z.string().trim().min(1).default("npm run typecheck"),
+  /**
+   * Hours after which an untouched sandbox is garbage (P2-18). `0` disables
+   * it — the collection is opt-out, not opt-in, because the 2026-10-08 audit
+   * found a workspace carrying 14 stale sandboxes (56MB) that nothing could
+   * see or reclaim. A sandbox with UNMERGED changes is never collected: that
+   * is a reader's unfinished work, not garbage.
+   */
+  maxIdleHours: z.number().min(0).default(168),
+  /**
+   * How many sandboxes may exist before the oldest CLEAN one is collected on
+   * the next create. `0` means no cap.
+   */
+  maxSandboxes: z.number().min(0).default(0),
 });
 
 /** The three-mode file axis (sandbox study §3 item 1, decision 25). */

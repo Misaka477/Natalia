@@ -86,3 +86,66 @@ test("session_history defaults to a bounded page when no args are given", async 
     next: "newer",
   });
 });
+
+test("the history page drops thinking rows, so private reasoning never answers (F4)", async () => {
+  // The 2026-10-10 sweep's F4: `limit=5` returned reasoning text inside the
+  // page — a tool answer is injected into context and logged, so private
+  // reasoning both floods the context and breaks the no-private-reasoning
+  // rule. The page is a record of what was SAID.
+  const thinkingText = "PRIVATE-REASONING-MUST-NOT-ANSWER";
+  const session = { id: "ses_history" } as unknown as SessionRecord;
+  const page = {
+    data: [
+      {
+        id: "turn_1",
+        turnID: "turn_1",
+        submitted: { id: "turn_1", text: "hello", at: "" },
+        rows: [
+          { id: "turn_1:user", turnID: "turn_1", kind: "user", event: {} },
+          {
+            id: "turn_1:thinking",
+            turnID: "turn_1",
+            kind: "thinking",
+            event: { type: "thinking.done", id: "turn_1", text: thinkingText },
+          },
+          {
+            id: "turn_1:assistant",
+            turnID: "turn_1",
+            kind: "assistant",
+            event: { type: "content.done", id: "turn_1", text: "hi" },
+          },
+        ],
+      },
+    ],
+    cursor: {},
+  };
+  const ctx = {
+    ports: {
+      getReady: () => Promise.resolve(),
+      getSessionID: () => "ses_history",
+      getExecutionBySession: () =>
+        new Map([["ses_history" as SessionID, { session }]]),
+      getSession: () => session,
+      resolveService: () => ({
+        messages: () => Promise.resolve(page),
+      }),
+    },
+    state: {
+      serviceDirectory: {
+        getOptional: () => ({
+          messages: () => Promise.resolve(page),
+        }),
+      },
+    },
+  } as unknown as RuntimeContext;
+  const tool = createSessionHistoryTool(ctx);
+  const answer = String(
+    await tool.execute({ limit: 5 }, { workspaceRoot: "/tmp" } as never),
+  );
+  // The reasoning text is not in the answer at all.
+  expect(answer).not.toContain(thinkingText);
+  expect(answer).not.toContain("thinking");
+  // What was said still is.
+  expect(answer).toContain("hello");
+  expect(answer).toContain("hi");
+});

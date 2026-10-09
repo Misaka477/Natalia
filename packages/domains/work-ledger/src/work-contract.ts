@@ -356,7 +356,10 @@ export function validationClassesFor(
   if (/bun install|npm install|pnpm install|yarn install/iu.test(text))
     classes.push("validation:install");
   if (/tsc|typecheck/iu.test(text)) classes.push("validation:typecheck");
-  if (/bun test|vitest|jest|pytest|go test|cargo test/iu.test(text)) {
+  // `ctest` is CMake's test runner — the 2026-10-10 sweep's F5 measured a
+  // project whose only test command is `ctest` being classified `code` and
+  // asked for `validation:test` it could never honestly produce.
+  if (/bun test|vitest|jest|pytest|go test|cargo test|\bctest\b/iu.test(text)) {
     classes.push("validation:test");
     if (/parser|tokeniz|lexer|grammar/iu.test(text))
       classes.push("validation:parser");

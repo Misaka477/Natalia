@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -681,4 +681,120 @@ test("idle collection reclaims clean sandboxes and keeps unmerged work (P2-18)",
   expect(ids).toContain("old.3");
   // The oldest CLEAN one went, not the one with work in it.
   expect(ids).not.toContain("old.1");
+});
+
+test("a validation command's own output is never merged into the host (F1)", async () => {
+  // The 2026-10-10 sweep's F1: validation runs inside the candidate, so what
+  // it builds lands in the candidate — and the merge then promoted the
+  // validation's own artifacts into the host. The audit measured
+  // `.cmake-verify/` (a static library, a Makefile, a cache file with the
+  // sandbox's absolute path) merged into the real workspace.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-f1-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "f1.1" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute(
+      { id: "f1.1", path: "model-change.txt", content: "mine\n" },
+      context,
+    );
+  // The validation command ITSELF builds something — that output belongs to
+  // the validation, not to the model's change. (A separate `sandbox_execute`
+  // before the merge would be the model's own change and SHOULD merge; the
+  // leak the audit measured was the validation's own build output.)
+  const withBuild = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    runtimeConfig: () => ({
+      // A path `.nataliaignore` does NOT cover — the audit's `.cmake-verify/`
+      // was exactly that, which is why it reached the host.
+      sandbox: {
+        promoteCommand: "mkdir -p verify-out && echo x > verify-out/cache.txt",
+      },
+    }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  const answer = String(
+    await tools.get("sandbox_merge")!.execute({ id: "f1.1" }, withBuild),
+  );
+  // The merge reports the model's change.
+  expect(answer).toContain("model-change.txt");
+  // The validation's build output never reached the host.
+  expect(await existsSync(join(root, "verify-out", "cache.txt"))).toBe(false);
+  expect(await existsSync(join(root, "model-change.txt"))).toBe(true);
+});
+
+test("a merge answer is capped, and says so (F2)", async () => {
+  // The 2026-10-10 sweep's F2: the answer was `JSON.stringify(changes, null,
+  // 2)` with no cap — one added file produced 117 pages / 5.87 MB, and a
+  // sweep spilled ~11.9 MB into `.natalia/tool-output/`. The tool declared
+  // `maxLines` and never read it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-f2-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "f2.1" }, context);
+  // A change big enough that its JSON is many lines.
+  await tools.get("sandbox_write")!.execute(
+    {
+      id: "f2.1",
+      path: "big.txt",
+      content: Array.from({ length: 400 }, (_, i) => `line ${i}`).join("\n"),
+    },
+    context,
+  );
+  const answer = String(
+    await tools.get("sandbox_merge")!.execute({ id: "f2.1" }, context),
+  );
+  // The cap is the answer's, and it names what it held back.
+  expect(answer).toContain("more line(s) omitted");
+  expect(answer).toContain("1 file(s) changed");
+  // The merge still landed.
+  expect(await existsSync(join(root, "big.txt"))).toBe(true);
+  // And `maxLines` is honoured: a second sandbox with the same shape answers
+  // with more lines when the caller asks.
+  await tools.get("sandbox_create")!.execute({ id: "f2.2" }, context);
+  await tools.get("sandbox_write")!.execute(
+    {
+      id: "f2.2",
+      path: "big2.txt",
+      content: Array.from({ length: 400 }, (_, i) => `line ${i}`).join("\n"),
+    },
+    context,
+  );
+  const wide = String(
+    await tools
+      .get("sandbox_merge")!
+      .execute({ id: "f2.2", maxLines: 5000 }, context),
+  );
+  expect(wide.split("\n").length).toBeGreaterThan(answer.split("\n").length);
+  // The byte cap still applies at any line count — a wider `maxLines` buys
+  // lines, not an unbounded answer.
+  expect(Buffer.byteLength(wide, "utf8")).toBeLessThanOrEqual(20_000);
 });

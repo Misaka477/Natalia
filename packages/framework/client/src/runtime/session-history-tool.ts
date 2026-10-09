@@ -160,7 +160,20 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
           ? { order: args.order }
           : {}),
       });
-      return JSON.stringify(page);
+      // F4 (2026-10-10 sweep): the page carried `thinking` rows verbatim —
+      // the model's private reasoning, returned to a tool answer that is
+      // injected into context and logged. The sweep measured reasoning text
+      // arriving at `limit=5`, which both floods the context and contradicts
+      // the no-private-reasoning rule the prompt states. The transcript page
+      // is a record of what was SAID; the thinking rows are dropped here, at
+      // the surface that answers, so the projection the UI draws is unchanged.
+      return JSON.stringify({
+        ...page,
+        data: page.data.map((message) => ({
+          ...message,
+          rows: message.rows.filter((row) => row.kind !== "thinking"),
+        })),
+      });
     },
   };
 }

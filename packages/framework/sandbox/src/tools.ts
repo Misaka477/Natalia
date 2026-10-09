@@ -44,6 +44,27 @@ function requireSandboxes(context: ToolExecutionContext) {
  * merged tree. The 2026-10-06 smoke run merged a CMake project and watched it
  * validated by `npm run typecheck` (T-09).
  */
+/**
+ * The merge answer's default bounds (F2, 2026-10-10 sweep).
+ *
+ * The audit measured one added file answering 117 pages / 5.87 MB, and a
+ * sweep spilling ~11.9 MB into `.natalia/tool-output/`. A merge's answer is
+ * WHICH files changed — the counts, not the patches.
+ */
+const MERGE_MAX_LINES = 60;
+const MERGE_MAX_BYTES = 20_000;
+
+/** A byte-capped text, with the original size for the note. */
+function boundedText(
+  text: string,
+  maxBytes: number,
+): { body: string; truncated: boolean; totalBytes: number } {
+  const totalBytes = Buffer.byteLength(text, "utf8");
+  if (totalBytes <= maxBytes)
+    return { body: text, truncated: false, totalBytes };
+  return { body: text.slice(0, maxBytes), truncated: true, totalBytes };
+}
+
 const PROMOTE_MARKERS: ReadonlyArray<{ file: string; command: string }> = [
   { file: "package.json", command: "npm run typecheck" },
   {
@@ -589,7 +610,32 @@ function sandboxMergeTool(): RuntimeTool {
       context.onWorkspaceChange?.(changes);
       context.onSandboxEvent?.(manager.updateEvent(id));
       context.onSandboxEvent?.(manager.auditEvent(id, "merge"));
-      return JSON.stringify(changes, null, 2);
+      // F2 (2026-10-10 sweep): the answer was `JSON.stringify(changes, null,
+      // 2)` with NO cap — one added file produced 117 pages / 5.87 MB, and a
+      // sweep wrote ~11.9 MB of spill into `.natalia/tool-output/`. The tool
+      // declares `maxLines` and never read it. The cap is the answer's, and
+      // it says when it cut.
+      const requested = args.maxLines;
+      const maxLines = Math.max(
+        1,
+        Math.min(
+          500,
+          typeof requested === "number" && Number.isFinite(requested)
+            ? Math.floor(requested)
+            : MERGE_MAX_LINES,
+        ),
+      );
+      const full = JSON.stringify(changes, null, 2);
+      const bounded = boundedText(full, MERGE_MAX_BYTES);
+      const lines = bounded.body.split("\n");
+      if (lines.length <= maxLines && !bounded.truncated) return bounded.body;
+      const kept = lines.slice(0, maxLines).join("\n");
+      const hidden = lines.length - maxLines;
+      return [
+        kept,
+        `... ${hidden} more line(s) omitted; ${changes.length} file(s) changed, ${bounded.totalBytes} bytes total.`,
+        "Pass maxLines for more, or read a file directly — the merge already landed.",
+      ].join("\n");
     },
   };
 }

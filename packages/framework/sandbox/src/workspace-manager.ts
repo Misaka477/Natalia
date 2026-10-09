@@ -344,13 +344,33 @@ export class WorkspaceSandboxManager
   }> {
     const command = input.command.trim();
     if (!command) throw new Error("sandbox promote command must not be empty");
+    const hostRoot = input.hostRoot;
+    if (!hostRoot) throw new Error("sandbox promote requires hostRoot");
+    // F1 (2026-10-10 sweep): the validation runs INSIDE the candidate, so
+    // whatever it builds lands in the candidate — and the merge then diffs
+    // the candidate and promotes the validation's own artifacts into the
+    // host. The audit measured `.cmake-verify/` (libneon.a, Makefile, a
+    // CMakeCache.txt with the sandbox's absolute path) merged into the real
+    // workspace: validation passing is what polluted the host.
+    //
+    // The candidate's index is captured BEFORE validation; afterwards the
+    // delta is exactly the validation's own output, which is deleted from the
+    // candidate and the index restored. The gate keeps testing the change;
+    // the change stays what the model made.
+    const beforeValidation = await this.captureForValidation(id);
     const evidence = await this.validate(id, command);
+    const artifacts = await this.validationArtifacts(id, beforeValidation);
+    const sandboxRoot = this.mustGet(id).root;
+    for (const path of artifacts)
+      await rm(await containPath(sandboxRoot, path), {
+        recursive: true,
+        force: true,
+      });
+    await this.restoreCandidateIndex(id, beforeValidation);
     if (!evidence.ok)
       throw new Error(
         `candidate ${id} failed validation (exit ${evidence.exitCode}):\n${evidence.output.slice(0, 2000)}`,
       );
-    const hostRoot = input.hostRoot;
-    if (!hostRoot) throw new Error("sandbox promote requires hostRoot");
     const changedFiles = await this.merge(id, hostRoot, input.authorize);
     // Reported rather than assumed: the completion record states whether a
     // rollback point exists, and a constant would be a claim the backend never
@@ -385,6 +405,29 @@ export class WorkspaceSandboxManager
   protected async rollbackPoint(_id: string): Promise<string | undefined> {
     return undefined;
   }
+
+  /**
+   * The candidate's index before validation runs, so the validation's own
+   * output can be told apart from the model's change (F1). The snapshot
+   * backend captures it; a backend that cannot leaves the merge as it was.
+   */
+  protected async captureForValidation(_id: string): Promise<unknown> {
+    return undefined;
+  }
+
+  /** The paths validation created inside the candidate (F1). */
+  protected async validationArtifacts(
+    _id: string,
+    _before: unknown,
+  ): Promise<string[]> {
+    return [];
+  }
+
+  /** Put the candidate's index back to its pre-validation state (F1). */
+  protected async restoreCandidateIndex(
+    _id: string,
+    _before: unknown,
+  ): Promise<void> {}
 
   async validate(
     id: string,

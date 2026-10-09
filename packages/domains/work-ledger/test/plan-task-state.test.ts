@@ -5,6 +5,7 @@ import {
   parsePlanTasks,
   projectPlanTaskStates,
 } from "../src/plan-task-state";
+import { validationClassesFor } from "../src/work-contract";
 
 test("parsePlanTasks reads open, done and skipped checkboxes with depth", () => {
   const tasks = parsePlanTasks(
@@ -226,4 +227,18 @@ test("a no-op untick on a checkbox-less plan is a refusal, not ok:true (P0-4)", 
   if (!appended.ok) throw new Error("unreachable");
   expect(appended.action).toBe("logged");
   expect(appended.content).toContain("- [ ] a task that is not in this plan");
+});
+
+test("ctest counts as a test command (F5)", () => {
+  // The 2026-10-10 sweep's F5: a CMake project's only test command is
+  // `ctest`, and the classifier's vocabulary did not contain it — so a
+  // `taskKind:"test"` completion was required to show `validation:test`,
+  // which the project could never honestly produce. Declaring the truth made
+  // the card UNjudgeable, which is a structure that rewards lying.
+  const classes = validationClassesFor("ctest --output-on-failure", true);
+  expect(classes).toContain("validation:test");
+  // The shape a CMake project actually runs.
+  expect(
+    validationClassesFor("cmake --build build && ctest -j4", true),
+  ).toContain("validation:test");
 });

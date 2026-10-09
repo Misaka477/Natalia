@@ -185,6 +185,37 @@ export class SnapshotSandboxManager extends WorkspaceSandboxManager {
   }
 
   /** The candidate's current index, reusing the previous one by size/mtime. */
+  /** F1: the candidate's index as it stands before validation runs. */
+  protected override async captureForValidation(
+    id: string,
+  ): Promise<SnapshotIndex | undefined> {
+    return await this.captureCandidate(id);
+  }
+
+  /**
+   * F1: the paths validation created inside the candidate. A path in the
+   * AFTER index that was not in the BEFORE one is the validation's own
+   * output — the audit measured a build directory and a cache file landing in
+   * the host this way.
+   */
+  protected override async validationArtifacts(
+    id: string,
+    before: SnapshotIndex | undefined,
+  ): Promise<string[]> {
+    if (!before) return [];
+    const after = await this.captureCandidate(id);
+    return [...after.keys()].filter((path) => !before.has(path));
+  }
+
+  /** F1: put the candidate's index back, so the merge sees the model's change. */
+  protected override async restoreCandidateIndex(
+    id: string,
+    before: SnapshotIndex | undefined,
+  ): Promise<void> {
+    if (!before) return;
+    await this.store.saveCandidateIndex(id, before);
+  }
+
   private async captureCandidate(id: string): Promise<SnapshotIndex> {
     const rules = await this.snapshotIgnoreRules();
     return await this.store.capture(

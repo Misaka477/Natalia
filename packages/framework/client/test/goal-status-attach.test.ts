@@ -168,11 +168,18 @@ test("same-id attach re-publishes an existing goal as a live goal.status", async
  * way: `pause` DISARMS it (the round finishes, the next one never starts —
  * the user's 2026-10-07 ruling), and `edit` steers it at the next step while
  * the durable edit makes the next round use the new objective.
+ *
+ * The two behaviours were ONE test, and that test flaked on CI's slow runner
+ * eight times: one chain carried admission -> turn -> edit -> round 2 ->
+ * pause -> settlement, and every hop's drift landed on the last wait. The
+ * user's pre-authorized remedy was to split it by behaviour ("edit" and
+ * "pause"), which is what these two are: each drives only its own half of
+ * the lifecycle, so neither can starve the other's budget.
  */
-test("pause disarms — the running goal round finishes and no next one starts (user 2026-10-07)", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-goal-steer-"));
-  const sessionID = "ses_goal_steer" as SessionID;
 
+/** One seeded goal session with a provider that blocks rounds 1 and 2. */
+async function bootGoalSteer(sessionID: SessionID) {
+  const root = await mkdtemp(join(tmpdir(), "natalia-goal-steer-"));
   const seeder = createSessionStoreController({
     workspaceRoot: root,
     sessionID: () => sessionID,
@@ -205,9 +212,9 @@ test("pause disarms — the running goal round finishes and no next one starts (
   await seeder.flush(sessionID);
   await seeder.close();
 
-  // Provider call 0 blocks (round 1 step 1) so the round stays in flight while
-  // the human edits/pauses; call 2 blocks (round 2 step 1) so the paused
-  // round is provably still running after the pause.
+  // Provider call 0 blocks (round 1 step 1) so the round stays in flight
+  // while the human edits/pauses; call 2 blocks (round 2 step 1) so the
+  // paused round is provably still running after the pause.
   let calls = 0;
   const releases = new Map<number, () => void>();
   const provider: StreamingProvider = {
@@ -260,29 +267,32 @@ test("pause disarms — the running goal round finishes and no next one starts (
     useSqliteStore: true,
     provider,
   });
+  client.start((event) => events.push(event));
+  await client.sessionAttach?.(sessionID);
+  // Arm + drive a round: the seeded goal starts disarmed by design.
+  await client.goalControl?.("pause", sessionID);
+  await client.goalControl?.("resume", sessionID);
+  await waitUntil(
+    () =>
+      events.some((event) => event.type === "goal.round" && event.round === 1),
+    "goal round 1 admission",
+  );
+  await waitUntil(
+    () =>
+      events.some(
+        (event) =>
+          event.type === "turn.started" && event.id.includes("round_1"),
+      ),
+    "round 1 turn start",
+  );
+  return { client, events, releases, waitUntil };
+}
+
+test("an edit steers the running round: the durable edit lands and round 2 uses it (user 2026-10-07)", async () => {
+  const { client, events, releases, waitUntil } = await bootGoalSteer(
+    "ses_goal_steer_edit" as SessionID,
+  );
   try {
-    client.start((event) => events.push(event));
-    await client.sessionAttach?.(sessionID);
-
-    // Arm + drive a round: the seeded goal starts disarmed by design.
-    await client.goalControl?.("pause", sessionID);
-    await client.goalControl?.("resume", sessionID);
-    await waitUntil(
-      () =>
-        events.some(
-          (event) => event.type === "goal.round" && event.round === 1,
-        ),
-      "goal round 1 admission",
-    );
-    await waitUntil(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "turn.started" && event.id.includes("round_1"),
-        ),
-      "round 1 turn start",
-    );
-
     // Edit while round 1 is in flight: durable edit + a next-step steering note.
     const goalRevision = events
       .filter(
@@ -296,7 +306,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
         revision: goalRevision,
         objective: "steady the NEW boat",
       },
-      sessionID,
+      "ses_goal_steer_edit" as SessionID,
     );
     expect(edited).toMatchObject({ ok: true, action: "edit" });
     expect(
@@ -307,8 +317,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
 
     releases.get(0)?.();
     // The edit preserves continuation authority, so round 2 is driven and its
-    // first provider call blocks. Pausing then DISARMS: round 2 finishes, no
-    // round 3 starts (the user's 2026-10-07 parity ruling).
+    // first provider call blocks.
     // (The steering note the edit injects is asserted after round 2 has been
     // admitted — by then it has long arrived, and a shared CI runner cannot
     // cross one more runtime-boundary hop to wait for it: this chain failed
@@ -336,10 +345,33 @@ test("pause disarms — the running goal round finishes and no next one starts (
         ),
       "round 2 turn start",
     );
+    // The durable edit is what round 2's context carries: the new objective
+    // is the one the goal runs on from here.
+    const latestGoal = events
+      .filter(
+        (event): event is Extract<RuntimeEvent, { type: "goal.changed" }> =>
+          event.type === "goal.changed",
+      )
+      .at(-1)!;
+    expect(latestGoal.snapshot?.objective).toBe("steady the NEW boat");
+  } finally {
+    for (const release of releases.values()) release();
+    await client.dispose?.();
+  }
+}, 120_000);
+
+test("pause disarms — the running goal round finishes and no next one starts (user 2026-10-07)", async () => {
+  const { client, events, releases, waitUntil } = await bootGoalSteer(
+    "ses_goal_steer_pause" as SessionID,
+  );
+  try {
     // Pausing DISARMS: the in-flight round runs to completion and the next
     // one is never started (the user's 2026-10-07 parity ruling — the
     // old behaviour hard-cancelled the round, which the user rejected).
-    const paused = await client.goalControl?.("pause", sessionID);
+    const paused = await client.goalControl?.(
+      "pause",
+      "ses_goal_steer_pause" as SessionID,
+    );
     expect(paused).toMatchObject({ ok: true, action: "pause" });
     expect(
       events.some(
@@ -351,28 +383,28 @@ test("pause disarms — the running goal round finishes and no next one starts (
     expect(
       events.some(
         (event) =>
-          event.type === "turn.cancelled" && event.id.includes("round_2"),
+          event.type === "turn.cancelled" && event.id.includes("round_1"),
       ),
     ).toBe(false);
-    // Let round 2 finish: its turn ENDS after the pause (never cancelled —
-    // that is the whole point of the disarm), and NO round 3 is admitted,
+    // Let round 1 finish: its turn ENDS after the pause (never cancelled —
+    // that is the whole point of the disarm), and NO round 2 is admitted,
     // because the paused phase is the driver's gate.
-    releases.get(2)?.();
+    releases.get(0)?.();
     await waitUntil(
       () =>
         events.some(
-          (event) => event.type === "goal.round.cost" && event.round === 2,
+          (event) => event.type === "goal.round.cost" && event.round === 1,
         ),
-      "round 2 settlement",
+      "round 1 settlement",
     );
     expect(
-      events.some((event) => event.type === "goal.round" && event.round === 3),
+      events.some((event) => event.type === "goal.round" && event.round === 2),
     ).toBe(false);
   } finally {
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-}, 240_000);
+}, 120_000);
 
 /**
  * A stream killed mid-flight must keep the text it already generated. The

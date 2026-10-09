@@ -185,6 +185,14 @@ export type SubagentToolService = {
    * is persisted with the record and hydrated on attach.
    */
   recordSubagentUsage(id: string, delta: Partial<SubagentUsageView>): boolean;
+  /**
+   * Reads the child's durable conversation checkpoint, or undefined when it
+   * has none. Optional: a backend without durable ledgers answers undefined
+   * and every continuation starts fresh.
+   */
+  loadLedger?(id: string): Promise<unknown>;
+  /** Persists the child's durable conversation checkpoint. */
+  saveLedger?(id: string, checkpoint: unknown): Promise<void>;
   /** Records the child's last context projection on its durable record. */
   recordSubagentContext(
     id: string,

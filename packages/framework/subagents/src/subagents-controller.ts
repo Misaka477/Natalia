@@ -90,6 +90,9 @@ export function createSubagentsController(input: {
       requireRegistry().recordSubagentUsage(id, delta),
     recordSubagentContext: (id, snapshot) =>
       requireRegistry().recordSubagentContext(id, snapshot),
+    loadLedger: async (id) => await requireRegistry().store.loadLedger(id),
+    saveLedger: async (id, checkpoint) =>
+      await requireRegistry().store.saveLedger(id, checkpoint),
     setSteerHook,
     // Authority, live routing and the queueing fallback all live on the registry
     // now, so both a bare registry and this composition answer a steer the same

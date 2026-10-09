@@ -146,6 +146,39 @@ export class SubagentStore {
   private path(): string {
     return join(this.dir, MANIFEST);
   }
+
+  /**
+   * Writes one subagent's durable conversation checkpoint.
+   *
+   * A child's ledger used to be rebuilt from nothing on every run, so a
+   * continuation lost the whole conversation and `agent_resume` had nothing
+   * to resume FROM (it was dead code waiting for a `paused` status nobody
+   * set). The checkpoint is the same shape the main session's context epoch
+   * uses, kept per child because a child's conversation is its own.
+   */
+  async saveLedger(agentId: string, checkpoint: unknown): Promise<void> {
+    const dir = join(this.dir, "ledgers");
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(dir, `${agentId}.json`),
+      `${JSON.stringify(checkpoint)}\n`,
+      { mode: 0o600 },
+    );
+  }
+
+  async loadLedger(agentId: string): Promise<unknown | undefined> {
+    try {
+      return JSON.parse(
+        await readFile(join(this.dir, "ledgers", `${agentId}.json`), "utf8"),
+      ) as unknown;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      // A torn or unreadable checkpoint degrades to "no history": the run
+      // then starts fresh rather than restoring a conversation that cannot
+      // be trusted.
+      return undefined;
+    }
+  }
 }
 
 function isValidRecord(r: unknown): r is SubagentRecord {

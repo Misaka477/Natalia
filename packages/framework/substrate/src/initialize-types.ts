@@ -141,11 +141,26 @@ export type SubagentSupport = {
   queueSubagentMessage(agentId: string, message: string): boolean;
   /** How many subagents currently hold a live ledger. */
   liveSubagentLedgerCount(): number;
+  /** The live ledger of a running subagent, when it has one. */
+  liveSubagentLedger(agentId: string): ContextLedger | undefined;
+  /**
+   * The child's durable conversation checkpoint, or undefined when it has
+   * none. A continuation resumes FROM it, which is what makes `agent_retry`
+   * and `agent_resume` continue work instead of re-deriving it.
+   */
+  loadSubagentLedgerCheckpoint(agentId: string): Promise<unknown>;
+  /** Persists the child's conversation where its next run will find it. */
+  writeSubagentLedgerCheckpoint(
+    agentId: string,
+    ledger: ContextLedger,
+  ): Promise<void>;
   createSubagentContext(
     system: string,
     task: string,
     planPointer?: { planID: string; documentPath: string; version: number },
     forkSeed?: { entries: readonly ContextEntry[] },
+    /** A durable checkpoint to resume the conversation from. */
+    resume?: unknown,
   ): ContextLedger;
   runSubagentProviderStep(
     ledger: ContextLedger,

@@ -146,8 +146,20 @@ export async function createSubagentSupport(
     task: string,
     planPointer?: { planID: string; documentPath: string; version: number },
     forkSeed?: { entries: readonly ContextEntry[] },
+    resume?: unknown,
   ) {
     const ledger = resolvedContextLedgerFactory.create();
+    // A continuation resumes the conversation it left off: the durable
+    // checkpoint holds the child's own entries (system, task, every step it
+    // ran), so restoring it is the whole of "continue where it stopped".
+    // Without one — a first run, or a checkpoint that could not be read —
+    // the fresh build below stands.
+    if (resume) {
+      ledger.restoreDurableCheckpoint(
+        resume as Parameters<typeof ledger.restoreDurableCheckpoint>[0],
+      );
+      return ledger;
+    }
     ledger.add({ id: "system", role: "system", content: system });
     // A forked child inherits the completed turns of its parent's conversation
     // before its own task, so it can continue work in progress rather than
@@ -187,6 +199,23 @@ export async function createSubagentSupport(
   }
   function unregisterSubagentLedger(agentId: string) {
     liveSubagentLedgers.delete(agentId);
+  }
+  /**
+   * The child's durable conversation checkpoint, or undefined when it has
+   * none (a first run, or one whose checkpoint could not be read).
+   */
+  async function loadSubagentLedgerCheckpoint(
+    agentId: string,
+  ): Promise<unknown | undefined> {
+    return await subagents?.loadLedger?.(agentId);
+  }
+  /** Persists the child's conversation where the next run will find it. */
+  async function writeSubagentLedgerCheckpoint(
+    agentId: string,
+    ledger: RuntimeContextLedger,
+  ): Promise<void> {
+    const step = ledger.snapshot().entries.length;
+    await subagents?.saveLedger?.(agentId, ledger.durableCheckpoint(step));
   }
   /** Queue a message for a subagent that has no live runner. */
   function queueSubagentMessage(agentId: string, message: string) {
@@ -632,8 +661,11 @@ export async function createSubagentSupport(
     createSubagentContext,
     registerSubagentLedger,
     unregisterSubagentLedger,
+    loadSubagentLedgerCheckpoint,
+    writeSubagentLedgerCheckpoint,
     queueSubagentMessage,
     liveSubagentLedgerCount: () => liveSubagentLedgers.size,
+    liveSubagentLedger: (agentId: string) => liveSubagentLedgers.get(agentId),
     runSubagentProviderStep,
     appendSubagentAssistant,
     appendSubagentToolResult,

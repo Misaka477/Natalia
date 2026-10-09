@@ -88,6 +88,9 @@ export async function installSubagents(
     createSubagentContext,
     registerSubagentLedger,
     unregisterSubagentLedger,
+    liveSubagentLedger,
+    loadSubagentLedgerCheckpoint,
+    writeSubagentLedgerCheckpoint,
     runSubagentProviderStep,
     appendSubagentAssistant,
     appendSubagentToolResult,
@@ -108,7 +111,16 @@ export async function installSubagents(
    * Leaving either in place would let a parent steer a subagent whose ledger no
    * longer exists, which would look like a delivery that went nowhere.
    */
-  function releaseSubagentSteering(runner: SubagentRunnerContext) {
+  async function releaseSubagentSteering(runner: SubagentRunnerContext) {
+    // Persist the conversation BEFORE the ledger is dropped: this is the one
+    // point every run passes through, so the checkpoint exists whether the
+    // child completed, failed or was cancelled. A failed write must not fail
+    // the run's own teardown.
+    const ledger = liveSubagentLedger(runner.agentId);
+    if (ledger)
+      await writeSubagentLedgerCheckpoint(runner.agentId, ledger).catch(
+        () => undefined,
+      );
     unregisterSubagentLedger(runner.agentId);
     subagentsController.setSteerHook?.(runner.agentId, undefined);
   }
@@ -168,7 +180,7 @@ export async function installSubagents(
       await runSandboxedSubagentInner(task, runner, exec, activeProvider);
     } finally {
       releaseSandboxedSubagentSlot();
-      releaseSubagentSteering(runner);
+      await releaseSubagentSteering(runner);
     }
   }
   async function runSandboxedSubagentInner(
@@ -210,6 +222,7 @@ export async function installSubagents(
     runner.log(`accepted (sandboxed): ${task}`);
     runner.setStatus("running");
     beginSubagentConversation(runner, task);
+    const resume = await loadSubagentLedgerCheckpoint(runner.agentId);
     const ledger = adoptSubagentLedger(runner, record, () =>
       createSubagentContext(
         scope.teamBehavior()?.sandboxedSubagentSystemPrompt(writePaths) ??
@@ -224,6 +237,11 @@ export async function installSubagents(
         record?.context === "fork"
           ? { entries: forkSeedEntries(exec.context.snapshot().entries) }
           : undefined,
+        // A continuation continues: the durable checkpoint (the child's own
+        // conversation, written when its last run ended) is restored instead
+        // of starting from nothing — which is what makes `agent_retry` and
+        // `agent_resume` continue work rather than re-derive it.
+        resume,
       ),
     );
     const repeatedCalls = new Map<string, number[]>();
@@ -326,7 +344,7 @@ export async function installSubagents(
         }
         runner.log(finalOutput.trim() || "completed without text output");
         finishSubagentConversation(runner, "done");
-        releaseSubagentSteering(runner);
+        await releaseSubagentSteering(runner);
         return;
       }
       appendSubagentAssistant(ledger, runner, step, output, calls);
@@ -360,6 +378,7 @@ export async function installSubagents(
         return await runSandboxedSubagent(task, runner, exec, activeProvider);
       const allowed = record?.allowedTools ?? [];
       const excluded = new Set(record?.excludeTools ?? []);
+      const resume = await loadSubagentLedgerCheckpoint(runner.agentId);
       const ledger = adoptSubagentLedger(runner, record, () =>
         createSubagentContext(
           agentTypeSystemPrompt(scope, record.agentType) ??
@@ -373,6 +392,11 @@ export async function installSubagents(
           record?.context === "fork"
             ? { entries: forkSeedEntries(exec.context.snapshot().entries) }
             : undefined,
+          // A continuation continues: the durable checkpoint (the child's own
+          // conversation, written when its last run ended) is restored instead
+          // of starting from nothing — which is what makes `agent_retry` and
+          // `agent_resume` continue work rather than re-derive it.
+          resume,
         ),
       );
       const repeatedCalls = new Map<string, number[]>();

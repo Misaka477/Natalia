@@ -675,7 +675,12 @@ export class SubagentRegistry {
   async resume(id: SubagentID): Promise<boolean> {
     const record = this.records.get(id);
     if (!record) return false;
-    if (record.status !== "paused") return false;
+    // `paused` was unreachable — nothing ever set it — so the only resume
+    // that meant anything was the one after a restart, where `load()` marks
+    // the interrupted run `stopped`. Both are "continue the work": the
+    // runner rehydrates the child's durable ledger, so a resume that has no
+    // checkpoint simply starts a fresh run.
+    if (record.status !== "paused" && record.status !== "stopped") return false;
     if (this.running.has(id)) return false;
     record.status = "running";
     record.updatedAt = this.clock();

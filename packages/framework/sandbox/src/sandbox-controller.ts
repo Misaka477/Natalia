@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { SandboxBackend } from "@anthelia/contracts";
+import type { ConfinementMode } from "@anthelia/confinement";
 import type { SandboxToolService } from "@anthelia/tools";
+import { dependencyRootsFor } from "./dependency-links";
 import { SnapshotSandboxManager } from "./snapshot-sandbox";
 import { WorktreeSandboxManager } from "./worktree-sandbox";
 import { WorkspaceSandboxManager } from "./workspace-manager";
@@ -34,6 +36,25 @@ export function createSandboxController(input: {
   workspaceRoot: string;
   /** Backend from `sandbox.backend`; absent defaults to our own snapshot. */
   backend?(): SandboxBackend | undefined;
+  /**
+   * Host directories linked into each candidate from `sandbox.dependencyRoots`
+   * — the dependency supply a validation command needs inside the candidate.
+   */
+  dependencyRoots?(): readonly string[] | undefined;
+  /**
+   * The confinement mode candidate commands run under. Resolved to the mode
+   * this host can ENFORCE once, at init: the mode a deployment requests and
+   * the mode a kernel provides are different questions, and only the second
+   * may reach an execution. Absent means the seam's own unconfined default,
+   * which is what a directly-driven manager gets.
+   */
+  confinement?(): ConfinementMode | undefined;
+  /**
+   * The confinement backend binary, overriding discovery. The valve the
+   * manager exposes for a test that needs the fail-closed branch without
+   * unsetting anything on the machine it runs on.
+   */
+  confinementBinaryPath?: string;
 }): SandboxController {
   let manager: WorkspaceSandboxManager | undefined;
   let initializing: Promise<void> | undefined;
@@ -51,10 +72,20 @@ export function createSandboxController(input: {
         const isGitRepo =
           existsSync(join(input.workspaceRoot, ".git")) ||
           existsSync(join(input.workspaceRoot, ".git", "HEAD"));
+        const options = {
+          dependencyRoots: dependencyRootsFor(
+            input.workspaceRoot,
+            input.dependencyRoots?.(),
+          ),
+          confinementMode: input.confinement?.() ?? "danger-full-access",
+          ...(input.confinementBinaryPath
+            ? { confinementBinaryPath: input.confinementBinaryPath }
+            : {}),
+        };
         const next =
           input.backend?.() === "worktree" && isGitRepo
-            ? new WorktreeSandboxManager(input.workspaceRoot)
-            : new SnapshotSandboxManager(input.workspaceRoot);
+            ? new WorktreeSandboxManager(input.workspaceRoot, options)
+            : new SnapshotSandboxManager(input.workspaceRoot, options);
         await next.initialize();
         if (closed) await next.close();
         else manager = next;

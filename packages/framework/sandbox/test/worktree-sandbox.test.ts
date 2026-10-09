@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -259,4 +260,52 @@ test("a candidate's .natalia data write shows in the diff like any other (user s
     ),
   ).toBe(true);
   rmSync(root, { recursive: true, force: true });
+});
+
+test("a worktree candidate links the host's dependencies and never commits them", async () => {
+  // The dependency supply on the git backend: `git worktree add` checks out
+  // only TRACKED files, so the host's installed node_modules is absent and
+  // the promotion gate's command would fail before testing anything. The
+  // link fixes the read side; the commit filter keeps the link out of the
+  // candidate branch — git stores a symlink as a blob, so a `git add -f`
+  // would carry it into the host's history and the merge would write it
+  // into the host working tree.
+  const root = await scratchRepo();
+  await writeFile(join(root, ".gitignore"), "node_modules/\n");
+  await git(root, ["add", ".gitignore"]);
+  await git(root, ["commit", "-m", "ignore node_modules"]);
+  await mkdir(join(root, "node_modules", "fixture"), { recursive: true });
+  await writeFile(join(root, "node_modules", "fixture", "pkg.json"), "{}");
+
+  const manager = new WorktreeSandboxManager(root, {
+    dependencyRoots: ["node_modules"],
+  });
+  const sandbox = await manager.create("sbx.deps");
+  // The link exists in the candidate: the gate's command can read through it.
+  expect(
+    existsSync(join(sandbox.root, "node_modules", "fixture", "pkg.json")),
+  ).toBe(true);
+
+  // A real change beside it is what the candidate branch carries — and the
+  // link is not among the changes, at any surface.
+  await writeFile(join(sandbox.root, "work.txt"), "done\n");
+  const changes = await manager.previewMerge("sbx.deps");
+  expect(changes.map((change) => change.path)).toContain("work.txt");
+  expect(changes.map((change) => change.path)).not.toContain("node_modules");
+
+  // Promoting lands the change, and the link is nowhere in the host's tree.
+  await manager.merge("sbx.deps", root);
+  const tracked = await git(root, ["ls-files"]);
+  expect(tracked.split("\n")).not.toContain("node_modules");
+  const committed = await git(root, [
+    "log",
+    "--name-only",
+    "--format=",
+    "HEAD",
+  ]);
+  expect(committed).not.toContain("node_modules");
+  expect(existsSync(join(root, "node_modules", "fixture", "pkg.json"))).toBe(
+    true,
+  );
+  await manager.delete("sbx.deps");
 });

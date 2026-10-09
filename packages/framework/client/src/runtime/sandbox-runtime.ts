@@ -281,32 +281,6 @@ export function createSandboxRuntime(
         ctx.ports.publishForSession(owner, evidence);
         return { evidence, outcome };
       };
-      let validation: { ok: boolean; exitCode: number; output: string };
-      try {
-        validation = await sandboxes.validate(id, command);
-      } catch (error) {
-        await publishPromotionEvidence({
-          status: "failed",
-          result: "failed",
-          output: error instanceof Error ? error.message : String(error),
-          durationMs: performance.now() - startedAt,
-          knownGaps: ["candidate failed validation; host unchanged"],
-        });
-        throw error;
-      }
-      const durationMs = performance.now() - startedAt;
-      if (!validation.ok) {
-        await publishPromotionEvidence({
-          status: "failed",
-          result: "failed",
-          output: validation.output,
-          durationMs,
-          knownGaps: ["candidate failed validation; host unchanged"],
-        });
-        throw new Error(
-          `candidate ${id} failed validation (exit ${validation.exitCode}):\n${validation.output.slice(0, 2000)}`,
-        );
-      }
       try {
         // EI E5 (R3/R4): compute the promotion's risk tier from the candidate's
         // real change set, and require a multi-stage confirmation for a
@@ -358,6 +332,14 @@ export function createSandboxRuntime(
             );
           }
         }
+        // ONE validation, run by the promotion gate itself INSIDE the
+        // candidate. This used to run the same command once more before the
+        // preview, which paid for the gate twice and — worse — left the first
+        // run's build output in the candidate, where the gate's own artifact
+        // cleanup (keyed on what appeared after ITS OWN before-capture) could
+        // no longer tell it from the model's change: a promotion then merged
+        // artifacts the validation had produced. The gate's result rides back
+        // on the promotion for the evidence record below.
         const promotion = await sandboxes.promoteWithValidation(id, {
           command,
           hostRoot: ctx.ports.getWorkspaceRoot(),
@@ -365,6 +347,7 @@ export function createSandboxRuntime(
             await ctx.ports.authorizeSandboxMerge({ id, paths }, owner),
         });
         const changes = promotion.changedFiles;
+        const durationMs = performance.now() - startedAt;
         for (const change of changes) {
           void appendSandboxMutation(
             ctx,
@@ -405,7 +388,8 @@ export function createSandboxRuntime(
         const { evidence, outcome } = await publishPromotionEvidence({
           status: "promoted",
           result: "passed",
-          output: validation.output,
+          // The gate's own output, from the one run it did.
+          output: promotion.validation.output,
           durationMs,
           changes,
         });
@@ -448,7 +432,9 @@ export function createSandboxRuntime(
             error instanceof SandboxPromotionConflict
               ? `promotion refused; host unchanged, candidate must be rebased ` +
                 `(${error.paths.length} conflicting path(s))`
-              : "promotion did not land; host unchanged",
+              : // The gate's own refusal, named: the promotion is what runs
+                // the validation now, so a failed check arrives as its error.
+                "candidate failed validation; host unchanged",
           ],
         });
         throw error;

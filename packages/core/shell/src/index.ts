@@ -41,4 +41,5 @@ export type {
   ShellExecSpec,
   ShellProcess,
   ShellRunResult,
+  ShellSandboxInfo,
 } from "./types";

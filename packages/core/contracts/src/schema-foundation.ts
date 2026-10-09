@@ -84,9 +84,26 @@ export const sandboxConfigSchema = z.object({
   backend: z.enum(["snapshot", "worktree"]).default("snapshot"),
   /**
    * Command run inside the candidate before a promote may land. Empty is
-   * rejected; the runtime never promotes on a silent no-op command.
+   * rejected; absent means DISCOVER — the runtime reads the workspace's own
+   * project markers (package.json → `npm run typecheck`, CMakeLists.txt →
+   * cmake configure+build, …) and refuses a promotion when it can name
+   * neither a configured command nor a marker. The old hardcoded default
+   * (`npm run typecheck`) made the discovery path dead code and validated
+   * every non-node workspace with a command whose package.json does not
+   * exist (T-09: a CMake project "checked" by npm).
    */
-  promoteCommand: z.string().trim().min(1).default("npm run typecheck"),
+  promoteCommand: z.string().trim().min(1).optional(),
+  /**
+   * Host directories linked into every candidate so a validation command can
+   * run there: the candidate is a checkout of the tracked tree, so a
+   * `node_modules/` the host installed is absent and `npm run typecheck`
+   * fails with "module not found" before it tests anything. Each root is
+   * linked (never copied) when it exists in the host; the link is invisible
+   * to capture/diff/merge, and confinement makes it readable but not
+   * writable from inside the candidate. Paths are host-relative; escaping
+   * ones are refused at link time.
+   */
+  dependencyRoots: z.array(z.string().trim().min(1)).default(["node_modules"]),
   /**
    * Hours after which an untouched sandbox is garbage (P2-18). `0` disables
    * it — the collection is opt-out, not opt-in, because the 2026-10-08 audit

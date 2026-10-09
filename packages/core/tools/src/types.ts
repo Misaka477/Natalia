@@ -351,7 +351,19 @@ export type SandboxToolService = {
     id: string,
     command: string,
     options?: { signal?: AbortSignal; env?: NodeJS.ProcessEnv },
-  ): Promise<{ exitCode: number; output: string; target: ExecutionTarget }>;
+  ): Promise<{
+    exitCode: number;
+    output: string;
+    target: ExecutionTarget;
+    /**
+     * What the sandbox actually did, when the run was confined: the mode
+     * requested and whether the runner declined before the command could
+     * run. Reported independently of the exit code, so a caller never has
+     * to tell "the command failed" from "the policy refused" from "the
+     * sandbox could not run at all" by guessing.
+     */
+    sandbox?: { mode: ConfinementMode; runnerFailed: boolean };
+  }>;
   write(
     id: string,
     path: string,
@@ -375,6 +387,13 @@ export type SandboxToolService = {
     sandboxID: string;
     changedFiles: SandboxChangeView[];
     lastKnownGood?: string;
+    /**
+     * The gate's own result. The caller used to run the same command once
+     * more before calling this — which paid for the validation twice and let
+     * the first run's build output survive the artifact cleanup as a
+     * "before" path — so the promotion now reports the one run it did.
+     */
+    validation: { ok: boolean; exitCode: number; output: string };
   }>;
   delete(id: string): Promise<{
     /** The operation's own fact: the sandbox is gone (this call deleted it). */

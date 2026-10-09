@@ -16,13 +16,58 @@ import type {
   SandboxDiffKind,
   SandboxStatus,
 } from "@anthelia/contracts";
-import { forceRemove, startDetachedProcess } from "@anthelia/platform";
-import { selectExecutor } from "@anthelia/shell";
+import type { ConfinementMode } from "@anthelia/confinement";
+import { wrapConfinedCommand } from "@anthelia/confinement";
+import {
+  forceRemove,
+  shellQuote,
+  startDetachedProcess,
+} from "@anthelia/platform";
+import { selectExecutor, type ShellSandboxInfo } from "@anthelia/shell";
 
 // The shell that owns both spellings this file needs: the profile-reading argv
 // for a foreground execute, and the detached POSIX launcher for a background
 // one. One per module; it is stateless.
 const shell = selectExecutor();
+
+/**
+ * The executor's confinement floor.
+ *
+ * The candidate's commands used to run as a plain local bash with a different
+ * cwd: at the OS level a hostile `rm -rf /` inside a candidate escaped the
+ * workspace as freely as the user's own shell. The floor is the shared
+ * confinement seam the rest of the command surface already uses — one
+ * policy, one classification, one fail-closed rule ("a missing or unusable
+ * backend never degrades into running unconstrained").
+ *
+ * `danger-full-access` is the deliberate default for a directly constructed
+ * manager: it is the seam's own "no confinement requested" spelling and
+ * preserves the behaviour every existing caller has. The production path
+ * (the sandbox controller) always passes the mode the runtime resolved.
+ */
+export type SandboxExecutorOptions = {
+  confinementMode?: ConfinementMode;
+  /** Host directories linked into each candidate (the dependency supply). */
+  dependencyRoots?: readonly string[];
+  /**
+   * The confinement backend binary, overriding discovery. A valve for tests:
+   * a path that does not exist exercises the fail-closed branch without
+   * unsetting anything on the machine the test runs on.
+   */
+  confinementBinaryPath?: string;
+};
+
+/**
+ * The timeout one sandboxed command gets, in milliseconds.
+ *
+ * The seam always applies a timeout, so routing the executor through it
+ * introduces one where there was none: a stuck command used to hold the
+ * turn open forever. The value is the seam's own maximum — a validation
+ * command is a real build (`tsc -b --force` over this repository's sixty
+ * packages is ~25s warm and minutes cold on a slow runner), and capping it
+ * tighter would fail legitimate promotions.
+ */
+const SANDBOX_COMMAND_TIMEOUT_MS = 600_000;
 
 export type IsolationLevel = "workspace" | "container" | "vm";
 
@@ -98,7 +143,19 @@ export type SandboxExecutor = {
     id: string,
     command: string,
     options?: { signal?: AbortSignal; env?: NodeJS.ProcessEnv },
-  ): Promise<{ exitCode: number; output: string; target: ExecutionTarget }>;
+  ): Promise<{
+    exitCode: number;
+    output: string;
+    target: ExecutionTarget;
+    /**
+     * What the sandbox actually did, when the run was confined: the mode
+     * requested and whether the runner declined before the command could
+     * run. Reported independently of the exit code, so a caller never has
+     * to tell "the command failed" from "the policy refused" from "the
+     * sandbox could not run at all" by guessing.
+     */
+    sandbox?: ShellSandboxInfo;
+  }>;
 };
 
 export class WorkspaceSandboxManager
@@ -107,8 +164,18 @@ export class WorkspaceSandboxManager
   private sandboxes = new Map<string, SandboxManifest>();
   private resources = new Map<string, SandboxResourceInfo>();
   private initialized?: Promise<void>;
+  /** The confinement mode every candidate command runs under. */
+  private readonly confinementMode: ConfinementMode;
+  /** The confinement backend override, when one was named. */
+  private readonly confinementBinaryPath: string | undefined;
 
-  constructor(private readonly baseRoot: string) {}
+  constructor(
+    private readonly baseRoot: string,
+    options?: SandboxExecutorOptions,
+  ) {
+    this.confinementMode = options?.confinementMode ?? "danger-full-access";
+    this.confinementBinaryPath = options?.confinementBinaryPath;
+  }
 
   async initialize() {
     if (!this.initialized) this.initialized = this.load();
@@ -164,6 +231,55 @@ export class WorkspaceSandboxManager
     return env;
   }
 
+  /**
+   * Wraps a detached launcher script in the confinement binary.
+   *
+   * The script is a shell LINE (`bash -c '<command>' > log 2>&1 & echo $!`),
+   * so the wrap runs it under `bash -c` inside the wrapper: the redirection
+   * and the pid handshake stay exactly where the launcher expects them, and
+   * the resource's own command lands under the write floor. Without this, a
+   * resource — the one long-running surface — would be the hole the floor
+   * claims to close.
+   *
+   * Fail-closed like every other command surface: with no usable backend
+   * this REFUSES rather than starting the resource unconfined, because a
+   * silent unconfined passthrough is the one thing the floor must never do.
+   */
+  private confinedScript(script: string, workspaceRoot: string): string {
+    if (this.confinementMode === "danger-full-access") return script;
+    const wrapped = wrapConfinedCommand({
+      mode: this.confinementMode,
+      workspaceRoot,
+      command: "bash",
+      args: ["-c", script],
+      ...(this.confinementBinaryPath
+        ? { binaryPath: this.confinementBinaryPath }
+        : {}),
+    });
+    if (!wrapped)
+      throw new Error(
+        `the ${this.confinementMode} sandbox could not start this resource: no ` +
+          `usable confinement-exec backend was found on this host, and the ` +
+          `sandbox refuses to run a command unconfined. Build the backend ` +
+          `(bun run native:confinement) or run this call under ` +
+          `sandbox_permissions=danger-full-access.`,
+      );
+    return [wrapped.command, ...wrapped.args.map(shellQuote)].join(" ");
+  }
+
+  /**
+   * Runs one command inside the candidate.
+   *
+   * Through the shared shell seam rather than a raw spawn, which is what puts
+   * the confinement floor under it: the candidate root is the writable root,
+   * so a command inside the candidate reads the host's linked dependencies
+   * and cannot write outside its own worktree. A missing backend fails
+   * CLOSED — the run refuses with the wrapper's own sentence instead of
+   * silently degrading to an unconstrained spawn — and the returned `sandbox`
+   * fact says what the sandbox actually did (the mode requested, and whether
+   * the runner declined before the command could run), so a caller never has
+   * to infer either from an exit code.
+   */
   async execute(
     id: string,
     command: string,
@@ -172,23 +288,47 @@ export class WorkspaceSandboxManager
     const manifest = this.mustGet(id);
     // The profile-reading invocation, which is what this call site has always
     // used: a sandboxed workspace executes with the user's shell profile.
-    const spec = shell.resolve({ command, loginShell: true });
-    const process = Bun.spawn([spec.command, ...spec.args], {
-      cwd: manifest.root,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
+    const spec = shell.resolve({
+      command,
+      workdir: manifest.root,
+      loginShell: true,
+      timeoutMs: SANDBOX_COMMAND_TIMEOUT_MS,
+      confinement: this.confinementMode,
+      workspaceRoot: manifest.root,
+      signal: options.signal,
       env: this.environment(manifest.envAllowlist, options.env),
+      ...(this.confinementBinaryPath
+        ? { confinementBinaryPath: this.confinementBinaryPath }
+        : {}),
     });
-    const abort = () => process.kill("SIGTERM");
-    options.signal?.addEventListener("abort", abort, { once: true });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(process.stdout).text(),
-      new Response(process.stderr).text(),
-      process.exited,
-    ]);
-    options.signal?.removeEventListener("abort", abort);
-    return { exitCode, output: `${stdout}${stderr}`, target: this.target(id) };
+    const run = await shell.run(spec, {
+      command,
+      confinement: this.confinementMode,
+      workspaceRoot: manifest.root,
+      signal: options.signal,
+      ...(this.confinementBinaryPath
+        ? { confinementBinaryPath: this.confinementBinaryPath }
+        : {}),
+    });
+    // "Could not run" is not "ran and failed": the confinement refusal (no
+    // usable backend) and a runner decline both arrive here, and both must
+    // read as the sandbox refusing rather than as the command's exit.
+    if (run.outcome === "spawn-failed")
+      throw new Error(
+        run.confinementRefusal ?? "the command could not be started",
+      );
+    if (run.outcome === "aborted")
+      throw options.signal?.reason ?? new Error("command cancelled");
+    if (run.outcome === "timeout")
+      throw new Error(
+        `sandbox command timed out after ${SANDBOX_COMMAND_TIMEOUT_MS / 1000}s`,
+      );
+    return {
+      exitCode: run.exitCode ?? -1,
+      output: `${run.stdout}${run.stderr}`,
+      target: this.target(id),
+      ...(run.sandbox ? { sandbox: run.sandbox } : {}),
+    };
   }
 
   async startResource(id: string, command: string, resourceID?: string) {
@@ -205,12 +345,16 @@ export class WorkspaceSandboxManager
       `${finalID}.log`,
     );
     await mkdir(dirname(outputPath), { recursive: true, mode: 0o700 });
+    // The launcher script runs the resource's command; confining the SCRIPT
+    // (rather than the command text) keeps the redirection and the `$!`
+    // handshake intact while the command itself lands under the same floor
+    // as every other candidate command. Without this, a resource — the one
+    // long-running surface — would be the hole the floor claims to close.
+    const script = shell.detachedPosixScript({ command, outputPath });
+    const posixScript = this.confinedScript(script, manifest.root);
     const { pid } = await startDetachedProcess({
       command,
-      // Byte-identical to the string that used to be built here; the spelling
-      // belongs to the shell now. No `setsid` prefix: this call site does not
-      // want a process group.
-      posixScript: shell.detachedPosixScript({ command, outputPath }),
+      posixScript,
       cwd: manifest.root,
       outputPath,
       env: this.environment(manifest.envAllowlist),
@@ -323,12 +467,15 @@ export class WorkspaceSandboxManager
   }
 
   /**
-   * Runs a validation command in the candidate's root — the build evidence a
-   * candidate must produce before its PR is ready. Shared by every backend.
-   */
-  /**
    * Validates the candidate, then promotes it. Empty commands are refused so a
    * missing check cannot be mistaken for a green promote.
+   *
+   * The validation's own result rides back on the return value: the caller
+   * used to run the SAME command once more before calling this, which (a)
+   * paid for the gate twice and (b) left the first run's build output in the
+   * candidate, where the artifact cleanup below — keyed on what appeared
+   * after ITS OWN before-capture — could no longer see it, so a promotion
+   * merged artifacts the gate itself produced. One run, reported once.
    */
   async promoteWithValidation(
     id: string,
@@ -341,6 +488,7 @@ export class WorkspaceSandboxManager
     sandboxID: string;
     changedFiles: SandboxChange[];
     lastKnownGood?: string;
+    validation: { ok: boolean; exitCode: number; output: string };
   }> {
     const command = input.command.trim();
     if (!command) throw new Error("sandbox promote command must not be empty");
@@ -380,6 +528,7 @@ export class WorkspaceSandboxManager
       sandboxID: id,
       changedFiles,
       ...(rollbackPoint ? { lastKnownGood: rollbackPoint } : {}),
+      validation: evidence,
     };
   }
 
@@ -429,23 +578,51 @@ export class WorkspaceSandboxManager
     _before: unknown,
   ): Promise<void> {}
 
+  /**
+   * The promotion gate's command, run INSIDE the candidate (T2-2: the gate's
+   * meaning is to validate the model's change, and the candidate is where
+   * that change lives). Through the same confined seam as {@link execute}, so
+   * a validation command reads the candidate's linked dependencies and writes
+   * nowhere else.
+   */
   async validate(
     id: string,
     command: string,
   ): Promise<{ ok: boolean; exitCode: number; output: string }> {
     const manifest = this.mustGet(id);
-    const process = Bun.spawn(["bash", "-c", command], {
-      cwd: manifest.root,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
+    const spec = shell.resolve({
+      command,
+      workdir: manifest.root,
+      loginShell: true,
+      timeoutMs: SANDBOX_COMMAND_TIMEOUT_MS,
+      confinement: this.confinementMode,
+      workspaceRoot: manifest.root,
+      ...(this.confinementBinaryPath
+        ? { confinementBinaryPath: this.confinementBinaryPath }
+        : {}),
     });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(process.stdout).text(),
-      new Response(process.stderr).text(),
-      process.exited,
-    ]);
-    return { ok: exitCode === 0, exitCode, output: `${stdout}${stderr}` };
+    const run = await shell.run(spec, {
+      command,
+      confinement: this.confinementMode,
+      workspaceRoot: manifest.root,
+      ...(this.confinementBinaryPath
+        ? { confinementBinaryPath: this.confinementBinaryPath }
+        : {}),
+    });
+    if (run.outcome === "spawn-failed")
+      throw new Error(
+        run.confinementRefusal ?? "the command could not be started",
+      );
+    if (run.outcome === "aborted") throw new Error("command cancelled");
+    if (run.outcome === "timeout")
+      throw new Error(
+        `sandbox validation timed out after ${SANDBOX_COMMAND_TIMEOUT_MS / 1000}s`,
+      );
+    return {
+      ok: run.exitCode === 0,
+      exitCode: run.exitCode ?? -1,
+      output: `${run.stdout}${run.stderr}`,
+    };
   }
 
   async previewMerge(id: string) {

@@ -28,6 +28,7 @@ import type { SandboxDiffKind } from "@anthelia/contracts";
 import {
   WorkspaceSandboxManager,
   type SandboxChange,
+  type SandboxExecutorOptions,
 } from "./workspace-manager";
 import {
   requiresApproval,
@@ -35,6 +36,7 @@ import {
   type SandboxRiskTier,
 } from "./governance";
 import { unifiedPatchToStructured } from "./diff";
+import { isDependencyLinkPath, linkDependencyRoots } from "./dependency-links";
 
 export type WorktreePromotion = {
   sandboxID: string;
@@ -45,6 +47,17 @@ export type WorktreePromotion = {
   /** The commit that was last-known-good before the promotion. */
   lastKnownGood: string;
   changedFiles: SandboxChange[];
+  /**
+   * The validation gate's own result, when the promotion ran one (the
+   * `promoteWithValidation` path). Absent on a bare `promote`, which runs no
+   * gate.
+   */
+  validation?: { ok: boolean; exitCode: number; output: string };
+};
+
+/** A promotion that ran the validation gate: its result is part of the record. */
+export type ValidatedWorktreePromotion = WorktreePromotion & {
+  validation: { ok: boolean; exitCode: number; output: string };
 };
 
 /** Runs `git` and returns stdout trimmed; throws with stderr on failure. */
@@ -128,10 +141,16 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
   /** The commit the last promotion was built on, and whose promotion it was. */
   private lastKnownGood: { commit: string; sandboxID: string } | undefined;
   private readonly hostRoot: string;
+  /** Host directories linked into each candidate (the dependency supply). */
+  private readonly dependencyRoots: readonly string[];
 
-  constructor(hostRoot: string) {
-    super(resolve(hostRoot, ".natalia", "sandboxes"));
+  constructor(
+    hostRoot: string,
+    options?: SandboxExecutorOptions & { dependencyRoots?: readonly string[] },
+  ) {
+    super(resolve(hostRoot, ".natalia", "sandboxes"), options);
     this.hostRoot = hostRoot;
+    this.dependencyRoots = [...(options?.dependencyRoots ?? [])];
   }
 
   /** The commit the host system branch is on. */
@@ -212,6 +231,11 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
       (path) =>
         path &&
         !this.isInternalCandidatePath(path) &&
+        // The dependency links are plumbing this manager installs, not the
+        // agent's work: a `git add -f node_modules` would commit a symlink
+        // into the host's history (git stores links as blobs), and the merge
+        // would then write that link into the host working tree.
+        !isDependencyLinkPath(path, this.dependencyRoots) &&
         !isSnapshotIgnored(path, false, rules),
     );
     if (!changed.length) return;
@@ -232,7 +256,17 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     });
     // The base records the manifest (resources, env allowlist, changed files)
     // at the worktree root; the record is ignored, so it never enters a diff.
-    return await super.create(id);
+    const manifest = await super.create(id);
+    // The dependency supply: a worktree checks out only TRACKED files, so the
+    // host's installed `node_modules` is absent and the promotion gate's
+    // command would fail before testing anything. Linked, never copied, and
+    // excluded from the candidate's commits by `commitPendingChanges`.
+    await linkDependencyRoots({
+      hostRoot: this.hostRoot,
+      candidateRoot: manifest.root,
+      roots: this.dependencyRoots,
+    });
+    return manifest;
   }
 
   override async delete(id: string) {
@@ -434,6 +468,9 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
    * Validates the candidate and, when it passes, promotes it. When
    * `requireApprovalTier` is set, the human-approval hook runs only when the
    * candidate's governance risk tier clears the gate.
+   *
+   * The validation's own result rides back on the promotion, the same shape
+   * the snapshot backend reports: one run, reported once.
    */
   override async promoteWithValidation(
     id: string,
@@ -443,7 +480,7 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
       requireApprovalTier?: SandboxRiskTier;
       hostRoot?: string;
     },
-  ): Promise<WorktreePromotion> {
+  ): Promise<ValidatedWorktreePromotion> {
     const command = input.command.trim();
     if (!command) throw new Error("sandbox promote command must not be empty");
     const evidence = await this.validate(id, command);
@@ -459,7 +496,8 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
               await input.authorize!(paths);
           }
         : input.authorize;
-    return await this.promote(id, authorize);
+    const promotion = await this.promote(id, authorize);
+    return { ...promotion, validation: evidence };
   }
 
   /** The recorded last-known-good commit, if any. */

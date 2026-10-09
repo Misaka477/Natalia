@@ -34,6 +34,7 @@ import { compactionService } from "@anthelia/compaction";
 import { checkpointFactory } from "@anthelia/checkpoint";
 import { contextLedgerFactory as contextLedgerFactoryToken } from "@natalia/context-ledger";
 import { createSandboxController, sandboxTools } from "@anthelia/sandbox";
+import { effectiveConfinementMode } from "../tool-execution/execute-context";
 import {
   agentTools,
   createSubagentsController,
@@ -202,6 +203,20 @@ export async function wireFrameworkServices(
   const sandbox = createSandboxController({
     workspaceRoot,
     backend: () => ctx.ports.getTsRuntimeConfig()?.sandbox.backend,
+    // The dependency supply: the candidate is a checkout of the tracked
+    // tree, so without the host's installed roots the promotion gate's
+    // command (`npm run typecheck`) fails before it tests anything.
+    dependencyRoots: () =>
+      ctx.ports.getTsRuntimeConfig()?.sandbox.dependencyRoots,
+    // The confinement floor for candidate commands, resolved the same way
+    // the tool layer resolves it for every other command surface —
+    // composition default, config fallback, schema default — and then gated
+    // to what this host can actually enforce. One resolution, shared.
+    confinement: () =>
+      effectiveConfinementMode({
+        profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
+        configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
+      }),
   });
   // The service binds through the directory; the owner stays for the tools
   // contribution below.

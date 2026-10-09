@@ -19,6 +19,11 @@ export {
 } from "./worktree-sandbox";
 export { SnapshotSandboxManager } from "./snapshot-sandbox";
 export { SandboxPromotionConflict } from "./snapshot-store";
+export {
+  dependencyRootsFor,
+  isDependencyLinkPath,
+  linkDependencyRoots,
+} from "./dependency-links";
 export { createSandboxController } from "./sandbox-controller";
 export {
   SnapshotStore,

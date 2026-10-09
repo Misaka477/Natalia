@@ -21,9 +21,11 @@ import {
 import {
   WorkspaceSandboxManager,
   type SandboxChange,
+  type SandboxExecutorOptions,
 } from "./workspace-manager";
 import { ObjectStore } from "@anthelia/object-store";
 import { SnapshotStore, type SnapshotIndex } from "./snapshot-store";
+import { linkDependencyRoots } from "./dependency-links";
 
 /**
  * Structural exclusions for a snapshot candidate: these are the sandbox's own
@@ -47,10 +49,16 @@ function isSnapshotInternalPath(rel: string): boolean {
 export class SnapshotSandboxManager extends WorkspaceSandboxManager {
   private readonly hostRoot: string;
   private readonly store: SnapshotStore;
+  /** Host directories linked into each candidate (the dependency supply). */
+  private readonly dependencyRoots: readonly string[];
 
-  constructor(hostRoot: string) {
-    super(resolve(hostRoot, ".natalia", "sandboxes"));
+  constructor(
+    hostRoot: string,
+    options?: SandboxExecutorOptions & { dependencyRoots?: readonly string[] },
+  ) {
+    super(resolve(hostRoot, ".natalia", "sandboxes"), options);
     this.hostRoot = hostRoot;
+    this.dependencyRoots = [...(options?.dependencyRoots ?? [])];
     this.store = new SnapshotStore(
       new ObjectStore(resolve(hostRoot, ".natalia", "objects")),
       resolve(hostRoot, ".natalia", "snapshots"),
@@ -82,6 +90,10 @@ export class SnapshotSandboxManager extends WorkspaceSandboxManager {
    * Creates the isolated worktree, captures the host as its base, then checks
    * that base out into the candidate. The candidate index records the checkout
    * metadata so later diffs can reuse unchanged objects by size/mtime.
+   *
+   * The dependency roots are linked last: the candidate is a checkout of the
+   * tracked tree, so without them a validation command finds no
+   * `node_modules` and fails before it tests anything (T2-1).
    */
   override async create(id: string) {
     const manifest = await super.create(id);
@@ -94,6 +106,11 @@ export class SnapshotSandboxManager extends WorkspaceSandboxManager {
     await this.store.saveIndex(id, base);
     const candidate = await this.store.materialize(manifest.root, base);
     await this.store.saveCandidateIndex(id, candidate);
+    await linkDependencyRoots({
+      hostRoot: this.hostRoot,
+      candidateRoot: manifest.root,
+      roots: this.dependencyRoots,
+    });
     return manifest;
   }
 

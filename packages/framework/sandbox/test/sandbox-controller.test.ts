@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
 import { createSandboxController } from "../src/sandbox-controller";
 
 test("sandbox controller initializes lazily and refuses before init", async () => {
@@ -77,4 +77,54 @@ test("sandbox.backend=worktree opts into the real-git backend when a repo exists
   });
   await controller.init();
   expect(await controller.referencedObjectIDs()).toBeUndefined();
+});
+
+test("the controller passes the resolved confinement mode to its manager", async () => {
+  // The production path: the client resolves the effective mode (composition
+  // default, config fallback, schema default, then the platform gate) and
+  // hands it to the controller. A manager that never received it would run
+  // every candidate command unconfined while the tool surface advertised a
+  // sandbox — the wiring is the whole of T2-4's second half.
+  const root = await mkdtemp(
+    join(tmpdir(), "natalia-sandbox-controller-floor-"),
+  );
+  const controller = createSandboxController({
+    workspaceRoot: root,
+    confinement: () => "workspace-write",
+  });
+  await controller.init();
+  await controller.create("box");
+  const run = await controller.execute("box", "echo confined");
+  expect(run.exitCode).toBe(0);
+  // The run reports the mode it ran under, from the manager the controller
+  // built with the mode it was given.
+  expect(run.sandbox?.mode).toBe("workspace-write");
+});
+
+test("the controller links the declared dependency roots into its candidates", async () => {
+  const root = await mkdtemp(
+    join(tmpdir(), "natalia-sandbox-controller-deps-"),
+  );
+  await mkdir(join(root, "node_modules", "fixture"), { recursive: true });
+  await writeFile(join(root, "node_modules", "fixture", "pkg.json"), "{}");
+  const controller = createSandboxController({
+    workspaceRoot: root,
+    dependencyRoots: () => ["node_modules"],
+  });
+  await controller.init();
+  const manifest = await controller.create("box");
+  expect(
+    existsSync(join(manifest.root, "node_modules", "fixture", "pkg.json")),
+  ).toBe(true);
+});
+
+test("a dependency declaration that escapes the workspace refuses the controller", async () => {
+  const root = await mkdtemp(
+    join(tmpdir(), "natalia-sandbox-controller-escape-"),
+  );
+  const controller = createSandboxController({
+    workspaceRoot: root,
+    dependencyRoots: () => ["../../.."],
+  });
+  await expect(controller.init()).rejects.toThrow(/escapes the workspace/u);
 });

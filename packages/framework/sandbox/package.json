@@ -9,6 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@anthelia/confinement": "workspace:*",
     "@anthelia/contracts": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
     "@anthelia/object-store": "workspace:*",

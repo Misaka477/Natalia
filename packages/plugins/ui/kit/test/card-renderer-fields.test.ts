@@ -271,3 +271,68 @@ test("a diff's hunks are drawn with the file's own line numbers (S5)", () => {
     { line: "+ 41: y", kind: "added" },
   ]);
 });
+
+test("a card field that changed meaning falls back instead of throwing (2026-10-10 live crash)", () => {
+  // The live transcript threw `e.lines.map is not a function`: `read.lines`
+  // was a line COUNT before it became the numbered rows, and a durable
+  // journal replays the old shape. Truthiness is not narrowing — a number is
+  // truthy — so every structured field goes through an array check and a
+  // stale shape falls back to the text it still carries.
+  const staleRead = {
+    kind: "read",
+    title: "a.txt",
+    // The R2 shape: a count, not rows.
+    lines: 3,
+    content: "one\ntwo\nthree",
+  } as unknown as ToolCard;
+  expect(CARD_RENDERERS.read(staleRead, toolCall())).toEqual([
+    { line: "one", kind: "plain" },
+    { line: "two", kind: "plain" },
+    { line: "three", kind: "plain" },
+  ]);
+  const staleSearch = {
+    kind: "search",
+    title: "q",
+    // A count where the hits belong.
+    matches: 7,
+    body: "a.txt:1: hit",
+  } as unknown as ToolCard;
+  expect(CARD_RENDERERS.search(staleSearch, toolCall())).toEqual([
+    { line: "a.txt:1: hit", kind: "plain" },
+  ]);
+  const staleGeneric = {
+    kind: "generic",
+    title: "todos",
+    // A count where the checklist rows belong.
+    checklist: 3,
+    body: "one\ntwo\nthree",
+  } as unknown as ToolCard;
+  expect(CARD_RENDERERS.generic(staleGeneric, toolCall())).toEqual([
+    { line: "one", kind: "plain" },
+    { line: "two", kind: "plain" },
+    { line: "three", kind: "plain" },
+  ]);
+  const staleDiff = {
+    kind: "diff",
+    title: "a.txt",
+    // A count where the hunks belong.
+    hunks: 1,
+    // The mark convention is `+ `/`- ` (a leading space), which is what the
+    // write family's markPatch emits.
+    body: "+ old\n- new",
+  } as unknown as ToolCard;
+  expect(CARD_RENDERERS.diff(staleDiff, toolCall())).toEqual([
+    { line: "+ old", kind: "added" },
+    { line: "- new", kind: "removed" },
+  ]);
+  // An EMPTY array is also not rows: the text fallback still applies.
+  const empty = {
+    kind: "read",
+    title: "a.txt",
+    lines: [],
+    content: "fallback",
+  } as unknown as ToolCard;
+  expect(CARD_RENDERERS.read(empty, toolCall())).toEqual([
+    { line: "fallback", kind: "plain" },
+  ]);
+});

@@ -1349,6 +1349,20 @@ function groupedMatchLines(
 }
 
 /**
+ * A card's structured rows, when the field really holds them.
+ *
+ * A card field can CHANGE MEANING between versions — `read.lines` was a line
+ * COUNT before it became the numbered rows a gutter draws — and a durable
+ * journal replays the old shape. `card.lines ? … : …` is truthiness, and a
+ * number is truthy: the renderer then called `.map` on it and the whole
+ * transcript threw (`e.lines.map is not a function`, 2026-10-10, live). The
+ * narrowing is explicit, and every structured field goes through it.
+ */
+function rowsOf<T>(value: T[] | undefined): T[] | undefined {
+  return Array.isArray(value) && value.length > 0 ? value : undefined;
+}
+
+/**
  * The card renderers — ONE per card kind, the framework's whole dispatch
  * surface (UI refactor R0; the completeness guard in
  * `card-renderers.test.ts` pins both the set and the one-renderer-per-kind
@@ -1372,20 +1386,24 @@ export const CARD_RENDERERS: CardRendererMap = {
   // numbers, which is what makes a window readable — `lines 40-55 of 300`
   // means nothing without the numbers. The flat `content` (and the older
   // body/result fallbacks) render as a plain block.
-  read: (card, toolCall) =>
-    card.lines
-      ? card.lines.map((line) => ({
+  read: (card, toolCall) => {
+    const rows = rowsOf(card.lines);
+    return rows
+      ? rows.map((line) => ({
           line: `${line.number}: ${line.text}`,
           kind: "plain" as const,
         }))
-      : plainCardLines(card.content ?? card.body ?? toolCall.output ?? ""),
+      : plainCardLines(card.content ?? card.body ?? toolCall.output ?? "");
+  },
   // A write's hunks, drawn with the file's own line numbers (S5): the
   // structured field wins over the mark text, so a reader sees WHERE each
   // change sits. The mark text stays the fallback for an older event.
-  diff: (card, toolCall) =>
-    card.hunks && card.hunks.length > 0
-      ? hunkLines(card.hunks)
-      : diffCardLines(card.body ?? toolCall.output ?? ""),
+  diff: (card, toolCall) => {
+    const hunks = rowsOf(card.hunks);
+    return hunks
+      ? hunkLines(hunks)
+      : diffCardLines(card.body ?? toolCall.output ?? "");
+  },
   // A terminal's own text: the structured `output` field once the family
   // projects one (R1), the migration body before that, the raw result for a
   // card that carries neither.
@@ -1394,12 +1412,15 @@ export const CARD_RENDERERS: CardRendererMap = {
   // A content search's hits, grouped by file with their line numbers — the
   // search kind's own drawing, the way the diff kind colors its marks. A
   // path search's listing is one line per path.
-  search: (card, toolCall) =>
-    card.matches
-      ? groupedMatchLines(card.matches)
-      : card.paths
-        ? plainCardLines(card.paths.join("\n"))
-        : plainCardLines(card.body ?? toolCall.output ?? ""),
+  search: (card, toolCall) => {
+    const matches = rowsOf(card.matches);
+    const paths = Array.isArray(card.paths) ? card.paths : undefined;
+    return matches
+      ? groupedMatchLines(matches)
+      : paths
+        ? plainCardLines(paths.join("\n"))
+        : plainCardLines(card.body ?? toolCall.output ?? "");
+  },
   web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
   // The body IS the reading: the tool-side flatten (or, since R5.5, the
   // runtime's default projection). A client draws it and parses nothing —
@@ -1410,8 +1431,9 @@ export const CARD_RENDERERS: CardRendererMap = {
     // colors a diff's marks. The 2026-10-08 ruling — the name-keyed
     // checklist special case was the wrong layer; this is the same reading
     // on the card itself.
-    if (card.checklist && card.checklist.length > 0)
-      return card.checklist.map((row) => ({
+    const checklist = rowsOf(card.checklist);
+    if (checklist)
+      return checklist.map((row) => ({
         line: `${row.done ? "[x]" : "[ ]"} ${row.text}`,
         kind: row.done ? ("added" as const) : ("plain" as const),
       }));

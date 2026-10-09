@@ -645,18 +645,21 @@ export class ManagedProcessRegistry {
     return running;
   }
 
-  async get(id: string, context: ToolExecutionContext) {
-    await this.load(context);
-    const info = this.workspaceProcesses(context).get(id);
-    if (!info) throw new Error(`process not found: ${id}`);
-    await this.settleFromRecord(context, info);
-    return publicProcessInfo(info);
-  }
-
-  async output(id: string, context: ToolExecutionContext) {
-    await this.load(context);
-    const info = this.workspaceProcesses(context).get(id);
-    if (!info) throw new Error(`process not found: ${id}`);
+  /**
+   * The retained output, refreshed from the file it lives in (P1-12).
+   *
+   * Both reads go through here. A status read that answered with an EMPTY
+   * `output` while the process had already printed eleven lines — and
+   * `ready:false` while the ready pattern was among them — was the
+   * 2026-10-08 audit's P1-12: a model reading only `process_status`
+   * concluded the process had produced nothing and was not ready. The file
+   * is right there; refreshing it costs one read and removes the trap.
+   */
+  private async refreshOutput(
+    id: string,
+    info: ManagedProcessRuntime,
+    context: ToolExecutionContext,
+  ) {
     const rawOutput = await readOptionalFile(info.outputPath);
     info.output = truncateProcessOutput(rawOutput, info.maxOutputBytes);
     // The snapshot's freshness is part of the answer: a status read that
@@ -667,6 +670,22 @@ export class ManagedProcessRegistry {
     // notice).
     await this.markReady(id, context.workspaceRoot, rawOutput);
     await this.settleFromRecord(context, info);
+    return rawOutput;
+  }
+
+  async get(id: string, context: ToolExecutionContext) {
+    await this.load(context);
+    const info = this.workspaceProcesses(context).get(id);
+    if (!info) throw new Error(`process not found: ${id}`);
+    await this.refreshOutput(id, info, context);
+    return publicProcessInfo(info);
+  }
+
+  async output(id: string, context: ToolExecutionContext) {
+    await this.load(context);
+    const info = this.workspaceProcesses(context).get(id);
+    if (!info) throw new Error(`process not found: ${id}`);
+    const rawOutput = await this.refreshOutput(id, info, context);
     // The tail is the page, and a page that does not say it is one is the
     // audit's finding: the earlier output existed on disk (the very file we
     // just read) and nothing in the result mentioned it. The note names the
@@ -689,6 +708,12 @@ export class ManagedProcessRegistry {
         info.stopTimeoutMs ?? 1000,
         info.pidStartTicks,
       );
+    // P1-13: a stop of an ALREADY-FINISHED process used to overwrite
+    // `endedAt` with the stop's own timestamp, so the record of when the
+    // process really ended was lost (the 2026-10-08 audit measured
+    // 17:45:12 becoming 17:45:24). A finished process stays finished: the
+    // stop is idempotent and the original end time survives.
+    if (info.status !== "running") return publicProcessInfo(info);
     info.status = "stopped";
     info.endedAt = new Date().toISOString();
     await this.save(context);
@@ -1171,7 +1196,7 @@ function processStatusTool(registry: ManagedProcessRegistry): RuntimeTool {
   return {
     name: "process_status",
     description:
-      "Return status for a managed process. The `output` field is the retained snapshot as it stands (see its `outputUpdatedAt`; call process_output for the fresh read).",
+      "Return status for a managed process. The `output` field is the retained snapshot, refreshed from the process's own output file on every read (see its `outputUpdatedAt`); `ready` reflects the ready pattern as of that same read.",
     requiresApproval: false,
     parameters: {
       type: "object",

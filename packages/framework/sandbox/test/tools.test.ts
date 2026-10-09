@@ -561,3 +561,41 @@ test("no promote path hardcodes a toolchain default (T-09 regression guard)", as
   });
   rmSync(root, { recursive: true, force: true });
 });
+
+test("sandbox_delete's discarded count is the number of paths, not of rows (P1-14)", async () => {
+  // The 2026-10-08 audit's P1-14: `discardedPaths` listed the same path
+  // repeatedly and `discardedChanges` counted the rows — `package.json`
+  // twice with `discardedChanges: 3` for two real paths. A caller approves
+  // the destruction of N paths, so N must be the number of paths.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-dup-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "dup.1" }, context);
+  // The same path, written twice: one real path, two change rows.
+  await tools
+    .get("sandbox_write")!
+    .execute({ id: "dup.1", path: "a.txt", content: "one\n" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute({ id: "dup.1", path: "a.txt", content: "two\n" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute({ id: "dup.1", path: "b.txt", content: "other\n" }, context);
+  const deleted = JSON.parse(
+    await tools.get("sandbox_delete")!.execute({ id: "dup.1" }, context),
+  ) as { discardedChanges?: number; discardedPaths?: string[] };
+  // Two paths, named once each, and the count agrees.
+  expect(deleted.discardedPaths).toEqual(["a.txt", "b.txt"]);
+  expect(deleted.discardedChanges).toBe(2);
+});

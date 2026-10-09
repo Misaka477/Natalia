@@ -475,10 +475,19 @@ export class WorkspaceSandboxManager
     // The discard is the fact the caller approves: deleting a sandbox with
     // pending changes destroys that work, and a result of bare arrays left
     // the caller to infer it (T-10).
+    // P1-14: the paths are DEDUPED, and the count is the deduped count. A
+    // rename (or a change set that touches one path twice) used to list the
+    // same path repeatedly with `discardedChanges` inflated to match — the
+    // 2026-10-08 audit measured `package.json` twice and
+    // `discardedChanges: 3` for two real paths. The caller approves the
+    // destruction of N paths, so N must be the number of paths.
+    const discardedPaths = [
+      ...new Set(pendingChanges.map((change) => change.path)),
+    ];
     const result = {
       deleted: true,
-      discardedChanges: pendingChanges.length,
-      discardedPaths: pendingChanges.map((change) => change.path),
+      discardedChanges: discardedPaths.length,
+      discardedPaths,
       pendingChanges,
       runningResources: [...manifest.runningResources],
     };

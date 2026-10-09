@@ -690,3 +690,80 @@ test("the process family's read tools project terminal cards (R1)", async () => 
     .get("process_stop")!
     .execute({ id: "proc_card" }, { workspaceRoot: root });
 });
+
+test("a stop of an already-finished process keeps its real end time (P1-13)", async () => {
+  // The 2026-10-08 audit's P1-13: stopping an exited process rewrote
+  // `endedAt` with the stop's timestamp, so the record of when the process
+  // really ended was lost (17:45:12 became 17:45:24).
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-idem-"));
+  const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_idem",
+      command: "true",
+      description: "Exit immediately",
+    },
+    { workspaceRoot: root },
+  );
+  // Let it exit on its own, then read the end time it recorded.
+  await Bun.sleep(300);
+  const finished = JSON.parse(
+    await tools
+      .get("process_status")!
+      .execute({ id: "proc_idem" }, { workspaceRoot: root }),
+  ) as { status: string; endedAt?: string };
+  expect(finished.status).not.toBe("running");
+  const realEnd = finished.endedAt;
+  expect(realEnd).toBeDefined();
+  // A late stop is idempotent: the process stays finished and the original
+  // end time survives.
+  const stopped = JSON.parse(
+    await tools
+      .get("process_stop")!
+      .execute({ id: "proc_idem" }, { workspaceRoot: root }),
+  ) as { status: string; endedAt?: string };
+  expect(stopped.status).toBe(finished.status);
+  expect(stopped.endedAt).toBe(realEnd);
+});
+
+test("a status read reports the output the process actually produced (P1-12)", async () => {
+  // The 2026-10-08 audit's P1-12: a status read answered `output: ""` and
+  // `ready: false` while the process had already printed its ready pattern —
+  // so a model reading only process_status concluded it had produced
+  // nothing. The snapshot is refreshed from the process's own file now.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-fresh-"));
+  const tools = processRegistryTools();
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_fresh",
+      command: "sh -c 'echo server listening; sleep 30'",
+      description: "Print then sleep",
+      readyPattern: "server listening",
+    },
+    { workspaceRoot: root },
+  );
+  // Wait for the output to land on disk (the audit's shape: the output was
+  // already there, and the status read still said nothing had arrived).
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const seen = String(
+      await tools
+        .get("process_output")!
+        .execute({ id: "proc_fresh" }, { workspaceRoot: root }),
+    );
+    if (seen.includes("server listening")) break;
+    await Bun.sleep(20);
+  }
+  // The very next status read — no process_output in between.
+  const status = JSON.parse(
+    await tools
+      .get("process_status")!
+      .execute({ id: "proc_fresh" }, { workspaceRoot: root }),
+  ) as { output: string; ready: boolean; outputUpdatedAt?: string };
+  expect(status.output).toContain("server listening");
+  expect(status.ready).toBe(true);
+  // And the snapshot says when it was taken.
+  expect(status.outputUpdatedAt).toBeDefined();
+  await tools
+    .get("process_stop")!
+    .execute({ id: "proc_fresh" }, { workspaceRoot: root });
+});

@@ -26,6 +26,15 @@ const provider: StreamingProvider = {
  * reached the status bar. Attach must re-seed it from `recovery_goal` and emit
  * a live `goal.status`.
  */
+/**
+ * The whole goal-attach chain's budget. The runner is ~3.4x slower than this
+ * machine (the same client-rest-1 batch: 49s local vs 167s there), and the
+ * chain is five provider turns with durable writes between them; 120s leaves
+ * room for the runner without making a genuine hang ambiguous. The per-test
+ * timeout above it is the outer bound.
+ */
+const CHAIN_BUDGET_MS = 120_000;
+
 test("same-id attach re-publishes an existing goal as a live goal.status", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-goal-status-"));
   const sessionID = "ses_goal_status" as SessionID;
@@ -230,13 +239,15 @@ test("pause disarms — the running goal round finishes and no next one starts (
   // 167s there), which turned the default into a coin flip — it failed twice
   // on client-rest-1 while every local run, loaded or not, passed. 45s gives
   // the runner headroom without loosening what a genuine hang looks like.
-  const waitUntil = async (
-    predicate: () => boolean,
-    label: string,
-    timeoutMs = 45_000,
-  ) => {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+  // ONE deadline for the whole chain (admission -> turn -> edit -> pause ->
+  // settlement). Per-wait budgets starved the LAST wait of the chain: the
+  // earlier waits' drift landed on it, and this test flaked on CI five times
+  // while every local run passed. Each wait now draws from what is left of a
+  // single budget, so a slow runner spends the budget where it is slow and a
+  // genuine hang still fails at the budget.
+  const chainDeadline = Date.now() + CHAIN_BUDGET_MS;
+  const waitUntil = async (predicate: () => boolean, label: string) => {
+    while (Date.now() < chainDeadline) {
       if (predicate()) return;
       await Bun.sleep(20);
     }
@@ -352,7 +363,6 @@ test("pause disarms — the running goal round finishes and no next one starts (
           (event) => event.type === "goal.round.cost" && event.round === 2,
         ),
       "round 2 settlement",
-      55_000,
     );
     expect(
       events.some((event) => event.type === "goal.round" && event.round === 3),

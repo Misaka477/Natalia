@@ -432,10 +432,15 @@ test("the blob-store option: the vectors answer the same recall through the stor
     inlineHits.map((hit) => hit.id),
   );
   for (const [index, hit] of storedHits.entries()) {
-    expect(hit.score).toBeCloseTo(inlineHits[index]!.score, 9);
+    // The two paths compute the same score by DIFFERENT summation orders
+    // (a stored-vector read vs an inline one), so bit-level agreement is not
+    // a property doubles have: CI measured a 1.5e-9 drift at 9 digits. Six
+    // digits is "the same score"; the ordering above is what pins the exact
+    // ranking.
+    expect(hit.score).toBeCloseTo(inlineHits[index]!.score, 6);
     expect(hit.breakdown.semantic).toBeCloseTo(
       inlineHits[index]!.breakdown.semantic,
-      9,
+      6,
     );
   }
   // And the bytes actually left the row: the store holds the vectors,

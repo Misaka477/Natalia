@@ -1740,7 +1740,10 @@ test("model capability disables provider-visible tools", async () => {
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
-      requests.push((await request.json()) as ProviderStreamRequest);
+      recordTurnRequest(
+        requests,
+        (await request.json()) as ProviderStreamRequest,
+      );
       return new Response("data: [DONE]\n\n", {
         headers: { "content-type": "text/event-stream" },
       });

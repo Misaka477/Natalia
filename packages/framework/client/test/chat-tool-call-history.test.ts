@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { recordTurnRequest } from "./e2e-harness";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,7 +105,7 @@ async function makeHarness(): Promise<Harness> {
     provider: "fake",
     model: "chat",
     async *stream(request) {
-      requests.push(request);
+      recordTurnRequest(requests, request);
       round += 1;
       if (round === 1) {
         yield {

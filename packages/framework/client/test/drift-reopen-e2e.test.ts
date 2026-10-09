@@ -293,9 +293,14 @@ test("Phase 2 E2E: a warning/high finding reaches the main agent's next provider
         const messages = (
           request as { messages: Array<{ role: string; content: string }> }
         ).messages;
-        requests.push(
-          messages.map((message) => String(message.content ?? "")).join("\n"),
-        );
+        // The session-title turn's prompt contains none of this test's
+        // markers, so letting it into the collection makes `requests[0]`
+        // name the wrong request on a slow runner.
+        const text = messages
+          .map((message) => String(message.content ?? ""))
+          .join("\n");
+        if (!text.startsWith("Create a concise session topic"))
+          requests.push(text);
         yield { type: "content" as const, text: "acknowledged" };
         yield { type: "done" as const };
       },

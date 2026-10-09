@@ -306,20 +306,13 @@ test("pause disarms — the running goal round finishes and no next one starts (
     ).toBe(true);
 
     releases.get(0)?.();
-    await waitUntil(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "turn.input" &&
-            event.internal === true &&
-            event.text.includes("goal edited by user"),
-        ),
-      "next-step steering note",
-    );
-
     // The edit preserves continuation authority, so round 2 is driven and its
     // first provider call blocks. Pausing then DISARMS: round 2 finishes, no
     // round 3 starts (the user's 2026-10-07 parity ruling).
+    // (The steering note the edit injects is asserted after round 2 has been
+    // admitted — by then it has long arrived, and a shared CI runner cannot
+    // cross one more runtime-boundary hop to wait for it: this chain failed
+    // there six times.)
     await waitUntil(
       () =>
         events.some(
@@ -327,6 +320,14 @@ test("pause disarms — the running goal round finishes and no next one starts (
         ),
       "goal round 2 admission",
     );
+    expect(
+      events.some(
+        (event) =>
+          event.type === "turn.input" &&
+          event.internal === true &&
+          event.text.includes("goal edited by user"),
+      ),
+    ).toBe(true);
     await waitUntil(
       () =>
         events.some(

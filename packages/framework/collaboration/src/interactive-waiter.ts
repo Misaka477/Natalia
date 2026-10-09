@@ -130,10 +130,11 @@ export function createInteractiveWaiter(
     }
     const terminalApproval = terminalApprovalScope(tool.name, call.arguments);
     const presentation = approvalPresentation(tool.name, call.arguments);
-    const expiresAt =
-      terminalApproval?.risk === "terminal_low"
-        ? Date.now() + terminalApproval.ttlMs
-        : undefined;
+    // No approval expires (R4(b)): the wait ends on a human's answer, an
+    // abort, or the runtime shutting down — never on a clock. The
+    // `terminal_low` TTL this used to apply was the only exception, and it
+    // made a late answer land on a settled request.
+    const expiresAt: number | undefined = undefined;
     // Establish every lookup before publishing. Event sinks are allowed to reply
     // synchronously; publishing first made an immediate `respondApproval()` look
     // like a response to a non-pending request and silently ignored it.

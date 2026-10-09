@@ -303,7 +303,11 @@ export class SessionRecoveryCoordinator {
         level: "warning",
         message: operationTurnWasInterrupted
           ? `previous process stopped during ${interruptedOperation!.kind === "provider_dispatch" ? "provider dispatch" : "tool execution"}; the operation was safely settled as an error and cannot be replayed without an idempotency contract`
-          : `previous process stopped during ${interrupted.filter((event) => event.type === "turn.finished").length} active turn(s); unresolved interactive requests were rejected because incomplete provider work cannot be replayed`,
+          : // R4(d): the requests are NOT rejected — they stay pending and
+            // answerable. What cannot be replayed is the interrupted turn's
+            // provider work, so the turn closes and the human's later answer
+            // is recorded against a request nothing is waiting on.
+            `previous process stopped during ${interrupted.filter((event) => event.type === "turn.finished").length} active turn(s); the turns are closed and their unresolved interactive requests stay pending — answer them and the decision is recorded`,
       });
     }
 

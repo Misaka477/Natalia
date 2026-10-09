@@ -24,6 +24,7 @@ import {
   projectedWorkGraphEdges,
   projectSessionMessages,
   projectSession,
+  projectInteractiveRequests,
   foldProjection,
   settleInterruptedTurns,
   selectedAgentFromEvents,
@@ -116,7 +117,7 @@ test("session projector replays only committed agent selection", () => {
   expect(selectedAgentFromEvents(events)).toBe("third");
 });
 
-test("interrupted turns reject only their unresolved interactive requests", () => {
+test("interrupted turns close but leave their interactive requests pending", () => {
   const session = createSessionRecord("ses_interrupted", "Interrupted");
   appendSessionEvent(session, {
     type: "turn.submitted",
@@ -144,22 +145,26 @@ test("interrupted turns reject only their unresolved interactive requests", () =
     preview: "safe",
   });
 
+  // R4(d): the turn closes, and NOTHING is settled on its behalf. The
+  // approval and the question stay pending — a restart used to append a
+  // forged `reject` for both (the tool approval id is `${turnID}:${callID}`,
+  // so every tool approval always matched), telling the model "no" for a
+  // decision the human never made and stranding the blocked call. The
+  // human's answer is the only thing that settles them now.
   expect(settleInterruptedTurns(session)).toEqual([
-    {
-      type: "approval.response",
-      id: "turn_crashed:write",
-      decision: "reject",
-      feedback: "interrupted turn cannot continue after runtime restart",
-    },
-    {
-      type: "question.response",
-      id: "turn_crashed:write:question",
-      answers: [],
-      rejected: true,
-    },
     { type: "turn.finished", id: "turn_crashed", stopReason: "error" },
   ]);
   expect(projectSession(session).activeTurnIDs).toEqual([]);
+  // The requests are still projected as pending: that is what makes them
+  // restorable and answerable after the restart.
+  const pending = projectInteractiveRequests(session.events);
+  expect(pending.approvals.map((request) => request.id)).toEqual([
+    "turn_crashed:write",
+    "independent_approval",
+  ]);
+  expect(pending.questions.map((request) => request.id)).toEqual([
+    "turn_crashed:write:question",
+  ]);
 });
 
 test("model-visible selection starts after the latest durable context epoch", () => {

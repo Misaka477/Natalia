@@ -1829,40 +1829,42 @@ export function projectedPlanDocs(events: RuntimeEvent[]): ProjectedPlanDoc[] {
   return [...plans.values()];
 }
 
+/**
+ * Closes the turns a restart interrupted, and deliberately LEAVES their
+ * interactive requests alone (R4(d), the user's 2026-10-10 ruling).
+ *
+ * This used to append an `approval.response{decision:"reject"}` for every
+ * approval belonging to an interrupted turn — the tool approval id is
+ * `${turnID}:${callID}`, so every tool approval always matched. The effect
+ * was that a restart silently told the model "no" for a decision the human
+ * never made, and the blocked tool call could never be re-driven: the
+ * request was settled, the waiter gone, and nothing in the next turn knew
+ * the call had ever been waiting.
+ *
+ * The semantics now follow the fact the ruling starts from: an approval
+ * that does not drive an agent waits FOREVER, so after a restart it is
+ * still sitting at that approval. The turn it belonged to is dead (its
+ * provider work cannot be replayed), but the REQUEST survives as pending
+ * and answerable — `respondApproval` already handles a request with no
+ * live waiter, recording the decision durably. What the model is told is
+ * the recovery diagnostic, not a forged rejection.
+ *
+ * The id lists stay in the signature: the caller's recovery filter uses
+ * the returned events to decide which recovered requests to restore, and a
+ * signature that stopped taking them would silently drop that filtering.
+ */
 export function settleInterruptedTurnIDs(
   activeTurnIDs: string[],
-  pendingApprovalIDs: string[],
-  pendingQuestionIDs: string[],
+  pendingApprovalIDs: readonly string[],
+  pendingQuestionIDs: readonly string[],
 ) {
   const settled: RuntimeEvent[] = [];
-  for (const requestID of pendingApprovalIDs)
-    if (requestBelongsToInterruptedTurn(requestID, activeTurnIDs))
-      settled.push({
-        type: "approval.response",
-        id: requestID,
-        decision: "reject",
-        feedback: "interrupted turn cannot continue after runtime restart",
-      });
-  for (const requestID of pendingQuestionIDs)
-    if (requestBelongsToInterruptedTurn(requestID, activeTurnIDs))
-      settled.push({
-        type: "question.response",
-        id: requestID,
-        answers: [],
-        rejected: true,
-      });
+  // Only the turn closes. Its approvals and questions stay pending: the
+  // human's answer is the one that settles them, and it arrives whenever
+  // the human gets to it.
   for (const id of activeTurnIDs)
     settled.push({ type: "turn.finished", id, stopReason: "error" });
   return settled;
-}
-
-function requestBelongsToInterruptedTurn(requestID: string, turnIDs: string[]) {
-  return turnIDs.some(
-    (turnID) =>
-      requestID === turnID ||
-      requestID.startsWith(`${turnID}:`) ||
-      requestID.includes(`:${turnID}:`),
-  );
 }
 
 /* ---------------------------------------------------------------------------

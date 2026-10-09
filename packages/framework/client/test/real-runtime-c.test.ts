@@ -1342,7 +1342,7 @@ test("restart projects unresolved interactive requests from durable events", asy
   ).toHaveLength(1);
 });
 
-test("restart durably rejects orphaned interactive requests from a crashed turn", async () => {
+test("restart closes the crashed turn and leaves its interactive requests pending", async () => {
   const root = await mkdtemp(
     join(tmpdir(), "natalia-ts7-interrupted-interactive-restart-"),
   );
@@ -1392,24 +1392,22 @@ test("restart durably rejects orphaned interactive requests from a crashed turn"
   });
   client.start((event) => events.push(event));
 
+  // R4(d): the crashed turn's approval and question are STILL PENDING — a
+  // restart used to settle them with a forged reject (the tool approval id is
+  // `${turnID}:${callID}`, so every tool approval always matched), which told
+  // the model "no" for a decision the human never made and stranded the
+  // blocked call. The turn itself is closed; its requests wait for the human.
   expect(await client.pendingInteractive!()).toEqual({
-    approvals: [expect.objectContaining({ id: "independent_approval" })],
-    questions: [],
+    approvals: [
+      expect.objectContaining({ id: "turn_crashed:write" }),
+      expect.objectContaining({ id: "independent_approval" }),
+    ],
+    questions: [expect.objectContaining({ id: "turn_crashed:write:question" })],
     interactives: [],
   });
   const history = await client.history!({ limit: 500 });
   expect(history.events.map((entry) => entry.event)).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({
-        type: "approval.response",
-        id: "turn_crashed:write",
-        decision: "reject",
-      }),
-      expect.objectContaining({
-        type: "question.response",
-        id: "turn_crashed:write:question",
-        rejected: true,
-      }),
       expect.objectContaining({
         type: "turn.finished",
         id: "turn_crashed",
@@ -1417,13 +1415,18 @@ test("restart durably rejects orphaned interactive requests from a crashed turn"
       }),
     ]),
   );
+  // Nothing was settled on the dead turn's behalf.
+  expect(
+    history.events.filter((entry) => entry.event.type === "approval.response"),
+  ).toHaveLength(0);
+  expect(
+    history.events.filter((entry) => entry.event.type === "question.response"),
+  ).toHaveLength(0);
   expect(events).toContainEqual(
     expect.objectContaining({
       type: "diagnostic",
       level: "warning",
-      message: expect.stringContaining(
-        "unresolved interactive requests were rejected",
-      ),
+      message: expect.stringContaining("stay pending"),
     }),
   );
 });

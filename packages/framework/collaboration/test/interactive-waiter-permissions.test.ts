@@ -208,3 +208,67 @@ test("responding to an approval does not write runtime state to stderr", async (
     console.error = originalError;
   }
 });
+
+test("a recovered approval is answerable, and the answer is durable", async () => {
+  // R4(d): a restart used to settle the interrupted turn's approvals with a
+  // forged `reject`. They now survive as pending, and the recovery path
+  // re-registers them so a human's answer still lands — recorded durably as
+  // an `approval.response` event even though no waiter survived the restart.
+  const h = harness();
+  const request = {
+    type: "approval.request",
+    id: "turn_dead:write",
+    title: "Write",
+    preview: "file",
+    permissionFamily: { id: "filesystem-write", label: "Filesystem writes" },
+  } as Extract<RuntimeEvent, { type: "approval.request" }>;
+  h.waiter.restoreRecoveredInteractiveState([request], [], []);
+  const outcome = h.waiter.respondApproval({
+    requestID: request.id,
+    decision: "once",
+  });
+  expect(outcome).toEqual({ accepted: true });
+  expect(h.events).toContainEqual(
+    expect.objectContaining({
+      type: "approval.response",
+      id: "turn_dead:write",
+      decision: "once",
+    }),
+  );
+});
+
+test("a terminal_low approval never expires", async () => {
+  // R4(b): the 30-minute TTL on `terminal_low` was the ONE approval that
+  // could time out — the wait failed, the model was told the call did not
+  // run, and a human answering at minute 31 answered a settled request.
+  // No approval expires now: the request carries no deadline and the wait
+  // has no timer.
+  const events: RuntimeEvent[] = [];
+  const waiter = createInteractiveWaiter({
+    publish: (event) => events.push(event),
+    publishForSession: (_session, event) => events.push(event),
+    sessionID: () => "ses_a" as SessionID,
+    sessionIDForTurn: () => "ses_a" as SessionID,
+    permissionMode: () => "ask",
+    abortSignal: () => undefined,
+    activeTurnID: () => undefined,
+    isPending: () => false,
+    workLedger: () =>
+      createWorkLedgerController({ openFindingIDs: () => new Set() }),
+  });
+  // Never answered: the point is that nothing settles it on a clock.
+  void waiter
+    .requireApproval(
+      "low",
+      tool("interactive_terminal_write"),
+      call("low", "interactive_terminal_write", { id: "tty_1", input: "ls" }),
+      "turn_low",
+    )
+    .catch(() => undefined);
+  const request = events.find(
+    (event): event is Extract<RuntimeEvent, { type: "approval.request" }> =>
+      event.type === "approval.request",
+  );
+  expect(request?.risk).toBe("terminal_low");
+  expect(request?.expiresAt).toBeUndefined();
+});

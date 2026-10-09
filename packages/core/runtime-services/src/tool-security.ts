@@ -17,7 +17,14 @@ export function terminalApprovalScope(toolName: string, rawArguments: string) {
     terminalID,
     risk,
     scope: `terminal:${terminalID}:${risk === "terminal_low" ? "low-risk" : "high-risk"}`,
-    ttlMs: 30 * 60 * 1_000,
+    // NO TTL (R4(b), the user's 2026-10-10 ruling: an approval the agent is
+    // waiting on must never expire). This used to carry a 30-minute TTL for
+    // `terminal_low`, which made it the ONE approval that could time out: the
+    // wait failed, the model was told the call did not run, and a human who
+    // answered at minute 31 answered a settled request. Every other approval
+    // already waited forever; the exception was the inconsistency, not the
+    // rule.
+    ttlMs: undefined,
   } as const;
 }
 

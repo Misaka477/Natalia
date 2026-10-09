@@ -102,6 +102,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "resident-defaults and a telemetry field pass in the wire",
   },
+  "packages/framework/client/src/runtime/initialize/finalize.ts": {
+    count: 1,
+    cls: "explicit-history",
+    note: "the restart audit re-wake scan behind its own ensureSessionFullEvents — the study's sanctioned class (the scan must see the whole log: the fast-attach tail both missed early audit.requested events and missed the plan.doc.status events that closed them)",
+  },
   "packages/framework/client/src/runtime/composition/foundation.ts": {
     count: 1,
     cls: "state-first",

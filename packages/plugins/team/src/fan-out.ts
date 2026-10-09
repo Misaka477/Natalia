@@ -19,6 +19,7 @@
  * fan-out core.
  */
 import type { RuntimeEvent, SettlementReason } from "@anthelia/contracts";
+import { detectPromoteCommand } from "@anthelia/sandbox";
 import type {
   SandboxChangeView,
   SandboxToolService,
@@ -65,6 +66,13 @@ export type FanOutPR = {
    * the PR is ready. Present when a build command was configured.
    */
   buildEvidence?: { ok: boolean; exitCode: number; output: string };
+  /**
+   * The command this PR's promotion must be validated with — the one its
+   * evidence was produced with, or the one the lead supplied for it. Recorded
+   * so a review can re-run the SAME check the fan-out ran instead of
+   * substituting a stand-in (`true`) that passes without testing anything.
+   */
+  buildCommand?: string;
 };
 
 /**
@@ -155,7 +163,13 @@ async function buildPR(
             output: "validate failed",
           }))
       : undefined;
-  return { diff, ...(buildEvidence ? { buildEvidence } : {}) };
+  return {
+    diff,
+    // The command rides with the PR so the lead's promotion validates with
+    // the same check that produced the evidence above.
+    ...(input.buildCommand ? { buildCommand: input.buildCommand } : {}),
+    ...(buildEvidence ? { buildEvidence } : {}),
+  };
 }
 
 /**
@@ -360,19 +374,35 @@ export async function reviewPRs(input: {
         await input.sandboxes.delete(pr.sandboxID).catch(() => undefined);
         continue;
       }
-      const promotion = await input.sandboxes
-        .promoteWithValidation(pr.sandboxID, {
-          // An empty command is refused by the promotion, so a batch with no
-          // build configured validates against `true` — the gate is the
-          // promotion's structure, not a check this layer invented.
-          command: input.buildCommand?.trim() || "true",
-          hostRoot: input.workspaceRoot,
-        })
-        .then((result) => ({ ok: true as const, result }))
-        .catch((error: unknown) => ({
-          ok: false as const,
-          reason: error instanceof Error ? error.message : String(error),
-        }));
+      // The validation command, in the honest order: the PR's own recorded
+      // command, the batch's, then the command the workspace's project
+      // markers imply. A lead approving a PR whose merge nothing can
+      // validate gets a refusal that names the missing command — never a
+      // silent stand-in (`true`) that passes without testing anything and
+      // was then reported to the model as build evidence.
+      const command =
+        pr.buildCommand?.trim() ||
+        input.buildCommand?.trim() ||
+        detectPromoteCommand(input.workspaceRoot)?.command;
+      const promotion = command
+        ? await input.sandboxes
+            .promoteWithValidation(pr.sandboxID, {
+              command,
+              hostRoot: input.workspaceRoot,
+            })
+            .then((result) => ({ ok: true as const, result }))
+            .catch((error: unknown) => ({
+              ok: false as const,
+              reason: error instanceof Error ? error.message : String(error),
+            }))
+        : {
+            ok: false as const,
+            reason:
+              "no build command configured: pass buildCommand for this PR, " +
+              "or add a project marker (package.json, CMakeLists.txt, " +
+              "Cargo.toml, pyproject.toml) to the workspace so its own " +
+              "toolchain's check can be detected",
+          };
       if (!promotion.ok) {
         // Recorded and the loop continues. Throwing here abandoned every PR
         // after the first that could not land, and left the ones already

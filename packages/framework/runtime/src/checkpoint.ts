@@ -8,14 +8,12 @@ import {
   manifestMetaOf,
   type CheckpointContextMeta,
 } from "./checkpoint-journal";
-import { constants } from "node:fs";
 
 /** The checkpoint subsystem's name — the `NATALIA_LOG` threshold key. */
 const log = getLogger("checkpoint");
 import {
   appendFile,
   chmod,
-  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -1220,11 +1218,16 @@ export class CheckpointStore {
       if (!entry.objectHash)
         throw new Error(`missing object hash: ${entry.path}`);
       const temp = `${full}.natalia-rollback-tmp`;
-      await copyFile(
-        this.objectPath(entry.objectHash),
-        temp,
-        constants.COPYFILE_FICLONE_FORCE,
-      ).catch(async () => copyFile(this.objectPath(entry.objectHash!), temp));
+      // The object library is the only reader of object bytes. A chunked
+      // object (anything past the store's `chunkMin`) never occupies the
+      // loose `<root>/<xx>/<hash>` path this used to hand-build — its bytes
+      // live in the chunk store behind a `chunked:<id>` manifest — so every
+      // file big enough to be split failed ENOENT here (16 KiB restored,
+      // 100 KiB and 3 MiB did not), and the `.catch()` that followed only
+      // retried the same dead path. `get()` resolves loose, packed and
+      // chunked alike and verifies the hash on the way out, the same reader
+      // `renderDiffChanges`/`previewChangesWithDiff` already use.
+      await writeFile(temp, await this.objects.get(entry.objectHash));
       await chmod(temp, entry.mode);
       await rename(temp, full);
       restoredFiles += 1;

@@ -175,6 +175,10 @@ test("reviewPRs promotes approved PRs into the system slot and sends back the re
     prs,
     sandboxes,
     workspaceRoot: root,
+    // The workspace has no project marker, so the review's validation
+    // command is the batch's own: with nothing resolvable the approve is
+    // refused instead of validated by a stand-in.
+    buildCommand: "test -f output.txt",
     decide: (pr) =>
       pr.id === "approved"
         ? { id: pr.id, decision: "approve" as const }
@@ -409,6 +413,7 @@ test("an approved PR releases its candidate sandbox", async () => {
     prs,
     sandboxes: tracking as unknown as SandboxToolService,
     workspaceRoot: root,
+    buildCommand: "test -f output.txt",
     decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
   });
 
@@ -562,4 +567,107 @@ test("an approved PR with no diff is accepted, not a failed promotion (user smok
   expect(outcomes[0]!.promotionError).toBeUndefined();
   expect(outcomes[0]!.reason).toContain("no changes to promote");
   rmSync(root, { recursive: true, force: true });
+});
+
+/**
+ * A recording `promoteWithValidation`: the command the promotion validated
+ * with is the whole question here, so the spy captures exactly that and
+ * forwards the real call.
+ */
+function recordingPromotions(sandboxes: SnapshotSandboxManager): {
+  service: SandboxToolService;
+  commands: string[];
+} {
+  const commands: string[] = [];
+  const service = new Proxy(sandboxes, {
+    get(target, prop) {
+      if (prop === "promoteWithValidation")
+        return async (
+          id: string,
+          input: { command: string; hostRoot?: string },
+        ) => {
+          commands.push(input.command);
+          return await target.promoteWithValidation(id, input);
+        };
+      return (target as unknown as Record<string, unknown>)[prop as string];
+    },
+  }) as unknown as SandboxToolService;
+  return { service, commands };
+}
+
+test("an approve nothing can validate is refused, never validated by a stand-in", async () => {
+  // The review used to fall back to `true` when no build command was
+  // configured: it exits 0 without testing anything, and the promotion then
+  // reported a green merge the lead could trust. A workspace with no marker
+  // and no command now gets a refusal that names what to set — and the
+  // promotion does not run at all.
+  const root = await mkdtemp(join(tmpdir(), "natalia-review-nocommand-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const sandboxes = new SnapshotSandboxManager(root);
+  await sandboxes.initialize();
+  const { service, commands } = recordingPromotions(sandboxes);
+
+  const outcomes = await reviewPRs({
+    prs: [
+      {
+        id: "x",
+        sandboxID: "sb_x",
+        status: "completed",
+        diff: [{ kind: "modify", path: "a.txt" }],
+      },
+    ],
+    sandboxes: service,
+    workspaceRoot: root,
+    decide: () => ({ id: "x", decision: "approve" }),
+  });
+
+  expect(outcomes[0]!.decision).toBe("request-changes");
+  expect(outcomes[0]!.promotionError).toMatch(/no build command configured/u);
+  expect(outcomes[0]!.promotionError).toMatch(/package\.json/u);
+  // The gate did not run: a stand-in command would have exited 0 here.
+  expect(commands).toEqual([]);
+});
+
+test("a PR's recorded command is the one its promotion validates with", async () => {
+  // The review must re-run the SAME check the fan-out ran. This workspace
+  // carries a `package.json` marker, so detection would answer
+  // `npm run typecheck` — which fails in a candidate with no node_modules.
+  // An approve that lands therefore proves the PR's own recorded command
+  // outranked detection, and the recorded command is what ran.
+  const root = await mkdtemp(join(tmpdir(), "natalia-review-command-"));
+  await writeFile(join(root, "package.json"), '{ "name": "fixture" }\n');
+  await writeFile(join(root, "base.txt"), "base\n");
+  const sandboxes = new SnapshotSandboxManager(root);
+  await sandboxes.initialize();
+  const registry = new SubagentRegistry({
+    workDir: join(root, ".natalia", "subagents"),
+    runner: async (task, context) => {
+      const manifest = await sandboxes.create(context.agentId);
+      await writeFile(join(manifest.root, "output.txt"), `from ${task}`);
+      context.log("ok");
+      context.setStatus("running");
+    },
+  });
+  const { service, commands } = recordingPromotions(sandboxes);
+
+  const prs = await runFanOut({
+    tasks: [{ id: "x", prompt: "x task" }],
+    subagents: registry,
+    sandboxes,
+    timeoutMs: 10_000,
+    // The fan-out records the command it validated with on the PR.
+    buildCommand: "test -f output.txt",
+  });
+  expect(prs[0]!.buildCommand).toBe("test -f output.txt");
+
+  const outcomes = await reviewPRs({
+    prs,
+    sandboxes: service,
+    workspaceRoot: root,
+    decide: () => ({ id: "x", decision: "approve" }),
+  });
+
+  expect(outcomes[0]!.decision).toBe("approve");
+  expect(commands).toEqual(["test -f output.txt"]);
+  expect(await readFile(join(root, "output.txt"), "utf8")).toBe("from x task");
 });

@@ -211,6 +211,40 @@ symlinkTest(
   },
 );
 
+test("rollback restores a chunked object through the object store", async () => {
+  // A file past the object store's `chunkMin` is split into content-defined
+  // chunks and reassembled on read — it never occupies the loose
+  // `<root>/<xx>/<hash>` path. Restoring one by hand-building that path
+  // failed ENOENT (16 KiB restored, 100 KiB and 3 MiB did not), so every
+  // chunked workspace file was unrecoverable and the atomic switch was
+  // empty at any real size.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  // Deterministic, poorly compressible bytes: one object per content, and
+  // the content-defined splitter cannot collapse it into a single chunk.
+  const original = Buffer.from(
+    Array.from({ length: 3 * 1024 * 1024 }, (_, index) => (index * 31) & 0xff),
+  );
+  await writeFile(join(root, "big.payload"), original);
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_chunked_rollback",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await writeFile(
+    join(root, "big.payload"),
+    Buffer.alloc(original.length, 0x41),
+  );
+  await store.createCheckpoint({ reason: "manual", context: ledger, step: 1 });
+  // The premise, pinned: the object is chunked, so the loose path the old
+  // restore copied does not exist and the retry after it could not help.
+  const hash = createHash("sha256").update(original).digest("hex");
+  const objectsRoot = resolveWorkspaceObjectsRoot(root);
+  expect(existsSync(join(objectsRoot, hash.slice(0, 2), hash))).toBe(false);
+  await store.rollbackTo("checkpoint_0", { context: ledger });
+  expect(await readFile(join(root, "big.payload"))).toEqual(original);
+});
+
 test("concurrent checkpoint creation assigns unique durable sequences", async () => {
   const root = await tempWorkspace();
   const ledger = new ContextLedger();

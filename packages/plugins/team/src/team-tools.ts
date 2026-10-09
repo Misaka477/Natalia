@@ -289,21 +289,24 @@ export function createTeamReviewTool(input: {
       const prs: FanOutPR[] = [];
       for (const pr of args.prs) {
         const diff = await sandboxes.previewMerge(pr.sandboxID).catch(() => []);
+        // The queue the lead reviews is rebuilt here from the live sandboxes,
+        // so the diff is re-previewed and the build evidence is whatever the
+        // fan-out actually recorded for this PR. Inventing
+        // `{ok: true, exitCode: 0}` because the caller merely MENTIONED a
+        // buildCommand claimed a validation that never ran — and the approve
+        // gate then merged on evidence nobody produced.
         prs.push({
           id: pr.id,
           sandboxID: pr.sandboxID,
           status: "completed",
           diff,
-          ...(pr.buildCommand
-            ? { buildEvidence: { ok: true, exitCode: 0, output: "" } }
-            : {}),
+          ...(pr.buildCommand ? { buildCommand: pr.buildCommand } : {}),
         });
       }
       const outcomes = await reviewPRs({
         prs,
         sandboxes,
         workspaceRoot: context.workspaceRoot,
-        buildCommand: "true",
         decide: async (pr) => {
           const decision = decisions.get(pr.id);
           if (!decision)

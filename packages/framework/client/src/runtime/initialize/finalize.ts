@@ -3,7 +3,9 @@ import {
   loadInstanceGovernance,
   resolveGovernanceRoot,
 } from "@natalia/governance-ledger";
+import type { RuntimeEvent } from "@anthelia/contracts";
 import type { InitializeOptions, RuntimeContext } from "@anthelia/substrate";
+import { ensureSessionFullEvents } from "@anthelia/substrate";
 import { createInitializeRuntime } from "./runtime";
 import { perfLog } from "@anthelia/runtime-services";
 import { workLedgerController as workLedgerControllerToken } from "@natalia/work-ledger";
@@ -11,6 +13,75 @@ import { governanceLedgerController as governanceLedgerControllerToken } from "@
 import type { GovernanceLedgerController } from "@natalia/governance-ledger";
 import type { WorkLedgerController } from "@natalia/work-ledger";
 import { logOf } from "@anthelia/operation-log";
+
+/**
+ * The plan statuses that mean an audit is in flight and has not reached a
+ * verdict. Everything else (`executing`, `paused`, `handed_off`, `marked`,
+ * `audit_gaps`, `completed`, …) is either not awaiting an audit or already
+ * answered one, and re-waking Nia for it would restart work that finished or
+ * never started.
+ */
+const AUDIT_IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
+  "awaiting_audit",
+  "auditing",
+  "audit_pending",
+]);
+
+/**
+ * Process-level guard for the restart audit re-wake: one wake per plan+round
+ * per process. `finalizeInitialize` runs once per runtime start, but one
+ * process can host several runtimes (re-initialization, tests), and each of
+ * them would otherwise stack another wake for the same in-flight audit.
+ */
+const reWokenAuditsThisProcess = new Set<string>();
+
+/**
+ * The plans whose audit a restart must re-wake Nia for (EI §3.9).
+ *
+ * A plan qualifies when it has a durable `audit.requested` AND its CURRENT
+ * status is still pre-verdict. "Current" is the last `plan.doc.status` folded
+ * over the whole log — the old scan instead asked "was an `audit_gaps` or
+ * `completed` event ever seen", which (a) re-woke Nia on every boot for a
+ * plan that was paused, handed off or still executing, and (b) under
+ * `NATALIA_FAST_EXECUTION_LOAD` read a post-epoch tail that hid the early
+ * events: an already-closed audit looked unclosed (a false re-wake) and an
+ * early `audit.requested` looked like it never happened (a missed one).
+ *
+ * The dedup key is the plan plus the round of its latest request: a new audit
+ * round is a new in-flight audit and earns its own wake, while the same round
+ * never wakes twice in one process. `alreadyWoken` is the caller's guard set;
+ * every key this function wakes is claimed in it.
+ */
+export function unclosedAuditPlanIDs(
+  events: readonly RuntimeEvent[],
+  alreadyWoken: Set<string> = new Set<string>(),
+): string[] {
+  const statusByPlan = new Map<string, string>();
+  const latestRoundByPlan = new Map<string, number>();
+  for (const event of events) {
+    if (event.type === "plan.doc.status")
+      statusByPlan.set(event.planID, event.status);
+    else if (event.type === "audit.requested")
+      latestRoundByPlan.set(
+        event.planID,
+        Math.max(latestRoundByPlan.get(event.planID) ?? 0, event.round),
+      );
+  }
+  const planIDs: string[] = [];
+  for (const [planID, round] of latestRoundByPlan) {
+    const status = statusByPlan.get(planID);
+    // A requested audit whose plan has no lifecycle projection at all (work
+    // outside any plan document — the request's own status write is
+    // best-effort) still needs its wake; a plan WITH a status line is
+    // governed by that line's current state.
+    if (status !== undefined && !AUDIT_IN_FLIGHT_STATUSES.has(status)) continue;
+    const key = `${planID}#${round}`;
+    if (alreadyWoken.has(key)) continue;
+    alreadyWoken.add(key);
+    planIDs.push(planID);
+  }
+  return planIDs;
+}
 
 export async function finalizeInitialize(
   ctx: RuntimeContext,
@@ -188,20 +259,24 @@ export async function finalizeInitialize(
   // (no audit_gaps / completed status) and re-wake Nia so the
   // audit is not lost across a restart.
   if (scope.activeExec && ctx.ports.requestNiaWake) {
-    const closedPlans = new Set<string>();
-    for (const event of session.events) {
-      if (
-        event.type === "plan.doc.status" &&
-        (event.status === "audit_gaps" || event.status === "completed")
-      )
-        closedPlans.add(event.planID);
+    // The scan needs the WHOLE log, not the fast-attach tail: the tail alone
+    // both misses early `audit.requested` events and misses the
+    // `plan.doc.status` events that closed them. A consumer without a store
+    // has no full log to load, and a startup must not die because the history
+    // could not be widened — the scan then runs over the exec's window.
+    try {
+      await ensureSessionFullEvents(ctx, scope.activeExec);
+    } catch (error) {
+      logOf(ctx.state.serviceDirectory).warn(
+        "audit-recovery",
+        "full event load failed; the unclosed-audit scan uses the exec window",
+        { error: error instanceof Error ? error.message : String(error) },
+      );
     }
-    const unclosed = new Set<string>();
-    for (const event of session.events) {
-      if (event.type === "audit.requested" && !closedPlans.has(event.planID))
-        unclosed.add(event.planID);
-    }
-    for (const planID of unclosed) {
+    for (const planID of unclosedAuditPlanIDs(
+      scope.activeExec.session.events,
+      reWokenAuditsThisProcess,
+    )) {
       logOf(ctx.state.serviceDirectory).info(
         "audit-recovery",
         "re-waking Nia for an unclosed audit",

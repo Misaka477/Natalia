@@ -24,6 +24,7 @@ import { contextLedgerFactory } from "@natalia/context-ledger";
 import { compactionService } from "@anthelia/compaction";
 import { subagentsService } from "@anthelia/runtime-services";
 import type { CompactionService, RetryService } from "@anthelia/runtime";
+import { chatStepTiming } from "@natalia/collab";
 import type {
   ContextLedgerFactory,
   RuntimeContextLedger,
@@ -221,6 +222,37 @@ export async function createSubagentSupport(
   ) {
     const meter = tokenMeterFor(ledger);
     const projection = meter.project(`subagent:${runner.agentId}`);
+    // The durable twin: the live event below carries the child's `agentID`,
+    // which the event sink keeps out of the parent's journal by design, so
+    // the last projection is written to the child's record and replayed on
+    // attach — the ring's restart survival, the same discipline navi/nia's
+    // snapshot seeding follows.
+    subagents?.recordSubagentContext(runner.agentId, {
+      usedTokens:
+        projection.projectedTokens ??
+        projection.pressureTokens ??
+        ledger.effectiveTokens(),
+      ...(projection.pressureTokens === undefined
+        ? {}
+        : { pressureTokens: projection.pressureTokens }),
+      ...(projection.projectedTokens === undefined
+        ? {}
+        : { projectedTokens: projection.projectedTokens }),
+      ...(projection.contextWindow === undefined
+        ? {}
+        : { contextWindow: projection.contextWindow }),
+      ...(projection.systemTokens === undefined
+        ? {}
+        : { systemTokens: projection.systemTokens }),
+      ...(projection.toolsTokens === undefined
+        ? {}
+        : { toolsTokens: projection.toolsTokens }),
+      ...(projection.messageTokens === undefined
+        ? {}
+        : { messageTokens: projection.messageTokens }),
+      source: projection.source,
+      at: new Date().toISOString(),
+    });
     publishSubagentEvent(runner, {
       type: "context.snapshot",
       usedTokens:
@@ -274,6 +306,10 @@ export async function createSubagentSupport(
     allowToolCalls = true,
   ) {
     const id = subagentTurnID(runner);
+    // The step's wall clock, the same anchors the main runner and the chat
+    // turns measure: without them the subagent pane's LLM / 首 token / tok/s
+    // segments were permanently blank.
+    const timing = chatStepTiming();
     const runStep = () =>
       resolvedRetryService.run(
         { id, operation: "llm_step", step },
@@ -305,6 +341,7 @@ export async function createSubagentSupport(
             providerMessages.length,
             toolSchemas.length,
           );
+          timing.start();
           const stream = scope.withProviderConcurrency(
             scope.providerConcurrencyLimiter,
             activeProvider.provider,
@@ -325,6 +362,7 @@ export async function createSubagentSupport(
             : stream;
           for await (const chunk of normalized) {
             if (chunk.type === "thinking") {
+              if (chunk.text) timing.firstToken();
               thinking += chunk.text;
               publishSubagentEvent(runner, {
                 type: "thinking.delta",
@@ -334,6 +372,7 @@ export async function createSubagentSupport(
               });
             }
             if (chunk.type === "content") {
+              if (chunk.text) timing.firstToken();
               output += chunk.text;
               publishSubagentEvent(runner, {
                 type: "content.delta",
@@ -363,6 +402,7 @@ export async function createSubagentSupport(
                   : { cacheReadInputTokens: chunk.cacheReadInputTokens }),
               };
           }
+          timing.end();
           if (providerUsage) {
             const meter = tokenMeterFor(ledger);
             const scopeKey = `subagent:${runner.agentId}`;
@@ -397,6 +437,31 @@ export async function createSubagentSupport(
                 : {
                     cacheReadInputTokens: providerUsage.cacheReadInputTokens,
                   }),
+              // The measured wall clock, so the pane's bar reads like the
+              // other three agents' instead of showing tokens alone.
+              ...timing.usage(),
+            });
+            // The durable twin (R3, option B): the live event above carries
+            // the child's `agentID`, which the event sink keeps out of the
+            // parent's journal by design, so the same numbers are written
+            // into the child's own record — persisted with it and hydrated
+            // on attach, which is what makes the pane survive a restart.
+            subagents?.recordSubagentUsage(runner.agentId, {
+              steps: 1,
+              inputTokens: providerUsage.inputTokens,
+              outputTokens: providerUsage.outputTokens,
+              ...(providerUsage.cacheCreationInputTokens === undefined
+                ? {}
+                : {
+                    cacheCreationInputTokens:
+                      providerUsage.cacheCreationInputTokens,
+                  }),
+              ...(providerUsage.cacheReadInputTokens === undefined
+                ? {}
+                : {
+                    cacheReadInputTokens: providerUsage.cacheReadInputTokens,
+                  }),
+              ...timing.usage(),
             });
           }
           return { output, thinking, calls, protocolViolation };

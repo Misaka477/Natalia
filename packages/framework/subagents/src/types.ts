@@ -54,6 +54,52 @@ export interface SubagentEvent {
   force?: boolean;
 }
 
+/**
+ * One subagent's accumulated usage, the same fields the other three agents'
+ * bars read — kept on the record so it survives the run, the restart and the
+ * session switch (R3's "cross-session behavior matches the other three").
+ *
+ * The live path already folds `runtime.step_usage` events carrying the
+ * child's `agentID` into its isolated view state; this is the DURABLE twin
+ * that a re-attach hydrates from, which is what the event-sink's `agentID`
+ * gate (live-only by design) cannot give. One writer per step, persisted by
+ * the store's existing save-on-change.
+ */
+export interface SubagentUsage {
+  turns: number;
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  /** Model stream wall time, ms. */
+  llmMs: number;
+  /** First-token latency, ms. */
+  ttftMs: number;
+  /** Steps that reported a first-token latency (the average's denominator). */
+  ttftSteps: number;
+  /** Decode wall time, ms (first token → stream end). */
+  decodeMs: number;
+  /** Tool-execution wall time, ms. */
+  toolMs: number;
+}
+
+export function emptySubagentUsage(): SubagentUsage {
+  return {
+    turns: 0,
+    steps: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    llmMs: 0,
+    ttftMs: 0,
+    ttftSteps: 0,
+    decodeMs: 0,
+    toolMs: 0,
+  };
+}
+
 export interface SubagentRecord {
   id: SubagentID;
   task: string;
@@ -89,6 +135,32 @@ export interface SubagentRecord {
   activityDetail: string;
   startedAt: number;
   endedAt?: number;
+  /**
+   * The child's accumulated usage, persisted with the record. Optional so an
+   * existing manifest without it reads as "no usage recorded yet" rather than
+   * as a malformed record.
+   */
+  usage?: SubagentUsage;
+  /**
+   * The child's last context projection, persisted with the record and
+   * replayed on attach — the ring's durable twin, the same discipline
+   * navi/nia's `context.snapshot` events follow. Named `contextSnapshot`
+   * because `context` already means the fresh/fork seed choice.
+   */
+  contextSnapshot?: SubagentContextSnapshot;
+}
+
+/** The last context projection a subagent's run produced. */
+export interface SubagentContextSnapshot {
+  usedTokens: number;
+  contextWindow?: number;
+  pressureTokens?: number;
+  projectedTokens?: number;
+  systemTokens?: number;
+  toolsTokens?: number;
+  messageTokens?: number;
+  source: string;
+  at: string;
 }
 
 export interface SpawnOptions {
@@ -137,7 +209,13 @@ export type RunnerCallback = (
 export interface SubagentRegistryOptions {
   runner: RunnerCallback;
   workDir?: string;
-  sessionID?: string;
+  /**
+   * The owning session, resolved LIVE (a thunk) rather than captured. The
+   * registry is constructed before `recoverSession` runs, so a captured
+   * value froze the workspace-level path into every later save whenever the
+   * boot had no active session yet.
+   */
+  sessionID?: string | (() => string | undefined);
   /** Time source; defaults to Date.now for production. */
   clock?: () => number;
   /** Grace period before idle→stalled; 0 uses the default. */

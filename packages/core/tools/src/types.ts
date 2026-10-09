@@ -73,6 +73,38 @@ export type SubagentRecordView = {
   activityDetail: string;
   startedAt: number;
   endedAt?: number;
+  /**
+   * The child's accumulated usage, persisted on its record. Optional: a
+   * record written before the usage existed reads as "none recorded yet".
+   */
+  usage?: SubagentUsageView;
+  /** The child's last context projection, persisted on its record. */
+  contextSnapshot?: {
+    usedTokens: number;
+    contextWindow?: number;
+    pressureTokens?: number;
+    projectedTokens?: number;
+    systemTokens?: number;
+    toolsTokens?: number;
+    messageTokens?: number;
+    source: string;
+    at: string;
+  };
+};
+
+/** One subagent's accumulated usage — the fields the agent bars read. */
+export type SubagentUsageView = {
+  turns: number;
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  llmMs: number;
+  ttftMs: number;
+  ttftSteps: number;
+  decodeMs: number;
+  toolMs: number;
 };
 
 export type SubagentEventView = {
@@ -143,6 +175,31 @@ export type SubagentToolService = {
   resume(id: string): Promise<boolean>;
   /** Replace the messages queued for a subagent. */
   setPendingMessages(id: string, messages: string[]): boolean;
+  /**
+   * Accumulates one provider step's usage into the child's DURABLE bucket.
+   *
+   * The live events a child publishes carry its `agentID` and fold into its
+   * isolated view state, but the event sink keeps `agentID`-tagged events out
+   * of the parent's journal by design — so without this the numbers died
+   * with the process and the pane read zeroes after any restart. The bucket
+   * is persisted with the record and hydrated on attach.
+   */
+  recordSubagentUsage(id: string, delta: Partial<SubagentUsageView>): boolean;
+  /** Records the child's last context projection on its durable record. */
+  recordSubagentContext(
+    id: string,
+    snapshot: {
+      usedTokens: number;
+      contextWindow?: number;
+      pressureTokens?: number;
+      projectedTokens?: number;
+      systemTokens?: number;
+      toolsTokens?: number;
+      messageTokens?: number;
+      source: string;
+      at: string;
+    },
+  ): boolean;
   /**
    * Deliver a parent message to a subagent, routing by its live state.
    * Rejects a caller that is not the subagent's parent.

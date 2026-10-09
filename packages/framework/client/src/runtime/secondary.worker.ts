@@ -48,6 +48,8 @@ port.on("message", (request: SecondaryWorkerRequest) => {
           lastActivityAt?: string;
           startedAt?: string;
           endedAt?: string;
+          usage?: Record<string, number>;
+          contextSnapshot?: Record<string, unknown>;
         };
         return {
           type: "subagent.update",
@@ -56,6 +58,10 @@ port.on("message", (request: SecondaryWorkerRequest) => {
           attached: value.attached,
           event: "status",
           task: value.task,
+          ...(value.usage ? { usage: value.usage } : {}),
+          ...(value.contextSnapshot
+            ? { contextSnapshot: value.contextSnapshot }
+            : {}),
           ...(value.parentSessionID !== undefined
             ? { parentSessionID: value.parentSessionID }
             : {}),

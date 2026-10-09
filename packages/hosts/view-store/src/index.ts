@@ -678,6 +678,26 @@ export function hydrateSubagents(
   const incoming: Record<string, RuntimeSubagentView> = {};
   for (const subagent of subagents) incoming[subagent.id] = subagent;
   state.subagents = { ...incoming, ...state.subagents };
+  // The durable twins: each record carries the usage and context projection
+  // the run persisted, and this is where they become the pane's numbers.
+  // SET, not accumulate — these are the totals the record holds, and live
+  // events continue on top of them from here.
+  for (const subagent of subagents) {
+    const child = (state.subagentStates[subagent.id] ??= initialState());
+    if (subagent.usage) child.sessionUsage = { ...subagent.usage };
+    if (subagent.contextSnapshot) {
+      child.context = {
+        used: subagent.contextSnapshot.usedTokens,
+        ...(subagent.contextSnapshot.contextWindow === undefined
+          ? {}
+          : { max: subagent.contextSnapshot.contextWindow }),
+        source: subagent.contextSnapshot.source,
+        contextWindow: subagent.contextSnapshot.contextWindow,
+        pressureTokens: subagent.contextSnapshot.pressureTokens,
+        projectedTokens: subagent.contextSnapshot.projectedTokens,
+      };
+    }
+  }
   return true;
 }
 

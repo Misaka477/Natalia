@@ -155,5 +155,11 @@ function toSubagentView(
     lastActivityAt: record.lastActivityAt,
     startedAt: record.startedAt,
     ...(record.endedAt !== undefined ? { endedAt: record.endedAt } : {}),
+    // The durable twins, so an attaching UI hydrates the pane's bar and ring
+    // from the record instead of showing zeroes until the child speaks.
+    ...(record.usage ? { usage: record.usage } : {}),
+    ...(record.contextSnapshot
+      ? { contextSnapshot: record.contextSnapshot }
+      : {}),
   };
 }

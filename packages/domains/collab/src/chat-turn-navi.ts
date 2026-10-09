@@ -23,6 +23,7 @@ import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import { logOf } from "@anthelia/operation-log";
 import {
   type ConcreteRuntimeEvent,
+  chatStepTiming,
   naviChatHistory,
   collabMessagesForExec,
   chatModelCapabilities,
@@ -287,6 +288,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
         : undefined;
     };
     try {
+      const timing = chatStepTiming();
       while (
         step <= effectiveMaxSteps(input.exec) ||
         input.exec.naviPendingQueue.length > 0
@@ -409,6 +411,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
         // which is the whole of this loop's job. It also carried a 64-entry
         // in-memory bound whose exact-match key almost never recurred across
         // steps, so it cost the risk and delivered nothing.
+        timing.start();
         const raw: AsyncIterable<ProviderStreamChunk> = activeProvider.stream({
           messages: requestMessages,
           tools: requestTools,
@@ -424,6 +427,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
           });
           if (chunk.type === "thinking") {
             setPhase("thinking");
+            if (chunk.text) timing.firstToken();
             if (chunk.text) {
               thinking += chunk.text;
               stepThinking += chunk.text;
@@ -442,6 +446,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
           }
           if (chunk.type === "content") {
             setPhase("generating");
+            if (chunk.text) timing.firstToken();
             output += chunk.text;
             stepOutput += chunk.text;
             publish({
@@ -467,6 +472,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
                 : { cacheReadInputTokens: chunk.cacheReadInputTokens }),
             };
         }
+        timing.end();
         if (providerUsage) {
           // The main provider runner emits one `runtime.step_usage` per step.
           // Chat turns call the provider directly, so mirror it here or the
@@ -485,6 +491,9 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
             ...(providerUsage.cacheReadInputTokens === undefined
               ? {}
               : { cacheReadInputTokens: providerUsage.cacheReadInputTokens }),
+            // The measured wall clock: without it the bar's LLM / 首 token /
+            // tok/s segments stayed blank for this channel.
+            ...timing.usage(),
           });
           const scope = "stream";
           const system =
@@ -617,6 +626,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
           }
           setPhase("using_tool", tool.name);
           let result: string;
+          const toolStart = performance.now();
           try {
             result = await tool.execute(parsed, {
               workspaceRoot: getWorkspaceRoot(),
@@ -625,6 +635,8 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
             });
           } catch (error) {
             result = `ERROR: ${error instanceof Error ? error.message : String(error)}`;
+          } finally {
+            timing.addToolMs(performance.now() - toolStart);
           }
           publish({
             type: "navi.chat.tool.used",

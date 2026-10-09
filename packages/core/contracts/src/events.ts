@@ -1244,6 +1244,40 @@ type RuntimeEventData =
         | "activity";
       task?: string;
       text?: string;
+      /**
+       * The child's accumulated usage, persisted on its record. Carried here
+       * so an attaching UI can hydrate the pane's bar from the durable
+       * numbers instead of showing zeroes until the child speaks again (R3).
+       */
+      usage?: {
+        turns: number;
+        steps: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadInputTokens: number;
+        cacheCreationInputTokens: number;
+        llmMs: number;
+        ttftMs: number;
+        ttftSteps: number;
+        decodeMs: number;
+        toolMs: number;
+      };
+      /**
+       * The child's last context projection, persisted on its record and
+       * replayed on attach the way navi/nia's snapshots are — without it the
+       * ring came up empty after every restart.
+       */
+      contextSnapshot?: {
+        usedTokens: number;
+        contextWindow?: number;
+        pressureTokens?: number;
+        projectedTokens?: number;
+        systemTokens?: number;
+        toolsTokens?: number;
+        messageTokens?: number;
+        source: string;
+        at: string;
+      };
       parentSessionID?: string;
       parentAgentID?: string;
       continuation?: number;
@@ -3329,10 +3363,15 @@ export function runtimeEventDurability(
     case "terminal.update":
     case "navi.chat.turn.started":
     case "navi.chat.turn.phase":
-    case "navi.chat.turn.finished":
     case "nia.chat.turn.started":
     case "nia.chat.turn.phase":
-    case "nia.chat.turn.finished":
+    // The turns' settlements are DURABLE: the fold counts a turn and adds its
+    // wall clock from `*.chat.turn.finished`, so a live-only verdict reset
+    // `usageByChannel.navi.turns`/`.nia.turns` (and their llmMs share) to
+    // zero on every restart while the token sums survived — the dashboard's
+    // two halves disagreed about the same session. The lifecycle's
+    // `started`/`phase` rows stay live: they are progress noise, and the
+    // finished row is the one fact worth keeping.
     // Session intelligence snapshots are reconstructible from the journal and
     // are published on every work-state boundary. Persisting each one bloats
     // long sessions and makes every full-session clone larger; keep them live

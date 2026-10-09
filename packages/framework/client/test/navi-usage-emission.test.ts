@@ -79,3 +79,60 @@ test("a real navi turn emits its own step_usage, not just the main one", async (
     await client.dispose?.();
   }
 });
+
+test("a real chat turn's step_usage carries the wall clock, not just tokens", async () => {
+  // G2-7: the bar's `LLM` / `首 token` / `tok/s` segments were permanently
+  // blank for Navi and Nia, because the chat turns call the provider directly
+  // and emitted the token four-tuple with no timing — the main runner
+  // measures and emits those, and the chat turns had no equivalent. The
+  // contract has carried the fields the whole time; nothing filled them.
+  const root = await mkdtemp(join(tmpdir(), "natalia-chat-timing-"));
+  const events: RuntimeEvent[] = [];
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    provider: {
+      provider: "test",
+      model: "test",
+      async *stream() {
+        yield { type: "content" as const, text: "timed answer" };
+        yield { type: "usage" as const, inputTokens: 40, outputTokens: 6 };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start((event) => events.push(event), { replay: "none" });
+  try {
+    await waitForAsync(async () =>
+      events.some((event) => event.type === "session.ready"),
+    );
+    await client.naviChat!.submit({ text: "ping for timing" });
+    await client.niaChat!.submit({ text: "ping for timing" });
+    await waitForAsync(async () =>
+      events.some(
+        (event) =>
+          (event.type === "navi.runtime.step_usage" &&
+            (event as { llmMs?: number }).llmMs !== undefined) ||
+          (event.type === "nia.runtime.step_usage" &&
+            (event as { llmMs?: number }).llmMs !== undefined),
+      ),
+    );
+
+    for (const type of [
+      "navi.runtime.step_usage",
+      "nia.runtime.step_usage",
+    ] as const) {
+      const usage = events.find(
+        (event): event is Extract<RuntimeEvent, { type: typeof type }> =>
+          event.type === type,
+      );
+      expect(usage, `${type} was emitted`).toBeDefined();
+      // Model wall time and first-token latency are measured, not derived.
+      expect(usage!.llmMs).toBeGreaterThanOrEqual(0);
+      expect(usage!.ttftMs).toBeGreaterThanOrEqual(0);
+      // The throughput denominator, without which tok/s cannot be computed.
+      expect(usage!.decodeMs).toBeGreaterThanOrEqual(0);
+    }
+  } finally {
+    await client.dispose?.();
+  }
+});

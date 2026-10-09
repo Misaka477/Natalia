@@ -20,7 +20,11 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
+import {
+  runtimeEventDurability,
+  type RuntimeEvent,
+  type SessionID,
+} from "@anthelia/contracts";
 import { JsonSessionStore, SqliteSessionStore } from "../src/index.ts";
 import { appendSessionEvent } from "../src/facts.ts";
 import {
@@ -117,3 +121,76 @@ for (const mode of ["json", "sqlite"] as const) {
     }
   });
 }
+
+test("a navi/nia turn's settlement is durable, so the turn count survives a restart", async () => {
+  // The other half of the bar: the token sums came back from the journal
+  // while `turns` (and its llmMs share) reset to zero on every restart,
+  // because `*.chat.turn.finished` was classified live-only. The fold has
+  // always known how to count one; the event just never reached the log.
+  const root = await mkdtemp(join(tmpdir(), "natalia-usage-turns-"));
+  try {
+    const events = [
+      {
+        type: "navi.runtime.step_usage",
+        id: "n:1",
+        inputTokens: 20,
+        outputTokens: 5,
+        llmMs: 40,
+      },
+      {
+        type: "navi.chat.turn.finished",
+        id: "n:f",
+        messageID: "m1",
+        stopReason: "done",
+        startedAt: 1_000,
+        endedAt: 1_250,
+      },
+      {
+        type: "nia.chat.turn.finished",
+        id: "i:f",
+        messageID: "m2",
+        stopReason: "done",
+        startedAt: 2_000,
+        endedAt: 2_400,
+      },
+    ] as unknown as RuntimeEvent[];
+    // The classification is the fix: both settlements are durable now, and
+    // the progress rows that carry no fact stay live.
+    expect(runtimeEventDurability(events[1]!)).toBe("durable");
+    expect(runtimeEventDurability(events[2]!)).toBe("durable");
+    expect(
+      runtimeEventDurability({
+        type: "navi.chat.turn.started",
+        id: "n:s",
+        messageID: "m1",
+        startedAt: 1_000,
+      } as unknown as RuntimeEvent),
+    ).toBe("live");
+
+    const sqlite = new SqliteSessionStore(join(root, "sessions.db"));
+    try {
+      sqlite.create(SESSION, "usage turns");
+      for (const event of events) sqlite.appendEvent(SESSION, event);
+      await sqlite.flushPendingWrites?.(SESSION);
+      const readBack = sqlite.loadEventsAfter(SESSION, 0);
+      expect(readBack.map((event) => event.type)).toContain(
+        "navi.chat.turn.finished",
+      );
+      expect(readBack.map((event) => event.type)).toContain(
+        "nia.chat.turn.finished",
+      );
+      const totals = emptySessionUsageTotals();
+      for (const event of readBack) foldSessionUsageInto(totals, event);
+      // The turn counts and their wall clock survive the round trip.
+      expect(totals.navi.turns).toBe(1);
+      expect(totals.navi.llmMs).toBe(290); // 40 from the step + 250 from the turn
+      expect(totals.nia.turns).toBe(1);
+      expect(totals.nia.llmMs).toBe(400);
+      expect(totals.main.turns).toBe(0);
+    } finally {
+      sqlite.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

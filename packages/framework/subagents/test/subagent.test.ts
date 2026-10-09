@@ -189,7 +189,9 @@ test("force stop persists a running agent status without waiting for completion"
     "stopped",
   );
   await Bun.sleep(20);
-  expect((await new SubagentStore(dir).load())[0]?.status).toBe("stopped");
+  expect((await new SubagentStore(dir).load()).records[0]?.status).toBe(
+    "stopped",
+  );
 });
 
 test("stop returns false for unknown agent", async () => {
@@ -477,7 +479,7 @@ test("formatStatus returns detailed agent info", async () => {
 test("store saves and loads manifest", async () => {
   const dir = await tempDir();
   const store = new SubagentStore(dir);
-  const records = await store.load();
+  const records = (await store.load()).records;
   expect(records).toHaveLength(0);
   const now = Date.now();
   await store.save([
@@ -500,16 +502,16 @@ test("store saves and loads manifest", async () => {
     },
   ]);
   const loaded = await store.load();
-  expect(loaded).toHaveLength(1);
-  expect(loaded[0].id).toBe("a1");
-  expect(loaded[0].task).toBe("persist");
-  expect(loaded[0].outputs[0].text).toBe("ok");
+  expect(loaded.records).toHaveLength(1);
+  expect(loaded.records[0].id).toBe("a1");
+  expect(loaded.records[0].task).toBe("persist");
+  expect(loaded.records[0].outputs[0].text).toBe("ok");
 });
 
 test("store handles missing directory", async () => {
   const dir = await tempDir();
   const store = new SubagentStore(join(dir, "nonexistent"));
-  const records = await store.load();
+  const records = (await store.load()).records;
   expect(records).toHaveLength(0);
 });
 
@@ -518,7 +520,7 @@ test("store handles corrupt manifest", async () => {
   const store = new SubagentStore(dir);
   await mkdir(store.dir, { recursive: true });
   await writeFile(join(store.dir, "manifest.json"), "{corrupt");
-  const records = await store.load();
+  const records = (await store.load()).records;
   expect(records).toHaveLength(0);
 });
 
@@ -550,7 +552,7 @@ test("store keeps its state under .natalia and never in the workspace root", asy
   // would leave a stray file next to their own sources.
   expect(await readdir(dir)).toEqual([".natalia"]);
   expect(await readdir(store.dir)).toEqual(["manifest.json"]);
-  expect((await store.load())[0]?.task).toBe("placement");
+  expect((await store.load()).records[0]?.task).toBe("placement");
 });
 
 test("spawn respects AbortSignal from options", async () => {
@@ -643,7 +645,7 @@ test("load marks process-local running agents stopped after runtime restart", as
   expect(registry.output("a1" as any)?.at(-1)?.text).toContain(
     "runtime restarted",
   );
-  expect((await store.load())[0]?.status).toBe("stopped");
+  expect((await store.load()).records[0]?.status).toBe("stopped");
 });
 
 test("retry explicitly starts a new continuation for stopped subagents", async () => {
@@ -702,7 +704,7 @@ test("save persists to store", async () => {
   await reg.spawn("save test");
   await reg.save();
   const store = new SubagentStore(dir);
-  const records = await store.load();
+  const records = (await store.load()).records;
   expect(records).toHaveLength(1);
   expect(records[0].task).toBe("save test");
 });
@@ -712,12 +714,12 @@ test("spawn auto-saves after runner completes", async () => {
   const reg = new SubagentRegistry({ runner: delayedRunner, workDir: dir });
   await reg.spawn("auto save");
   const store = new SubagentStore(dir);
-  let records = await store.load();
+  let records = (await store.load()).records;
   // Auto-save is asynchronous; poll instead of racing a fixed sleep.
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (records.length === 1 && records[0]?.status === "completed") break;
     await Bun.sleep(10);
-    records = await store.load();
+    records = (await store.load()).records;
   }
   expect(records).toHaveLength(1);
   expect(records[0].status).toBe("completed");
@@ -993,12 +995,12 @@ test("session-scoped store backfills missing parentSessionID for legacy records"
     },
   ]);
 
-  const loaded = await store.load();
+  const loaded = (await store.load()).records;
   expect(loaded[0]!.parentSessionID).toBe("ses_legacy");
   const persisted = JSON.parse(
     await readFile(join(store.dir, "manifest.json"), "utf8"),
-  ) as Array<{ parentSessionID?: string }>;
-  expect(persisted[0]!.parentSessionID).toBe("ses_legacy");
+  ) as { records: Array<{ parentSessionID?: string }> };
+  expect(persisted.records[0]!.parentSessionID).toBe("ses_legacy");
 });
 
 test("registry without sessionID uses the legacy shared store path", async () => {
@@ -1114,4 +1116,150 @@ test("a message to a terminal agent is a dead letter, not a queued success (P1-4
   expect(answer.reason).toContain("never be delivered");
   // Nothing was queued for it.
   expect(registry.get(record.id)?.pendingMessages).toBeUndefined();
+});
+
+test("a subagent's usage is durable and re-read by a restarted registry", async () => {
+  // R3's core: the live step_usage events a child publishes carry its
+  // `agentID`, which the event sink keeps out of the parent's journal by
+  // design — so without the record's own bucket the pane read zeroes after
+  // every restart. The bucket is written beside the step and persisted with
+  // the record.
+  const dir = await tempDir();
+  const reg = new SubagentRegistry({ runner: immediateRunner, workDir: dir });
+  await reg.spawn("usage task");
+  expect(reg.recordSubagentUsage("a1", { steps: 1, inputTokens: 40 })).toBe(
+    true,
+  );
+  expect(reg.recordSubagentUsage("a1", { steps: 1, inputTokens: 12 })).toBe(
+    true,
+  );
+  expect(reg.recordSubagentUsage("a1", { ttftMs: 120 })).toBe(true);
+  expect(reg.get("a1")?.usage).toMatchObject({
+    steps: 2,
+    inputTokens: 52,
+    ttftSteps: 1,
+    ttftMs: 120,
+  });
+  // An unknown child is refused, not silently dropped.
+  expect(reg.recordSubagentUsage("nope", { steps: 1 })).toBe(false);
+
+  await reg.save();
+  const reloaded = new SubagentRegistry({
+    runner: immediateRunner,
+    workDir: dir,
+  });
+  await reloaded.load();
+  // A restarted runtime reads the same numbers — this is what the pane
+  // hydrates from after a restart or a session switch.
+  expect(reloaded.get("a1")?.usage).toMatchObject({
+    steps: 2,
+    inputTokens: 52,
+    ttftSteps: 1,
+    ttftMs: 120,
+  });
+});
+
+test("a subagent's last context projection is durable and re-read", async () => {
+  const dir = await tempDir();
+  const reg = new SubagentRegistry({ runner: immediateRunner, workDir: dir });
+  await reg.spawn("context task");
+  reg.recordSubagentContext("a1", {
+    usedTokens: 4_200,
+    contextWindow: 200_000,
+    source: "provider",
+    at: "2026-10-10T00:00:00.000Z",
+  });
+  await reg.save();
+  const reloaded = new SubagentRegistry({
+    runner: immediateRunner,
+    workDir: dir,
+  });
+  await reloaded.load();
+  expect(reloaded.get("a1")?.contextSnapshot).toMatchObject({
+    usedTokens: 4_200,
+    contextWindow: 200_000,
+  });
+});
+
+test("attach and detach are durable, and the audit trail survives a restart", async () => {
+  // Both used to live in memory only: the inspector's flag answered
+  // differently before and after a restart, and `agent_audit` forgot every
+  // spawn/stop the session had performed — exactly when an operator needed
+  // it, after the crash that prompted the audit.
+  const dir = await tempDir();
+  const reg = new SubagentRegistry({ runner: immediateRunner, workDir: dir });
+  await reg.spawn("audit task");
+  // Let the run settle first: the spawn's own auto-save would otherwise
+  // persist the attach flag as a side effect and the assertion would pass
+  // for the wrong reason.
+  for (
+    let attempt = 0;
+    attempt < 100 && reg.get("a1")?.status !== "completed";
+    attempt += 1
+  )
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(reg.get("a1")?.status).toBe("completed");
+  // A known-flushed baseline BEFORE the attach, so the assertion cannot pass
+  // on the spawn's own auto-save racing the flag in.
+  await reg.save();
+  reg.attach("a1");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const reloaded = new SubagentRegistry({
+    runner: immediateRunner,
+    workDir: dir,
+  });
+  await reloaded.load();
+  expect(reloaded.get("a1")?.attached).toBe(true);
+  // The trail came back with the manifest: created, then attach.
+  const actions = reloaded.auditTrail().map((entry) => entry.action);
+  expect(actions).toContain("created");
+  expect(actions).toContain("attach");
+
+  reloaded.detach("a1");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const third = new SubagentRegistry({ runner: immediateRunner, workDir: dir });
+  await third.load();
+  expect(third.get("a1")?.attached).toBe(false);
+  expect(third.auditTrail().map((entry) => entry.action)).toContain("detach");
+});
+
+test("the store's directory follows the CURRENT session, not the boot's", async () => {
+  // G2-16: the path was captured when the store was built, and the store is
+  // built before `recoverSession` — so a boot with no active session froze
+  // the workspace-level path into every later save. Whether a child's record
+  // was session-scoped depended on startup order.
+  const dir = await tempDir();
+  let sessionID: string | undefined;
+  const store = new SubagentStore(dir, () => sessionID);
+  expect(store.dir).toBe(join(dir, ".natalia", "subagents"));
+  sessionID = "ses_live";
+  expect(store.dir).toBe(
+    join(dir, ".natalia", "sessions", "ses_live", "subagents"),
+  );
+  // And the records follow the directory: a save under the live session is
+  // not visible from the workspace-level path.
+  await store.save([
+    {
+      id: "a1",
+      task: "scoped",
+      mode: "sandbox",
+      status: "completed",
+      attached: false,
+      modelProfile: "",
+      allowedTools: [],
+      excludeTools: [],
+      outputs: [],
+      createdAt: 0,
+      updatedAt: 0,
+      phase: "finalizing",
+      lastActivityAt: 0,
+      activityDetail: "",
+      startedAt: 0,
+    } as SubagentRecord,
+  ]);
+  expect((await new SubagentStore(dir).load()).records).toHaveLength(0);
+  expect(
+    (await new SubagentStore(dir, "ses_live").load()).records,
+  ).toHaveLength(1);
 });

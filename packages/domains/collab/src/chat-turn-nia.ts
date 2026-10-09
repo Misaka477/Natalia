@@ -23,6 +23,7 @@ import { activePlanForExec } from "./plan-doc-runtime";
 import { logOf } from "@anthelia/operation-log";
 import {
   type ConcreteRuntimeEvent,
+  chatStepTiming,
   niaChatHistory,
   collabMessagesForExec,
   chatModelCapabilities,
@@ -356,6 +357,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
         correction: `AUDIT_REQUIRED: You are auditing plan ${activePlan.planID} (${activePlan.status}). You must call audit_report with planID ${activePlan.planID} and verdict passed or gaps before ending. You may also call collab_chat to send the concrete findings to Natalia. Reading tools alone does not complete an audit.`,
       };
     };
+    const timing = chatStepTiming();
     try {
       while (
         step <= effectiveMaxSteps(input.exec) ||
@@ -462,6 +464,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
               cacheReadInputTokens?: number;
             }
           | undefined;
+        timing.start();
         const raw = activeProvider.stream({
           messages: finalOnly
             ? [...messages, { role: "assistant", content: MAX_STEPS_PROMPT }]
@@ -479,6 +482,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
           });
           if (chunk.type === "thinking") {
             setPhase("thinking");
+            if (chunk.text) timing.firstToken();
             if (chunk.text) {
               thinking += chunk.text;
               stepThinking += chunk.text;
@@ -497,6 +501,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
           }
           if (chunk.type === "content") {
             setPhase("generating");
+            if (chunk.text) timing.firstToken();
             output += chunk.text;
             stepOutput += chunk.text;
             publish({
@@ -522,6 +527,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
                 : { cacheReadInputTokens: chunk.cacheReadInputTokens }),
             };
         }
+        timing.end();
         if (providerUsage) {
           // The main provider runner emits one `runtime.step_usage` per step.
           // Chat turns call the provider directly, so mirror it here or the
@@ -540,6 +546,9 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
             ...(providerUsage.cacheReadInputTokens === undefined
               ? {}
               : { cacheReadInputTokens: providerUsage.cacheReadInputTokens }),
+            // The measured wall clock: without it the bar's LLM / 首 token /
+            // tok/s segments stayed blank for this channel.
+            ...timing.usage(),
           });
           const scope = "stream";
           const system =
@@ -703,6 +712,7 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
           }
           setPhase("using_tool", tool.name);
           let result: string;
+          const toolStart = performance.now();
           try {
             result = await tool.execute(parsed, {
               workspaceRoot: getWorkspaceRoot(),
@@ -711,6 +721,8 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
             });
           } catch (error) {
             result = `ERROR: ${error instanceof Error ? error.message : String(error)}`;
+          } finally {
+            timing.addToolMs(performance.now() - toolStart);
           }
           publish({
             type: "nia.chat.tool.used",

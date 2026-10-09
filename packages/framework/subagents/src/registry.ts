@@ -1,4 +1,5 @@
 import { boundVerboseOutput } from "./format-output";
+import { emptySubagentUsage } from "./types";
 import type {
   SubagentID,
   SubagentStatus,
@@ -139,7 +140,8 @@ export class SubagentRegistry {
   }
 
   async load(): Promise<void> {
-    const records = await this.store.load();
+    const { records, audit } = await this.store.load();
+    this.restoreAuditTrail(audit);
     let recovered = false;
     const now = this.clock();
     for (const rec of records) {
@@ -172,7 +174,28 @@ export class SubagentRegistry {
   }
 
   async save(): Promise<void> {
-    await this.store.save([...this.records.values()]);
+    await this.store.save([...this.records.values()], this.auditEntries);
+  }
+
+  /**
+   * The audit trail, read back after a restart.
+   *
+   * It used to live in a process-local array: a restart forgot every
+   * spawn/stop/resume the session had performed, so `agent_audit` answered
+   * from an empty history exactly when an operator needed it (after the
+   * crash that prompted the audit). The entries now ride the manifest the
+   * store already writes, beside the records they describe.
+   */
+  auditTrail(tail = 100): import("./types").AuditEntry[] {
+    return this.auditEntries.slice(-tail);
+  }
+
+  /** Restores the audit trail from a persisted manifest. */
+  restoreAuditTrail(entries: readonly import("./types").AuditEntry[]): void {
+    this.auditEntries = [...entries].slice(-this.maxAudit);
+    // Continue the id sequence past what was restored: a reused eventId
+    // would make two different actions indistinguishable in the log.
+    this.auditSeq = this.auditEntries.length;
   }
 
   async spawn(
@@ -678,11 +701,71 @@ export class SubagentRegistry {
     return true;
   }
 
+  /**
+   * Accumulates one provider step's usage into the child's durable bucket.
+   *
+   * The live `runtime.step_usage` events the child publishes carry its
+   * `agentID` and fold into its isolated view state — but the event sink
+   * gates the durable append on `!event.agentID` (by design: a child's stream
+   * must not land in the parent's journal), so those numbers die with the
+   * process. This is the durable twin the plan's option B asks for: same
+   * fields the other three agents' bars read, written beside the step and
+   * persisted by the store's existing save-on-change, so a re-attach
+   * hydrates the pane instead of showing zeroes until the child speaks again.
+   */
+  recordSubagentUsage(
+    id: SubagentID,
+    delta: Partial<import("./types").SubagentUsage>,
+  ): boolean {
+    const record = this.records.get(id);
+    if (!record) return false;
+    const usage = { ...emptySubagentUsage(), ...record.usage };
+    for (const [key, value] of Object.entries(delta)) {
+      if (value === undefined) continue;
+      const field = key as keyof import("./types").SubagentUsage;
+      if (field === "ttftSteps") continue; // derived below, never summed raw
+      usage[field] = (usage[field] as number) + (value as number);
+    }
+    // The average's denominator follows the latency's presence, the same
+    // rule the session fold applies: a step that reported a first-token
+    // latency is a step the average counts.
+    if (delta.ttftMs !== undefined) usage.ttftSteps += 1;
+    record.usage = usage;
+    record.updatedAt = this.clock();
+    void this.save();
+    return true;
+  }
+
+  /**
+   * Records the child's last context projection on its record.
+   *
+   * The live `context.snapshot` events carry the child's `agentID`, which the
+   * event sink keeps out of the parent's journal by design, so the ring's
+   * numbers died with the process and came up empty after every restart.
+   * This is the durable twin an attaching UI hydrates from, the same way
+   * navi/nia's latest snapshot is re-seeded on attach.
+   */
+  recordSubagentContext(
+    id: SubagentID,
+    snapshot: import("./types").SubagentContextSnapshot,
+  ): boolean {
+    const record = this.records.get(id);
+    if (!record) return false;
+    record.contextSnapshot = snapshot;
+    record.updatedAt = this.clock();
+    void this.save();
+    return true;
+  }
+
   attach(id: SubagentID): boolean {
     const record = this.records.get(id);
     if (!record) return false;
     record.attached = true;
     record.updatedAt = this.clock();
+    // Persisted: `attached` is durable state the UI's inspector reads back
+    // after a restart, and a flag that only lived in memory answered
+    // differently before and after one.
+    void this.save();
     this.addAudit({
       agentId: id,
       action: "attach",
@@ -705,6 +788,7 @@ export class SubagentRegistry {
     if (!record) return false;
     record.attached = false;
     record.updatedAt = this.clock();
+    void this.save();
     this.addAudit({
       agentId: id,
       action: "detach",

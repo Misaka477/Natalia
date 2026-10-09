@@ -25,7 +25,14 @@ export function createSubagentsController(input: {
     const next = new SubagentRegistry({
       workDir: input.workDir,
       runner,
-      sessionID: input.sessionID?.(),
+      // The THUNK, not its value: `init` runs while `installSubagents` is
+      // still going, which is before `recoverSession` resolves the session.
+      // Capturing the answer here froze the workspace-level store path into
+      // every later save whenever the boot had no active session yet, so
+      // whether a child's record was session-scoped depended on startup
+      // order (G2-16). The registry asks the same question at the same time
+      // the other three agents' scopes are decided.
+      sessionID: input.sessionID,
       wallClockBudgetMs: input.wallClockBudgetMs,
       onSettled: input.onSettled,
       onChildMessage: input.onChildMessage,
@@ -79,6 +86,10 @@ export function createSubagentsController(input: {
     resume: async (id) => await requireRegistry().resume(id),
     setPendingMessages: (id, messages) =>
       requireRegistry().setPendingMessages(id, messages),
+    recordSubagentUsage: (id, delta) =>
+      requireRegistry().recordSubagentUsage(id, delta),
+    recordSubagentContext: (id, snapshot) =>
+      requireRegistry().recordSubagentContext(id, snapshot),
     setSteerHook,
     // Authority, live routing and the queueing fallback all live on the registry
     // now, so both a bare registry and this composition answer a steer the same

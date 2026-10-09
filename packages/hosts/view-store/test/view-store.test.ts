@@ -10,6 +10,7 @@ import {
   displayText,
   hydrateNaviMessages,
   hydrateNiaMessages,
+  hydrateSubagents,
   beginNaviHydration,
   hydrateProjectedMessages,
   hydrateRuntimeNotices,
@@ -3406,4 +3407,64 @@ test("hydration carries the session's usage across a restart instead of zeroing 
   // window already folded is never lost.
   expect(fresh.sessionUsage.inputTokens).toBeGreaterThanOrEqual(1200);
   expect(fresh.usageByChannel.main?.inputTokens).toBeGreaterThanOrEqual(1200);
+});
+
+test("hydrateSubagents seeds each child's durable usage and context ring", () => {
+  // R3's re-attach half: the record carries the usage and context projection
+  // the run persisted, and the hydration is where they become the pane's
+  // numbers — SET, not accumulate, so live events continue on top of the
+  // durable totals rather than doubling them.
+  const state = initialState();
+  const hydrated = hydrateSubagents(state, [
+    {
+      type: "subagent.update",
+      id: "sub-1",
+      status: "completed",
+      attached: false,
+      event: "status",
+      task: "durable child",
+      usage: {
+        turns: 1,
+        steps: 4,
+        inputTokens: 900,
+        outputTokens: 120,
+        cacheReadInputTokens: 700,
+        cacheCreationInputTokens: 0,
+        llmMs: 2_000,
+        ttftMs: 300,
+        ttftSteps: 4,
+        decodeMs: 1_700,
+        toolMs: 250,
+      },
+      contextSnapshot: {
+        usedTokens: 4_200,
+        contextWindow: 200_000,
+        source: "provider_usage",
+        at: "2026-10-10T00:00:00.000Z",
+      },
+    },
+  ]);
+  expect(hydrated).toBe(true);
+  expect(state.subagents["sub-1"]?.task).toBe("durable child");
+  expect(state.subagentStates["sub-1"]?.sessionUsage).toMatchObject({
+    turns: 1,
+    steps: 4,
+    inputTokens: 900,
+    outputTokens: 120,
+  });
+  expect(state.subagentStates["sub-1"]?.context).toMatchObject({
+    used: 4_200,
+    max: 200_000,
+  });
+
+  // A live step after the hydration adds to the durable totals.
+  applyEvent(state, {
+    type: "runtime.step_usage",
+    id: "sub-1:usage:5",
+    agentID: "sub-1",
+    inputTokens: 100,
+    outputTokens: 10,
+  });
+  expect(state.subagentStates["sub-1"]?.sessionUsage?.inputTokens).toBe(1_000);
+  expect(state.subagentStates["sub-1"]?.sessionUsage?.steps).toBe(5);
 });

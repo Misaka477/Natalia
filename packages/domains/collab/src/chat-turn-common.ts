@@ -47,6 +47,82 @@ const DEFAULT_CHAT_MODEL_CAPABILITIES: ModelCapabilities = {
  * derived from the chat selection (falling back to the runtime default model)
  * rather than from the main execution state.
  */
+/**
+ * The per-step wall-clock anchors the usage dashboard reads, measured the
+ * same way the main provider runner measures them.
+ *
+ * Navi and Nia call the provider directly rather than through that runner,
+ * so without this their usage bars showed tokens and nothing else — the
+ * `LLM` / `首 token` / `tok/s` segments were permanently blank for both
+ * channels (G2-7). One helper keeps the two channels and the main runner
+ * from drifting on what a number means:
+ *
+ *   llmMs     — step start → stream end (model wall time)
+ *   ttftMs    — step start → the first content/thinking chunk
+ *   decodeMs  — first token → stream end (the throughput denominator)
+ *   toolMs    — accumulated tool-execution wall time on the step
+ */
+export type ChatStepTiming = {
+  /** Marks the step's start (before the provider call). */
+  start(): void;
+  /** Records the first token, once. */
+  firstToken(): void;
+  /** Marks the stream's end. */
+  end(): void;
+  /** Accumulates one tool call's wall time. */
+  addToolMs(ms: number): void;
+  /** The measured fields, ready to spread into a step-usage event. */
+  usage(): {
+    llmMs: number;
+    ttftMs?: number;
+    decodeMs?: number;
+    toolMs?: number;
+  };
+};
+
+export function chatStepTiming(): ChatStepTiming {
+  let stepStart = 0;
+  let firstTokenTime: number | undefined;
+  let streamEnd = 0;
+  let toolMs = 0;
+  return {
+    start() {
+      stepStart = performance.now();
+      firstTokenTime = undefined;
+      streamEnd = 0;
+      // Reset per step: the fold SUMS toolMs across events, so a
+      // carry-over would count one tool call's time twice. The event for
+      // step N is published before step N's tools run (the usage block sits
+      // inside the stream consumption), so what it carries is the tool time
+      // of the steps before it — every tool-using step is followed by
+      // another emitting step, which keeps the turn's total exact.
+      toolMs = 0;
+    },
+    firstToken() {
+      if (firstTokenTime === undefined) firstTokenTime = performance.now();
+    },
+    end() {
+      streamEnd = performance.now();
+    },
+    addToolMs(ms: number) {
+      toolMs += ms;
+    },
+    usage() {
+      const end = streamEnd || performance.now();
+      return {
+        llmMs: end - stepStart,
+        ...(firstTokenTime !== undefined
+          ? {
+              ttftMs: firstTokenTime - stepStart,
+              decodeMs: end - firstTokenTime,
+            }
+          : {}),
+        ...(toolMs > 0 ? { toolMs } : {}),
+      };
+    },
+  };
+}
+
 export function chatModelCapabilities(
   ctx: RuntimeContext,
   provider: StreamingProvider,

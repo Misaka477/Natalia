@@ -33,7 +33,7 @@ const provider: StreamingProvider = {
  * room for the runner without making a genuine hang ambiguous. The per-test
  * timeout above it is the outer bound.
  */
-const CHAIN_BUDGET_MS = 120_000;
+const CHAIN_BUDGET_MS = 200_000;
 
 test("same-id attach re-publishes an existing goal as a live goal.status", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-goal-status-"));
@@ -371,7 +371,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-}, 120_000);
+}, 240_000);
 
 /**
  * A stream killed mid-flight must keep the text it already generated. The

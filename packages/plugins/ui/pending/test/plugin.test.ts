@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
 import { createPendingUiPlugin } from "../src/ui/index";
 
-test("pending plugin contributes the side panel and registers presenters on mount", () => {
+test("the delisted pending plugin contributes no panel and no presenter", () => {
+  // T4-4: the side tab is gone. Its job moved to the web plugin's composer
+  // takeover, which owns the presenters now — two owners would throw in the
+  // host. The entry stays so an install that still has the package loads and
+  // disposes cleanly instead of failing on a missing ui entry; it just
+  // contributes nothing.
   const plugin = createPendingUiPlugin();
-  const panels = plugin.panels ?? [];
-  expect(panels.map((panel) => panel.id)).toEqual(["pending"]);
-  expect(panels[0]?.region).toBe("side");
-  expect(typeof panels[0]?.mount).toBe("function");
+  expect(plugin.panels ?? []).toEqual([]);
+  const mounted = plugin.mount?.({} as never);
+  expect(typeof mounted?.dispose).toBe("function");
+  mounted?.dispose?.();
 });

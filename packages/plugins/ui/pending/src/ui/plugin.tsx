@@ -113,42 +113,25 @@ function ensurePendingStyles() {
   document.head.append(style);
 }
 
+/**
+ * The pending-inbox UI plugin, after the tab's removal (T4-4).
+ *
+ * The side panel and its presenters are gone: the panel's job moved to the
+ * web plugin's composer takeover, which owns the presenters now (two owners
+ * would throw in the host). This entry stays so an install that still has
+ * the package loads and disposes cleanly instead of failing on a missing ui
+ * entry — it just contributes nothing.
+ */
 export function createPendingUiPlugin(): UiPlugin {
   return defineUiPlugin({
     id: "natalia.ui.pending-inbox",
     name: "Pending Inbox",
     version: "1.0.0",
-    description: "Approvals and questions in one side panel.",
-    panels: [
-      {
-        id: "pending",
-        title: "待处理",
-        region: "side",
-        mount(ctx, container) {
-          container.replaceChildren();
-          const disposeRender = render(
-            () => <PendingInbox ctx={ctx} />,
-            container,
-          );
-          return () => disposeRender();
-        },
-      },
-    ],
-    mount(ctx) {
-      // The shell renders the tab badge before the panel is ever mounted, so
-      // the stylesheet must be present as soon as the plugin loads.
-      ensurePendingStyles();
-      // Registering here (once per plugin load) instead of in panel.mount keeps
-      // a panel remount from churning the presenter registry.
-      const disposers = [
-        ctx.pending.registerPresenter(approvalPresenter),
-        ctx.pending.registerPresenter(questionPresenter),
-      ];
-      return {
-        dispose() {
-          for (const disposer of disposers) disposer();
-        },
-      };
+    description:
+      "Deprecated: approvals and questions render in the composer takeover.",
+    panels: [],
+    mount() {
+      return { dispose() {} };
     },
   });
 }

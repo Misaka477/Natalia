@@ -36,6 +36,7 @@ import type { UiPanelDefinition } from "@natalia/ui-host";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { Composer, type ComposerAttachment } from "./components/Composer";
+import { PendingTakeover } from "./components/PendingTakeover";
 import { QueueDock } from "./components/QueueDock";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 import { ReviewPane } from "./components/RightPanel";
@@ -787,6 +788,20 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   >("git");
   const [reviewRequestedCheckpointID, setReviewRequestedCheckpointID] =
     createSignal<string | undefined>();
+  // The composer takeover (R4(a)(c)): while a request waits it replaces the
+  // composer, and minimizing leaves a persistent count rather than vanishing.
+  const [pendingTakeoverMinimized, setPendingTakeoverMinimized] =
+    createSignal(false);
+  const [pendingTakeoverFocus, setPendingTakeoverFocus] = createSignal<
+    string | undefined
+  >(undefined);
+  const pendingTakeoverCount = createMemo(() => {
+    return (
+      state().pendingApprovals.length +
+      state().pendingQuestions.length +
+      state().pendingInteractives.length
+    );
+  });
   const [pendingRollback, setPendingRollback] = createSignal<
     | {
         turnID: string;
@@ -2609,7 +2624,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                         label: "处理",
                         primary: true,
                         onClick: () => {
-                          setRightTab("pending");
+                          // The pending tab is gone (T4-4): the request's
+                          // home is the composer takeover now. Focusing it
+                          // also un-minimizes, so the button always lands on
+                          // the card rather than on a collapsed strip.
+                          setPendingTakeoverMinimized(false);
+                          setPendingTakeoverFocus(pendingRequestID);
                           props.ctx.pending.controller.focus(pendingRequestID);
                         },
                       },
@@ -3865,101 +3885,130 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     }}
                   />
                   <SessionUsageBar usage={state().usageByChannel.main} />
-                  <Composer
-                    value={mainDraft()}
-                    placeholder="输入消息，使用 @ 提及文件…"
-                    busy={Boolean(state().natalia.activeTurn)}
-                    onInput={setMainDraft}
-                    attachments={mainAttachments()}
-                    onRemoveAttachment={(path) =>
-                      setMainAttachments(
-                        mainAttachments().filter((item) => item.path !== path),
-                      )
+                  <Show
+                    when={
+                      pendingTakeoverCount() > 0 && !pendingTakeoverMinimized()
                     }
-                    onPaste={(event) =>
-                      handlePasteAttachments(
-                        event,
-                        mainAttachments(),
-                        setMainAttachments,
-                      )
+                  >
+                    <PendingTakeover
+                      ctx={props.ctx}
+                      minimized={pendingTakeoverMinimized}
+                      onMinimize={setPendingTakeoverMinimized}
+                      focusID={pendingTakeoverFocus}
+                      onFocusHandled={() => setPendingTakeoverFocus(undefined)}
+                    />
+                  </Show>
+                  <Show
+                    when={
+                      pendingTakeoverCount() === 0 || pendingTakeoverMinimized()
                     }
-                    onSubmit={() => {
-                      const text = mainDraft();
-                      const paths = mainAttachments().map((item) => item.path);
-                      if (text.trim() || paths.length) {
-                        const rollback = pendingRollback();
-                        const submit = async () => {
-                          try {
-                            if (rollback) {
-                              const sessionID =
-                                selectedSessionID() || state().sessionID;
-                              const messageResult =
-                                rollback.turnID && sessionID
-                                  ? await props.ctx.runtime.sessionRollbackMessages?.(
-                                      sessionID,
-                                      rollback.turnID,
+                  >
+                    <Composer
+                      value={mainDraft()}
+                      placeholder="输入消息，使用 @ 提及文件…"
+                      busy={Boolean(state().natalia.activeTurn)}
+                      onInput={setMainDraft}
+                      attachments={mainAttachments()}
+                      onRemoveAttachment={(path) =>
+                        setMainAttachments(
+                          mainAttachments().filter(
+                            (item) => item.path !== path,
+                          ),
+                        )
+                      }
+                      onPaste={(event) =>
+                        handlePasteAttachments(
+                          event,
+                          mainAttachments(),
+                          setMainAttachments,
+                        )
+                      }
+                      onSubmit={() => {
+                        const text = mainDraft();
+                        const paths = mainAttachments().map(
+                          (item) => item.path,
+                        );
+                        if (text.trim() || paths.length) {
+                          const rollback = pendingRollback();
+                          const submit = async () => {
+                            try {
+                              if (rollback) {
+                                const sessionID =
+                                  selectedSessionID() || state().sessionID;
+                                const messageResult =
+                                  rollback.turnID && sessionID
+                                    ? await props.ctx.runtime.sessionRollbackMessages?.(
+                                        sessionID,
+                                        rollback.turnID,
+                                      )
+                                    : undefined;
+                                const preview = rollback.checkpointID
+                                  ? await props.ctx.runtime.checkpointRollback?.(
+                                      {
+                                        id: rollback.checkpointID,
+                                        sessionID,
+                                      },
                                     )
                                   : undefined;
-                              const preview = rollback.checkpointID
-                                ? await props.ctx.runtime.checkpointRollback?.({
-                                    id: rollback.checkpointID,
-                                    sessionID,
-                                  })
-                                : undefined;
-                              await refreshTranscript();
-                              if (messageResult || preview) {
-                                setRollbackNotice({
-                                  text:
-                                    messageResult && preview
-                                      ? `已还原消息，并恢复工作区检查点。`
-                                      : preview
-                                        ? `已恢复工作区检查点。`
-                                        : messageResult?.safetyCheckpointID
-                                          ? `已还原 1 条消息，并创建了安全后悔点。`
-                                          : `已还原 1 条消息。没有可用的文件检查点，因此未恢复工作区更改。`,
-                                  safetyCheckpointID:
-                                    messageResult?.safetyCheckpointID ??
-                                    preview?.safetyCheckpointID,
-                                  restoredCount: 1,
-                                });
+                                await refreshTranscript();
+                                if (messageResult || preview) {
+                                  setRollbackNotice({
+                                    text:
+                                      messageResult && preview
+                                        ? `已还原消息，并恢复工作区检查点。`
+                                        : preview
+                                          ? `已恢复工作区检查点。`
+                                          : messageResult?.safetyCheckpointID
+                                            ? `已还原 1 条消息，并创建了安全后悔点。`
+                                            : `已还原 1 条消息。没有可用的文件检查点，因此未恢复工作区更改。`,
+                                    safetyCheckpointID:
+                                      messageResult?.safetyCheckpointID ??
+                                      preview?.safetyCheckpointID,
+                                    restoredCount: 1,
+                                  });
+                                }
+                              } else {
+                                setRollbackNotice(undefined);
                               }
-                            } else {
-                              setRollbackNotice(undefined);
+                              perfLog("[web-plugin] send", text);
+                              // The Composer opts into mid-turn injection by
+                              // default. The settings panel can switch a busy send
+                              // to `next-turn`, which queues a separate turn.
+                              const busy = Boolean(state().natalia.activeTurn);
+                              const busySendDelivery =
+                                props.ctx.preferences.get<
+                                  "next-step" | "next-turn"
+                                >("busySendDelivery") ?? "next-step";
+                              const sessionID =
+                                selectedSessionID() || state().sessionID;
+                              const outgoing =
+                                goalCommandInstruction(text) ?? text;
+                              if (props.ctx.runtime.submitInput) {
+                                props.ctx.runtime.submitInput({
+                                  text: outgoing,
+                                  ...(paths.length
+                                    ? { attachments: paths }
+                                    : {}),
+                                  ...(busy
+                                    ? { delivery: busySendDelivery }
+                                    : {}),
+                                  sessionID,
+                                });
+                              } else {
+                                props.ctx.runtime.submit?.(text, sessionID);
+                              }
+                            } finally {
+                              setMainDraft("");
+                              setMainAttachments([]);
+                              setPendingRollback(undefined);
                             }
-                            perfLog("[web-plugin] send", text);
-                            // The Composer opts into mid-turn injection by
-                            // default. The settings panel can switch a busy send
-                            // to `next-turn`, which queues a separate turn.
-                            const busy = Boolean(state().natalia.activeTurn);
-                            const busySendDelivery =
-                              props.ctx.preferences.get<
-                                "next-step" | "next-turn"
-                              >("busySendDelivery") ?? "next-step";
-                            const sessionID =
-                              selectedSessionID() || state().sessionID;
-                            const outgoing =
-                              goalCommandInstruction(text) ?? text;
-                            if (props.ctx.runtime.submitInput) {
-                              props.ctx.runtime.submitInput({
-                                text: outgoing,
-                                ...(paths.length ? { attachments: paths } : {}),
-                                ...(busy ? { delivery: busySendDelivery } : {}),
-                                sessionID,
-                              });
-                            } else {
-                              props.ctx.runtime.submit?.(text, sessionID);
-                            }
-                          } finally {
-                            setMainDraft("");
-                            setMainAttachments([]);
-                            setPendingRollback(undefined);
-                          }
-                        };
-                        void submit();
-                      }
-                    }}
-                    onStop={() => props.ctx.runtime.cancel?.()}
-                  />
+                          };
+                          void submit();
+                        }
+                      }}
+                      onStop={() => props.ctx.runtime.cancel?.()}
+                    />
+                  </Show>
                 </div>
               </div>
             </Show>
@@ -4197,9 +4246,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       onClick={() => setRightTab(tab.id)}
                     >
                       {tab.label}
-                      <Show when={tab.id === "pending"}>
-                        <PendingBadge count={pendingCount()} />
-                      </Show>
                       <Show when={tab.id === "governance"}>
                         <PendingBadge count={openDriftCount() ?? 0} />
                       </Show>

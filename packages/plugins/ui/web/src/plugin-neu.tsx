@@ -1,5 +1,6 @@
 import { render } from "solid-js/web";
 import { defineUiPlugin, type UiPlugin } from "@natalia/ui-host";
+import { approvalPresenter, questionPresenter } from "@natalia/ui-model";
 import { AppNeu } from "./app-neu";
 import { EXAMPLE_WEB_UI_PANELS, EXAMPLE_WEB_UI_PLUGIN_ID } from "./identity";
 import { applyNeuTheme, nataliaNeuStyles } from "./styles";
@@ -19,6 +20,14 @@ export function createNataliaNeuPlugin(): UiPlugin {
       const style = document.createElement("style");
       style.textContent = nataliaNeuStyles;
       ctx.root.append(style);
+      // The pending presenters live here now (T4-4): the side panel that
+      // owned them is delisted, and the composer takeover is the surface
+      // that renders them. Registering once per plugin load — not per card
+      // mount — keeps a remount from churning the registry.
+      const presenterDisposers = [
+        ctx.pending.registerPresenter(approvalPresenter),
+        ctx.pending.registerPresenter(questionPresenter),
+      ];
 
       const shellEntry = ctx.host
         ?.loaded()
@@ -52,6 +61,7 @@ export function createNataliaNeuPlugin(): UiPlugin {
             : undefined;
         unmount = () => {
           disposeLayout?.();
+          for (const disposePresenter of presenterDisposers) disposePresenter();
           ctx.root.replaceChildren();
           unmount = undefined;
         };
@@ -65,6 +75,7 @@ export function createNataliaNeuPlugin(): UiPlugin {
       const disposeRender = render(() => <AppNeu ctx={ctx} />, mountPoint);
       unmount = () => {
         disposeRender();
+        for (const disposePresenter of presenterDisposers) disposePresenter();
         ctx.root.replaceChildren();
         unmount = undefined;
       };

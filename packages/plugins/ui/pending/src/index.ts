@@ -17,16 +17,13 @@ export const PENDING_INBOX_PLUGIN_MANIFEST: PluginManifest = {
   dependencies: [],
   hooks: {},
   integrationPoints: [],
+  // No panel (T4-4): the side tab is gone and the composer takeover is the
+  // surface. The ui entry stays so an already-installed copy still loads and
+  // disposes cleanly, but it registers nothing — the presenters moved to the
+  // web plugin, and two owners would throw in the host.
   ui: {
     entry: "ui/plugin.js",
-    panels: [
-      {
-        id: "pending",
-        title: "待处理",
-        region: "side",
-        order: 5,
-      },
-    ],
+    panels: [],
   },
 };
 

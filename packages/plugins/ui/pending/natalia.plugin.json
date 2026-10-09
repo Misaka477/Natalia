@@ -15,13 +15,6 @@
   "integrationPoints": [],
   "ui": {
     "entry": "src/ui/plugin.tsx",
-    "panels": [
-      {
-        "id": "pending",
-        "title": "待处理",
-        "region": "side",
-        "order": 5
-      }
-    ]
+    "panels": []
   }
 }

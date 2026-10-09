@@ -136,6 +136,18 @@ export type SessionExecutionState = {
   }>;
   naviAbortWakePending?: boolean;
   niaAbortWakePending?: boolean;
+  /**
+   * The intent the next Nia wake should run with, recorded by
+   * `requestNiaWake` and consumed by `wakeNia`.
+   *
+   * The wake queue in the provider-model controller coalesces per session, so
+   * the intent cannot ride the call: several wakes collapse into one, and the
+   * last requester's intent is the one the merged wake runs with. The exec is
+   * where the rest of this per-session wake state already lives
+   * (`niaAbortWakePending`, `advisorPending`), and it is cleared once the wake
+   * has read it so a later plain wake does not inherit a stale intent.
+   */
+  niaWakeIntent?: import("@anthelia/contracts").ChatTurnIntent;
 };
 
 /** Seeds {@link SessionExecutionState.announcedTurnIDs} from the loaded journal. */

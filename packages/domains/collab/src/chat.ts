@@ -401,6 +401,10 @@ export function createNiaChatSurface(ctx: RuntimeContext): StreamSurface {
           sessionID: exec.session.id as SessionID,
           text,
           responseMessageID,
+          // The user's own conversation, said out loud rather than left to
+          // the default: this is the path that must never be framed as an
+          // audit wake or a sister message.
+          intent: "user_chat",
           model: input.model,
           reasoningEffort: input.reasoningEffort,
           attachments,

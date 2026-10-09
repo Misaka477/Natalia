@@ -82,6 +82,13 @@ export type ProviderChatTurnInput = {
   responseMessageID: string;
   internal?: boolean;
   /**
+   * What this turn is for. `undefined` reads as `user_chat` — the UI submit
+   * path never set one, and that path is the user's own conversation. Every
+   * wake path names its intent so a turn stops being framed as an audit just
+   * because it arrived internally.
+   */
+  intent?: import("@anthelia/contracts").ChatTurnIntent;
+  /**
    * A detour-review wake (EI §3.4): when set on an internal Nia turn, the turn
    * prompts Nia to review the requested detour (via detour_review) instead of
    * the default audit wake. Her verdict is a reference for the user.

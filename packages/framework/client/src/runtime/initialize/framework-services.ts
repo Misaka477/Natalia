@@ -388,7 +388,15 @@ export async function wireFrameworkServices(
           exec.advisorPending = true;
         ctx.ports.requestNaviWake(exec);
       } else if (recipient === "nia") {
-        ctx.ports.requestNiaWake(exec);
+        // What the wake is FOR, from the two facts this request already
+        // carries and used to discard: a message from the main agent is
+        // sister-to-sister collaboration (answer it, do not audit), and
+        // anything else keeps the audit framing it always had. Naming it is
+        // what stops "every internal wake is an audit".
+        ctx.ports.requestNiaWake(
+          exec,
+          request?.source === "main_agent" ? "collaboration" : "audit",
+        );
       } else {
         ctx.ports.wakeMainForCollaboration(
           exec,

@@ -8,6 +8,7 @@
 import type { AgentDefinition, AgentRegistry } from "@anthelia/agent";
 import type { CapabilityRegistryHost } from "@anthelia/capability";
 import type {
+  ChatTurnIntent,
   CollaborationParticipant,
   ConfigV3,
   RuntimeEvent,
@@ -245,7 +246,15 @@ export type RuntimePorts = {
     message: { agentId: string; text: string },
   ) => boolean;
   requestNaviWake: (exec: SessionExecutionState) => void;
-  requestNiaWake: (exec: SessionExecutionState) => void;
+  /**
+   * Asks for a Nia wake, naming what the turn is for. The default is
+   * `audit` — the EI §3.9 trigger and the restart recovery scan — so a
+   * caller that says nothing keeps the behavior it always had.
+   */
+  requestNiaWake: (
+    exec: SessionExecutionState,
+    intent?: ChatTurnIntent,
+  ) => void;
   wakeNia: (exec: SessionExecutionState) => Promise<void>;
   scheduleInternalWake: (
     exec: SessionExecutionState,
@@ -265,7 +274,10 @@ export type RuntimePorts = {
   /** Nia's static system prompt (ADR D1). */
   niaChatPersona: () => string;
   /** Nia's dynamic runtime context (ADR D2). */
-  niaChatLiveContext: (exec?: SessionExecutionState) => string;
+  niaChatLiveContext: (
+    exec?: SessionExecutionState,
+    intent?: ChatTurnIntent,
+  ) => string;
   naviChatTools: (
     exec?: SessionExecutionState,
   ) => import("@anthelia/tools").RuntimeTool[];

@@ -3005,6 +3005,29 @@ export type RuntimeReasoningEffort =
   | "medium"
   | "high"
   | "xhigh";
+/**
+ * What a chat turn is FOR — the intent that decides which prompt and which
+ * mechanisms a sister-channel turn runs with.
+ *
+ * This exists because `internal` could not answer the question: every wake
+ * into Nia carried `internal: true`, so an audit wake, a sister-to-sister
+ * collaboration message and a user's own question all arrived through the
+ * same door and all got the audit framing ("收到什么都是审计"). The intent
+ * names the four things a turn can be:
+ *
+ *   audit          — the EI §3.9 audit wake: read the chain, call
+ *                    `audit_report`, then `collab_chat` the findings.
+ *   detour         — a detour review: record an independent `detour_review`,
+ *                    never an audit report.
+ *   collaboration  — Natalia's sister-to-sister message: answer with
+ *                    `collab_chat` using the exact messageID; it is not a
+ *                    user message and not an audit.
+ *   user_chat      — the user talking to Nia through the panel composer.
+ *
+ * `undefined` reads as `user_chat` everywhere: the UI submit path never set
+ * an intent, and that path is exactly the user's own conversation.
+ */
+export type ChatTurnIntent = "audit" | "detour" | "collaboration" | "user_chat";
 export type RuntimeAgentCatalogEntry = {
   name: string;
   description: string;

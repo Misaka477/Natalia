@@ -323,7 +323,7 @@ export function NiaPanel(props: {
           <Transcript
             messages={renderedMessages()}
             emptyTitle="向 Nia 提问"
-            emptyHint="Nia 用于审计，只读、不写代码、不写 Plan。"
+            emptyHint="Nia 是只读的审计 agent，也能直接对话：问她审计发现、项目状态，或让她解释她的判断。她不写代码、不写 Plan。"
             assistantName="Nia"
             assistantInitial="N"
             apiRef={(api) => {
@@ -390,7 +390,7 @@ export function NiaPanel(props: {
         <SessionUsageBar usage={props.state.usageByChannel.nia} />
         <Composer
           value={draft()}
-          placeholder="向 Nia 提问…"
+          placeholder="问 Nia 审计发现，或直接和她聊…"
           busy={Boolean(active()) || busy()}
           onInput={setDraft}
           onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}

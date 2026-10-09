@@ -86,6 +86,12 @@ export type RuntimePortsExtra = {
       responseMessageID: string;
       exec: SessionExecutionState;
       internal?: boolean;
+      /**
+       * What this turn is for. `undefined` reads as `user_chat` — the UI
+       * submit path never set one, and that path is the user's own
+       * conversation with Nia.
+       */
+      intent?: import("@anthelia/contracts").ChatTurnIntent;
       model?: { modelID?: string; variant?: string };
       reasoningEffort?: import("@anthelia/contracts").RuntimeReasoningEffort;
       attachments?: import("@anthelia/contracts").LocalAttachment[];

@@ -13,7 +13,11 @@ import {
 } from "@anthelia/session";
 import type { ProviderModelController } from "@anthelia/provider-model";
 import { providerModelController } from "@anthelia/provider-model";
-import type { SessionID, SubmitInput } from "@anthelia/contracts";
+import type {
+  ChatTurnIntent,
+  SessionID,
+  SubmitInput,
+} from "@anthelia/contracts";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ProductRuntimeContext } from "./product-context";
 import type { SessionExecutionState } from "@anthelia/substrate";
@@ -248,10 +252,28 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
     }
   }
 
-  function requestNiaWake(exec: SessionExecutionState) {
+  /**
+   * Asks for a Nia wake, naming what the turn is for.
+   *
+   * The intent rides on the exec, not the call: the controller's wake queue
+   * coalesces per session (several requests collapse into one wake), so the
+   * last requester's intent is what the merged wake runs with — and an audit
+   * wake that arrives while a collaboration wake is queued must not turn the
+   * collaboration message into an audit. `wakeNia` consumes and clears it.
+   *
+   * The default is `audit`: every existing caller is the EI §3.9 audit
+   * trigger or the restart recovery scan, and a caller that says nothing gets
+   * the behavior it always had.
+   */
+  function requestNiaWake(
+    exec: SessionExecutionState,
+    intent: ChatTurnIntent = "audit",
+  ) {
     if (ctx.ports.isDisposed()) return;
+    exec.niaWakeIntent = intent;
     logOf(ctx.state.serviceDirectory).info("nia-wake", "requestNiaWake", {
       sessionID: exec.session.id,
+      intent,
     });
     const controller = ctx.state.serviceDirectory.getOptional(
       providerModelController,
@@ -267,7 +289,14 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
     ) {
       exec.niaPendingQueue.push({
         messageID: `nia-collab-wake:${Date.now().toString(36)}`,
-        text: "(internal collaboration wake: read the latest collaboration context and respond according to the Nia audit rules. This is not a user message.)",
+        // The queued wake speaks the requester's intent: an audit wake reads
+        // the audit rules, a collaboration wake answers the sister message.
+        // One audit-framed sentence for every intent is what made a
+        // collaboration message arrive as an audit.
+        text:
+          intent === "collaboration"
+            ? "(internal collaboration wake: Natalia sent you a collaboration message. Read the latest collaboration context and answer it with collab_chat using its exact messageID. This is not a user message and not an audit.)"
+            : "(internal collaboration wake: read the latest collaboration context and respond according to the Nia audit rules. This is not a user message.)",
       });
       return;
     }
@@ -275,6 +304,10 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
   }
 
   async function wakeNia(exec: SessionExecutionState) {
+    // The intent the requester recorded, consumed here: a later plain wake
+    // must not inherit a stale one.
+    const intent = exec.niaWakeIntent ?? "audit";
+    exec.niaWakeIntent = undefined;
     const { nextChatSequence, publishForSession } = ctx.ports;
     const controller = ctx.state.serviceDirectory.getOptional(
       providerModelController,
@@ -302,6 +335,7 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
         text: "",
         responseMessageID,
         internal: true,
+        intent,
         ...(normalProfile?.modelID
           ? {
               model: {

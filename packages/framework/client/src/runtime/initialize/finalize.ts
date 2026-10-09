@@ -284,7 +284,10 @@ export async function finalizeInitialize(
           planID,
         },
       );
-      ctx.ports.requestNiaWake(scope.activeExec);
+      // The restart recovery wake is an AUDIT wake, said out loud: the
+      // intent now decides the turn's framing, and this one exists to
+      // finish an interrupted audit.
+      ctx.ports.requestNiaWake(scope.activeExec, "audit");
     }
   }
 }

@@ -1076,8 +1076,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 .neu-pane .natalia-goal-round-detail {
   margin: 0;
-  max-height: 320px;
-  overflow: auto;
   padding: 8px 12px;
   border-top: 1px solid color-mix(in srgb, var(--neu-accent) 18%, transparent);
   font-size: 11px;
@@ -2073,8 +2071,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 10px;
   border-radius: 8px;
   background: var(--neu-bg);
-  overflow: auto;
   max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .plan-panel-preview.markdown-body blockquote {
   margin: 0.6em 0;
@@ -5586,14 +5585,25 @@ button.wg-node-row:hover {
   padding: 6px 8px;
   text-align: left;
 }
+/* A message's own code block renders at its full height (the 2026-10-10
+   ruling: no fixed height, no inner scrollbar, render naturally). The clamp
+   this replaces put a scrollbar inside a long reply: any block markdown
+   parsed into a pre -- an indented quote, a fenced block -- became a fixed box
+   the reader had to scroll INSIDE, which is exactly what the reference
+   implementation does not do (its markdown payload carries no height bound at
+   all). The transcript's own scroll is the pane's: one scrollbar for the whole
+   conversation. */
 .natalia-message-text pre,
 .natalia-thinking-text pre {
   background: var(--neu-bg);
   border-radius: 8px;
   padding: 10px;
   max-width: 100%;
-  max-height: 420px;
-  overflow: auto;
+  /* Wrapped, not scrolled: the reference implementation's markdown payload
+     carries pre-wrap and no overflow at all, so a wide code line reflows
+     instead of growing a scrollbar inside a reply. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .natalia-message-text code,
 .natalia-thinking-text code {

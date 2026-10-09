@@ -279,7 +279,9 @@ export const fileEditorStyles =
   background: var(--neu-bg);
   padding: 10px 12px;
   border-radius: 10px;
-  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .neu-markdown-body pre code {
   background: transparent;

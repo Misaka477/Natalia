@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   TailScrollController,
   estimateMessageHeight,
@@ -250,4 +252,47 @@ test("fixedRowHeight collapses large tool output to its preview height", () => {
   // Large output is collapsed to a bounded preview, not the full payload.
   expect(fixedRowHeight(huge)).toBeGreaterThan(fixedRowHeight(small));
   expect(fixedRowHeight(huge)).toBeLessThan(600);
+});
+
+test("a message's own body carries no height bound and no inner scrollbar", () => {
+  // The 2026-10-10 ruling, twice over: "no fixed height, no inner scrollbar,
+  // render naturally". The row-height clamp was the first half (a 6000px row
+  // reported as 1200px); this is the second — `.natalia-message-text pre` had
+  // `max-height: 420px; overflow: auto`, so any block markdown parsed into a
+  // <pre> (an indented quote, a fenced block) became a fixed box the reader
+  // had to scroll INSIDE, in the middle of a reply.
+  //
+  // The reference implementation's markdown payload carries no height bound at
+  // all — one scrollbar for the whole conversation, which is the pane's.
+  const css = readFileSync(
+    join(import.meta.dir, "..", "src", "styles", "base.ts"),
+    "utf8",
+  );
+  const rule = (selector: string) => {
+    const at = css.indexOf(selector);
+    expect(at, `${selector} must exist`).toBeGreaterThan(-1);
+    const body = css.slice(at, css.indexOf("}", at));
+    return body;
+  };
+  for (const selector of [
+    ".natalia-message-text pre",
+    ".natalia-thinking-text pre",
+  ]) {
+    const block = rule(selector);
+    expect(block, `${selector} must not clamp a height`).not.toContain(
+      "max-height",
+    );
+    // Wrapped, not scrolled: a wide line reflows instead of growing a
+    // scrollbar inside the reply.
+    expect(block).toContain("white-space: pre-wrap");
+    expect(block).not.toContain("overflow: auto");
+    expect(block).not.toContain("overflow-y");
+  }
+  // The message body itself is unconstrained too.
+  const body = rule(".natalia-message-body");
+  expect(body).not.toContain("max-height");
+  expect(body).not.toContain("overflow");
+  // The composer is the one box that legitimately bounds itself (the input
+  // grows to a cap, the way the reference implementation's does).
+  expect(rule(".natalia-composer-textarea")).toContain("max-height");
 });

@@ -340,22 +340,22 @@ One submission produces, in order, on the live stream and in the journal
 
 ### Approvals and questions
 
-- **An approval is a request, not a gate you hold open.** The waiter events
-  (`approval.request`, `question.request`) carry `id`, `title`, `preview`,
-  optional `detail`/`keyArguments`, `sensitive` (the detail was withheld from
-  the model), `risk` (`terminal_low` / `terminal_high` for terminal scopes),
-  `scope`, `expiresAt` and `revocable`.
-- **Approvals time out, and a timeout is not a cancellation.** The runtime
-  answers an approval with the model's chosen verdict once a human responds;
-  if nobody responds, the request expires (`expiresAt`) and answering it
-  afterwards returns `accepted: false` — the model was already told the call
-  did not run. "Nobody answered" and "the turn was cancelled" are different
-  facts; an external UI must render them differently.
-- **`scope` is a grant key, not a label.** Approving an approval grants its
-  `scope` for the session, so later requests in the same scope (for example
-  the same tool) do not ask again until the scope expires (`expiresAt`) or is
-  revoked (`revocable`). `respondApproval` with `accept: true` grants; the
-  grant is session-scoped and never journaled.
+- **审批是一个请求，不是一道你替他守着的门。** waiter 事件
+  （`approval.request`、`question.request`）携带 `id`、`title`、`preview`、
+  可选的 `detail`/`keyArguments`、`sensitive`（细节已对模型隐瞒）、
+  `risk`（终端作用域的 `terminal_low` / `terminal_high`）、`scope` 与
+  `revocable`。
+- **审批不会过期。** 等待以人的回答、中止或运行时关闭结束——永远不以时钟
+  结束。不驱动 agent 的审批（背后没有东西在执行）无限等待，这正是它能跨
+  重启幸存的原因：被中断的回合被关闭，请求保持 pending，迟来的回答照常
+  durable 落盘，即使没有 waiter 幸存。"没人回答"与"回合被取消"是两种不
+  同的事实，外部 UI 必须区别渲染。
+- **`permissionFamily` 是授权的键，不是标签。** `respondApproval` 收
+  `decision: "once" | "session" | "project" | "reject"`。`once` 只授权被
+  请求的那一个动作；`session` 在本客户端实例内授权该请求的
+  `permissionFamily`（仅内存、绝不进 journal——重开会话绝不悄悄恢复造成
+  副作用的权限）；`project` 是常设授权，其 durable 记录就是
+  `approval.response` 事件本身，恢复折叠读的正是它。
 
 ### Subagent coordination tools
 

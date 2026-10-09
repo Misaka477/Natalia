@@ -344,18 +344,21 @@ One submission produces, in order, on the live stream and in the journal
   (`approval.request`, `question.request`) carry `id`, `title`, `preview`,
   optional `detail`/`keyArguments`, `sensitive` (the detail was withheld from
   the model), `risk` (`terminal_low` / `terminal_high` for terminal scopes),
-  `scope`, `expiresAt` and `revocable`.
-- **Approvals time out, and a timeout is not a cancellation.** The runtime
-  answers an approval with the model's chosen verdict once a human responds;
-  if nobody responds, the request expires (`expiresAt`) and answering it
-  afterwards returns `accepted: false` — the model was already told the call
-  did not run. "Nobody answered" and "the turn was cancelled" are different
-  facts; an external UI must render them differently.
-- **`scope` is a grant key, not a label.** Approving an approval grants its
-  `scope` for the session, so later requests in the same scope (for example
-  the same tool) do not ask again until the scope expires (`expiresAt`) or is
-  revoked (`revocable`). `respondApproval` with `accept: true` grants; the
-  grant is session-scoped and never journaled.
+  `scope` and `revocable`.
+- **No approval expires.** The wait ends on a human's answer, an abort, or
+  the runtime shutting down — never on a clock. An approval that does not
+  drive an agent (nothing is executing behind it) waits indefinitely, which
+  is what makes it survive a restart: the interrupted turn is closed, the
+  request stays pending, and the later answer is recorded durably even
+  though no waiter survived. "Nobody answered" and "the turn was cancelled"
+  are different facts; an external UI must render them differently.
+- **`permissionFamily` is the grant key, not a label.** `respondApproval`
+  takes `decision: "once" | "session" | "project" | "reject"`. `once` grants
+  the single requested action; `session` grants the request's
+  `permissionFamily` for this client instance (in memory, never journaled —
+  reopening a session must never silently restore permission to cause side
+  effects); `project` is the standing grant whose durable record IS the
+  `approval.response` event itself, so the restore fold reads it back.
 
 ### Subagent coordination tools
 

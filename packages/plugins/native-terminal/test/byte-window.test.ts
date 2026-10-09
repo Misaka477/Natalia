@@ -253,10 +253,13 @@ test("a full-speed flood does not starve the keyboard", async () => {
   // echo take? Measured after the screen-fold fix: 14.5ms. Before the fold
   // fix the same probe would have waited on the fold's backlog.
   //
-  // The budget is deliberately loose (5s against a 14.5ms reality) so CI
+  // The budget is deliberately loose (20s against a 14.5ms reality) so CI
   // noise cannot flake it; what it catches is the real failure — the echo
   // arriving only after the flood ends, which is what a fold that blocks the
-  // input path looks like.
+  // input path looks like. 5s had been "loose" and still flaked three times
+  // on the runner (a shared CPU running `yes` at full rate is exactly where
+  // the echo latency is not the local 14.5ms); 20s keeps the real failure
+  // unambiguous — a blocked input path never echoes at all.
   const root = await mkdtemp(join(tmpdir(), "natalia-flood-latency-"));
   const { controller } = await paneIn(root, "t_flood");
   try {
@@ -268,7 +271,7 @@ test("a full-speed flood does not starve the keyboard", async () => {
     });
     const started = performance.now();
     controller.write("t_flood", "echo ECHO_MARKER_XYZ\n");
-    while (!echoed && performance.now() - started < 5_000) await Bun.sleep(5);
+    while (!echoed && performance.now() - started < 20_000) await Bun.sleep(5);
     unsub();
     expect(echoed).toBe(true);
     // Stop the flood so the pane's exit does not wait on `yes`.

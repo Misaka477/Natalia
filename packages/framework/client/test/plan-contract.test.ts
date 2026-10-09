@@ -17,7 +17,7 @@ import {
   projectedRuntimeNotices,
   projectedWorkContracts,
 } from "@anthelia/session";
-import { createScriptedProvider } from "./e2e-harness";
+import { createScriptedProvider, recordTurnRequest } from "./e2e-harness";
 
 /** A provider whose first step proposes the contract, then settles. */
 function proposeProvider(
@@ -1002,7 +1002,7 @@ test("the project documents inject as a user-tier runtime context block (ADR D2 
       provider: "test",
       model: "test",
       async *stream(request: ProviderStreamRequest) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "content" as const, text: "ok" };
         yield { type: "done" as const };
       },
@@ -1049,7 +1049,7 @@ test("a project document edit changes the block hash and re-injects (EI §8.5)",
       provider: "test",
       model: "test",
       async *stream(request: ProviderStreamRequest) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "content" as const, text: "ok" };
         yield { type: "done" as const };
       },

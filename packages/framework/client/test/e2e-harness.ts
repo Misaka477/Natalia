@@ -49,6 +49,27 @@ function toolNames(request: ProviderStreamRequest): Set<string> {
  * runtime uses one provider object for all channels; a deterministic E2E script
  * must not let a Nia wake consume the Main Agent's next step.
  */
+/**
+ * Record one provider request, skipping the session-title turn.
+ *
+ * Naming a session is a real provider call: its system prompt is the title
+ * instruction, it belongs to no turn step, and on a slow runner it lands in
+ * the middle of any `requests` collection. An index-based assertion
+ * (`requests[0]`, `requests.at(-1)`) then reads the WRONG request — the
+ * flake family this closes, seen seven times on CI (real-runtime-e,
+ * three-stream-isolation, real-runtime-d, real-runtime-b). Every collection
+ * an index assertion reads goes through here.
+ */
+export function recordTurnRequest(
+  requests: ProviderStreamRequest[],
+  request: ProviderStreamRequest,
+): void {
+  const system = String(
+    (request.messages[0] as { content?: unknown } | undefined)?.content ?? "",
+  );
+  if (system.startsWith("Create a concise session topic")) return;
+  requests.push(request);
+}
 export function detectAgent(request: ProviderStreamRequest): E2EAgent {
   const names = toolNames(request);
   if (

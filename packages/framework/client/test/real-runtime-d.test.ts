@@ -1578,7 +1578,16 @@ test("a rejected approval feeds the reason back and lets the turn continue", asy
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        // The session-title turn is a provider call that belongs to neither
+        // step: its system prompt is the title instruction, so it lands in
+        // this collection and `requests.at(-1)` can name IT instead of the
+        // turn's last step (the CI flake this closes — the same title-turn
+        // family as real-runtime-e's).
+        const titleTurn = String(
+          (request.messages[0] as { content?: unknown } | undefined)?.content ??
+            "",
+        ).startsWith("Create a concise session topic");
+        if (!titleTurn) requests.push(request);
         // The second step only happens if the turn survived the rejection.
         if (request.messages.some((message) => message.role === "tool")) {
           yield { type: "content" as const, text: "understood, moving on" };

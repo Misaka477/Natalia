@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, test } from "bun:test";
 import { createRealRuntimeClient as createRuntimeClient } from "../src";
+import { recordTurnRequest } from "./e2e-harness";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type {
   ProviderStreamRequest,
@@ -181,7 +182,7 @@ test("read-only runtime preserves a plugin tool approval declaration", async () 
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -229,7 +230,7 @@ test("workspace plugin trust does not alter an approval declaration", async () =
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -1059,7 +1060,7 @@ test("runtime agent selection applies only at the next provider turn boundary", 
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         if (requests.length === 1)
           await new Promise<void>((resolve) => (release = resolve));
         yield { type: "done" as const };
@@ -1128,7 +1129,7 @@ test("committed agent selection restores when a session runtime is reopened", as
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -2173,7 +2174,7 @@ test("agent MCP server scope limits provider-visible MCP tools", async () => {
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -2227,7 +2228,7 @@ test("agent MCP scope includes only its server prompt and resource tools", async
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -2261,7 +2262,7 @@ test("runtime persists and lowers structured agent resource mentions", async () 
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -2419,7 +2420,7 @@ test("real runtime reserves the configured final step for a text response", asyn
         request.messages.some((message) =>
           message.content.includes("MAXIMUM STEPS REACHED"),
         );
-      if (mainTurnRequest) requests.push(request);
+      if (mainTurnRequest) recordTurnRequest(requests, request);
       if (request.tools === undefined) {
         yield { type: "content", text: "All tool checks completed." };
         yield { type: "done" };

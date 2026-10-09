@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, test } from "bun:test";
 import { createRealRuntimeClient as createRuntimeClient } from "../src";
+import { recordTurnRequest } from "./e2e-harness";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type {
   ProviderStreamRequest,
@@ -1992,7 +1993,7 @@ test("read-only profile rejects side-effecting tools without an approval request
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         if (!request.messages.some((message) => message.role === "tool"))
           yield {
             type: "tool_call" as const,
@@ -2071,7 +2072,7 @@ test("selected permission profile denies tools outside its allow list before app
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         if (!request.messages.some((message) => message.role === "tool"))
           yield {
             type: "tool_call" as const,
@@ -2599,7 +2600,7 @@ test("configured agent selection supplies the provider system prompt and tool po
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },
@@ -2637,7 +2638,7 @@ test("runtime sends a baseline system prompt without configured agent instructio
       provider: "test",
       model: "test",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         yield { type: "done" as const };
       },
     },

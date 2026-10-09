@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { recordTurnRequest } from "./e2e-harness";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -661,7 +662,7 @@ test("real runtime client with allow policy prevents excluded tools from provide
     model: "scripted-policy-model",
     requests,
     async *stream(request: ProviderStreamRequest) {
-      requests.push(request);
+      recordTurnRequest(requests, request);
       yield { type: "content", text: "ok" };
       yield { type: "done" };
     },
@@ -982,7 +983,7 @@ test("sandbox merge exclusion applies to catalog and forced execution", async ()
       provider: "scripted-sandbox-merge-exclude",
       model: "scripted-sandbox-merge-exclude-model",
       async *stream(request) {
-        requests.push(request);
+        recordTurnRequest(requests, request);
         if (!request.messages.some((message) => message.role === "tool"))
           yield {
             type: "tool_call" as const,

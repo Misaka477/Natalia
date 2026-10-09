@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { recordTurnRequest } from "./e2e-harness";
 import { createTestContext } from "@anthelia/runtime-services";
 import { providerModelController } from "@anthelia/provider-model";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -89,7 +90,7 @@ async function makeHarness(
     imageInput: input.providerImageInput ?? true,
     videoInput: input.providerVideoInput ?? true,
     async *stream(request) {
-      requests.push(request);
+      recordTurnRequest(requests, request);
       yield { type: "content", text: "ok" };
       yield { type: "done", finishReason: "stop" };
     },

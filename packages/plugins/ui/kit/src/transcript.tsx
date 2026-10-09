@@ -839,57 +839,23 @@ export function estimateMessageHeight(message: Message): number {
 }
 
 /**
- * The fixed-height row model (scroll Phase 5). Unlike the refining
- * `estimateMessageHeight`, this computes a deterministic, *bounded* height: the
- * markdown/code body is clamped to a fixed line budget and the total to a hard
- * ceiling, and large tool output is always collapsed to its preview. Because
- * the height depends only on clamped content, the rendered row matches it
- * exactly, so the virtualizer no longer needs to measure the DOM
- * (`measureElement`) to stay anchored.
+ * A row's rendered height.
+ *
+ * The clamp this used to carry (a 40-line body budget and a 1200px ceiling)
+ * was ruled out on 2026-10-10: a row that renders 6000px tall was reported to
+ * the virtualizer as 1200px, so the pane's total size came up short and the
+ * tail-follow landed above the true bottom — a large answer could not be
+ * scrolled to at all. The row is its content's height, with no ceiling and no
+ * inner scroll: it renders downward, naturally, the way the reference table
+ * renders a payload.
+ *
+ * The estimate must therefore be the row's REAL height, which is what
+ * `estimateMessageHeight` computes (the same wrapped-line accounting the
+ * markdown body uses). The virtualizer's `scrollEndThreshold` compensates the
+ * small residual delta when the reader is pinned to the end.
  */
-const MAX_MARKDOWN_BODY_LINES = 40;
-const MAX_ROW_HEIGHT = 1200;
-
-/** Wrapped line count of a body, capped at a fixed line budget. */
-function clampedBodyLines(text: string, maxLines: number): number {
-  let lines = 0;
-  let inFence = false;
-  for (const line of text.split("\n")) {
-    if (/^\s*```/u.test(line)) {
-      lines += 1;
-      inFence = !inFence;
-      if (lines >= maxLines) return maxLines;
-      continue;
-    }
-    lines += inFence ? 1 : Math.max(1, Math.ceil(line.length / 96));
-    if (lines >= maxLines) return maxLines;
-  }
-  return lines;
-}
-
 export function fixedRowHeight(message: Message): number {
-  let height = MESSAGE_BASE_HEIGHT;
-  const bodyLines = clampedBodyLines(message.content, MAX_MARKDOWN_BODY_LINES);
-  if (message.thinking)
-    height += THINKING_BLOCK_HEIGHT + bodyLines * MESSAGE_LINE_HEIGHT;
-  else if (message.content !== "") height += bodyLines * MESSAGE_LINE_HEIGHT;
-  for (const toolCall of message.toolCalls ?? []) {
-    const output = toolCall.output ?? toolCall.summary ?? "";
-    const outputLines = wrappedLineCount(output, 110);
-    // The default view is the capped window (S2), so the deterministic row
-    // height is the capped height plus the toggle.
-    height +=
-      TOOL_CARD_BASE_HEIGHT +
-      (toolOutputHidden(output) > 0
-        ? TOOL_CARD_COLLAPSED_OUTPUT_HEIGHT
-        : outputLines * TOOL_OUTPUT_LINE_HEIGHT);
-  }
-  for (const attachment of message.attachments ?? [])
-    height += estimateAttachmentHeight(attachment) + ATTACHMENT_GAP;
-  return Math.max(
-    MESSAGE_BASE_HEIGHT,
-    Math.min(MAX_ROW_HEIGHT, Math.ceil(height)),
-  );
+  return estimateMessageHeight(message);
 }
 
 function MessageGroup(props: {

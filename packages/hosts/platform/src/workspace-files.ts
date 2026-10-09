@@ -514,8 +514,15 @@ export async function globWorkspaceFilesBounded(
     const childAbsolute = resolve(directory, child.name);
 
     if (child.isDirectory()) {
+      // F7: `.natalia/plans/` is searchable like any source directory; the
+      // runtime's own internals under `.natalia` are not. An explicit pattern
+      // still reaches either.
+      const nataliaInternal =
+        childRelative === ".natalia" || childRelative.startsWith(".natalia/");
       if (
-        DEFAULT_GREP_IGNORED_DIRECTORIES.has(child.name) &&
+        (DEFAULT_GREP_IGNORED_DIRECTORIES.has(child.name) ||
+          (nataliaInternal &&
+            !isSearchableNataliaSubdirectory(childRelative))) &&
         childRelative !== scope &&
         !includeMayEnterDirectory(childRelative, input.pattern)
       )
@@ -617,7 +624,6 @@ const DEFAULT_GREP_IGNORED_DIRECTORIES = new Set([
   ".git",
   ".hg",
   ".svn",
-  ".natalia",
   ".next",
   ".turbo",
   "__pycache__",
@@ -1355,6 +1361,22 @@ function matchesInclude(path: string, include?: string) {
  * glob include prefix such as `devref/...` or `**\/devref/...`.
  * `**\/*` alone intentionally does not make every heavy directory walkable.
  */
+/**
+ * Whether a path under `.natalia` may appear in a workspace search (F7).
+ *
+ * `.natalia/plans/` holds the plan documents — the working contract every
+ * agent reads — so hiding it made the contract unfindable by the tools meant
+ * to find it. Everything else under `.natalia` is runtime state (sessions,
+ * tool-output spill, caches) and stays out of a search the way `node_modules`
+ * does. `.natalia` itself is entered, because that is the only way to reach
+ * `plans/`.
+ */
+function isSearchableNataliaSubdirectory(relativePath: string): boolean {
+  return (
+    relativePath === ".natalia" || relativePath.startsWith(".natalia/plans")
+  );
+}
+
 function includeMayEnterDirectory(directory: string, include?: string) {
   if (!include) return false;
   const normalized = include.replace(/\\/gu, "/").replace(/^\.\//u, "");

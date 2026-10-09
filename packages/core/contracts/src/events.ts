@@ -726,6 +726,8 @@ type LegacyChatEventData =
       argumentsRaw?: string;
       /** The tool's own card, when the publisher projected one. */
       card?: ToolCard;
+      /** The provider call's id — the pairing key for the rebuilt history. */
+      toolCallID?: string;
       meta?: Record<string, unknown>;
       startedAt?: number;
       endedAt?: number;

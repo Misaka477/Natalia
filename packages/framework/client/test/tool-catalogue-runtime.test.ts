@@ -105,3 +105,16 @@ test("the advertised tool names are the names the real runtime registers", async
         `"${name}" is advertised outside the registry and outside the alias map`,
       ).toBe(true);
 }, 120_000);
+
+test("interactive_observe reaches the tool whose name sits outside the family (F8)", () => {
+  // The 2026-10-10 sweep's F8: the observation tool's canonical name is
+  // `terminal_observe` — the only name outside the `interactive_terminal_*`
+  // family. A model that learned the family's shape reaches for a name that
+  // does not exist and gets "No tool output found for function call".
+  expect(interactiveTerminalToolAliases.interactive_observe).toBe(
+    "terminal_observe",
+  );
+  // And the alias's target is a name the runtime registers.
+  expect(runtimeToolNames()).toContain("terminal_observe");
+  expect(runtimeToolNames()).toContain("interactive_observe");
+});

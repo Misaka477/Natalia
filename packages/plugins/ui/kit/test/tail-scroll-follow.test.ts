@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { TailScrollController } from "../src/scroll-controller";
+import { fixedRowHeight } from "../src/transcript";
 
 /**
  * Tail-follow: the reader's scroll wins over the runtime's scroll (S6).
@@ -77,4 +78,29 @@ test("scrolling back to the bottom re-arms follow", () => {
   element.scrollTop = element.scrollHeight - element.clientHeight;
   controller.onScroll({ currentTarget: element } as unknown as Event);
   expect(controller.isFollowing()).toBe(true);
+});
+
+test("a row's height is its content's height, with no ceiling (2026-10-10 ruling)", () => {
+  // The user's ruling: no fixed height, no inner scrollbar, render naturally.
+  // The clamp this replaces also broke the tail-follow — a 6000px row reported
+  // as 1200px leaves the pane's total size short, so the follow lands above the
+  // true bottom and a large answer cannot be scrolled to.
+  const big = {
+    id: "m1",
+    role: "assistant",
+    content: Array.from({ length: 400 }, (_, i) => `line ${i}`).join("\n"),
+    at: "",
+  } as never;
+  const height = fixedRowHeight(big);
+  // The row is TALLER than the old 1200px ceiling, by a lot.
+  expect(height).toBeGreaterThan(1200);
+  // And it grows with the content: doubling the body roughly doubles it.
+  const bigger = {
+    ...big,
+    content: Array.from({ length: 800 }, (_, i) => `line ${i}`).join("\n"),
+  } as never;
+  expect(fixedRowHeight(bigger)).toBeGreaterThan(height * 1.8);
+  // A short message is still short — no floor inflation.
+  const small = { id: "m2", role: "assistant", content: "hi", at: "" } as never;
+  expect(fixedRowHeight(small)).toBeLessThan(200);
 });

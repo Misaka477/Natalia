@@ -52,7 +52,12 @@ const SAFE_EXECUTABLES = new Set([
   "whoami",
 ]);
 
-const SAFE_TEST_EXECUTABLES = new Set(["jest", "pytest", "vitest"]);
+// F9 (2026-10-10 sweep): `ctest` is CMake's test runner. A CMake project's
+// ONLY test command is `ctest`, so leaving it out meant Nia could not re-run
+// the project's tests at all — an audit that cannot re-run the thing it is
+// auditing is decoration. It runs tests and nothing else, which is the whole
+// criterion for this set.
+const SAFE_TEST_EXECUTABLES = new Set(["jest", "pytest", "vitest", "ctest"]);
 const SAFE_PACKAGE_SCRIPTS = new Set(["format", "test", "typecheck"]);
 
 function executableName(token: string | undefined) {

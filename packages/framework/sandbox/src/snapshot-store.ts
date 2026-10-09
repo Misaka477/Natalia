@@ -475,14 +475,25 @@ export class SnapshotStore {
     if (!(await this.pathExists(lkgDir))) return false;
     const record = await this.loadPromotionRecord(id);
     if (record) {
+      // Deepest first: a directory is only removable once everything it held
+      // is gone, and the paths an addition created are collected so the
+      // directories they made can go too (F3 — the audit measured a rollback
+      // reporting success while leaving 11 empty directories behind).
+      const addedDirectories = new Set<string>();
       for (const applied of [...record.applied].reverse()) {
         const target = containPath(hostRoot, applied.path);
         if (!applied.existedBefore) {
           await rm(target, { force: true });
+          let dir = dirname(target);
+          while (dir.startsWith(hostRoot) && dir !== hostRoot) {
+            addedDirectories.add(dir);
+            dir = dirname(dir);
+          }
           continue;
         }
         await this.restoreFromBackup(lkgDir, hostRoot, applied.path);
       }
+      await this.pruneEmptyDirectories(hostRoot, addedDirectories);
       return true;
     }
     // A last-known-good written before records existed: restoring the backups is
@@ -493,6 +504,28 @@ export class SnapshotStore {
       await this.restoreFromBackup(lkgDir, hostRoot, rel);
     }
     return true;
+  }
+
+  /**
+   * Remove the directories an addition created, deepest first, and only when
+   * they are empty (F3). A directory that still holds a file the rollback
+   * restored — or one that predates the promotion — is left exactly as it is.
+   */
+  private async pruneEmptyDirectories(
+    hostRoot: string,
+    directories: ReadonlySet<string>,
+  ): Promise<void> {
+    for (const dir of [...directories].sort(
+      (a, b) => b.split("/").length - a.split("/").length,
+    )) {
+      try {
+        const entries = await readdir(dir);
+        if (entries.length === 0)
+          await rm(dir, { recursive: true, force: true });
+      } catch {
+        // already gone, or never a directory: nothing to prune
+      }
+    }
   }
 
   /** The record a promote wrote, or undefined for a pre-record last-known-good. */

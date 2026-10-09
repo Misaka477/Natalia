@@ -1169,6 +1169,14 @@ export type ProjectedChatMessage = {
     argumentsRaw?: string;
     startedAt?: number;
     endedAt?: number;
+    /**
+     * The provider call's id — the ONLY thing that pairs a tool result with
+     * the assistant `toolCalls` entry. Carried through the projection because
+     * the history rebuild pairs by it: pairing by tool NAME collides the
+     * moment one message calls the same tool twice, and the gateway rejects
+     * the next turn with "Duplicate value for 'tool_call_id'".
+     */
+    toolCallID?: string;
   };
 };
 
@@ -1467,6 +1475,9 @@ function projectChatStream(
           ...(event.result !== undefined ? { result: event.result } : {}),
           ...(event.argumentsRaw !== undefined
             ? { argumentsRaw: event.argumentsRaw }
+            : {}),
+          ...(event.toolCallID !== undefined
+            ? { toolCallID: event.toolCallID }
             : {}),
           // The tool's own card and facts (R4): carried so a replayed chat
           // row renders exactly like a live one — the projection was always

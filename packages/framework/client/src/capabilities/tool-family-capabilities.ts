@@ -90,6 +90,7 @@ export function runtimeToolNames(): string[] {
     "interactive_last_command",
     "interactive_list",
     "interactive_cleanup",
+    "interactive_observe",
     "interactive_read",
     "interactive_resize",
     "interactive_search",

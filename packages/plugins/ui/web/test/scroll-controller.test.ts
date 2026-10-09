@@ -203,10 +203,13 @@ test("tool output estimates account for the payload instead of content length", 
   expect(huge).toBeLessThan(600);
 });
 
-test("fixedRowHeight is deterministic and bounded regardless of content size", () => {
+test("a row's height is its content's height, with no ceiling (2026-10-10 ruling)", () => {
+  // The user's ruling on 2026-10-10: no fixed height, no inner scrollbar,
+  // render naturally. The clamp this replaces (a 40-line body budget and a
+  // 1200px ceiling) also broke the tail-follow — a row that renders 6000px was
+  // reported as 1200px, so the pane's total size came up short and the follow
+  // landed above the true bottom: a large answer could not be scrolled to.
   const small: Message = { id: "s", role: "assistant", content: "hi" };
-  // A huge markdown body is clamped to the fixed line budget, so the height is
-  // bounded and identical whether the body is 40 lines or 40,000.
   const fortyLines: Message = {
     ...small,
     id: "forty",
@@ -217,10 +220,15 @@ test("fixedRowHeight is deterministic and bounded regardless of content size", (
     id: "huge",
     content: Array.from({ length: 40_000 }, (_, i) => `line ${i}`).join("\n"),
   };
-  expect(fixedRowHeight(fortyLines)).toBe(fixedRowHeight(fortyThousandLines));
-  expect(fixedRowHeight(fortyThousandLines)).toBeLessThanOrEqual(1200);
-  // The refining estimate grows unbounded with the body; the fixed model does not.
-  expect(estimateMessageHeight(fortyThousandLines)).toBeGreaterThan(
+  // The height grows with the body instead of being clamped to a constant.
+  expect(fixedRowHeight(fortyLines)).toBeGreaterThan(fixedRowHeight(small));
+  expect(fixedRowHeight(fortyThousandLines)).toBeGreaterThan(
+    fixedRowHeight(fortyLines) * 100,
+  );
+  // No ceiling: a 40,000-line body is NOT reported as 1200px.
+  expect(fixedRowHeight(fortyThousandLines)).toBeGreaterThan(1200);
+  // Deterministic: the same message always measures the same.
+  expect(fixedRowHeight(fortyThousandLines)).toBe(
     fixedRowHeight(fortyThousandLines),
   );
 });

@@ -181,3 +181,33 @@ test("web_search projects a card naming the status and the byte cap", () => {
     ["results", "0"],
   ]);
 });
+
+test("a search that found nothing says so instead of returning the page (F10)", async () => {
+  // The 2026-10-10 sweep's F10: with no endpoint configured, a search returned
+  // 33 KB of DuckDuckGo markup — measured — for an answer of "no results".
+  // The raw body is reachable through web_fetch; the search's own answer is
+  // that it found nothing.
+  const originalFetch = globalThis.fetch;
+  // No endpoint configured, so the DuckDuckGo fallback is the source — the
+  // path the sweep measured.
+  globalThis.fetch = (async () =>
+    new Response("<html><body>no results here</body></html>", {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    })) as never;
+  try {
+    const tools = new Map(webTools.map((tool) => [tool.name, tool]));
+    const answer = String(
+      await tools
+        .get("web_search")!
+        .execute({ query: "nothing" }, { workspaceRoot: tmpdir() } as never),
+    );
+    expect(answer).toContain("results=0");
+    expect(answer).toContain("body=omitted");
+    expect(answer).toContain("web_fetch");
+    // The markup itself is not in the answer.
+    expect(answer).not.toContain("<html>");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

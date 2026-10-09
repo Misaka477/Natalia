@@ -264,7 +264,19 @@ function webSearchTool(): RuntimeTool {
             ]
           : []),
       ];
-      if (parsed.length === 0) return [...header, bounded.body].join("\n");
+      // F10 (2026-10-10 sweep): the DuckDuckGo path returned the raw page when
+      // nothing parsed — 33 KB of markup measured, for an answer of "no
+      // results". A search's answer is its RESULTS; the haystack is reachable
+      // through web_fetch on the same URL. A CONFIGURED endpoint is the
+      // operator's own format and its body stays the answer, so only the
+      // DuckDuckGo fallback omits it.
+      if (parsed.length === 0)
+        return [
+          ...header,
+          ...(search.label.startsWith("DuckDuckGo")
+            ? ["body=omitted; use web_fetch on the same URL to read it"]
+            : [bounded.body]),
+        ].join("\n");
       return [
         ...header,
         ...parsed.map(

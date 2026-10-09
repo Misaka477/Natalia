@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, symlink, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createWorkspaceFile,
   deleteWorkspaceFile,
+  globWorkspaceFilesBounded,
+  grepWorkspaceFilesBounded,
   renameWorkspaceFile,
   writeWorkspaceFile,
 } from "../src/index";
@@ -75,4 +77,45 @@ test("workspace write ops reject absolute and .. paths before touching disk", as
       newPath: "../out.txt",
     }),
   ).rejects.toThrow(/must remain inside workspace/);
+});
+
+test(".natalia/plans is searchable; the runtime's internals are not (F7)", async () => {
+  // The 2026-10-10 sweep's F7: `.natalia` was in the blanket ignored set, so
+  // the plan documents — the working contract every agent reads — were
+  // invisible to the tools meant to find them. A hand-built plan document was
+  // unfindable by glob/grep and unpicked by the registry scan.
+  const root = await mkdtemp(join(tmpdir(), "natalia-f7-"));
+  for (const dir of [
+    ".natalia/plans",
+    ".natalia/tool-output",
+    ".natalia/sessions",
+    "node_modules/dep",
+  ])
+    await mkdir(join(root, dir), { recursive: true });
+  await writeFile(join(root, ".natalia/plans/my-plan.md"), "# plan\n");
+  await writeFile(join(root, ".natalia/tool-output/spill.log"), "spill\n");
+  await writeFile(join(root, ".natalia/sessions/s.json"), "{}\n");
+  await writeFile(join(root, "node_modules/dep/index.ts"), "dep\n");
+  await writeFile(join(root, "src.ts"), "src\n");
+  const markdown = await globWorkspaceFilesBounded({
+    workspaceRoot: root,
+    pattern: "**/*.md",
+  });
+  // The plan is found by a general search.
+  expect(markdown.paths).toContain(".natalia/plans/my-plan.md");
+  const types = await globWorkspaceFilesBounded({
+    workspaceRoot: root,
+    pattern: "**/*.ts",
+  });
+  // Runtime internals and dependencies are still out.
+  expect(types.paths).toEqual(["src.ts"]);
+  // And the plan's CONTENT is greppable.
+  const hits = await grepWorkspaceFilesBounded({
+    workspaceRoot: root,
+    pattern: "plan",
+  });
+  expect(hits.matches.map((match) => match.path)).toContain(
+    ".natalia/plans/my-plan.md",
+  );
+  await rm(root, { recursive: true, force: true });
 });

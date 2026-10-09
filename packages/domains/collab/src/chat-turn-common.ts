@@ -231,15 +231,28 @@ export function promptData(value: string): string {
  * per call, in call order.
  */
 /** A projected chat row, as the mapper needs it (a display tool row + its result). */
-type HistoryChatRow = {
+export type HistoryChatRow = {
   messageID: string;
   role: "user" | "chat" | "system";
   text: string;
   kind?: "message" | "thinking" | "tool" | "compaction" | "collab";
-  tool?: { name: string; result?: string };
+  tool?: { name: string; result?: string; toolCallID?: string };
 };
 
-function chatProviderMessages(
+/**
+ * The provider messages for a chat history, with every call answered.
+ *
+ * A call is paired with its result by the provider call's id — the ONLY key
+ * that identifies it. Pairing by tool NAME (what this did until 2026-10-10)
+ * collides the moment one message calls the same tool twice: both results got
+ * the FIRST call's id, and the gateway rejected the next turn with
+ * "Duplicate value for 'tool_call_id'".
+ *
+ * A call with no recorded result is answered with a row that says so, because
+ * a call left unanswered is rejected outright — "No tool output found for
+ * function call". An honest placeholder beats a rejected turn.
+ */
+export function chatProviderMessages(
   history: readonly HistoryChatRow[],
   callsByMessage: ReadonlyMap<
     string,
@@ -265,15 +278,32 @@ function chatProviderMessages(
     if (!calls?.length) continue;
     pending.delete(message.messageID);
     // The tool rows that belong to this message, in projection order.
-    for (const toolRow of history.filter(
+    const toolRows = history.filter(
       (candidate) =>
         candidate.kind === "tool" && candidate.messageID === message.messageID,
-    )) {
-      const call = calls.find((c) => c.name === toolRow.tool?.name);
+    );
+    const answered = new Set<string>();
+    for (const toolRow of toolRows) {
+      const call = calls.find(
+        (candidate) => candidate.id === toolRow.tool?.toolCallID,
+      );
+      if (!call) continue;
+      answered.add(call.id);
       messages.push({
         role: "tool",
-        toolCallID: call?.id ?? "",
+        toolCallID: call.id,
         content: toolRow.tool?.result ?? toolRow.text,
+      });
+    }
+    // A call whose result never landed still needs its row.
+    for (const call of calls) {
+      if (answered.has(call.id)) continue;
+      messages.push({
+        role: "tool",
+        toolCallID: call.id,
+        content:
+          `The result of ${call.name} was not recorded for this call. ` +
+          `Do not assume it succeeded; re-run it if the outcome matters.`,
       });
     }
   }

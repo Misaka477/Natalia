@@ -798,3 +798,46 @@ test("a merge answer is capped, and says so (F2)", async () => {
   // lines, not an unbounded answer.
   expect(Buffer.byteLength(wide, "utf8")).toBeLessThanOrEqual(20_000);
 });
+
+test("a rollback removes the directories an addition made (F3)", async () => {
+  // The 2026-10-10 sweep's F3: `sandbox_rollback` reported `restored: true`
+  // while leaving `.cmake-verify/` as 0 files / 11 empty directories — 80 paths
+  // listed, the tree still shaped by the thing that was undone. A rollback
+  // that says it restored and leaves the shape behind is a lie the workspace
+  // pays for.
+  const root = await mkdtemp(join(tmpdir(), "natalia-tool-sandbox-f3-"));
+  await writeFile(join(root, "base.txt"), "base\n");
+  const manager = new SnapshotSandboxManager(root);
+  await manager.initialize();
+  const tools = new Map(
+    sandboxToolFamily().tools.map((tool) => [tool.name, tool]),
+  );
+  const context = {
+    workspaceRoot: root,
+    sandboxes: manager,
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    onSandboxEvent: () => undefined,
+    onWorkspaceChange: () => undefined,
+    sandboxMergeAuthorize: async () => undefined,
+  } as never;
+  await tools.get("sandbox_create")!.execute({ id: "f3.1" }, context);
+  await tools
+    .get("sandbox_write")!
+    .execute(
+      { id: "f3.1", path: "deep/nested/dir/file.txt", content: "new\n" },
+      context,
+    );
+  await tools.get("sandbox_merge")!.execute({ id: "f3.1" }, context);
+  expect(existsSync(join(root, "deep/nested/dir/file.txt"))).toBe(true);
+  const rolled = JSON.parse(
+    String(
+      await tools.get("sandbox_rollback")!.execute({ id: "f3.1" }, context),
+    ),
+  ) as { restored: boolean };
+  expect(rolled.restored).toBe(true);
+  // The file is gone AND the directories it arrived in are gone with it.
+  expect(existsSync(join(root, "deep/nested/dir/file.txt"))).toBe(false);
+  expect(existsSync(join(root, "deep"))).toBe(false);
+  // What predated the promotion is untouched.
+  expect(existsSync(join(root, "base.txt"))).toBe(true);
+});

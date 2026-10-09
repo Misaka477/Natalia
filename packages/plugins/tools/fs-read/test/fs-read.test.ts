@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
@@ -289,4 +289,22 @@ test("image_read refuses when the host has no attachment channel", async () => {
       .get("image_read")!
       .execute({ path: "image.png" }, { workspaceRoot: "/workspace" }),
   ).rejects.toThrow("image attachment is unavailable");
+});
+
+test("read_media_file on a directory names the tool, the path and the way out (P1-17)", async () => {
+  // The 2026-10-08 audit's P1-17: a directory answered the bare OS sentence
+  // `EISDIR: illegal operation on a directory, read` — no tool name, no path,
+  // no next step.
+  const root = await mkdtemp(join(tmpdir(), "natalia-read-media-dir-"));
+  await mkdir(join(root, "docs"), { recursive: true });
+  const tool = fsReadToolFamily().tools.find(
+    (entry) => entry.name === "read_media_file",
+  )!;
+  await expect(
+    tool.execute({ path: "docs" }, { workspaceRoot: root } as never),
+  ).rejects.toThrow(/read_media_file: docs is a directory, not a file/u);
+  // And it says what to use instead.
+  await expect(
+    tool.execute({ path: "docs" }, { workspaceRoot: root } as never),
+  ).rejects.toThrow(/use glob to list a directory's entries/u);
 });

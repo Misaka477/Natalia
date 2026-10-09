@@ -377,6 +377,17 @@ export function evaluateCompletionCard(input: {
   changes?: string[];
   evidenceRefs: string[];
   /**
+   * The caller's own declaration of what kind of task this is.
+   *
+   * The 2026-10-08 audit's P1-15: a zero-file-change task was classified
+   * `code` (the default when nothing matches) and therefore required
+   * `validation:test`, which the caller's `validation:any` could not
+   * satisfy — the card came back `judgeable:false` with no way to say what
+   * the task actually was. An explicit declaration wins over both the path
+   * classifier and the text classifier, because the caller knows.
+   */
+  taskKind?: TaskKind;
+  /**
    * Evidence classes the caller already resolved from the records its
    * evidenceRefs cite (T-02). The tool that owns the ledger lookup fills
    * this; the judgment itself stays a pure function of its inputs.
@@ -389,7 +400,7 @@ export function evaluateCompletionCard(input: {
   }>;
 }): {
   kind: TaskKind | PathClass;
-  classifiedBy: "path" | "objective";
+  classifiedBy: "declared" | "path" | "objective";
   requires: string[];
   missing: string[];
   judgeable: boolean;
@@ -401,11 +412,18 @@ export function evaluateCompletionCard(input: {
   const pathClass = input.changes?.length
     ? classifyPathClass(input.changes)
     : undefined;
+  // The caller's declaration first (P1-15), then the path classifier, then
+  // the text classifier. `classifiedBy` names which one decided, so a reader
+  // can tell a declaration from a guess.
   const kind: TaskKind | PathClass =
-    pathClass ?? classifyTaskKind(input.objective, input.scope ?? []);
-  const matrix = pathClass
-    ? PATH_CLASS_EVIDENCE[pathClass]
-    : MINIMUM_EVIDENCE_MATRIX[kind as TaskKind];
+    input.taskKind ??
+    pathClass ??
+    classifyTaskKind(input.objective, input.scope ?? []);
+  const matrix = input.taskKind
+    ? MINIMUM_EVIDENCE_MATRIX[input.taskKind]
+    : pathClass
+      ? PATH_CLASS_EVIDENCE[pathClass]
+      : MINIMUM_EVIDENCE_MATRIX[kind as TaskKind];
   const present = new Set<string>();
   for (const reference of input.evidenceRefs) present.add(reference);
   // The classes the CALLER resolved from the records its evidenceIDs cite
@@ -422,7 +440,11 @@ export function evaluateCompletionCard(input: {
   const missing = matrix.requires.filter((entry) => !present.has(entry));
   return {
     kind,
-    classifiedBy: pathClass ? "path" : "objective",
+    classifiedBy: input.taskKind
+      ? "declared"
+      : pathClass
+        ? "path"
+        : "objective",
     requires: matrix.requires,
     missing,
     judgeable: missing.length === 0,

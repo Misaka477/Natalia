@@ -280,6 +280,18 @@ export function createRecordCompletionTool(
         },
         evidenceIDs: { type: "array", items: { type: "string" } },
         changePaths: { type: "array", items: { type: "string" } },
+        // P1-15: what kind of task this is, declared by the caller. Without
+        // it a task that changed no files is classified `code` by default and
+        // is then required to show `validation:test` — which a docs, config
+        // or dependency task cannot honestly produce, so its completion card
+        // came back judgeable:false with no way to say otherwise (the
+        // 2026-10-08 audit measured exactly that).
+        taskKind: {
+          type: "string",
+          enum: ["dependency", "parser", "test", "docs", "config", "code"],
+          description:
+            "What kind of task this was. Omit it and the card classifies from the changed paths, then from the objective's text; declare it when neither says the truth (a task that changed no files, for instance).",
+        },
       },
       required: ["taskID", "objective", "changeSummary"],
       additionalProperties: false,
@@ -306,6 +318,7 @@ export function createRecordCompletionTool(
         rollbackState?: "clean" | "available" | "none" | "needs_promotion";
         evidenceIDs?: string[];
         changePaths?: string[];
+        taskKind?: string;
       };
       const exec = resolveExec(ctx, context.sessionID);
       const ledger = requireGovernanceLedger(ctx);
@@ -432,6 +445,13 @@ export function createRecordCompletionTool(
       const card = requireWorkLedger(ctx)!.evaluateCompletionCard({
         objective: args.objective.trim(),
         ...(args.changePaths?.length ? { changes: args.changePaths } : {}),
+        // P1-15: the caller's declaration wins over both classifiers.
+        ...(args.taskKind
+          ? {
+              taskKind:
+                args.taskKind as import("@natalia/work-ledger").TaskKind,
+            }
+          : {}),
         evidenceRefs: args.evidenceIDs ?? [],
         resolvedEvidenceClasses: resolvedClasses,
         validations: args.validations ?? [],
@@ -447,7 +467,13 @@ export function createRecordCompletionTool(
                 : `${entry.evidenceID} is not a passed validation record`,
           )
           .join("; ");
-        return `${card.note} Requirements still open: ${card.missing.join(", ")}.${detail ? ` Cited evidence: ${detail}.` : ""} The completion changed no files, so the requirement comes from the objective's task kind, not from a path class.`;
+        // P1-15: when the caller DECLARED the kind, say so — the requirement
+        // is then the caller's own statement, not a guess from the text.
+        const declared =
+          card.classifiedBy === "declared"
+            ? `The completion declared this a ${card.kind} task.`
+            : `The completion changed no files, so the requirement comes from the objective's task kind, not from a path class.`;
+        return `${card.note} Requirements still open: ${card.missing.join(", ")}.${detail ? ` Cited evidence: ${detail}.` : ""} ${declared}`;
       })();
       return JSON.stringify({
         recorded: true,

@@ -525,3 +525,32 @@ test("evaluateCompletionCard classifies by change path and requires validation f
   expect(fallback.classifiedBy).toBe("objective");
   expect(fallback.kind).toBe("dependency");
 });
+
+test("a declared task kind wins over the classifiers (P1-15)", () => {
+  // The 2026-10-08 audit's P1-15: a zero-file-change task was classified
+  // `code` (the default when nothing matches) and therefore required
+  // `validation:test`, which the caller's `validation:any` could not
+  // satisfy — judgeable:false with no way to say what the task was.
+  const declared = evaluateCompletionCard({
+    // An objective whose text classifies as `code` — so the declaration is
+    // what makes the difference, not the words.
+    objective: "rewrite the session store write path",
+    evidenceRefs: [],
+    resolvedEvidenceClasses: ["validation:any"],
+    taskKind: "docs",
+  });
+  expect(declared).toMatchObject({
+    kind: "docs",
+    classifiedBy: "declared",
+    judgeable: true,
+  });
+  // The same call WITHOUT the declaration still classifies `code` and stays
+  // unjudgeable — which is exactly what the audit measured.
+  const guessed = evaluateCompletionCard({
+    objective: "rewrite the session store write path",
+    evidenceRefs: [],
+    resolvedEvidenceClasses: ["validation:any"],
+  });
+  expect(guessed.kind).toBe("code");
+  expect(guessed.judgeable).toBe(false);
+});

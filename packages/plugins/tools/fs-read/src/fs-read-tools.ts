@@ -419,9 +419,18 @@ function readMediaFileTool(): RuntimeTool {
         info = await stat(path);
         data = await readFile(path);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT")
           throw new Error(
             `read_media_file: file does not exist: ${relative(context.workspaceRoot, path)}`,
+          );
+        // P1-17: a directory used to answer the bare OS sentence
+        // `EISDIR: illegal operation on a directory, read` — no tool name, no
+        // path, and no hint that this tool reads FILES. The 2026-10-08 audit
+        // measured exactly that and had to guess what to do next.
+        if (code === "EISDIR")
+          throw new Error(
+            `read_media_file: ${relative(context.workspaceRoot, path)} is a directory, not a file — this tool reads one file's metadata; use glob to list a directory's entries`,
           );
         throw error;
       }

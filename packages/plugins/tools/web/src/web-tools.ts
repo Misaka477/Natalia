@@ -191,6 +191,7 @@ function webSearchTool(): RuntimeTool {
         // alike.
         const status = Number(/status=(\d+)/u.exec(value)?.[1] ?? "0");
         const truncated = /truncated=true/u.test(value);
+        const results = Number(/results=(\d+)/u.exec(value)?.[1] ?? "0");
         const lines = value.split("\n");
         let bodyStart = 0;
         while (
@@ -201,10 +202,16 @@ function webSearchTool(): RuntimeTool {
         return {
           kind: "web",
           title: query,
-          summary: `status ${status}`,
+          // The result count is the headline fact of a search (P1-16): a
+          // reader scanning rows wants "7 results", not a status code.
+          summary:
+            results > 0
+              ? `${results} result${results === 1 ? "" : "s"}`
+              : "no results",
           body: lines.slice(bodyStart).join("\n") || "(empty body)",
           meta: [
             ["status", String(status)],
+            ["results", String(results)],
             ...(truncated
               ? ([["truncated", "true"]] as Array<[string, string]>)
               : []),
@@ -234,19 +241,123 @@ function webSearchTool(): RuntimeTool {
           `web_search failed: HTTP ${response.status} from ${url.origin}`,
         );
       const bounded = boundedWebBody(text, numberOr(args.maxBytes, 20000));
-      return [
+      // P1-16: a search's answer is its RESULTS, not the page's markup. The
+      // DuckDuckGo HTML endpoint is parsed here — title, destination URL
+      // (the redirect unwrapped), snippet — and the result lines are what
+      // the model reads. A page that does not parse yields `results=0` with
+      // the reason named, and the raw body is still reachable through
+      // web_fetch on the same URL.
+      const parsed = parseDuckDuckGoResults(bounded.body);
+      const header = [
         `status=${response.status}`,
         `content-type=${response.headers.get("content-type") ?? "unknown"}`,
         `source=${search.label}`,
+        `results=${parsed.length}`,
+        ...(parsed.length === 0
+          ? [
+              "note=the page carried no parseable results; use web_fetch on the same URL for the raw body",
+            ]
+          : []),
         ...(bounded.truncated
           ? [
               `truncated=true bytes=${bounded.body.length} of ${bounded.totalBytes}`,
             ]
           : []),
-        bounded.body,
+      ];
+      if (parsed.length === 0) return [...header, bounded.body].join("\n");
+      return [
+        ...header,
+        ...parsed.map(
+          (result, index) =>
+            `${index + 1}. ${result.title}\n   ${result.url}\n   ${result.snippet}`,
+        ),
       ].join("\n");
     },
   };
+}
+
+/**
+ * A DuckDuckGo HTML result page, parsed into results.
+ *
+ * The 2026-10-08 audit's P1-16: `web_search` returned the raw HTML — a model
+ * got `<div class="result results_links ...">` and had to parse markup it
+ * cannot reliably parse (and the byte cap usually cut it mid-tag). The
+ * search tool's job is the RESULTS, so the parsing happens here, once, where
+ * the page's shape is known.
+ *
+ * A page that does not match the expected shape yields no results rather
+ * than a guess — the caller then sees `results=0` and the raw body is still
+ * available through `web_fetch` on the same URL.
+ */
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
+export function parseDuckDuckGoResults(html: string): WebSearchResult[] {
+  const results: WebSearchResult[] = [];
+  // Each result is an anchor with class result__a inside a result block;
+  // the snippet is the result__snippet node's text.
+  const blocks = html.split(/<div[^>]*class="[^"]*result[^"]*"/u).slice(1);
+  for (const block of blocks) {
+    const anchor =
+      /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/u.exec(
+        block,
+      );
+    if (!anchor) continue;
+    const href = decodeEntities(anchor[1] ?? "");
+    const title = stripTags(decodeEntities(anchor[2] ?? ""));
+    const snippetMatch =
+      /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/u.exec(
+        block,
+      ) ??
+      /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/u.exec(block);
+    const snippet = snippetMatch
+      ? stripTags(decodeEntities(snippetMatch[1] ?? ""))
+      : "";
+    // DuckDuckGo wraps outbound links in a redirect; unwrap it so the URL a
+    // model reads is the destination it can fetch.
+    const url = unwrapDuckDuckGoRedirect(href);
+    if (!url || !title) continue;
+    results.push({ title, url, snippet });
+    if (results.length >= 20) break;
+  }
+  return results;
+}
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-f]+);/giu, (_m, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/gu, (_m, dec: string) =>
+      String.fromCodePoint(Number(dec)),
+    )
+    .replace(/&amp;/gu, "&")
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&quot;/gu, '"')
+    .replace(/&#39;/gu, "'")
+    .replace(/&nbsp;/gu, " ");
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function unwrapDuckDuckGoRedirect(href: string): string {
+  // `//duckduckgo.com/l/?uddg=<encoded>` — the destination is the parameter.
+  const match = /[?&]uddg=([^&]+)/u.exec(href);
+  if (!match) return href;
+  try {
+    return decodeURIComponent(match[1] ?? "");
+  } catch {
+    return href;
+  }
 }
 
 function selectWebSearchSource(input: {

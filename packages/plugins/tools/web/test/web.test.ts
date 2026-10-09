@@ -156,15 +156,18 @@ test("web_search projects a card naming the status and the byte cap", () => {
   });
   const card = tool.output?.presentResult?.(
     { query: "natalia cli" },
-    "status=200\ncontent-type=text/html\ntruncated=true bytes=500 of 9000\n<body>",
+    "status=200\ncontent-type=text/html\nresults=7\ntruncated=true bytes=500 of 9000\n1. First\n   https://example.com",
   );
   expect(card).toEqual({
     kind: "web",
     title: "natalia cli",
-    summary: "status 200",
-    body: "<body>",
+    // The result count is the headline fact of a search (P1-16): a reader
+    // scanning rows wants "7 results", not a status code.
+    summary: "7 results",
+    body: "1. First\n   https://example.com",
     meta: [
       ["status", "200"],
+      ["results", "7"],
       ["truncated", "true"],
     ],
   });
@@ -173,5 +176,8 @@ test("web_search projects a card naming the status and the byte cap", () => {
     { query: "natalia cli" },
     "status=200\ncontent-type=text/html\n<body>",
   );
-  expect(whole?.meta).toEqual([["status", "200"]]);
+  expect(whole?.meta).toEqual([
+    ["status", "200"],
+    ["results", "0"],
+  ]);
 });

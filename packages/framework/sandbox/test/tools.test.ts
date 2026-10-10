@@ -9,6 +9,7 @@ import {
   sandboxSelfDiffTool,
   sandboxToolFamily,
   sandboxTools,
+  validationFailure,
   WorkspaceSandboxManager,
   WorktreeSandboxManager,
 } from "../src";
@@ -907,4 +908,32 @@ test("a sandboxed subagent's own diff needs no id and names no other candidate",
   await expect(tool.execute({}, {} as never)).rejects.toThrow(
     /only available inside a sandboxed subagent/u,
   );
+});
+
+test("a failed validation never ends at a bare colon (F13)", () => {
+  // The sweep measured `failed validation (exit 3): ` with nothing after the
+  // colon — the command's output was not captured, and the message stopped
+  // there. A caller learned the exit code and nothing else.
+  // With output, the output rides.
+  expect(
+    validationFailure("sbx.1", "ctest", {
+      exitCode: 3,
+      output: "3 tests failed",
+    }),
+  ).toContain("3 tests failed");
+  // Without it, the message SAYS so and carries the command, so the failure is
+  // actionable rather than a dead end.
+  const empty = validationFailure("sbx.1", "ctest --output-on-failure", {
+    exitCode: 3,
+    output: "",
+  });
+  expect(empty).toContain("no captured output");
+  expect(empty).toContain("ctest --output-on-failure");
+  expect(empty).not.toMatch(/:\s*$/u);
+  // Whitespace-only output is the same case as empty.
+  const blank = validationFailure("sbx.1", "ctest", {
+    exitCode: 3,
+    output: "  \n ",
+  });
+  expect(blank).toContain("no captured output");
 });

@@ -37,6 +37,7 @@ import {
   type SandboxRiskTier,
 } from "./governance";
 import { unifiedPatchToStructured } from "./diff";
+import { validationFailure } from "./workspace-manager";
 
 /**
  * True when `target` resolves inside `root`. A conflict path arrives from git
@@ -572,10 +573,7 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     const command = input.command.trim();
     if (!command) throw new Error("sandbox promote command must not be empty");
     const evidence = await this.validate(id, command);
-    if (!evidence.ok)
-      throw new Error(
-        `candidate ${id} failed validation (exit ${evidence.exitCode}):\n${evidence.output.slice(0, 2000)}`,
-      );
+    if (!evidence.ok) throw new Error(validationFailure(id, command, evidence));
     const authorize =
       input.authorize && input.requireApprovalTier
         ? async (paths: string[]) => {

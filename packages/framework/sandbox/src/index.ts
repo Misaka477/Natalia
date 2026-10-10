@@ -37,6 +37,9 @@ export {
   sandboxToolFamily,
   sandboxTools,
 } from "./tools";
+// The message a failed validation throws (F13): a bare `exit N:` with nothing
+// after it told a caller the exit code and nothing else.
+export { validationFailure } from "./workspace-manager";
 // The diff engine the sandbox family draws its hunks with. The write family
 // (write_file/edit_file/apply_edits) composes its diff card from the same
 // engine, so a write's hunks are real (context lines, correct line numbers)

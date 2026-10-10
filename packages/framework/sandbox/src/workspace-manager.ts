@@ -158,6 +158,29 @@ export type SandboxExecutor = {
   }>;
 };
 
+/**
+ * The message a failed validation throws (F13, 2026-10-10 sweep).
+ *
+ * The sweep measured `failed validation (exit 3): ` with NOTHING after the
+ * colon — the command's output was not captured, and the message ended there.
+ * A caller reading that learns the exit code and nothing else: not what the
+ * command was, not that its output is missing rather than empty, not what to
+ * do next. When the captured output is empty this says so and carries the
+ * command, so the failure is actionable instead of a dead end.
+ */
+export function validationFailure(
+  id: string,
+  command: string,
+  evidence: { exitCode: number; output: string },
+): string {
+  const output = evidence.output.trim();
+  const head = output ? `:\n${output.slice(0, 2000)}` : "";
+  const empty = output
+    ? ""
+    : ` (the command produced no captured output; re-run it in the candidate to see why: ${command})`;
+  return `candidate ${id} failed validation (exit ${evidence.exitCode})${head}${empty}`;
+}
+
 export class WorkspaceSandboxManager
   implements SandboxManager, SandboxExecutor
 {
@@ -515,10 +538,7 @@ export class WorkspaceSandboxManager
         force: true,
       });
     await this.restoreCandidateIndex(id, beforeValidation);
-    if (!evidence.ok)
-      throw new Error(
-        `candidate ${id} failed validation (exit ${evidence.exitCode}):\n${evidence.output.slice(0, 2000)}`,
-      );
+    if (!evidence.ok) throw new Error(validationFailure(id, command, evidence));
     const changedFiles = await this.merge(id, hostRoot, input.authorize);
     // Reported rather than assumed: the completion record states whether a
     // rollback point exists, and a constant would be a claim the backend never

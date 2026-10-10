@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   TailScrollController,
+  decideMeasurementFollow,
   estimateMessageHeight,
   fixedRowHeight,
   type Message,
@@ -385,6 +386,27 @@ test("a streaming frame cannot re-arm follow the reader just broke", () => {
   expect(endCalls).toBe(2);
 });
 
+test("a measurement follows only while the reader is pinned, once", () => {
+  // The decision behind the measurement-driven follow, as a pure function so
+  // the reachability is testable rather than asserted from source text.
+  // Following: one follow is issued.
+  expect(decideMeasurementFollow({ following: true, pending: false })).toBe(
+    "follow",
+  );
+  // A second measurement while one is in flight adds nothing (a follow can
+  // trigger another measurement).
+  expect(decideMeasurementFollow({ following: true, pending: true })).toBe(
+    "skip",
+  );
+  // The reader is away: a measurement must never yank them.
+  expect(decideMeasurementFollow({ following: false, pending: false })).toBe(
+    "skip",
+  );
+  expect(decideMeasurementFollow({ following: false, pending: true })).toBe(
+    "skip",
+  );
+});
+
 test("the transcript feeds the controller's live flag to the tail machine", () => {
   // The other half of the same bug, at the wiring level. The controller's
   // flag is only authoritative if the layout effect READS it: this used to
@@ -607,4 +629,81 @@ test("a clone request that never answers fails on its own", async () => {
   } finally {
     setCloneStateWorkerFactory(() => silent);
   }
+});
+
+test("a measurement that strands the pane above the bottom is recovered", () => {
+  // A single large answer: the follow runs against the total size as it was,
+  // then the row measures taller and the pane is left thousands of px above
+  // the true bottom. No scroll event fires for this (scrollTop did not move),
+  // so the ONLY thing that can recover it is a follow issued from the
+  // measurement itself. This proves that call works, and that it works
+  // without any scroll event in between.
+  const { element, state } = createFakeScrollElement({ scrollTop: 400 });
+  let frames = 0;
+  const controller = new TailScrollController({
+    getScrollElement: () => element,
+    scrollToEnd: () => {
+      frames += 1;
+      state.scrollTop = Math.max(0, state.scrollHeight - state.clientHeight);
+    },
+  });
+
+  // The follow lands at the bottom of the content as it was.
+  controller.followTailNow();
+  expect(frames).toBe(1);
+  expect(state.scrollTop).toBe(state.scrollHeight - state.clientHeight);
+
+  // The measurement: the row is 3,000px taller than estimated. Note there is
+  // NO scroll event here — that is the whole point.
+  state.scrollHeight += 3_000;
+  expect(state.scrollHeight - state.clientHeight - state.scrollTop).toBe(3000);
+
+  // The measurement-driven follow recovers it.
+  controller.followTailNow();
+  expect(frames).toBe(2);
+  expect(state.scrollTop).toBe(state.scrollHeight - state.clientHeight);
+
+  // And while the reader is away, the same call must do nothing (a
+  // measurement must never yank a reader who scrolled up to read).
+  const reading = state.scrollTop - 500;
+  element.scrollTop = reading;
+  controller.onUserIntent();
+  state.scrollHeight += 2_000;
+  controller.followTailNow();
+  expect(frames).toBe(2);
+  // The pane is exactly where the reader left it.
+  expect(state.scrollTop).toBe(reading);
+});
+
+test("the transcript follows the virtualizer's measurements, not just row counts", () => {
+  // The wiring half: `onChange` used to be an empty function with a comment
+  // saying a measurement callback must not scroll on its own — which left
+  // the one case nothing else covers. It is wired now, gated on the live
+  // follow state.
+  const source = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "ui",
+      "kit",
+      "src",
+      "transcript.tsx",
+    ),
+    "utf8",
+  );
+  // The wiring: the virtualizer's own onChange routes through the pure
+  // decision and reaches the follow. Slicing the body keeps the assertion
+  // about THAT hook rather than some other call site down the file.
+  const start = source.indexOf("onChange: () => {");
+  expect(start).toBeGreaterThan(-1);
+  const body = source.slice(start, source.indexOf("});", start));
+  expect(body).toContain("decideMeasurementFollow({");
+  expect(body).toContain("controller?.followTailNow()");
+  // No early exit before the decision: an `onChange` that returns first is
+  // the empty function this replaces.
+  expect(body.indexOf("decideMeasurementFollow({")).toBeLessThan(
+    body.indexOf("return"),
+  );
 });

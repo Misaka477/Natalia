@@ -26,6 +26,7 @@ import {
 } from "./head-tail-cap";
 import { TailScrollController } from "./scroll-controller";
 import {
+  decideMeasurementFollow,
   evaluateTailScroll,
   initialTailScrollState,
   type TailScrollState,
@@ -173,10 +174,30 @@ export function Transcript(props: TranscriptProps) {
     gap: VIRTUAL_ROW_GAP,
     overscan: VIRTUAL_OVERSCAN,
     onChange: () => {
-      // Tail-follow is owned by the transcript state machine below; a
-      // measurement callback must not scroll on its own.
+      // A measurement is new information about content the reader is already
+      // following, and it is the ONLY signal for one case: a row that
+      // measures taller than its estimate (a single large answer) grows the
+      // total size AFTER the follow has already run. The pane is then
+      // stranded above the true bottom, and nothing else will notice — the
+      // message count did not change, and no scroll event fires because
+      // scrollTop did not move. That is the reported "one big output and it
+      // detaches".
+      if (
+        decideMeasurementFollow({
+          following: controller?.isFollowing() ?? true,
+          pending: measurementFollowPending,
+        }) === "skip"
+      )
+        return;
+      measurementFollowPending = true;
+      requestAnimationFrame(() => {
+        measurementFollowPending = false;
+        controller?.followTailNow();
+      });
     },
   });
+  /** One measurement-driven follow in flight (re-entrancy guard). */
+  let measurementFollowPending = false;
   let pendingScrollEl: HTMLDivElement | undefined;
   const setScrollRef = (el: HTMLDivElement | null) => {
     if (!el) {

@@ -112,3 +112,29 @@ export function evaluateTailScroll(
   if (!input.following) return { state: next, effect: { type: "none" } };
   return { state: next, effect: { type: "scroll-end" } };
 }
+
+/**
+ * What a virtualizer measurement should do about tail-follow.
+ *
+ * A measurement is the ONLY signal for one case: a row that measures taller
+ * than its estimate (a single large answer) grows the total size AFTER the
+ * follow has already run, leaving the pane stranded above the true bottom.
+ * Nothing else notices — the message count did not change, and no scroll
+ * event fires because scrollTop did not move.
+ *
+ * It must not scroll while the reader is away, so the decision is gated on
+ * the live follow state, and one in-flight follow covers any number of
+ * measurements that arrive together.
+ */
+export type MeasurementFollowDecision = "follow" | "skip";
+
+export function decideMeasurementFollow(input: {
+  /** The live follow state (the reader's scroll owns it). */
+  following: boolean;
+  /** Whether a measurement-driven follow is already scheduled. */
+  pending: boolean;
+}): MeasurementFollowDecision {
+  if (input.pending) return "skip";
+  if (!input.following) return "skip";
+  return "follow";
+}

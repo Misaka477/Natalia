@@ -76,6 +76,7 @@ export {
 } from "./pending-styles";
 export { renderMarkdownHtml } from "./markdown";
 export {
+  decideMeasurementFollow,
   evaluateTailScroll,
   initialTailScrollState,
 } from "./tail-scroll-machine";

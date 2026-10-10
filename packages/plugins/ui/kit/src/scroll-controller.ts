@@ -79,6 +79,8 @@ export class TailScrollController {
   private readonly anchorSelector: string;
   private readonly options: TailScrollControllerOptions;
   private followTail = true;
+  /** Where the last follow-scroll left the pane (see `performScrollToEnd`). */
+  private lastProgrammaticTop: number | undefined;
   private disposed = false;
   private cancelFollowSchedule: (() => void) | undefined;
   private cancelRestoreSchedule: (() => void) | undefined;
@@ -135,32 +137,60 @@ export class TailScrollController {
    * tap (or a drag that never leaves the bottom) should not leave a stray
    * jump button visible.
    */
+  /**
+   * Re-evaluate follow after a gesture ends. This only RE-ARMS (a tap that
+   * never left the bottom should not leave a stray jump button); it never
+   * clears, because the gesture that moved the reader away already did.
+   */
   reconcile(): void {
     if (this.disposed) return;
     const element = this.getScrollElement();
     if (!element) return;
-    this.setFollowing(this.isAtBottom(element));
+    if (this.isAtBottom(element)) this.setFollowing(true);
   }
 
+  /**
+   * A scroll event. This RE-ARMS follow when the reader lands at the bottom
+   * and otherwise leaves the flag alone — it never clears it.
+   *
+   * It used to be `setFollowing(isAtBottom(element))`, which made our own
+   * follow-scroll able to break follow: the write lands at the bottom of the
+   * content as it was, the event is dispatched afterwards, and by then a
+   * streaming chunk has grown `scrollHeight` again — so the event reports
+   * "not at the bottom" and follow died. Every later frame was then a no-op
+   * and the transcript detached for good, which is exactly what a large
+   * burst of output looks like. The reference implementation does not have
+   * this race because it writes `scrollTop` synchronously inside its layout
+   * effect, so the event sees the same content the write targeted; this
+   * controller writes from a rAF, so it has to say who the event belongs to.
+   *
+   * Clearing follow is the READER's decision, and a reader's decision
+   * arrives as a gesture — wheel, touch, pointer, key — each of which calls
+   * {@link onUserIntent}. A scroll event cannot tell the two apart, so it
+   * does not try: it only resumes following when the reader comes back to
+   * the bottom (a scrollbar dragged all the way down, a wheel-down that
+   * reached the end).
+   */
   onScroll(event: Event): void {
     if (this.disposed || this.isPaused()) return;
     const element =
       asHtmlElement(event.currentTarget) ?? this.getScrollElement();
     if (!element) return;
 
-    // A programmatic follow-scroll lands at the END — that is what makes it
-    // recognizable. The flag only swallows an event that actually is one: a
-    // reader's scroll that arrives while the flag is still set (the wheel-up
-    // that races the streaming frame's scrollTop write) is the READER's
-    // event and must be honoured, not eaten. Eating it re-armed follow and
-    // the next frame yanked the viewport back to the bottom — the reported
-    // "I scroll up during streaming and it jumps back".
     if (this.ignoreNextProgrammaticScroll) {
       this.ignoreNextProgrammaticScroll = false;
-      if (this.isAtBottom(element)) {
-        this.setFollowing(true);
+      // Ours: the pane is still where our write left it (or the content grew
+      // past it, which is the streaming burst). Keep follow — the next frame
+      // catches up. Breaking here is what detached the transcript whenever a
+      // large answer arrived in one piece.
+      if (
+        this.lastProgrammaticTop !== undefined &&
+        element.scrollTop >= this.lastProgrammaticTop - this.distanceThreshold
+      ) {
+        if (this.isAtBottom(element)) this.setFollowing(true);
         return;
       }
+      // The reader moved above our write: theirs, honour it.
     }
 
     this.setFollowing(this.isAtBottom(element));
@@ -309,6 +339,12 @@ export class TailScrollController {
     } else {
       element.scrollTop = element.scrollHeight;
     }
+    // Where our own write left the pane. The next scroll event is attributed
+    // by comparing against this: the reader scrolling up moves scrollTop
+    // ABOVE it, while our own event (which can arrive after the content has
+    // grown again) leaves it exactly here. That is the only deterministic
+    // way to tell the two apart when the follow writes from a rAF.
+    this.lastProgrammaticTop = element.scrollTop;
     this.options.onAfterFollow?.(element.scrollTop);
   }
 

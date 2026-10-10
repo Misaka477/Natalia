@@ -543,6 +543,41 @@ export function Transcript(props: TranscriptProps) {
     controller?.reconcile();
   };
 
+  /**
+   * Keyboard scrolling is a reader action with no wheel and no pointer, so
+   * without this it was the one way to move the transcript without breaking
+   * follow — and `onScroll` no longer breaks it (it cannot tell our own
+   * follow-scroll from the reader's). These are the keys that move a
+   * scrollport; anything else (typing in the composer, copy shortcuts) is
+   * not a scroll and must not detach the reader.
+   */
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const scrollKeys = new Set([
+      "ArrowUp",
+      "ArrowDown",
+      "PageUp",
+      "PageDown",
+      "Home",
+      "End",
+      " ",
+    ]);
+    if (!scrollKeys.has(event.key)) return;
+    const el = scrollEl();
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= 2;
+    // Scrolling further down at the physical bottom is not a reason to leave
+    // follow mode — the same rule the wheel handler applies.
+    if (
+      atBottom &&
+      (event.key === "ArrowDown" ||
+        event.key === "PageDown" ||
+        event.key === "End" ||
+        event.key === " ")
+    )
+      return;
+    controller?.onUserIntent();
+  };
+
   createEffect(() => {
     if (!uiDebugEnabled()) return;
     const mounted = useVirtual() ? virtualItems() : [];
@@ -666,6 +701,7 @@ export function Transcript(props: TranscriptProps) {
       ref={setScrollRef}
       onScroll={handleScroll}
       onWheel={handleWheel}
+      onKeyDown={handleKeyDown}
       onTouchStart={handleUserIntentStart}
       onPointerDown={handlePointerDown}
       onPointerUp={handleUserIntentEnd}

@@ -1469,3 +1469,119 @@ test("GC reachability survives a rollback that moved past live records", async (
   const record = await reopened.get(above.id);
   expect(Object.keys(record!.manifest!.entries)).toContain("above.txt");
 });
+
+test("a manifest's directory identity makes an unchanged workspace O(1)", async () => {
+  // T5-5: a manifest's entries are a flat path→entry map, so "did anything
+  // change" was a walk over the whole tree — paid on EVERY checkpoint (one
+  // per tool call) to learn that the answer was usually "no". A directory
+  // identity hash makes it one comparison at the root.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_tree_identity",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await mkdir(join(root, "src"));
+  await mkdir(join(root, "docs"));
+  await writeFile(join(root, "src", "a.ts"), "export const a = 1;\n");
+  await writeFile(join(root, "src", "b.ts"), "export const b = 2;\n");
+  await writeFile(join(root, "docs", "readme.md"), "# docs\n");
+  const first = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 1,
+  });
+
+  // Nothing changed: a second capture must carry the SAME root identity, and
+  // the record's scalar meta must expose it (so a listing can answer the
+  // question without materializing a manifest).
+  const second = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 2,
+  });
+  const manifestFirst = await store.loadManifest(first);
+  const manifestSecond = await store.loadManifest(second);
+  expect(manifestFirst.tree?.hash).toMatch(/^[0-9a-f]{64}$/);
+  expect(manifestSecond.tree?.hash).toBe(manifestFirst.tree?.hash);
+  expect(first.manifestMeta.treeHash).toBe(manifestFirst.tree?.hash);
+  expect(second.manifestMeta.treeHash).toBe(manifestFirst.tree?.hash);
+  // An unchanged workspace produces no changes at all.
+  expect(second.changes).toEqual([]);
+
+  // A change under ONE directory moves that directory's identity and the
+  // root's, and leaves the untouched directory's identity alone — the diff
+  // can then skip it whole.
+  await writeFile(join(root, "src", "b.ts"), "export const b = 3;\n");
+  const third = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 3,
+  });
+  const manifestThird = await store.loadManifest(third);
+  expect(manifestThird.tree?.hash).not.toBe(manifestFirst.tree?.hash);
+  expect(manifestThird.tree?.entries.src).toMatchObject({ kind: "tree" });
+  const srcBefore = manifestFirst.tree!.entries.src!;
+  const srcAfter = manifestThird.tree!.entries.src!;
+  const docsBefore = manifestFirst.tree!.entries.docs!;
+  const docsAfter = manifestThird.tree!.entries.docs!;
+  if (srcBefore.kind !== "tree" || srcAfter.kind !== "tree")
+    throw new Error("src");
+  if (docsBefore.kind !== "tree" || docsAfter.kind !== "tree")
+    throw new Error("docs");
+  expect(srcAfter.hash).not.toBe(srcBefore.hash);
+  expect(docsAfter.hash).toBe(docsBefore.hash);
+  // And the diff names exactly the one file that changed.
+  expect(third.changes.map((change) => change.path)).toEqual(["src/b.ts"]);
+});
+
+test("a diff skips the directories whose identity is unchanged", async () => {
+  // The tree diff's other half: the walk descends only into the directories
+  // whose identity differs. A change deep in one subtree must not make the
+  // diff touch a sibling subtree's entries at all.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_tree_diff",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await mkdir(join(root, "left", "deep"), { recursive: true });
+  await mkdir(join(root, "right"));
+  await writeFile(join(root, "left", "deep", "x.txt"), "x\n");
+  await writeFile(join(root, "left", "y.txt"), "y\n");
+  await writeFile(join(root, "right", "z.txt"), "z\n");
+  const before = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 1,
+  });
+  await writeFile(join(root, "left", "deep", "x.txt"), "x changed\n");
+  await store.createCheckpoint({ reason: "manual", context: ledger, step: 2 });
+
+  const changes = await store.diffCheckpoints(
+    { kind: "checkpoint", id: before.id },
+    { kind: "current" },
+  );
+  // Only the changed file — not left/y.txt, not right/z.txt.
+  expect(changes.map((change) => change.path)).toEqual(["left/deep/x.txt"]);
+
+  // A rename inside a changed directory is still detected (the content
+  // lookup on the before side is global, exactly as before the tree).
+  await rm(join(root, "left", "deep", "x.txt"));
+  await writeFile(join(root, "left", "deep", "renamed.txt"), "x changed\n");
+  const after = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 3,
+  });
+  // The vocabulary is unchanged from the flat diff: a move is reported as a
+  // rename for the new path AND a delete for the old one.
+  expect(
+    after.changes.map((change) => [change.kind, change.path, change.oldPath]),
+  ).toEqual([
+    ["rename", "left/deep/renamed.txt", "left/deep/x.txt"],
+    ["delete", "left/deep/x.txt", undefined],
+  ]);
+});

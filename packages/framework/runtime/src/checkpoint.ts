@@ -4,6 +4,23 @@ import { getLogger } from "@anthelia/logging";
 import { ChunkStore } from "./chunk-store";
 import { StatCache, statCachePath } from "./stat-cache";
 import {
+  buildManifestTree,
+  changedDirectories,
+  sameManifestTree,
+} from "./manifest-tree";
+import type {
+  ManifestEntry,
+  ManifestTree,
+  WorkspaceManifest,
+} from "./checkpoint-types";
+
+export type {
+  ManifestEntry,
+  ManifestTree,
+  ManifestTreeNode,
+  WorkspaceManifest,
+} from "./checkpoint-types";
+import {
   CheckpointJournal,
   contextMetaOf,
   manifestMetaOf,
@@ -89,24 +106,6 @@ export type DiffCheckpointsOptions = {
   maxPatchChars?: number;
 };
 
-export type ManifestEntry = {
-  path: string;
-  kind: "regular" | "symlink";
-  objectHash?: string;
-  size?: number;
-  mode: number;
-  linkTarget?: string;
-};
-
-export type WorkspaceManifest = {
-  root: string;
-  entries: Record<string, ManifestEntry>;
-  complete: boolean;
-  errors: string[];
-  ignoredFiles: number;
-  totalBytes: number;
-};
-
 /**
  * Scalar manifest header. Always present on a record; the (potentially huge)
  * `manifest` itself is omitted from `list()` summaries and rebuilt on demand
@@ -119,6 +118,13 @@ export type CheckpointManifestMeta = {
   ignoredFiles: number;
   totalBytes: number;
   entryCount: number;
+  /**
+   * The manifest's root tree identity (T5-5): two records with the same
+   * `treeHash` describe the same workspace, so a listing can answer "did
+   * anything change since the previous record" without materializing a
+   * manifest.
+   */
+  treeHash?: string;
 };
 
 export type CheckpointChange = {
@@ -1157,6 +1163,10 @@ export class CheckpointStore {
     // dropped, so a deleted file cannot linger with a stale hash.
     this.statCache.retain(Object.keys(manifest.entries));
     await this.statCache.save();
+    // The directory tree and its identity hashes (T5-5). Built from the flat
+    // entries after the scan, so `entries` stays the single source of truth
+    // every consumer reads and the tree is derived, never divergent.
+    manifest.tree = buildManifestTree(manifest.entries);
     return manifest;
   }
 
@@ -1678,16 +1688,44 @@ function diffManifests(
       mode: modeString(entry.mode),
     }));
   }
+  // O(1): the same root identity means the same workspace.
+  if (sameManifestTree(before, after)) return [];
+
   const changes: CheckpointChange[] = [];
-  const beforeByHash = new Map<string, string>();
-  for (const entry of Object.values(before.entries)) {
-    const key = entryKey(entry);
-    if (key) beforeByHash.set(key, entry.path);
+  // The directories worth looking at. Without trees (a migrated v2 record,
+  // or a manifest assembled by hand) every directory is in scope, which is
+  // the old whole-tree walk.
+  let scope: Set<string> | undefined;
+  if (before.tree && after.tree) {
+    scope = new Set<string>();
+    changedDirectories(before.tree, after.tree, "", scope);
   }
+  // The scope holds directory prefixes WITH their trailing slash (the root is
+  // the empty string), so a path's parent is compared in that form.
+  const inScope = (path: string): boolean => {
+    if (!scope) return true;
+    const slash = path.lastIndexOf("/");
+    const parent = slash === -1 ? "" : path.slice(0, slash);
+    return scope.has(parent === "" ? "" : `${parent}/`);
+  };
+
+  let beforeByHash: Map<string, string> | undefined;
+  const renameSource = (entry: ManifestEntry): string | undefined => {
+    if (!beforeByHash) {
+      beforeByHash = new Map<string, string>();
+      for (const candidate of Object.values(before.entries)) {
+        const key = entryKey(candidate);
+        if (key) beforeByHash.set(key, candidate.path);
+      }
+    }
+    return beforeByHash.get(entryKey(entry));
+  };
+
   for (const [path, entry] of Object.entries(after.entries)) {
+    if (!inScope(path)) continue;
     const old = before.entries[path];
     if (!old) {
-      const oldPath = beforeByHash.get(entryKey(entry));
+      const oldPath = renameSource(entry);
       changes.push({
         kind: oldPath ? "rename" : "add",
         path,
@@ -1713,7 +1751,8 @@ function diffManifests(
       });
   }
   for (const path of Object.keys(before.entries)) {
-    if (!after.entries[path]) changes.push({ kind: "delete", path });
+    if (!after.entries[path] && inScope(path))
+      changes.push({ kind: "delete", path });
   }
   return changes;
 }

@@ -38,6 +38,7 @@ import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { join } from "node:path";
 import { ChunkStore, type ChunkRef } from "./chunk-store";
+import { buildManifestTree } from "./manifest-tree";
 
 /**
  * A journal that was read successfully but is DAMAGED: a line that is not
@@ -269,6 +270,9 @@ export function manifestMetaOf(
     ignoredFiles: manifest.ignoredFiles,
     totalBytes: manifest.totalBytes,
     entryCount: Object.keys(manifest.entries).length,
+    // The workspace identity (T5-5): a listing can answer "did anything
+    // change since the previous record" from this alone.
+    ...(manifest.tree ? { treeHash: manifest.tree.hash } : {}),
   };
 }
 
@@ -598,6 +602,11 @@ export class CheckpointJournal {
       for (const [path, value] of Object.entries(delta.added))
         entries[path] = value;
       manifest = { ...base, entries };
+      // The tree is DERIVED from the entries, and the delta changed them, so
+      // the base's tree is stale here. Rebuild it rather than inheriting it
+      // (T5-5): a diff that trusted the inherited hash would compare the
+      // wrong directories and silently miss changes.
+      manifest.tree = buildManifestTree(entries);
     }
     const result: WorkspaceManifest = {
       ...manifest,

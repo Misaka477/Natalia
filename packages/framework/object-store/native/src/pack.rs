@@ -18,14 +18,6 @@ use std::collections::HashMap;
 
 /// The TS `deltaSize` gate, ported: both sides >=64 bytes and the
 /// instruction stream meaningfully smaller than the full original.
-pub fn delta_worthwhile(original: &[u8], base: &[u8]) -> bool {
-    if original.len() < 64 || base.len() < 64 {
-        return false;
-    }
-    let delta = compute_delta(base, original);
-    (delta.len() as f64) < (original.len() as f64) * 0.7
-}
-
 /// The TS `computeDelta`, ported instruction for instruction: a16-byte
 /// window map over the base (FORWARD insertion = the LAST position
 /// wins, exactly as the TS Map does), min match8, literals flushed as
@@ -90,6 +82,14 @@ pub struct PackEntry<'a> {
 /// Builds the two files' BYTES for one pack: the delta-vs-previous
 /// chain (the TS walks its loose list in order), then NDX1. Returns
 /// (pack bytes, index bytes).
+/// How many recent objects may be considered as a delta base (git's
+/// `--window`); the TypeScript writer applies the same budget.
+const DELTA_WINDOW: usize = 10;
+
+/// How long a delta chain may grow before the next object is stored full
+/// and becomes a fresh base (git's `--depth`).
+const DELTA_MAX_DEPTH: usize = 50;
+
 pub fn pack_frame(entries: &[PackEntry]) -> (Vec<u8>, Vec<u8>) {
     let mut pack: Vec<u8> = Vec::new();
     pack.extend_from_slice(b"NPAC");
@@ -98,16 +98,42 @@ pub fn pack_frame(entries: &[PackEntry]) -> (Vec<u8>, Vec<u8>) {
     // id -> the NDX1 record's fields, in listLoose's order
     let mut records: Vec<Record> = Vec::with_capacity(entries.len());
     let mut offset = 5usize; // magic + version
-    let mut last: Option<(String, Vec<u8>)> = None;
+    // The base window with each candidate's chain depth (T5-6): the same
+    // budget the TypeScript writer applies, so both writers make the SAME
+    // delta decision for the same order. `last` was the old rule — one
+    // positional base, no depth cap, and the delta computed twice (probe
+    // then encode).
+    let mut window: Vec<(String, Vec<u8>, usize)> = Vec::new();
     for entry in entries {
-        let worthwhile = last
-            .as_ref()
-            .map(|(_, base)| delta_worthwhile(entry.data, base))
-            .unwrap_or(false);
-        if worthwhile {
-            let (_, base) = last.as_ref().unwrap();
-            let delta = compute_delta(base, entry.data);
-            let base_id = last.as_ref().unwrap().0.as_bytes();
+        let mut chosen: Option<(String, Vec<u8>, usize, Vec<u8>)> = None;
+        for (base_id, base_data, depth) in window.iter() {
+            if *depth >= DELTA_MAX_DEPTH {
+                continue;
+            }
+            if entry.data.len() < 64 || base_data.len() < 64 {
+                continue;
+            }
+            let delta = compute_delta(base_data, &entry.data);
+            if (delta.len() as f64) >= (entry.data.len() as f64) * 0.7 {
+                continue;
+            }
+            let next_depth = depth + 1;
+            let better = chosen
+                .as_ref()
+                .map(|(_, _, _, best)| delta.len() < best.len())
+                .unwrap_or(true);
+            if better {
+                chosen = Some((
+                    base_id.clone(),
+                    base_data.clone(),
+                    next_depth,
+                    delta,
+                ));
+            }
+        }
+        if let Some((_, _, _, delta)) = chosen.as_ref() {
+            let (base_id, _, depth, _) = chosen.as_ref().unwrap();
+            let base_id = base_id.as_bytes();
             let header_len = 1 + 4 + base_id.len() + 4 + 4;
             pack.push(1);
             pack.extend_from_slice(&(base_id.len() as u32).to_le_bytes());
@@ -123,10 +149,11 @@ pub fn pack_frame(entries: &[PackEntry]) -> (Vec<u8>, Vec<u8>) {
                 orig_len: entry.data.len() as u32,
                 comp_len: 0,
                 kind: 1,
-                base_id: Some(last.as_ref().unwrap().0.clone()),
+                base_id: Some(String::from_utf8_lossy(base_id).to_string()),
                 delta_len: delta.len() as u32,
             });
             offset += header_len + delta.len();
+            window.push((entry.id.to_string(), entry.data.to_vec(), *depth));
         } else {
             let compressed = deflate_stored(entry.data);
             let id_bytes = entry.id.as_bytes();
@@ -149,8 +176,13 @@ pub fn pack_frame(entries: &[PackEntry]) -> (Vec<u8>, Vec<u8>) {
                 delta_len: 0,
             });
             offset += header_len + compressed.len();
+            window.push((entry.id.to_string(), entry.data.to_vec(), 0));
         }
-        last = Some((entry.id.to_string(), entry.data.to_vec()));
+        // The window is bounded: only the most recent objects may serve as
+        // a base, so the probe stays O(window) per object.
+        if window.len() > DELTA_WINDOW {
+            window.remove(0);
+        }
     }
     let idx = index_bytes(&records);
     (pack, idx)

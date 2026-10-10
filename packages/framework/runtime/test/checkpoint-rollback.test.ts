@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { checkpointConfigSchema } from "@anthelia/contracts";
-import type { RuntimeEvent } from "@anthelia/contracts";
+import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import {
   defaultCheckpointStoreDir,
   resolveWorkspaceObjectsRoot,
@@ -144,17 +144,31 @@ test("default baseline, user scenario rollback and session restore remain durabl
     sessionID: "ses_checkpoint_user",
     workspaceRoot: root,
   });
+  // T5-3: the rollback is a pointer, not a truncation. The visible journal
+  // ends at the target; the safety record (and everything the session wrote
+  // above it) stays on disk with its delta chain intact, so a later rollback
+  // to any of them still works — which is exactly what the next lines do.
   const restoredRecords = await restored.list();
-  const safety = restoredRecords.find(
-    (record) => record.reason === "rollback_safety",
-  );
-  expect(safety).toBeDefined();
-  expect(restoredRecords.map((record) => record.id)).toEqual([
-    "checkpoint_0",
-    safety!.id,
-  ]);
+  expect(restoredRecords.map((record) => record.id)).toEqual(["checkpoint_0"]);
+  const safety = await restored.get(preview.safetyCheckpointID!);
+  expect(safety?.reason).toBe("rollback_safety");
   await restored.rollbackTo(safety!.id, { context: ledger });
   expect(await readFile(join(root, "test_example.py"), "utf8")).toContain("ok");
+  // And the pointer moved the window FORWARD to the safety record, which the
+  // old destructive rollback could not do: it had deleted the path there.
+  const forward = await CheckpointStore.open({
+    sessionID: "ses_checkpoint_user",
+    workspaceRoot: root,
+  });
+  // The window ends at the safety record, and everything at or below it is
+  // visible again — the records the first rollback moved past were never
+  // deleted, so moving the pointer forward restores them all. That is the
+  // property the destructive rollback could not have.
+  expect((await forward.list()).map((record) => record.id)).toEqual([
+    "checkpoint_0",
+    "checkpoint_1",
+    safety!.id,
+  ]);
 });
 
 symlinkTest(
@@ -1279,4 +1293,179 @@ test("a damaged journal line and a newer-format journal are different refusals",
   await expect(futureReopened.list()).rejects.toThrow(
     /upgrade Natalia to open it/u,
   );
+});
+
+test("a rollback moves a pointer; the records above it stay reconstructible", async () => {
+  // T5-3: the rollback used to physically truncate the journal — the one
+  // destructive operation in an append-only log. It re-anchored the safety
+  // checkpoint by hand (its delta base was being deleted under it) and
+  // destroyed every record between the target and the rollback, so rolling
+  // back to one of them afterwards was impossible.
+  //
+  // The pointer keeps all of it: the visible window ends at the target, the
+  // records above stay on disk with their delta chains, and a later rollback
+  // to any of them is an ordinary pointer move.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_rollback_pointer",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await writeFile(join(root, "v1.txt"), "one\n");
+  const first = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 1,
+  });
+  await writeFile(join(root, "v2.txt"), "two\n");
+  const second = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 2,
+  });
+  await writeFile(join(root, "v3.txt"), "three\n");
+  const third = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 3,
+  });
+  const baseline = (await store.list())[0]!;
+
+  // Roll back to the middle record.
+  await store.rollbackTo(second.id, { context: ledger });
+  expect((await store.list()).map((record) => record.id)).toEqual([
+    baseline.id,
+    first.id,
+    second.id,
+  ]);
+  // The workspace is the middle record's, not the newest one's.
+  expect(existsSync(join(root, "v3.txt"))).toBe(false);
+  expect(await readFile(join(root, "v2.txt"), "utf8")).toBe("two\n");
+
+  // The NEWEST record is still reachable and still holds its manifest — the
+  // delta chain was never truncated.
+  const reopened = await CheckpointStore.open({
+    sessionID: "ses_rollback_pointer",
+    workspaceRoot: root,
+  });
+  const newest = await reopened.get(third.id);
+  expect(newest?.id).toBe(third.id);
+  expect(Object.keys(newest!.manifest!.entries)).toContain("v3.txt");
+
+  // And rolling FORWARD to it is an ordinary pointer move — the records the
+  // first rollback moved past come back.
+  await reopened.rollbackTo(third.id, { context: ledger });
+  expect((await reopened.list()).map((record) => record.id)).toEqual([
+    baseline.id,
+    first.id,
+    second.id,
+    third.id,
+  ]);
+  expect(existsSync(join(root, "v3.txt"))).toBe(true);
+});
+
+test("a ref resolves over the whole log, above the rollback pointer", async () => {
+  // T5-4: refs used to resolve through `list()` — the visible window. A
+  // rollback that moved past an audit round's checkpoint made
+  // `{kind:"round", planID, round}` fail with "audit round not found" for a
+  // round whose record was sitting one line above the pointer: durable,
+  // addressable, and unreachable.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_ref_above_pointer",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await writeFile(join(root, "a.txt"), "one\n");
+  await store.createAuditRoundCheckpoint({
+    planID: "plan_ref",
+    round: 1,
+    verdict: "gaps",
+    context: ledger,
+    step: 1,
+    sessionID: "ses_ref_above_pointer" as SessionID,
+  });
+  await writeFile(join(root, "a.txt"), "two\n");
+  await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 2,
+  });
+
+  // Roll back below the round's checkpoint. The workspace is restored to
+  // checkpoint_0, so "current" (a live capture) and the round's content now
+  // agree — an empty diff is the honest answer for THIS pair.
+  await store.rollbackTo("checkpoint_0", { context: ledger });
+  // The round is no longer in the visible window …
+  const visible = await store.list();
+  expect(visible.some((record) => record.reason === "audit_round")).toBe(false);
+  // … but the ref still RESOLVES — that is the property: the round's record
+  // is one line above the pointer, durable and addressable. The pair that
+  // shows its content is the round against the record the session wrote
+  // after it (checkpoint_1, also above the pointer).
+  const above = await store.allRecords();
+  const manual = above.find((record) => record.reason === "manual")!;
+  const after = await store.diffCheckpoints(
+    { kind: "round", planID: "plan_ref", round: 1 },
+    { kind: "checkpoint", id: manual.id },
+  );
+  expect(
+    after.some(
+      (change) =>
+        change.path === "a.txt" &&
+        change.after?.includes("two") &&
+        change.before?.includes("one"),
+    ),
+  ).toBe(true);
+});
+
+test("GC reachability survives a rollback that moved past live records", async () => {
+  // T5-7 + T5-3: the records a rollback pointer moved past are still
+  // reachable — a later rollback can move the pointer back to any of them,
+  // so a GC that only saw the visible window would delete payloads the
+  // journal still names. Reachability is derived from each record's direct
+  // object references (an anchor names all of its entries, a delta names
+  // what it added), so the walk covers the whole log without materializing
+  // a single manifest.
+  const root = await tempWorkspace();
+  const ledger = new ContextLedger();
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_gc_pointer",
+    workspaceRoot: root,
+    context: ledger,
+  });
+  await writeFile(join(root, "keep.txt"), "kept payload ".repeat(40));
+  const first = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 1,
+  });
+  await writeFile(join(root, "above.txt"), "above the pointer\n");
+  const above = await store.createCheckpoint({
+    reason: "manual",
+    context: ledger,
+    step: 2,
+  });
+  const baseline = (await store.list())[0]!;
+  // Roll back below the record that holds above.txt.
+  await store.rollbackTo(first.id, { context: ledger });
+  expect((await store.list()).map((record) => record.id)).toEqual([
+    baseline.id,
+    first.id,
+  ]);
+
+  // A GC now must not prune above.txt's object: the record naming it is one
+  // line above the pointer.
+  const dryRun = await store.gcObjects(true);
+  expect(dryRun.unreachableObjects).toBe(0);
+  await store.gcObjects(false);
+  // And the record above the pointer still materializes its manifest.
+  const reopened = await CheckpointStore.open({
+    sessionID: "ses_gc_pointer",
+    workspaceRoot: root,
+  });
+  const record = await reopened.get(above.id);
+  expect(Object.keys(record!.manifest!.entries)).toContain("above.txt");
 });

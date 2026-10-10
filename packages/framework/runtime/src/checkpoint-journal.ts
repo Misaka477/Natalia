@@ -121,7 +121,33 @@ export type StoredCheckpoint = Omit<
 
 type JournalEntry =
   | { schema: 2; record: CheckpointRecord }
-  | { schema: 3; stored: StoredCheckpoint };
+  | { schema: 3; stored: StoredCheckpoint }
+  /**
+   * A rollback pointer: "the visible journal now ends at `to`". Appended,
+   * never truncating (T5-3) — the records above `to` stay on disk with their
+   * delta chains intact, so a later rollback to one of them is still
+   * reconstructible and nothing that was durable is destroyed by a pointer
+   * move. `from` names the record the rollback moved away from, which is
+   * what makes the journal's history readable after the fact.
+   */
+  | { schema: 3; pointer: RollbackPointer };
+
+/**
+ * One rollback's pointer record. `to` is the sequence the journal is now
+ * considered to end at; `safety` is the rollback-safety checkpoint taken
+ * before the workspace was mutated, which stays reachable so a failed
+ * rollback can be recovered.
+ */
+export type RollbackPointer = {
+  kind: "rollback";
+  /** The sequence the visible journal ends at after this rollback. */
+  to: number;
+  /** The record the rollback moved away from. */
+  from: number;
+  /** The safety checkpoint taken before the workspace was mutated. */
+  safety: number;
+  at: string;
+};
 
 type ContextDeltaPayload = {
   added: DurableContextCheckpoint["entries"];
@@ -281,9 +307,16 @@ export class CheckpointJournal {
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index]!;
       if (!line) continue;
-      let parsed: { schemaVersion?: number };
+      let parsed: {
+        schemaVersion?: number;
+        kind?: string;
+        to?: number;
+        from?: number;
+        safety?: number;
+        at?: string;
+      };
       try {
-        parsed = JSON.parse(line) as { schemaVersion?: number };
+        parsed = JSON.parse(line) as typeof parsed;
       } catch (error) {
         // The two rejections a reader must tell apart (T5-8): a line that is
         // not JSON at all is a DAMAGED file (a torn write, a truncated
@@ -294,7 +327,30 @@ export class CheckpointJournal {
           `checkpoint journal ${path} is damaged: line ${index + 1} is not valid JSON (${error instanceof Error ? error.message : String(error)})`,
         );
       }
-      if (parsed.schemaVersion === 3)
+      if (parsed.kind === "rollback") {
+        // A rollback pointer (T5-3): the journal's visible window ends here.
+        // A malformed one is a damaged line like any other — a pointer that
+        // cannot name its target cannot be honoured, and guessing would
+        // silently move the window to the wrong record.
+        if (
+          typeof parsed.to !== "number" ||
+          typeof parsed.from !== "number" ||
+          typeof parsed.safety !== "number"
+        )
+          throw new CheckpointJournalCorruptionError(
+            `checkpoint journal ${path} is damaged: line ${index + 1} is a rollback pointer without its target`,
+          );
+        entries.push({
+          schema: 3,
+          pointer: {
+            kind: "rollback",
+            to: parsed.to,
+            from: parsed.from,
+            safety: parsed.safety,
+            at: parsed.at ?? "",
+          },
+        });
+      } else if (parsed.schemaVersion === 3)
         entries.push({ schema: 3, stored: parsed as StoredCheckpoint });
       else if (
         typeof parsed.schemaVersion === "number" &&
@@ -373,9 +429,9 @@ export class CheckpointJournal {
     return this.entries.length;
   }
 
-  /** True when the journal has at least one record (used by baseline setup). */
+  /** True when the journal has at least one VISIBLE record. */
   get isEmpty(): boolean {
-    return this.entries.length === 0;
+    return this.visibleLength() === 0;
   }
 
   private reindex() {
@@ -389,6 +445,7 @@ export class CheckpointJournal {
   sequenceAt(index: number): number | undefined {
     const entry = this.entries[index];
     if (!entry) return undefined;
+    if ("pointer" in entry) return undefined;
     return entry.schema === 3 ? entry.stored.sequence : entry.record.sequence;
   }
 
@@ -397,14 +454,37 @@ export class CheckpointJournal {
   }
 
   private indexOfID(id: string): number | undefined {
-    if (id === "last") return this.entries.length - 1;
+    if (id === "last") return this.visibleLength() - 1;
     for (let index = 0; index < this.entries.length; index++) {
       const entry = this.entries[index]!;
       const matches =
-        entry.schema === 3
-          ? entry.stored.id === id || String(entry.stored.sequence) === id
-          : entry.record.id === id || String(entry.record.sequence) === id;
+        "pointer" in entry
+          ? false
+          : entry.schema === 3
+            ? entry.stored.id === id || String(entry.stored.sequence) === id
+            : entry.record.id === id || String(entry.record.sequence) === id;
       if (matches) return index;
+    }
+    return undefined;
+  }
+
+  /**
+   * The index one past the last VISIBLE record — the records a rollback
+   * pointer moved past are still on disk but are not part of the journal's
+   * current history.
+   */
+  private visibleLength(): number {
+    const pointer = this.lastPointer();
+    if (!pointer) return this.entries.length;
+    const index = this.indexOfSequence(pointer.to);
+    return index === undefined ? this.entries.length : index + 1;
+  }
+
+  /** The most recent rollback pointer, or undefined when there is none. */
+  private lastPointer(): RollbackPointer | undefined {
+    for (let index = this.entries.length - 1; index >= 0; index--) {
+      const entry = this.entries[index]!;
+      if ("pointer" in entry) return entry.pointer;
     }
     return undefined;
   }
@@ -416,6 +496,7 @@ export class CheckpointJournal {
       return entry.record.context
         ? contextMetaOf(entry.record.context)
         : undefined;
+    if ("pointer" in entry) return undefined;
     const { context } = entry.stored;
     return {
       journalOffset: context.journalOffset,
@@ -439,6 +520,8 @@ export class CheckpointJournal {
       this.contextMemo.set(index, context);
       return context;
     }
+    if ("pointer" in entry)
+      throw new Error(`checkpoint index is a rollback pointer: ${index}`);
     const stored = entry.stored.context;
     let context: DurableContextCheckpoint;
     if (stored.kind === "anchor") {
@@ -489,6 +572,8 @@ export class CheckpointJournal {
       this.manifestMemo.set(index, legacy);
       return legacy;
     }
+    if ("pointer" in entry)
+      throw new Error(`checkpoint index is a rollback pointer: ${index}`);
     const stored = entry.stored.manifest;
     let manifest: WorkspaceManifest;
     if (stored.kind === "anchor") {
@@ -553,6 +638,8 @@ export class CheckpointJournal {
   async summaryAt(index: number): Promise<CheckpointRecord> {
     const entry = this.entries[index];
     if (!entry) throw new Error(`checkpoint index out of range: ${index}`);
+    if ("pointer" in entry)
+      throw new Error(`checkpoint index is a rollback pointer: ${index}`);
     if (entry.schema === 2) return this.legacyRecord(entry.record, false);
     // Schema 3: scalars come from the stored header, so the manifest (and its
     // entries) stays unmaterialized until a consumer asks for it.
@@ -563,6 +650,8 @@ export class CheckpointJournal {
   async recordAt(index: number): Promise<CheckpointRecord> {
     const entry = this.entries[index];
     if (!entry) throw new Error(`checkpoint index out of range: ${index}`);
+    if ("pointer" in entry)
+      throw new Error(`checkpoint index is a rollback pointer: ${index}`);
     if (entry.schema === 2) return this.legacyRecord(entry.record, true);
     return this.buildRecord(
       entry.stored,
@@ -573,15 +662,18 @@ export class CheckpointJournal {
 
   async summaries(): Promise<CheckpointRecord[]> {
     const out: CheckpointRecord[] = [];
-    for (let index = 0; index < this.entries.length; index++)
+    for (let index = 0; index < this.visibleLength(); index++)
       out.push(await this.summaryAt(index));
     return out;
   }
 
+  /** Every record on disk, pointers skipped (refs resolve over this). */
   async all(): Promise<CheckpointRecord[]> {
     const out: CheckpointRecord[] = [];
-    for (let index = 0; index < this.entries.length; index++)
+    for (let index = 0; index < this.entries.length; index++) {
+      if ("pointer" in this.entries[index]!) continue;
       out.push(await this.recordAt(index));
+    }
     return out;
   }
 
@@ -629,7 +721,11 @@ export class CheckpointJournal {
    * queue.
    */
   async append(record: CheckpointRecord): Promise<void> {
-    const previousIndex = this.entries.length - 1;
+    // The delta base is the last VISIBLE record: a rollback pointer sits
+    // above the window it moved, and encoding a delta against a pointer (or
+    // against a record the pointer moved past) would chain the new record to
+    // something the journal no longer considers current.
+    const previousIndex = this.lastVisibleIndex();
     const previous =
       previousIndex >= 0 ? await this.recordAt(previousIndex) : undefined;
     const stored = await this.encode(record, previous);
@@ -776,6 +872,7 @@ export class CheckpointJournal {
     const index = this.indexOfID(id);
     if (index === undefined) return undefined;
     const entry = this.entries[index]!;
+    if ("pointer" in entry) return undefined;
     if (entry.schema === 3) {
       const updated: StoredCheckpoint = { ...entry.stored, name };
       this.entries[index] = { schema: 3, stored: updated };
@@ -790,42 +887,113 @@ export class CheckpointJournal {
   }
 
   /**
-   * Drops every record later than `sequence`, optionally keeping one record
-   * with `keepSequence` (the rollback safety checkpoint, which sits above the
-   * target but must survive so a failed rollback can be recovered).
+   * Records a rollback as a POINTER, not a truncation (T5-3).
+   *
+   * The old behaviour physically dropped every record above the target —
+   * which made a rollback the one destructive operation in an append-only
+   * journal: the safety checkpoint had to be re-anchored by hand (its delta
+   * base was being deleted under it), and every record the session had
+   * written between the target and the rollback was gone for good, so
+   * rolling back to one of them afterwards was impossible.
+   *
+   * A pointer keeps all of it: the records stay on disk with their delta
+   * chains intact, and the journal's visible window simply ends at `to`.
+   * A later rollback to any of those records is an ordinary pointer move.
    */
-  async truncateAfter(sequence: number, keepSequence?: number): Promise<void> {
-    const kept: JournalEntry[] = [];
-    let keepIndex: number | undefined;
-    for (let index = 0; index < this.entries.length; index++) {
-      const entry = this.entries[index]!;
-      const at =
-        entry.schema === 3 ? entry.stored.sequence : entry.record.sequence;
-      if (at <= sequence) kept.push(entry);
-      else if (keepSequence !== undefined && at === keepSequence)
-        keepIndex = index;
-    }
-    // The retained safety record sits above the truncation point, so the delta
-    // chain it pointed at is being dropped. Re-anchor it (materialize, then
-    // store full) so it stays self-contained instead of dangling.
-    if (keepIndex !== undefined) {
-      const record = await this.recordAt(keepIndex);
-      kept.push({
-        schema: 3,
-        stored: await this.encode(record, undefined, true),
-      });
-    }
-    this.entries = kept;
-    this.reindex();
+  async rollbackTo(
+    to: number,
+    from: number,
+    safety: number,
+    at: string = new Date().toISOString(),
+  ): Promise<void> {
+    if (this.indexOfSequence(to) === undefined)
+      throw new Error(`checkpoint rollback names missing target ${to}`);
+    this.entries.push({
+      schema: 3,
+      pointer: { kind: "rollback", to, from, safety, at },
+    });
     this.contextMemo.clear();
     this.manifestMemo.clear();
-    await this.writeAll();
+    await appendFileLine(
+      this.path,
+      JSON.stringify({
+        schemaVersion: 3,
+        ...{ kind: "rollback", to, from, safety, at },
+      }),
+    );
+  }
+
+  /** The most recent rollback pointer, for diagnostics and the /checkpoint view. */
+  lastRollback(): RollbackPointer | undefined {
+    return this.lastPointer();
+  }
+
+  /** True when the index holds a rollback pointer rather than a record. */
+  isRollbackPointerAt(index: number): boolean {
+    const entry = this.entries[index];
+    return entry !== undefined && "pointer" in entry;
+  }
+
+  /** The index of the last VISIBLE record (a pointer is never visible). */
+  lastVisibleIndex(): number {
+    return this.visibleLength() - 1;
+  }
+
+  /** The highest sequence on disk, pointers included (numbering source). */
+  highestSequence(): number {
+    let highest = -1;
+    for (let index = 0; index < this.entries.length; index++) {
+      const sequence = this.sequenceAt(index);
+      if (sequence !== undefined && sequence > highest) highest = sequence;
+    }
+    return highest;
+  }
+
+  /**
+   * The object hashes ONE record references directly (T5-7).
+   *
+   * GC used to materialize every record's manifest — for every sibling
+   * session — which is O(sessions x records x tree): the manifests are the
+   * largest payloads in the store, and rebuilding each one replays its delta
+   * chain only to throw the entries away and keep the hashes.
+   *
+   * The union of every record's DIRECT references is exactly the union of
+   * every materialized manifest: a manifest's entries are the base's entries
+   * plus each delta's `added`, so walking the records and collecting the
+   * hashes each one names cannot miss one and cannot invent one. An anchor
+   * names all of its entries; a delta names only what it added.
+   */
+  async directManifestRefs(index: number): Promise<Set<string>> {
+    const entry = this.entries[index];
+    const refs = new Set<string>();
+    if (!entry || "pointer" in entry) return refs;
+    if (entry.schema === 2) {
+      for (const value of Object.values(entry.record.manifest?.entries ?? {}))
+        if (value.objectHash) refs.add(value.objectHash);
+      return refs;
+    }
+    const stored = entry.stored.manifest;
+    if (stored.kind === "anchor") {
+      const manifest = JSON.parse(
+        (await this.decodePayload(stored)).toString("utf8"),
+      ) as WorkspaceManifest;
+      for (const value of Object.values(manifest.entries))
+        if (value.objectHash) refs.add(value.objectHash);
+      return refs;
+    }
+    const delta = JSON.parse(
+      (await this.decodePayload(stored)).toString("utf8"),
+    ) as ManifestDeltaPayload;
+    for (const value of Object.values(delta.added))
+      if (value.objectHash) refs.add(value.objectHash);
+    return refs;
   }
 
   /** Chunk refs referenced by the journal (GC roots for the chunk store). */
   referencedChunks(): Set<string> {
     const referenced = new Set<string>();
     for (const entry of this.entries) {
+      if ("pointer" in entry) continue;
       if (entry.schema !== 3) continue;
       for (const payload of [entry.stored.context, entry.stored.manifest]) {
         if (!("ref" in payload)) continue;
@@ -835,12 +1003,14 @@ export class CheckpointJournal {
     return referenced;
   }
 
-  /** Serialized lines, for a full rewrite (rename/truncate/migration). */
+  /** Serialized lines, for a full rewrite (rename/migration). */
   serializedLines(): string[] {
     return this.entries.map((entry) =>
-      entry.schema === 3
-        ? JSON.stringify(entry.stored)
-        : JSON.stringify(entry.record),
+      "pointer" in entry
+        ? JSON.stringify({ schemaVersion: 3, ...entry.pointer })
+        : entry.schema === 3
+          ? JSON.stringify(entry.stored)
+          : JSON.stringify(entry.record),
     );
   }
 

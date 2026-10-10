@@ -412,7 +412,13 @@ export class CheckpointStore {
     // a small header plus chunk refs, and the payloads are semantic deltas
     // (context/manifest) stored through the content-defined chunk library.
     const previous = await this.readLastRecord();
-    const sequence = previous ? previous.sequence + 1 : 0;
+    // Numbering follows the journal's HIGHEST sequence, not the visible
+    // window's: a rollback pointer moves the window but does not rewind the
+    // log, so numbering from the visible tail would reissue a sequence a
+    // record above the window already owns (and the delta chain would then
+    // have two records claiming one base).
+    const highest = await (await this.loadJournal()).highestSequence();
+    const sequence = previous ? Math.max(previous.sequence, highest) + 1 : 0;
     const id = sequence === 0 ? "checkpoint_0" : `checkpoint_${sequence}`;
     try {
       const manifest = await this.captureManifest();
@@ -491,6 +497,16 @@ export class CheckpointStore {
     return await (await this.loadJournal()).summaries();
   }
 
+  /**
+   * Every record on disk — the visible window plus whatever a rollback
+   * pointer moved past. Refs and audit-round lookups resolve here (T5-4);
+   * `list()` stays the current-history view.
+   */
+  async allRecords(): Promise<CheckpointRecord[]> {
+    if (this.unavailableReason) return [];
+    return await (await this.loadJournal()).all();
+  }
+
   /** One record with its full ledger context materialized. */
   async get(id: string) {
     if (this.unavailableReason) return undefined;
@@ -528,7 +544,9 @@ export class CheckpointStore {
   }
 
   async listAuditRounds(planID?: string): Promise<AuditRoundRecord[]> {
-    const records = await this.list();
+    // Whole log, not the visible window (T5-4): an audit round's checkpoint
+    // can sit above a rollback pointer, and the round is still the round.
+    const records = await this.allRecords();
     const rounds: AuditRoundRecord[] = [];
     for (const record of records) {
       if (record.reason !== "audit_round") continue;
@@ -601,9 +619,21 @@ export class CheckpointStore {
     return this.renderDiffChanges(fromManifest, toManifest, changes, options);
   }
 
+  /**
+   * Resolves a ref to the manifest it names (T5-4).
+   *
+   * Refs resolve over the WHOLE log, not the visible window: a rollback
+   * pointer moves the window, and the records above it are still durable and
+   * still addressable — `list()` hides them because they are not the current
+   * history, but a caller naming one (`{kind:"round", planID, round}` after
+   * a rollback that moved past the round's checkpoint) must still get it.
+   * Resolving through `list()` here made exactly that ref fail with "audit
+   * round not found" for a round whose record was sitting one line above the
+   * pointer.
+   */
   private async manifestForRef(ref: CheckpointRef): Promise<WorkspaceManifest> {
     if (ref.kind === "current") return this.captureManifest();
-    const records = await this.list();
+    const records = await this.allRecords();
     let record: CheckpointRecord | undefined;
     if (ref.kind === "baseline") {
       record = records.find((candidate) => candidate.complete);
@@ -925,7 +955,7 @@ export class CheckpointStore {
         throw new Error("injected context rollback failure");
       options.context.restoreDurableCheckpoint(targetContext);
       await options.onContextRestored?.(targetContext);
-      await this.truncateFutureCheckpoints(target, safety);
+      await this.recordRollbackPointer(target, safety);
       this.emit({
         type: "rollback.end",
         checkpointID: target.id,
@@ -1028,10 +1058,19 @@ export class CheckpointStore {
     // GC is the one listing path that genuinely needs every manifest entry, so
     // materialize each manifest here (on demand) rather than in `list()`.
     for (const journal of journals) {
+      // Every record on disk, not only the visible window: a rollback
+      // pointer moves the window but does not delete the records above it,
+      // and their payloads are still reachable — a later rollback can move
+      // the pointer back to any of them (T5-3/T5-7).
+      //
+      // Reachability comes from each record's DIRECT object references, not
+      // from materializing its manifest: the union over the records equals
+      // the union over the manifests (an anchor names all of its entries, a
+      // delta names what it added), and it costs one small payload decode
+      // per record instead of a full delta-chain replay (T5-7).
       for (let index = 0; index < journal.length; index++) {
-        const manifest = await journal.manifestAt(index);
-        for (const entry of Object.values(manifest.entries))
-          if (entry.objectHash) referenced.add(entry.objectHash);
+        for (const hash of await journal.directManifestRefs(index))
+          referenced.add(hash);
       }
       for (const hash of journal.referencedChunks()) referencedChunks.add(hash);
     }
@@ -1289,20 +1328,34 @@ export class CheckpointStore {
     return { restoredFiles, deletedFiles };
   }
 
-  private async truncateFutureCheckpoints(
+  /**
+   * Records the rollback as a pointer (T5-3).
+   *
+   * The journal is append-only: the records above the target stay on disk
+   * with their delta chains intact, and the visible window ends at the
+   * target. Nothing that was durable is destroyed by moving the pointer,
+   * and a later rollback to any of those records is an ordinary pointer
+   * move — which is what "atomic switch" means when the journal is the
+   * record of what happened.
+   */
+  private async recordRollbackPointer(
     target: CheckpointRecord,
     safety: CheckpointRecord,
   ) {
-    await (
-      await this.loadJournal()
-    ).truncateAfter(target.sequence, safety.sequence);
+    const journal = await this.loadJournal();
+    const visible = await journal.summaries();
+    const from = visible.at(-1)?.sequence ?? target.sequence;
+    await journal.rollbackTo(target.sequence, from, safety.sequence);
   }
 
-  /** Newest record summary, for sequence numbering and baseline checks. */
+  /** Newest VISIBLE record summary, for sequence numbering and baseline checks. */
   private async readLastRecord(): Promise<CheckpointRecord | undefined> {
     const journal = await this.loadJournal();
     if (journal.isEmpty) return undefined;
-    const index = journal.length - 1;
+    // The last visible index, not the last line: a rollback pointer sits
+    // above the window it moved, and asking IT for the next sequence would
+    // hand a pointer to `summaryAt`.
+    const index = journal.lastVisibleIndex();
     // The previous record is used to diff manifests, so materialize exactly its
     // manifest (never the ledger).
     const record = await journal.summaryAt(index);

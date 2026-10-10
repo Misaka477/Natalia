@@ -46,6 +46,23 @@ function objectStoreWorkerDisabled(): boolean {
   );
 }
 
+/**
+ * How many recent objects may be considered as a delta base (git's
+ * `--window`). Bounding it keeps the base probe O(window) per object
+ * instead of O(everything packed so far), and stops one pathological
+ * keep-order run from making the pack build quadratic.
+ */
+const DELTA_WINDOW = 10;
+
+/**
+ * How long a delta chain may grow before the next object is stored full
+ * and becomes a fresh base (git's `--depth`). A chain is a read-time cost
+ * (the Nth object replays N-1 instruction streams) and a blast radius (one
+ * corrupt intermediate takes every object after it down), so it is capped
+ * rather than left to grow with the pack.
+ */
+const DELTA_MAX_DEPTH = 50;
+
 export class ObjectStore {
   private readonly lru = new Map<string, Buffer>();
   private lruBytes = 0;
@@ -988,26 +1005,25 @@ export class ObjectStore {
       await fd.write(this.packMagic);
       await fd.write(Buffer.from([this.packVersion]));
       let offset = this.packMagic.length + 1;
-      let lastId: string | undefined;
-      let lastOriginal: Buffer | undefined;
+      // The recent window of candidate bases with their chain depths. An
+      // object stored full starts a new chain at depth 0; a delta extends
+      // its base's chain (T5-6).
+      const window: Array<{ id: string; data: Buffer; depth: number }> = [];
       try {
         for (const id of keepIds) {
           const original = originalById.get(id)!;
-          const delta =
-            lastOriginal && this.deltaSize(original, lastOriginal)
-              ? this.computeDelta(lastOriginal, original)
-              : undefined;
-          if (delta) {
-            const baseId = lastId!;
+          const chosen = this.selectDeltaBase(window, original);
+          if (chosen) {
+            const { baseId, delta, depth } = chosen;
             const baseIdBuffer = Buffer.from(baseId, "utf8");
             const header = Buffer.alloc(1 + 4 + baseIdBuffer.length + 4 + 4);
             header.writeUInt8(1, 0);
             header.writeUInt32LE(baseIdBuffer.length, 1);
             baseIdBuffer.copy(header, 5);
             header.writeUInt32LE(original.length, 5 + baseIdBuffer.length);
-            header.writeUInt32LE(delta.bytes.length, 9 + baseIdBuffer.length);
+            header.writeUInt32LE(delta.length, 9 + baseIdBuffer.length);
             await fd.write(header);
-            await fd.write(delta.bytes);
+            await fd.write(delta);
             indexEntries.push({
               id,
               offset,
@@ -1016,9 +1032,10 @@ export class ObjectStore {
               compLen: 0,
               kind: 1,
               baseId,
-              deltaLen: delta.bytes.length,
+              deltaLen: delta.length,
             });
-            offset += header.length + delta.bytes.length;
+            offset += header.length + delta.length;
+            window.push({ id, data: original, depth });
           } else {
             const compressed = deflateSync(original);
             const idBuffer = Buffer.from(id, "utf8");
@@ -1039,9 +1056,11 @@ export class ObjectStore {
               kind: 0,
             });
             offset += header.length + compressed.length;
+            window.push({ id, data: original, depth: 0 });
           }
-          lastId = id;
-          lastOriginal = original;
+          // The window is bounded: only the most recent objects may serve as
+          // a base, so a long keep-order run cannot make the probe O(n^2).
+          if (window.length > DELTA_WINDOW) window.shift();
         }
         await fd.close();
       } catch (error) {
@@ -1155,26 +1174,22 @@ export class ObjectStore {
       await fd.write(this.packMagic);
       await fd.write(Buffer.from([this.packVersion]));
       let offset = this.packMagic.length + 1;
-      let lastId: string | undefined;
-      let lastOriginal: Buffer | undefined;
+      const window: Array<{ id: string; data: Buffer; depth: number }> = [];
       try {
         for (const id of looseIds) {
           const original = originalById.get(id)!;
-          const delta =
-            lastOriginal && this.deltaSize(original, lastOriginal)
-              ? this.computeDelta(lastOriginal, original)
-              : undefined;
-          if (delta) {
-            const baseId = lastId!;
+          const chosen = this.selectDeltaBase(window, original);
+          if (chosen) {
+            const { baseId, delta, depth } = chosen;
             const baseIdBuffer = Buffer.from(baseId, "utf8");
             const header = Buffer.alloc(1 + 4 + baseIdBuffer.length + 4 + 4);
             header.writeUInt8(1, 0);
             header.writeUInt32LE(baseIdBuffer.length, 1);
             baseIdBuffer.copy(header, 5);
             header.writeUInt32LE(original.length, 5 + baseIdBuffer.length);
-            header.writeUInt32LE(delta.bytes.length, 9 + baseIdBuffer.length);
+            header.writeUInt32LE(delta.length, 9 + baseIdBuffer.length);
             await fd.write(header);
-            await fd.write(delta.bytes);
+            await fd.write(delta);
             indexEntries.push({
               id,
               offset,
@@ -1183,9 +1198,10 @@ export class ObjectStore {
               compLen: 0,
               kind: 1,
               baseId,
-              deltaLen: delta.bytes.length,
+              deltaLen: delta.length,
             });
-            offset += header.length + delta.bytes.length;
+            offset += header.length + delta.length;
+            window.push({ id, data: original, depth });
           } else {
             const compressed = deflateSync(original);
             const idBuffer = Buffer.from(id, "utf8");
@@ -1206,10 +1222,10 @@ export class ObjectStore {
               kind: 0,
             });
             offset += header.length + compressed.length;
+            window.push({ id, data: original, depth: 0 });
           }
+          if (window.length > DELTA_WINDOW) window.shift();
           totalBytes += original.length;
-          lastId = id;
-          lastOriginal = original;
         }
         await fd.close();
       } catch (error) {
@@ -1411,12 +1427,38 @@ export class ObjectStore {
     await writeFile(indexPath, Buffer.concat(buffers), { mode: 0o600 });
   }
 
-  private deltaSize(current: Buffer, base: Buffer): boolean {
-    if (current.length < 64 || base.length < 64) return false;
-    const delta = this.computeDelta(base, current).bytes;
-    // Only use delta when the instruction stream is meaningfully smaller
-    // than shipping the whole object as a full zlib record.
-    return delta.length < current.length * 0.7;
+  /**
+   * Chooses a delta base for `current` from the recent candidates, under an
+   * explicit budget (T5-6).
+   *
+   * The old rule was "whatever object came immediately before this one in
+   * keep-order", which has two costs. It builds unbounded chains: reading
+   * the Nth object replays N-1 delta instruction streams, and one corrupt
+   * intermediate takes every object after it down with it. And it computes
+   * the delta twice per object — once as a size probe, once for real —
+   * because the probe and the encode were separate calls.
+   *
+   * git's answer is `--window` (how many recent objects may be considered
+   * as a base) and `--depth` (how long a chain may grow). Both are here,
+   * with the delta computed exactly once: the probe IS the encode.
+   */
+  private selectDeltaBase(
+    candidates: Array<{ id: string; data: Buffer; depth: number }>,
+    current: Buffer,
+  ): { baseId: string; delta: Buffer; depth: number } | undefined {
+    let best: { baseId: string; delta: Buffer; depth: number } | undefined;
+    for (const candidate of candidates) {
+      // A chain past the depth budget is not extended: this object either
+      // finds a shallower base or is stored full and becomes a new base.
+      if (candidate.depth >= DELTA_MAX_DEPTH) continue;
+      if (current.length < 64 || candidate.data.length < 64) continue;
+      const delta = this.computeDelta(candidate.data, current).bytes;
+      if (delta.length >= current.length * 0.7) continue;
+      const depth = candidate.depth + 1;
+      if (!best || delta.length < best.delta.length)
+        best = { baseId: candidate.id, delta, depth };
+    }
+    return best;
   }
 
   private computeDelta(base: Buffer, current: Buffer): { bytes: Buffer } {

@@ -12,10 +12,14 @@ import {
   updateProgram,
 } from "@natalia/installer";
 import {
+  evaluateBaseline,
   groupRunsByPrompt,
   mineSessionPairs,
+  readDataset,
+  samplesFromPairs,
   scoreRun,
   segmentTurns,
+  splitForPair,
   writeDataset,
 } from "@natalia/engineering-intelligence";
 import { createLocalSessionService } from "@anthelia/session-store";
@@ -410,48 +414,98 @@ export async function handleLocalCommands(argv: string[]) {
       break;
     }
     case "evolution": {
-      // L2's dataset miner: turn this workspace's own session journal into
-      // an evaluation dataset — (task, response) pairs, secret-filtered at
-      // the entry, split train/val/holdout deterministically. Pure offline
-      // replay over the journal (the same read `runs` scores), no daemon,
-      // no telemetry, and the main session's live cache is never touched.
+      // L2's dataset miner and L3's evaluation face, offline: mine the
+      // workspace journal into (task, response) pairs (secret-filtered at
+      // the entry, split deterministically), or report a mined dataset's
+      // shape and its baseline floor. Pure replay over the journal (the
+      // same read `runs` scores), no daemon, no telemetry, and the main
+      // session's live cache is never touched.
+      const usage =
+        "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]\n" +
+        "       natalia evolution evaluate --target <name> [--workspace <root>] [--json]";
       const action = argv[1];
-      if (action !== "mine") {
-        console.error(
-          "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]",
-        );
+      if (action !== "mine" && action !== "evaluate") {
+        console.error(usage);
         process.exit(1);
       }
       const target = valueAfter(argv, "--target");
       if (!target) {
-        console.error(
-          "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]",
-        );
+        console.error(usage);
         process.exit(1);
       }
       const workspaceRoot = valueAfter(argv, "--workspace") ?? process.cwd();
-      const service = createLocalSessionService(workspaceRoot);
-      const rows = await service.list();
-      const pairs = [];
-      const dropped = { secrets: 0, empty: 0, internal: 0 };
-      let sessions = 0;
-      for (const row of rows) {
-        const events = await service.events(row.id).catch(() => []);
-        if (!events.length) continue;
-        sessions += 1;
-        const mined = mineSessionPairs(row.id, events);
-        pairs.push(...mined.pairs);
-        dropped.secrets += mined.dropped.secrets;
-        dropped.empty += mined.dropped.empty;
-        dropped.internal += mined.dropped.internal;
+      if (action === "mine") {
+        const service = createLocalSessionService(workspaceRoot);
+        const rows = await service.list();
+        const pairs = [];
+        const dropped = { secrets: 0, empty: 0, internal: 0 };
+        let sessions = 0;
+        for (const row of rows) {
+          const events = await service.events(row.id).catch(() => []);
+          if (!events.length) continue;
+          sessions += 1;
+          const mined = mineSessionPairs(row.id, events);
+          pairs.push(...mined.pairs);
+          dropped.secrets += mined.dropped.secrets;
+          dropped.empty += mined.dropped.empty;
+          dropped.internal += mined.dropped.internal;
+        }
+        const written = await writeDataset({ workspaceRoot, target, pairs });
+        const report = {
+          target,
+          sessions,
+          pairs: pairs.length,
+          ...written,
+          dropped,
+        };
+        if (argv.includes("--json")) {
+          console.log(JSON.stringify(report, null, 2));
+          break;
+        }
+        console.log(
+          [
+            `dataset: ${target} → ${written.dir}`,
+            `sessions read: ${sessions}`,
+            `pairs: ${written.train} train / ${written.val} val / ${written.holdout} holdout`,
+            `dropped: ${dropped.secrets} secret-shaped, ${dropped.empty} without a response, ${dropped.internal} without a human task`,
+          ].join("\n"),
+        );
+        break;
       }
-      const written = await writeDataset({ workspaceRoot, target, pairs });
+      // evaluate: the mined dataset's shape and its baseline floor. The
+      // baseline is the journal's own recorded responses scored through
+      // the cheap overlap judge — the number a candidate must beat by the
+      // strict-improvement rule. The holdout's score rides the sealed
+      // door (a number, never its cases); the dimensions the cheap judge
+      // cannot measure are REPORTED, not invented.
+      const dataset = await readDataset(workspaceRoot, target);
+      if (!dataset) {
+        console.error(
+          `no dataset named ${target} under ${workspaceRoot}/.natalia/evolution/datasets — run: natalia evolution mine --target ${target}`,
+        );
+        process.exit(1);
+      }
+      const { baseline, holdoutScore } = evaluateBaseline({
+        pool: {
+          samples: samplesFromPairs(dataset.visible, (pair) =>
+            splitForPair(pair),
+          ),
+        },
+        holdout: samplesFromPairs(dataset.holdout, () => "holdout" as const),
+      });
       const report = {
         target,
-        sessions,
-        pairs: pairs.length,
-        ...written,
-        dropped,
+        dir: dataset.dir,
+        samples: {
+          train: dataset.train.length,
+          val: dataset.val.length,
+          holdout: dataset.holdout.length,
+        },
+        baseline: {
+          score: baseline.score,
+          holdoutScore,
+          unjudgedDimensions: ["procedureFollowing", "conciseness"],
+        },
       };
       if (argv.includes("--json")) {
         console.log(JSON.stringify(report, null, 2));
@@ -459,10 +513,10 @@ export async function handleLocalCommands(argv: string[]) {
       }
       console.log(
         [
-          `dataset: ${target} → ${written.dir}`,
-          `sessions read: ${sessions}`,
-          `pairs: ${written.train} train / ${written.val} val / ${written.holdout} holdout`,
-          `dropped: ${dropped.secrets} secret-shaped, ${dropped.empty} without a response, ${dropped.internal} without a human task`,
+          `dataset: ${target} → ${dataset.dir}`,
+          `samples: ${dataset.train} train / ${dataset.val} val / ${dataset.holdout.length} holdout (sealed)`,
+          `baseline score: ${baseline.score.toFixed(4)} (holdout ${holdoutScore.toFixed(4)})`,
+          `judge: keyword overlap — procedure_following and conciseness are UNJUDGED, not measured`,
         ].join("\n"),
       );
       break;

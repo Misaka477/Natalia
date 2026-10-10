@@ -321,3 +321,46 @@ export async function readDatasetSplit(
     .filter((line) => line.trim().length > 0)
     .map((line) => JSON.parse(line) as DatasetPair);
 }
+
+/**
+ * Read a target's dataset back: the three splits, plus the visible pool
+ * (train + val) an evaluation face may be built over. The holdout is
+ * returned separately and SEALED — a caller that builds an evaluation face
+ * hands it to the constructor, never to the pool.
+ *
+ * A missing dataset answers undefined rather than an empty one: "you never
+ * mined this" and "you mined nothing" are different facts, and the CLI
+ * says the first one out loud.
+ */
+export async function readDataset(
+  workspaceRoot: string,
+  target: string,
+): Promise<
+  | {
+      dir: string;
+      train: DatasetPair[];
+      val: DatasetPair[];
+      holdout: DatasetPair[];
+      visible: DatasetPair[];
+    }
+  | undefined
+> {
+  const dir = datasetDir(workspaceRoot, target);
+  const trainPath = join(dir, "train.jsonl");
+  if (!(await readFile(trainPath, "utf8").catch(() => undefined)))
+    return undefined;
+  const [train, val, holdout] = await Promise.all([
+    readSplit(trainPath),
+    readSplit(join(dir, "val.jsonl")),
+    readSplit(join(dir, "holdout.jsonl")),
+  ]);
+  return { dir, train, val, holdout, visible: [...train, ...val] };
+}
+
+async function readSplit(path: string): Promise<DatasetPair[]> {
+  const body = await readFile(path, "utf8").catch(() => "");
+  return body
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as DatasetPair);
+}

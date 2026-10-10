@@ -7,6 +7,7 @@ export * from "./validation";
 export * from "./self-review";
 export * from "./run-scorer";
 export * from "./dataset-miner";
+export * from "./evaluation";
 export * from "./feedback";
 export * from "./growth";
 export * from "./eval-reader";

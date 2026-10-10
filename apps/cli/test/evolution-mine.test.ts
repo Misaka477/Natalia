@@ -156,3 +156,62 @@ test("evolution mine on an empty workspace writes three empty splits and says so
   for (const split of ["train", "val", "holdout"] as const)
     expect(readFileSync(join(report.dir, `${split}.jsonl`), "utf8")).toBe("");
 });
+
+test("evolution evaluate reports the dataset shape and the baseline floor", async () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-eval-"));
+  await seed(base);
+  const mined = run(
+    ["evolution", "mine", "--target", "release-skill", "--workspace", base],
+    base,
+  );
+  expect(mined.exitCode).toBe(0);
+  const child = run(
+    [
+      "evolution",
+      "evaluate",
+      "--target",
+      "release-skill",
+      "--workspace",
+      base,
+      "--json",
+    ],
+    base,
+  );
+  expect(child.exitCode).toBe(0);
+  const report = JSON.parse(new TextDecoder().decode(child.stdout)) as {
+    samples: { train: number; val: number; holdout: number };
+    baseline: {
+      score: number;
+      holdoutScore: number;
+      unjudgedDimensions: string[];
+    };
+  };
+  expect(report.samples.train + report.samples.val).toBe(2);
+  // The cheap judge scores the recorded responses against themselves, so
+  // the floor is a real 1.0 — and the report says which dimensions were
+  // never measured instead of pretending it scored them.
+  expect(report.baseline.score).toBe(1);
+  expect(report.baseline.unjudgedDimensions).toEqual([
+    "procedureFollowing",
+    "conciseness",
+  ]);
+  const human = run(
+    ["evolution", "evaluate", "--target", "release-skill", "--workspace", base],
+    base,
+  );
+  const out = new TextDecoder().decode(human.stdout);
+  expect(out).toContain("UNJUDGED");
+  expect(out).toContain("holdout (sealed)");
+});
+
+test("evolution evaluate on an unmined target says what to run", () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-eval-missing-"));
+  const child = run(
+    ["evolution", "evaluate", "--target", "nope", "--workspace", base],
+    base,
+  );
+  expect(child.exitCode).not.toBe(0);
+  expect(new TextDecoder().decode(child.stderr)).toContain(
+    "natalia evolution mine --target nope",
+  );
+});

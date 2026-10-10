@@ -35,7 +35,9 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import { lineCount } from "@anthelia/substrate";
 
-const WAITING_TOOLS = new Set(["terminal_observe"]);
+// F8: the observe tool carries its family's name; the old short spelling is
+// its alias, resolved by the registry before this set is consulted.
+const WAITING_TOOLS = new Set(["interactive_terminal_observe"]);
 const MAX_PROTOCOL_CORRECTIONS = 2;
 
 function sessionSeed(workspaceRoot: string) {

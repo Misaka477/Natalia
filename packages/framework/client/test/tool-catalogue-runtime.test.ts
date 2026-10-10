@@ -106,15 +106,17 @@ test("the advertised tool names are the names the real runtime registers", async
       ).toBe(true);
 }, 120_000);
 
-test("interactive_observe reaches the tool whose name sits outside the family (F8)", () => {
-  // The 2026-10-10 sweep's F8: the observation tool's canonical name is
-  // `terminal_observe` — the only name outside the `interactive_terminal_*`
-  // family. A model that learned the family's shape reaches for a name that
-  // does not exist and gets "No tool output found for function call".
-  expect(interactiveTerminalToolAliases.interactive_observe).toBe(
-    "terminal_observe",
+test("the observe tool carries its family's name, and the old spelling still reaches it (F8)", () => {
+  // The 2026-10-10 sweep's F8: `interactive_terminal_request_human` tells the
+  // model to "check back with interactive_terminal_observe", and that name did
+  // not exist — following the instruction it was given produced `Unknown
+  // tool`. The tool now carries its family's name, with the old short spelling
+  // as the alias, so both reach a tool that exists.
+  expect(interactiveTerminalToolAliases.terminal_observe).toBe(
+    "interactive_terminal_observe",
   );
-  // And the alias's target is a name the runtime registers.
+  // Both spellings are advertised: the canonical name, and the alias a model
+  // that learned the old one reaches for. Neither may be a phantom.
+  expect(runtimeToolNames()).toContain("interactive_terminal_observe");
   expect(runtimeToolNames()).toContain("terminal_observe");
-  expect(runtimeToolNames()).toContain("interactive_observe");
 });

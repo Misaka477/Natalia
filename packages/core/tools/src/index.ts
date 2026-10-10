@@ -217,11 +217,13 @@ const interactiveTerminalToolAliases = {
   interactive_list: "interactive_terminal_list",
   // P2-19: the lifecycle's short spelling, next to the list it follows.
   interactive_cleanup: "interactive_terminal_cleanup",
-  // F8 (2026-10-10 sweep): `terminal_observe` is the one tool whose canonical
-  // name sits outside this family, so a model that learned the family's shape
-  // reaches for a name that does not exist. The alias closes the gap without
-  // renaming a published tool.
-  interactive_observe: "terminal_observe",
+  // F8 (2026-10-10 sweep): the observe tool now carries its family's name
+  // (`interactive_terminal_observe`), so the old short spelling is the alias —
+  // the reverse of what this entry used to do. `interactive_terminal_request_human`
+  // tells the model to "check back with interactive_terminal_observe", and that
+  // name did not exist, so following the instruction it was given produced
+  // `Unknown tool`. Both spellings now reach a tool that exists.
+  terminal_observe: "interactive_terminal_observe",
 } as const;
 
 export { interactiveTerminalToolAliases };

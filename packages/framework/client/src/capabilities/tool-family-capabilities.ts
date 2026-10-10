@@ -90,7 +90,6 @@ export function runtimeToolNames(): string[] {
     "interactive_last_command",
     "interactive_list",
     "interactive_cleanup",
-    "interactive_observe",
     "interactive_read",
     "interactive_resize",
     "interactive_search",
@@ -155,6 +154,12 @@ export function runtimeToolNames(): string[] {
     "skill_load",
     "team_fanout",
     "team_review",
+    // F8 (2026-10-10 sweep): the observe tool carries its family's name now,
+    // so this advertised list says the name a model can actually call. The old
+    // short spelling is the family's alias, resolved at registration, and it
+    // is advertised too because a model that learned it must not be told the
+    // tool does not exist.
+    "interactive_terminal_observe",
     "terminal_observe",
     "todo_read",
     "todo_write",

@@ -706,7 +706,14 @@ function terminalLastCommandTool(): RuntimeTool {
 
 function terminalObserveTool(): RuntimeTool {
   return {
-    name: "terminal_observe",
+    // F8 (2026-10-10 sweep): this was the one tool whose name sat outside its
+    // own family — `interactive_terminal_request_human` tells the model to
+    // "check back with interactive_terminal_observe", and that name did not
+    // exist, so the model got `Unknown tool` for following the instruction it
+    // was given. The family's shape is `interactive_terminal_*`; this is now
+    // that name, with the old spelling kept as an alias so existing callers
+    // and the permission-family classification still resolve.
+    name: "interactive_terminal_observe",
     description:
       "Wait for a terminal screen revision or process exit, then return the current styled framebuffer. Timeout is a normal observation result. afterRevision is optional; omit it to get current state. Use mode='latest' for current state without waiting; mode='tail' for recent lines; mode='new_only' for only new output since last observation; mode='cursor' for lines around the cursor.",
     requiresApproval: false,

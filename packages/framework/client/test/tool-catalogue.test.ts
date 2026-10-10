@@ -96,7 +96,7 @@ const catalogue: Array<
   ["sandbox_resource_start", true],
   ["sandbox_resource_stop", true],
   ["sandbox_write", true],
-  ["terminal_observe", false, 35],
+  ["interactive_terminal_observe", false, 35],
   ["todo_read", false],
   ["todo_write", false],
   ["web_fetch", false, 30],
@@ -179,7 +179,9 @@ const migratedPluginTools = new Set([
   "sandbox_resource_start",
   "sandbox_resource_stop",
   "sandbox_write",
-  "terminal_observe",
+  // F8: the observe tool carries its family's name; the old short spelling is
+  // its alias, resolved at registration rather than advertised.
+  "interactive_terminal_observe",
   "todo_read",
   "todo_write",
   "web_fetch",

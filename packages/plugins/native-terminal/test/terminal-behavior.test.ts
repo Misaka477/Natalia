@@ -633,7 +633,7 @@ test("terminal observe latest mode returns current state without waiting", async
     .execute({ command: "cat", id: "tty_observe" }, context);
   const obs = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute(
         { id: "tty_observe", afterRevision: 0, mode: "latest" },
         context,
@@ -666,7 +666,7 @@ test("terminal observe tail mode returns only recent lines", async () => {
     .execute({ command: "cat", id: "tty_tail" }, context);
   const obs = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute(
         { id: "tty_tail", afterRevision: 0, mode: "tail", scrollbackRows: 3 },
         context,
@@ -690,7 +690,7 @@ test("terminal observe cursor mode returns lines around cursor", async () => {
     .execute({ command: "cat", id: "tty_cursor" }, context);
   const obs = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute({ id: "tty_cursor", afterRevision: 0, mode: "cursor" }, context),
   );
   expect(obs.cursorY).toBe(15);
@@ -716,7 +716,7 @@ test("terminal observe new_only mode returns only new text since last observatio
     .execute({ command: "cat", id: "tty_new_only" }, context);
   const first = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute(
         { id: "tty_new_only", afterRevision: 0, mode: "new_only" },
         context,
@@ -724,7 +724,7 @@ test("terminal observe new_only mode returns only new text since last observatio
   );
   expect(first.text).toBe("initial text\n");
   const second = JSON.parse(
-    await tools.get("terminal_observe")!.execute(
+    await tools.get("interactive_terminal_observe")!.execute(
       {
         id: "tty_new_only",
         afterRevision: first.currentRevision,
@@ -773,7 +773,7 @@ test("terminal observe afterRevision is optional and defaults to current state",
     .execute({ command: "cat", id: "tty_no_ar" }, context);
   const obs = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute({ id: "tty_no_ar", mode: "latest" }, context),
   );
   expect(obs.text).toBe("no afterRevision output");
@@ -841,7 +841,7 @@ test("native terminal search pages bounded Unicode matches without screen transp
     nextCursor: undefined,
   });
 });
-test("terminal_observe latest reports a point-in-time read, not a wait outcome", async () => {
+test("interactive_terminal_observe latest reports a point-in-time read, not a wait outcome", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-observe-latest-"));
   const nativeTerminal = fakeHost({ text: "screen contents" });
   const context = fakeHostToolContext(root, nativeTerminal);
@@ -853,7 +853,7 @@ test("terminal_observe latest reports a point-in-time read, not a wait outcome",
   const latest = JSON.parse(
     String(
       await tools
-        .get("terminal_observe")!
+        .get("interactive_terminal_observe")!
         .execute({ id: "tty_latest", mode: "latest" }, context),
     ),
   );
@@ -865,7 +865,7 @@ test("terminal_observe latest reports a point-in-time read, not a wait outcome",
   // The same call with a revision already seen still reports the current text.
   const repeated = JSON.parse(
     String(
-      await tools.get("terminal_observe")!.execute(
+      await tools.get("interactive_terminal_observe")!.execute(
         {
           id: "tty_latest",
           mode: "latest",
@@ -906,7 +906,7 @@ test("observe without afterRevision waits for what changed since last look", asy
   // The first observation marks the revision the model last looked at.
   const first = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute({ id: "tty_default", timeoutMs: 1_000 }, context),
   );
   expect(first.changed).toBe(true);
@@ -915,7 +915,7 @@ test("observe without afterRevision waits for what changed since last look", asy
   const started = Date.now();
   const second = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute({ id: "tty_default", timeoutMs: 400 }, context),
   );
   expect(second.changed).toBe(false);
@@ -927,7 +927,7 @@ test("observe without afterRevision waits for what changed since last look", asy
   );
   const third = JSON.parse(
     await tools
-      .get("terminal_observe")!
+      .get("interactive_terminal_observe")!
       .execute({ id: "tty_default", timeoutMs: 2_000 }, context),
   );
   expect(third.changed).toBe(true);

@@ -7,6 +7,7 @@ import type {
   RuntimeSessionSummary,
   ChatModelProfile,
   ConfigV3,
+  SessionID,
   WorkspaceSummary,
 } from "@anthelia/contracts";
 import { type AppState, cloneState } from "@natalia/view-store";
@@ -27,6 +28,7 @@ import {
   PagedTranscriptController,
   PendingBadge,
   Transcript,
+  feedbackActions,
   toolCallRow,
   type Attachment,
   type PagedTranscriptState,
@@ -2665,6 +2667,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             msg.role !== "user" &&
             (msg.pendingText ?? "").length > 0,
         );
+        // L2's feedback entry: a confirmed assistant answer carries the
+        // thumbs. Which rows qualify is the kit's decision; the actions
+        // themselves come from it too, so the rule lives in one tested
+        // place rather than in this 4500-line host.
+        const feedbackRowActions = feedbackActionsFor({
+          id: msg.id,
+          role,
+          thinking: msg.role === "thinking",
+          streaming,
+          text: msg.text,
+        });
         return {
           id: msg.id,
           signature: [
@@ -2681,6 +2694,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             Boolean(active),
             isLast,
             attachments,
+            feedbackRowActions.length,
+            messageVerdicts()[msg.id] ?? "",
           ],
           create: () => ({
             id: msg.id,
@@ -2699,6 +2714,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                 }
               : {}),
             ...(goalRound ? { goalRound } : {}),
+            ...(feedbackRowActions.length
+              ? { actions: feedbackRowActions }
+              : {}),
             content,
             status,
             steering,
@@ -2716,6 +2734,49 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     return messages.slice(0, hiddenAfter);
   });
 
+  // L2's feedback entry (D6a): the thumbs on a confirmed assistant row.
+  // The rating rides the runtime's feedback face, which journals a
+  // `feedback.recorded` event and structurally never reaches the model —
+  // design law 3, "signals about the output, never input to it". The
+  // per-message verdict is remembered here so a rated row shows its own
+  // state instead of offering the same choice twice.
+  const [messageVerdicts, setMessageVerdicts] = createSignal<
+    Record<string, "up" | "down">
+  >({});
+  async function rateMessage(messageID: string, verdict: "up" | "down") {
+    const runtime = props.ctx.runtime;
+    const sessionID = selectedSessionID() || state().sessionID;
+    if (!runtime.feedback || !sessionID) return;
+    try {
+      await runtime.feedback({
+        scope: "message",
+        sessionID: sessionID as SessionID,
+        messageID,
+        verdict,
+      });
+      setMessageVerdicts((current) => ({ ...current, [messageID]: verdict }));
+    } catch {
+      // A refused rating is a silent no-op: the human clicks again. The
+      // surface validates (scope/verdict/messageID), so a throw here is a
+      // runtime answer, not a UI bug worth a banner.
+    }
+  }
+  // Which rows carry the thumbs is the kit's decision (rateableRow): a
+  // confirmed assistant answer, never a streaming tail and never a
+  // thinking row.
+  const feedbackActionsFor = (row: {
+    role: string;
+    thinking?: boolean;
+    streaming?: boolean;
+    text: string;
+    id: string;
+  }) =>
+    feedbackActions({
+      row,
+      verdict: messageVerdicts()[row.id],
+      rate: (verdict) => void rateMessage(row.id, verdict),
+    });
+
   // The shared Transcript virtualizes long histories, so do not switch
   // between a synthetic tail window and the full paged window here. That
   // data-window swap was racing the scroll anchor restore in CEF.
@@ -2724,7 +2785,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       dedupeTranscriptRowsById(visibleMainMessages()),
     ),
   );
-
   const naviChatActivity = () => state().navi.activity;
 
   const chatMessageCache = new Map<

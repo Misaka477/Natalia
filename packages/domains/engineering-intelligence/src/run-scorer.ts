@@ -15,7 +15,17 @@ import type { RuntimeEvent } from "@anthelia/contracts";
 export type TurnWindow = {
   turnID: string;
   /** The admission that asked for this turn (nearest preceding submit). */
-  submitted?: { text: string; promptKey?: string };
+  submitted?: {
+    text: string;
+    promptKey?: string;
+    /**
+     * The admission's own internal flag (a runtime-generated wake boundary,
+     * never human-authored input). Carried so a consumer that must NOT
+     * learn from choreography — the dataset miner — can refuse it without
+     * re-reading the journal. The scorer ignores it.
+     */
+    internal?: boolean;
+  };
   /** The turn's own events, lead admission included. */
   events: RuntimeEvent[];
 };
@@ -69,7 +79,11 @@ export function segmentTurns(events: readonly RuntimeEvent[]): TurnWindow[] {
     if (event.type === "turn.submitted") {
       const promptKey =
         typeof event.sha256 === "string" ? event.sha256 : undefined;
-      lead = { text: event.text, promptKey };
+      lead = {
+        text: event.text,
+        promptKey,
+        ...(event.internal ? { internal: true } : {}),
+      };
       if (open && !open.submitted) open.submitted = lead;
       continue;
     }

@@ -39,6 +39,12 @@ export type {
 } from "./message";
 export { toolCallCard, toolCallRow, toolRowLabel } from "./message";
 export {
+  feedbackActions,
+  rateableRow,
+  type MessageVerdict,
+  type RateableRow,
+} from "./feedback-actions";
+export {
   CHAT_OUTPUT_MAX_LINES,
   SINGLE_LINE_MAX_CHARS,
   clipLongLine,

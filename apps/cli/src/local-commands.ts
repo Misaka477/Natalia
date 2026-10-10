@@ -13,8 +13,10 @@ import {
 } from "@natalia/installer";
 import {
   groupRunsByPrompt,
+  mineSessionPairs,
   scoreRun,
   segmentTurns,
+  writeDataset,
 } from "@natalia/engineering-intelligence";
 import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
@@ -90,6 +92,7 @@ export async function handleLocalCommands(argv: string[]) {
       "bench",
       "runs",
       "consults",
+      "evolution",
       "update",
     ]).has(subcommand ?? "")
   )
@@ -404,6 +407,64 @@ export async function handleLocalCommands(argv: string[]) {
             group.retries,
           ].join("\t"),
         );
+      break;
+    }
+    case "evolution": {
+      // L2's dataset miner: turn this workspace's own session journal into
+      // an evaluation dataset — (task, response) pairs, secret-filtered at
+      // the entry, split train/val/holdout deterministically. Pure offline
+      // replay over the journal (the same read `runs` scores), no daemon,
+      // no telemetry, and the main session's live cache is never touched.
+      const action = argv[1];
+      if (action !== "mine") {
+        console.error(
+          "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]",
+        );
+        process.exit(1);
+      }
+      const target = valueAfter(argv, "--target");
+      if (!target) {
+        console.error(
+          "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]",
+        );
+        process.exit(1);
+      }
+      const workspaceRoot = valueAfter(argv, "--workspace") ?? process.cwd();
+      const service = createLocalSessionService(workspaceRoot);
+      const rows = await service.list();
+      const pairs = [];
+      const dropped = { secrets: 0, empty: 0, internal: 0 };
+      let sessions = 0;
+      for (const row of rows) {
+        const events = await service.events(row.id).catch(() => []);
+        if (!events.length) continue;
+        sessions += 1;
+        const mined = mineSessionPairs(row.id, events);
+        pairs.push(...mined.pairs);
+        dropped.secrets += mined.dropped.secrets;
+        dropped.empty += mined.dropped.empty;
+        dropped.internal += mined.dropped.internal;
+      }
+      const written = await writeDataset({ workspaceRoot, target, pairs });
+      const report = {
+        target,
+        sessions,
+        pairs: pairs.length,
+        ...written,
+        dropped,
+      };
+      if (argv.includes("--json")) {
+        console.log(JSON.stringify(report, null, 2));
+        break;
+      }
+      console.log(
+        [
+          `dataset: ${target} → ${written.dir}`,
+          `sessions read: ${sessions}`,
+          `pairs: ${written.train} train / ${written.val} val / ${written.holdout} holdout`,
+          `dropped: ${dropped.secrets} secret-shaped, ${dropped.empty} without a response, ${dropped.internal} without a human task`,
+        ].join("\n"),
+      );
       break;
     }
     case "consults": {

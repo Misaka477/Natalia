@@ -100,7 +100,24 @@ test("a turn sediments a skill through the side-channel review", async () => {
                 kind: "create",
                 name: "parser-gotchas",
                 description: "Parser pitfalls",
-                content: "# Parser gotchas\nAvoid empty replies.",
+                // A body the necessity gate accepts: a heading and enough
+                // substance to be a procedure. The one-line version this
+                // used to carry is exactly the vacuous skill the gate
+                // refuses — a note that would load on every matching task.
+                content: [
+                  "# Parser gotchas",
+                  "",
+                  "## When to use",
+                  "A provider stream hands you tool calls whose arguments arrive in fragments.",
+                  "",
+                  "## Procedure",
+                  "1. Accumulate the argument fragments before parsing.",
+                  "2. Reject a call whose name is empty rather than guessing.",
+                  "3. Report the refusal with the fragment count.",
+                  "",
+                  "## Pitfalls",
+                  "- Never assume a fragment boundary is a JSON boundary.",
+                ].join("\n"),
               },
               {
                 kind: "delete",

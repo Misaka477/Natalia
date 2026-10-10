@@ -269,6 +269,101 @@ export type SelfReviewDeps = {
   disposed?(): boolean;
 };
 
+/**
+ * The necessity gate: may this candidate be written at all?
+ *
+ * The write boundary (`validateSkillProposal`) checks SHAPE — kind, name,
+ * description, content, size. Shape is not necessity. A review asked to
+ * fill a `candidates` array will fill it, so without a gate here every turn
+ * sediments a skill whether or not the session learned anything: the
+ * 2026-10-10 report measured exactly that, three skills in one workspace
+ * and nothing saying any of them was load-bearing.
+ *
+ * hermes' guardrails are the model — their variants fail structurally, not
+ * by prompt ("Variants that fail any constraint are discarded"). The three
+ * rules below are the same idea at the place our loop writes:
+ *
+ *  1. **A create must name something new.** A name already in the catalog
+ *     is an UPDATE, and an update must say so: silently re-creating under a
+ *     taken name would overwrite a skill the workspace chose.
+ *  2. **A candidate must not restate an existing skill.** Token overlap
+ *     against every catalog entry, name and description together. The
+ *     catalog is already in the prompt; this is the structural half, because
+ *     "you already have X" in prose is a request and a gate is a fact.
+ *  3. **A candidate must carry substance.** A heading and enough body to be
+ *     a procedure rather than a note. A two-line "skill" is a note that
+ *     will be loaded on every matching task forever.
+ *
+ * The gate REFUSES; it never rewrites. A refusal is counted in the same
+ * `rejected` bucket the boundary's whitelist rejection lands in, so the
+ * completed event says how many candidates were dropped and why.
+ */
+const MIN_SKILL_BODY_CHARS = 200;
+const DUPLICATE_OVERLAP = 0.6;
+
+export type SkillCandidateDecision =
+  | { accept: true }
+  | { accept: false; reason: string };
+
+function tokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/u)
+      .filter((token) => token.length > 2),
+  );
+}
+
+function overlap(left: Set<string>, right: Set<string>): number {
+  if (!left.size || !right.size) return 0;
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / Math.min(left.size, right.size);
+}
+
+export function skillCandidateDecision(
+  candidate: unknown,
+  catalog: readonly SkillMetadata[],
+): SkillCandidateDecision {
+  if (typeof candidate !== "object" || candidate === null)
+    return { accept: false, reason: "not an object" };
+  const raw = candidate as Record<string, unknown>;
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const description =
+    typeof raw.description === "string" ? raw.description.trim() : "";
+  const content = typeof raw.content === "string" ? raw.content.trim() : "";
+  if (!name) return { accept: false, reason: "no name" };
+
+  const existing = catalog.find((skill) => skill.name === name);
+  if (existing && raw.kind !== "update")
+    return {
+      accept: false,
+      reason: `"${name}" is already in the catalog; an update must say kind:"update"`,
+    };
+
+  const body = tokens(`${name} ${description}`);
+  for (const skill of catalog) {
+    if (skill.name === name) continue;
+    if (
+      overlap(body, tokens(`${skill.name} ${skill.description}`)) >=
+      DUPLICATE_OVERLAP
+    )
+      return {
+        accept: false,
+        reason: `restates the existing skill "${skill.name}"`,
+      };
+  }
+
+  if (content.length < MIN_SKILL_BODY_CHARS)
+    return {
+      accept: false,
+      reason: `body is ${content.length} chars; a skill needs at least ${MIN_SKILL_BODY_CHARS}`,
+    };
+  if (!/^#{1,3}\s/mu.test(content))
+    return { accept: false, reason: "body has no markdown heading" };
+  return { accept: true };
+}
+
 export function createSelfReview(deps: SelfReviewDeps) {
   const tasks = new Map<
     string,
@@ -355,16 +450,35 @@ export function createSelfReview(deps: SelfReviewDeps) {
     if (controller.signal.aborted) return skip("superseded");
 
     const answer = parseSelfReviewAnswer(output);
+    const catalog = skillService.list();
     const skillsCreated: string[] = [];
     const skillsUpdated: string[] = [];
     let rejected = 0;
+    const refusals: string[] = [];
     for (const candidate of answer.candidates) {
+      // The necessity gate BEFORE the boundary: shape is not necessity, and
+      // a review asked to fill a candidates array will fill it.
+      const decision = skillCandidateDecision(candidate, catalog);
+      if (!decision.accept) {
+        rejected += 1;
+        const name =
+          typeof (candidate as { name?: unknown })?.name === "string"
+            ? (candidate as { name: string }).name
+            : "(unnamed)";
+        refusals.push(`${name}: ${decision.reason}`);
+        continue;
+      }
       try {
         const result = await skillService.upsertSkill(candidate);
         (result.created ? skillsCreated : skillsUpdated).push(result.name);
-      } catch {
+      } catch (error) {
         // The boundary rejected it (whitelist/validation) — counted, never fatal.
         rejected += 1;
+        refusals.push(
+          `${(candidate as { name?: string }).name ?? "(unnamed)"}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     }
     // The growth lanes: ONE fact per review, deficiencies first. An empty
@@ -383,6 +497,10 @@ export function createSelfReview(deps: SelfReviewDeps) {
       skillsCreated,
       skillsUpdated,
       rejected,
+      // Why each was dropped — the review's own audit trail. hermes requires
+      // a PR to report "any constraint violations that were caught and
+      // rejected during evolution"; this is that, at the loop's own scale.
+      ...(refusals.length ? { refusals } : {}),
       proposals: fact.suggestions.length,
       deficiencies: answer.deficiencies.length,
       aspirations: answer.aspirations.length,

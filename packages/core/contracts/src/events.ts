@@ -2572,8 +2572,21 @@ type RuntimeEventData =
       workspaceID?: string;
       skillsCreated: string[];
       skillsUpdated: string[];
-      /** Proposals the write boundary rejected (whitelist/validation). */
+      /**
+       * How many candidates did NOT land — the necessity gate's refusals
+       * plus the write boundary's (whitelist/validation). Zero is the
+       * honest empty; a high number with few created is the loop telling
+       * you it wanted to write things it should not have.
+       */
       rejected: number;
+      /**
+       * Why each was dropped, as `name: reason` lines. The review's own
+       * audit trail — hermes requires a PR to report the constraint
+       * violations it caught during evolution, and this is that at the
+       * loop's own scale. Names only, never the model's prose or a
+       * skill body.
+       */
+      refusals?: string[];
       /**
        * The growth lanes' proposals recorded this review (a
        * `growth.proposed` fact's suggestions, when any): how many, and

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { skillCandidateDecision } from "../src/self-review";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import type { SkillService, SkillMetadata } from "@anthelia/runtime-services";
 import type { StreamingProvider } from "@anthelia/runtime";
@@ -96,6 +97,21 @@ function fakeSkills(upsert?: SkillService["upsertSkill"]) {
   } as unknown as SkillService;
 }
 
+/** A body the necessity gate accepts: a heading and real substance. */
+const BODY = `# Parser gotchas
+
+## When to use
+A provider stream hands you tool calls whose arguments arrive in fragments.
+
+## Procedure
+1. Accumulate the argument fragments before parsing.
+2. Reject a call whose name is empty rather than guessing.
+3. Report the refusal with the fragment count.
+
+## Pitfalls
+- Never assume a fragment boundary is a JSON boundary.
+`;
+
 const collectDeps = (
   over: Partial<Parameters<typeof createSelfReview>[0]> = {},
 ) => {
@@ -115,11 +131,23 @@ test("the loop completes with created/updated/rejected — boundary rejections c
   const { deps, published } = collectDeps({
     provider: () =>
       fakeProvider(
-        `{"candidates":[
-          {"kind":"create","name":"parser-gotchas","description":"d","content":"# body"},
-          {"kind":"update","name":"existing","description":"d","content":"# body2"},
-          {"kind":"delete","name":"evil","description":"d","content":"x"}
-        ]}`,
+        JSON.stringify({
+          candidates: [
+            {
+              kind: "create",
+              name: "parser-gotchas",
+              description: "d",
+              content: BODY,
+            },
+            {
+              kind: "update",
+              name: "existing",
+              description: "d",
+              content: BODY.replace("# Parser gotchas", "# Updated body"),
+            },
+            { kind: "delete", name: "evil", description: "d", content: "x" },
+          ],
+        }),
       ),
     skills: () =>
       fakeSkills(async (candidate) => {
@@ -343,4 +371,111 @@ test("the loop publishes ONE growth fact when a lane has content — and nothing
   expect(quietGrowth).toHaveLength(0);
   const quietCompleted = quiet.published[0] as Record<string, unknown>;
   expect(quietCompleted.proposals).toBe(0);
+});
+
+// ── the necessity gate ────────────────────────────────────────────────────
+// Shape is not necessity. The write boundary checks kind/name/size; a review
+// asked to fill a candidates array will fill it, so every turn sedimented a
+// skill whether or not the session learned anything. The gate refuses
+// structurally, the way hermes' constraints refuse variants.
+
+const CATALOG = [
+  { name: "existing", description: "how the existing skill works" },
+  {
+    name: "sweep-procedure",
+    description: "systematically smoke-test every tool family",
+  },
+] as SkillMetadata[];
+
+test("a create under a taken name is refused — an update must say so", () => {
+  const decision = skillCandidateDecision(
+    { kind: "create", name: "existing", description: "d", content: BODY },
+    CATALOG,
+  );
+  expect(decision.accept).toBe(false);
+  expect((decision as { reason: string }).reason).toContain('kind:"update"');
+  // The same name AS an update is the honest way to change it.
+  expect(
+    skillCandidateDecision(
+      { kind: "update", name: "existing", description: "d", content: BODY },
+      CATALOG,
+    ).accept,
+  ).toBe(true);
+});
+
+test("a candidate that restates an existing skill is refused", () => {
+  // The catalog is already in the prompt; this is the structural half,
+  // because "you already have X" in prose is a request and a gate is a fact.
+  const decision = skillCandidateDecision(
+    {
+      kind: "create",
+      name: "sweep-procedure-guide",
+      description: "systematically smoke-test every tool family and report",
+      content: BODY,
+    },
+    CATALOG,
+  );
+  expect(decision.accept).toBe(false);
+  expect((decision as { reason: string }).reason).toContain(
+    "restates the existing skill",
+  );
+});
+
+test("a thin body is refused — a two-line skill is a note, not a procedure", () => {
+  for (const content of ["# body", "", "   ", "x".repeat(50)])
+    expect(
+      skillCandidateDecision(
+        { kind: "create", name: "fresh-thing", description: "d", content },
+        CATALOG,
+      ).accept,
+    ).toBe(false);
+  // Substance AND a heading.
+  expect(
+    skillCandidateDecision(
+      {
+        kind: "create",
+        name: "fresh-thing",
+        description: "d",
+        content: BODY,
+      },
+      CATALOG,
+    ).accept,
+  ).toBe(true);
+});
+
+test("the loop reports WHY a candidate was dropped, not just how many", async () => {
+  const { deps, published } = collectDeps({
+    provider: () =>
+      fakeProvider(
+        JSON.stringify({
+          candidates: [
+            // already in the catalog
+            {
+              kind: "create",
+              name: "existing",
+              description: "d",
+              content: BODY,
+            },
+            // too thin
+            { kind: "create", name: "thin", description: "d", content: "# b" },
+            // legitimately new
+            {
+              kind: "create",
+              name: "fresh-thing",
+              description: "d",
+              content: BODY,
+            },
+          ],
+        }),
+      ),
+  });
+  await createSelfReview(deps).review("ses_d4", new AbortController());
+  const completed = published[0] as Record<string, unknown>;
+  expect(completed.skillsCreated).toEqual(["fresh-thing"]);
+  // Two dropped, and the event says which and why.
+  expect(completed.rejected).toBe(2);
+  expect(completed.refusals).toEqual([
+    expect.stringContaining("existing"),
+    expect.stringContaining("thin"),
+  ]);
 });

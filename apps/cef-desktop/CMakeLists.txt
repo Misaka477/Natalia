@@ -88,6 +88,28 @@ if(WIN32)
     # every Windows target carries.
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
+  # The application icon as a Windows resource, so the executables carry it
+  # themselves: the window class icon the tray reads, Explorer's icon for the
+  # .exe, and the launcher (which never creates a window of its own). The
+  # running window's icon on every platform comes from simple_app.cc instead.
+  # See src/natalia.rc.in for why the path is substituted rather than written.
+  set(NATALIA_APP_ICON_ICO
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/icons/icon.ico")
+  if(NOT EXISTS "${NATALIA_APP_ICON_ICO}")
+    # The icons are committed, so this fires only when someone configures a
+    # Windows build from a tree that never ran the generator — and then the
+    # resource compiler's own error names a file the builder has no reason to
+    # know about.
+    message(FATAL_ERROR
+      "Windows app icon not found at ${NATALIA_APP_ICON_ICO}; "
+      "run 'python3 scripts/build-app-icons.py' first.")
+  endif()
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/natalia.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/natalia.rc"
+    @ONLY
+  )
+  list(APPEND NATALIA_CEF_SRCS "${CMAKE_CURRENT_BINARY_DIR}/natalia.rc")
   if(NATALIA_CEF_PROBE_ONLY)
     target_compile_definitions(natalia-cef-desktop PRIVATE
       NATALIA_CEF_PROBE_ONLY=1)
@@ -101,6 +123,9 @@ if(WIN32)
   # DETACHED_PROCESS, so they outlive it, and it is what the shortcut runs.
   add_executable(natalia-launcher WIN32
     "${CMAKE_CURRENT_SOURCE_DIR}/src/natalia_launcher_win.cc"
+    # The same embedded icon: the launcher's own taskbar button and its Start
+    # Menu entry before the shortcut's icon takes over.
+    "${CMAKE_CURRENT_BINARY_DIR}/natalia.rc"
   )
   target_link_libraries(natalia-launcher PRIVATE shell32 ws2_32)
   set_target_properties(natalia-launcher PROPERTIES
@@ -197,7 +222,10 @@ foreach(_pkg ${_AI_CANDIDATES})
     # includes an empty file and fails with "'natalia' has not been declared" — which
     # reads like a namespace typo rather than a missing define.
     target_compile_definitions(natalia-tray-probe PRIVATE NATALIA_HAVE_APPINDICATOR)
-    target_include_directories(natalia-tray-probe SYSTEM PRIVATE ${_NATALIA_GLIB_DIRS} ${_AI_INCLUDE_DIRS})
+    # The tray implementation now builds its icon from the generated
+    # app_icon_png.h, so the probe — which compiles that same .cc — needs the
+    # source directory the main target already has.
+    target_include_directories(natalia-tray-probe SYSTEM PRIVATE ${_NATALIA_GLIB_DIRS} ${_AI_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(natalia-tray-probe PRIVATE ${_AI_LIBRARIES})
     if(NATALIA_AYATANA_APPINDICATOR)
       target_compile_definitions(natalia-tray-probe PRIVATE NATALIA_AYATANA_APPINDICATOR)

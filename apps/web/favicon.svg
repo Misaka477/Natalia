@@ -1,5 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="7" fill="#101014"/>
-  <circle cx="16" cy="16" r="8.5" fill="none" stroke="#7aa2f7" stroke-width="2.4"/>
-  <circle cx="16" cy="16" r="2.6" fill="#7aa2f7"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Natalia app mark — the portrait icon flattened for favicon sizes.
+
+    The raster icon set (assets/icons/) carries the full illustration down to
+    48px and a posterized simplification below that; a browser tab shows this
+    at 16px, where even that simplification is noise. So the tab gets a drawn
+    mark instead: the same reading — cat ears, headphones, teal eyes — as flat
+    shapes on the icon's light card (#ECECEA, 22% corners), teal sampled from
+    the art's eyes (#4FC2B8).
+  -->
+  <rect width="512" height="512" rx="115" fill="#ECECEA"/>
+  <g fill="#232329">
+    <!-- cat ears: tips above the headphone band, as in the art -->
+    <path d="M150 202C130 162 105 106 92 66 135 88 185 108 225 132Z"/>
+    <path d="M362 202C382 162 407 106 420 66 377 88 327 108 287 132Z"/>
+    <!-- head -->
+    <rect x="128" y="168" width="256" height="284" rx="122"/>
+    <!-- headphone band arcing over the head, cups on both sides -->
+    <path d="M120 316C120 110 392 110 392 316" fill="none" stroke="#232329" stroke-width="38" stroke-linecap="round"/>
+    <rect x="92" y="268" width="60" height="116" rx="28"/>
+    <rect x="360" y="268" width="60" height="116" rx="28"/>
+    <!-- bangs: three tapered strands off the hairline -->
+    <path d="M214 184 240 258 222 252Z"/>
+    <path d="M256 176 264 260 248 260Z"/>
+    <path d="M298 184 272 258 290 252Z"/>
+  </g>
+  <!-- eyes: the one color element, so it carries the brand teal -->
+  <ellipse cx="205" cy="332" rx="21" ry="27" fill="#4FC2B8" transform="rotate(-8 205 332)"/>
+  <ellipse cx="307" cy="332" rx="21" ry="27" fill="#4FC2B8" transform="rotate(8 307 332)"/>
 </svg>

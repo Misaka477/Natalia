@@ -1,0 +1,15 @@
+// Windows resource for the Natalia executables — GENERATED from this template
+// by CMake (configure_file), which substitutes the icon's absolute path.
+//
+// Why a template rather than a plain .rc: the resource compiler resolves
+// relative paths against its own working directory, which CMake does not
+// promise to be anything in particular. A path that resolves on one machine
+// and silently produces an icon-less exe on another is not worth the
+// convenience of writing "icon.ico" directly.
+//
+// What this covers beyond simple_app.cc's SetWindowAppIcon (which handles the
+// running window on every platform): the window CLASS icon that
+// simple_tray_win.cc reads back for the tray, the icon Explorer shows for the
+// .exe file itself, and the launcher executable, which never creates a window
+// of its own to decorate.
+IDI_APPICON ICON "@NATALIA_APP_ICON_ICO@"

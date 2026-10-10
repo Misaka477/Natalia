@@ -6,8 +6,10 @@
 
 #include <string>
 
+#include "app_icon_png.h"
 #include "include/cef_browser.h"
 #include "include/cef_command_line.h"
+#include "include/cef_image.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
@@ -71,6 +73,22 @@ bool MinimiseOnClose() {
 
 namespace {
 
+// The app's own icon on the RUNNING window — the title bar, the taskbar
+// button, the alt-tab entry, and (on Windows, through the window class) the
+// tray that simple_tray_win.cc reads back.
+//
+// Why bytes and not a file: the icon's location differs between a checkout and
+// an installed copy, and a missing icon file degrades silently to the platform
+// default. The binary always has itself, so the PNG (assets/icons/icon-128.png,
+// generated into app_icon_png.h) travels inside the executable.
+CefRefPtr<CefImage> AppIconImage() {
+  CefRefPtr<CefImage> image = CefImage::CreateImage();
+  if (!image->AddPNG(1.0f, natalia::kAppIconPng, natalia::kAppIconPngSize)) {
+    return nullptr;
+  }
+  return image;
+}
+
 // When using the Views framework this object provides the delegate
 // implementation for the CefWindow that hosts the Views-based browser.
 class SimpleWindowDelegate : public CefWindowDelegate {
@@ -89,6 +107,15 @@ class SimpleWindowDelegate : public CefWindowDelegate {
     // Add the browser view and show the window.
     window->AddChildView(browser_view_);
     window_ = window;
+
+    // The app icon, before the first paint: a window that appears without it
+    // shows the platform default for as long as it is on screen. App icon
+    // (taskbar/alt-tab) and window icon (title bar) are separate calls in
+    // CEF, and both want the same image.
+    if (CefRefPtr<CefImage> icon = AppIconImage()) {
+      window->SetWindowAppIcon(icon);
+      window->SetWindowIcon(icon);
+    }
 
     if (initial_show_state_ != CEF_SHOW_STATE_HIDDEN) {
       window->Show();

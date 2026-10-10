@@ -671,3 +671,99 @@ test("a PR's recorded command is the one its promotion validates with", async ()
   expect(commands).toEqual(["test -f output.txt"]);
   expect(await readFile(join(root, "output.txt"), "utf8")).toBe("from x task");
 });
+
+test("the promotion queue refreshes each candidate against the current head", async () => {
+  // T6-5: the promotions ran in a `for` loop, which was sequential by
+  // accident of its shape rather than by decision — so the property that
+  // makes a fan-out safe (the second candidate's merge sees the first
+  // candidate's landing) was an implementation detail nobody could rely on.
+  // Each approved PR is now refreshed against the host's current head before
+  // it is promoted, and the queue is one step at a time.
+  const root = await mkdtemp(join(tmpdir(), "natalia-fanout-queue-"));
+  await writeFile(join(root, "output.txt"), "stale\n");
+  const refreshed: string[] = [];
+  const promoted: string[] = [];
+  const sandboxes = {
+    refresh: async (id: string) => {
+      refreshed.push(id);
+      return { refreshed: true, conflicted: false };
+    },
+    promoteWithValidation: async (id: string) => {
+      promoted.push(id);
+      await writeFile(join(root, "output.txt"), `promoted ${id}\n`);
+      return { changedFiles: [{ path: "output.txt" }] };
+    },
+    delete: async () => {},
+  } as unknown as SandboxToolService;
+  const prs: FanOutPR[] = [
+    {
+      id: "pr-1",
+      sandboxID: "sbx-1",
+      status: "completed",
+      diff: [{ kind: "modify", path: "output.txt" }],
+    },
+    {
+      id: "pr-2",
+      sandboxID: "sbx-2",
+      status: "completed",
+      diff: [{ kind: "modify", path: "output.txt" }],
+    },
+  ];
+  const outcomes = await reviewPRs({
+    prs,
+    sandboxes,
+    workspaceRoot: root,
+    buildCommand: "test -f output.txt",
+    decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
+  });
+
+  // Both were refreshed, in the batch's order, and each BEFORE its own
+  // promotion — so the second one's merge saw the first one's landing.
+  expect(refreshed).toEqual(["sbx-1", "sbx-2"]);
+  expect(promoted).toEqual(["sbx-1", "sbx-2"]);
+  expect(outcomes.map((outcome) => outcome.decision)).toEqual([
+    "approve",
+    "approve",
+  ]);
+});
+
+test("a candidate the refresh leaves conflicted is reported, not promoted", async () => {
+  // The conflict is this PR's state to resolve; promoting anyway would land
+  // a merge that reverts the host's newer work.
+  const root = await mkdtemp(join(tmpdir(), "natalia-fanout-conflict-"));
+  await writeFile(join(root, "output.txt"), "stale\n");
+  const promoted: string[] = [];
+  const sandboxes = {
+    refresh: async () => ({
+      refreshed: false,
+      conflicted: true,
+      paths: ["output.txt"],
+    }),
+    promoteWithValidation: async (id: string) => {
+      promoted.push(id);
+      return { changedFiles: [] };
+    },
+    delete: async () => {},
+  } as unknown as SandboxToolService;
+  const prs: FanOutPR[] = [
+    {
+      id: "pr-1",
+      sandboxID: "sbx-1",
+      status: "completed",
+      diff: [{ kind: "modify", path: "output.txt" }],
+    },
+  ];
+  const outcomes = await reviewPRs({
+    prs,
+    sandboxes,
+    workspaceRoot: root,
+    buildCommand: "test -f output.txt",
+    decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
+  });
+  expect(promoted).toEqual([]);
+  expect(outcomes[0]?.decision).toBe("request-changes");
+  expect(outcomes[0]?.reason).toContain(
+    "conflicts with the host's newer commits",
+  );
+  expect(outcomes[0]?.reason).toContain("output.txt");
+});

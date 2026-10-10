@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { WorktreeSandboxManager } from "../src/worktree-sandbox";
@@ -422,4 +422,57 @@ test("a conflict resolution must answer every conflicted path", async () => {
   });
   expect(resolved.conflicted).toBe(false);
   await manager.delete("sbx.partial");
+});
+
+test("a retried sandbox reuses the candidate branch a restart left behind", async () => {
+  // T6-6: a restart that retries a sandboxed subagent re-ran
+  // `git worktree add -b candidate/<id>` unconditionally, and the branch —
+  // and often the worktree — are still there from the attempt that died.
+  // `-b` on an existing branch fails with "already exists", so the retry
+  // could never come back.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  const first = await manager.create("sbx.retry");
+  // The attempt that died: the agent committed something, then the process
+  // went away without the sandbox being deleted.
+  await writeFile(join(first.root, "file.txt"), "attempt one\n");
+  await git(first.root, ["add", "file.txt"]);
+  await git(first.root, ["commit", "-m", "attempt one"]);
+  const survived = await git(root, ["rev-parse", "candidate/sbx.retry"]);
+
+  // The retry: the same id, same repo, branch and worktree still present.
+  const second = await manager.create("sbx.retry");
+  expect(second.root).toBe(first.root);
+  // The branch is the SAME one — not a new branch, and not a failure.
+  expect(await git(root, ["rev-parse", "candidate/sbx.retry"])).toBe(survived);
+  // And the work from the dead attempt is still there, so the retry resumes
+  // from it rather than starting over.
+  expect(await readFile(join(second.root, "file.txt"), "utf8")).toBe(
+    "attempt one\n",
+  );
+  expect(
+    (await manager.previewMerge("sbx.retry")).map((change) => change.path),
+  ).toEqual(["file.txt"]);
+  await manager.delete("sbx.retry");
+});
+
+test("a retried sandbox re-attaches a worktree whose directory was removed", async () => {
+  // The other half of the same failure: the branch survives but the worktree
+  // directory does not (a tmpdir reap, a manual `rm -rf`). The retry must
+  // re-attach rather than fail on the existing branch.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  const first = await manager.create("sbx.reattach");
+  await writeFile(join(first.root, "file.txt"), "kept\n");
+  await git(first.root, ["add", "file.txt"]);
+  await git(first.root, ["commit", "-m", "kept"]);
+  // Remove the worktree directory (and its registration) but keep the branch.
+  await git(root, ["worktree", "remove", "--force", first.root]);
+  await rm(first.root, { recursive: true, force: true });
+  expect(existsSync(first.root)).toBe(false);
+
+  const again = await manager.create("sbx.reattach");
+  expect(existsSync(again.root)).toBe(true);
+  expect(await readFile(join(again.root, "file.txt"), "utf8")).toBe("kept\n");
+  await manager.delete("sbx.reattach");
 });

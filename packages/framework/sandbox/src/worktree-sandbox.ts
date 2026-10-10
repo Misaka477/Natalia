@@ -15,6 +15,7 @@
  * fall back to the directory-copy manager; container/VM isolation is a later,
  * threat-model-driven step.
  */
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
@@ -198,6 +199,35 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     return git(this.hostRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
   }
 
+  /** Whether a branch exists in the host repo. */
+  private async branchExists(branch: string): Promise<boolean> {
+    return await git(this.hostRoot, [
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/heads/${branch}`,
+    ])
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /** The worktree registered at a path, or undefined when none is. */
+  private async worktreeFor(root: string): Promise<string | undefined> {
+    const output = await git(this.hostRoot, [
+      "worktree",
+      "list",
+      "--porcelain",
+    ]).catch(() => "");
+    for (const block of output.split("\n\n")) {
+      const line = block
+        .split("\n")
+        .find((entry) => entry.startsWith("worktree "));
+      if (line && resolve(line.slice("worktree ".length)) === resolve(root))
+        return resolve(root);
+    }
+    return undefined;
+  }
+
   private async snapshotIgnoreRules(): Promise<readonly SnapshotIgnoreRule[]> {
     await ensureNataliaIgnoreFile(this.hostRoot);
     return (await loadNataliaIgnore(this.hostRoot)).rules;
@@ -278,12 +308,35 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     await git(root, ["commit", "-m", `sandbox ${id} changes`]);
   }
 
-  /** Creates a sandbox as a worktree on a candidate branch off the system head. */
+  /**
+   * Creates a sandbox as a worktree on a candidate branch off the system
+   * head.
+   *
+   * The `-b` is conditional (T6-6): a restart that retries a sandboxed
+   * subagent used to re-run `git worktree add -b candidate/<id>`
+   * unconditionally, and the branch — and often the worktree — are still
+   * there from the attempt that died. `-b` on an existing branch fails with
+   * "already exists", so the retry could never come back. When the branch is
+   * already present the worktree is re-attached to it (creating it only if
+   * the directory is also gone), which is what makes a retry a resume.
+   */
   override async create(id: string) {
     const branch = `candidate/${id}`;
     const root = resolve(this["baseRoot"], id);
     const base = await this.systemHead();
-    await git(this.hostRoot, ["worktree", "add", "-b", branch, root, base]);
+    const branchExists = await this.branchExists(branch);
+    if (branchExists) {
+      // The branch survived a previous attempt. Re-attach a worktree to it if
+      // the directory is gone; if the worktree is still registered, reuse it
+      // exactly as it is — that is the state the retry resumes from.
+      const registered = await this.worktreeFor(root);
+      if (registered === undefined && !existsSync(root))
+        await git(this.hostRoot, ["worktree", "add", root, branch]);
+      else if (registered === undefined)
+        await git(this.hostRoot, ["worktree", "add", "--force", root, branch]);
+    } else {
+      await git(this.hostRoot, ["worktree", "add", "-b", branch, root, base]);
+    }
     // The manifest record must never enter a candidate diff, even when the
     // agent runs `git add .` in the worktree.
     await writeFile(resolve(root, ".gitignore"), ".natalia-manifest.json\n", {

@@ -329,6 +329,104 @@ export type PRReviewOutcome = {
  * merge); a request-changes PR is returned with the reason, and its candidate
  * stays for the sub-agent to redo.
  */
+/**
+ * Promotes ONE approved PR, in the queue's order (T6-5).
+ *
+ * Two things happen here that a bare `promoteWithValidation` call does not
+ * do. The candidate is REFRESHED against the host's current head first: the
+ * second PR in a batch was cut from the head the first one was, so without
+ * the refresh it promotes against a base that no longer exists — its preview
+ * names files the first PR already changed, and a conflict there is reported
+ * as this PR's failure when it is really the batch's ordering. And the
+ * promotion itself is awaited BY the caller's queue, one at a time, because
+ * two candidates off the same base promoting concurrently race on the host's
+ * index: git's merge machine catches some of it and the snapshot backend's
+ * conflict check catches some of it, but "sometimes caught" is not a design.
+ *
+ * A refresh that conflicts is this PR's state to resolve (the worktree
+ * backend's `resolveConflict`), so it is reported rather than swallowed —
+ * aborting it would throw away MERGE_HEAD and the conflict paths.
+ */
+async function promoteOne(
+  pr: FanOutPR,
+  input: {
+    sandboxes: SandboxToolService;
+    workspaceRoot: string;
+    buildCommand?: string;
+  },
+): Promise<
+  | {
+      ok: true;
+      result: {
+        changedFiles: Awaited<
+          ReturnType<SandboxToolService["promoteWithValidation"]>
+        >["changedFiles"];
+      };
+    }
+  | { ok: false; reason: string }
+> {
+  const controller = input.sandboxes as SandboxToolService & {
+    refresh?: (
+      id: string,
+    ) => Promise<{ conflicted: boolean; paths?: string[] }>;
+  };
+  if (controller.refresh) {
+    try {
+      const refreshed = await controller.refresh(pr.sandboxID);
+      if (refreshed.conflicted)
+        return {
+          ok: false,
+          reason:
+            "candidate conflicts with the host's newer commits at " +
+            `${(refreshed.paths ?? []).join("; ")} — resolve it, then re-review`,
+        };
+    } catch {
+      // A backend with no refresh (the snapshot one) is not a failure: there
+      // is no branch to bring up to date, and the promotion below is the
+      // whole of its work.
+    }
+  }
+  // The validation command, in the honest order: the PR's own recorded
+  // command, the batch's, then the command the workspace's project markers
+  // imply. A lead approving a PR whose merge nothing can validate gets a
+  // refusal that names the missing command — never a silent stand-in
+  // (`true`) that passes without testing anything and was then reported to
+  // the model as build evidence.
+  const command =
+    pr.buildCommand?.trim() ||
+    input.buildCommand?.trim() ||
+    detectPromoteCommand(input.workspaceRoot)?.command;
+  if (!command)
+    return {
+      ok: false,
+      reason:
+        "no build command configured: pass buildCommand for this PR, " +
+        "or add a project marker (package.json, CMakeLists.txt, " +
+        "Cargo.toml, pyproject.toml) to the workspace so its own " +
+        "toolchain's check can be detected",
+    };
+  return await input.sandboxes
+    .promoteWithValidation(pr.sandboxID, {
+      command,
+      hostRoot: input.workspaceRoot,
+    })
+    .then((result) => ({ ok: true as const, result }))
+    .catch((error: unknown) => ({
+      ok: false as const,
+      reason: error instanceof Error ? error.message : String(error),
+    }));
+}
+
+/**
+ * Reviews every PR in the batch and promotes the approved ones.
+ *
+ * The promotions run through ONE queue, in the batch's order (T6-5): the
+ * `for` loop this replaces was sequential by accident of its shape, not by
+ * decision, and nothing said so — so the property that makes a fan-out safe
+ * (the second candidate's merge sees the first candidate's landing) was an
+ * implementation detail nobody could rely on or test. It is a named step
+ * now, and each one refreshes its candidate before promoting it.
+ */
 export async function reviewPRs(input: {
   prs: FanOutPR[];
   sandboxes: SandboxToolService;
@@ -380,29 +478,9 @@ export async function reviewPRs(input: {
       // validate gets a refusal that names the missing command — never a
       // silent stand-in (`true`) that passes without testing anything and
       // was then reported to the model as build evidence.
-      const command =
-        pr.buildCommand?.trim() ||
-        input.buildCommand?.trim() ||
-        detectPromoteCommand(input.workspaceRoot)?.command;
-      const promotion = command
-        ? await input.sandboxes
-            .promoteWithValidation(pr.sandboxID, {
-              command,
-              hostRoot: input.workspaceRoot,
-            })
-            .then((result) => ({ ok: true as const, result }))
-            .catch((error: unknown) => ({
-              ok: false as const,
-              reason: error instanceof Error ? error.message : String(error),
-            }))
-        : {
-            ok: false as const,
-            reason:
-              "no build command configured: pass buildCommand for this PR, " +
-              "or add a project marker (package.json, CMakeLists.txt, " +
-              "Cargo.toml, pyproject.toml) to the workspace so its own " +
-              "toolchain's check can be detected",
-          };
+      // One step of the promotion queue (T6-5): refresh this candidate
+      // against the host's current head, then promote it.
+      const promotion = await promoteOne(pr, input);
       if (!promotion.ok) {
         // Recorded and the loop continues. Throwing here abandoned every PR
         // after the first that could not land, and left the ones already

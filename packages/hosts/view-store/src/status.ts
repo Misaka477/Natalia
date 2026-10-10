@@ -2,8 +2,13 @@
  * Status projection: context budget, compaction, retries, selections, policy
  * outcomes and the session intelligence snapshot.
  *
- * Banners here are advisory strings a UI may show while something transient is
- * happening. They are derived, never durable truth — clearing one changes
+ * It also carries the self-iteration observation slices (L1): the growth
+ * proposals and promotions, the external-benchmark joins, the finished
+ * background reviews and the human feedback. Those facts used to exist only
+ * in the journal, which is why nothing could render them.
+ *
+ * Banners here are advisory strings a UI may show while something transient
+ * is happening. They are derived, never durable truth — clearing one changes
  * nothing about the runtime.
  */
 import type { RuntimeEvent } from "@anthelia/contracts";
@@ -17,8 +22,13 @@ import {
   decisionLimit,
   driftFindingLimit,
   evidenceLimit,
+  externalRunLimit,
+  feedbackLimit,
+  growthProposalLimit,
+  growthPromotionLimit,
   invariantFindingLimit,
   policyDecisionLimit,
+  selfReviewLimit,
   upsertBlock,
   type AppState,
 } from "./state";
@@ -458,6 +468,48 @@ export function applyStatusEvent(
       return true;
     case "session.snapshot":
       state.intelligence = event;
+      return true;
+    // --- the self-iteration observation slices (L1) ---
+    // Every fold below dedups by the event's own id: the writers are
+    // idempotent, but a replayed stream is not, and one fact shown twice
+    // reads as two proposals.
+    case "growth.proposed":
+      if (state.growthProposals.some((entry) => entry.id === event.id))
+        return true;
+      state.growthProposals = appendBounded(
+        state.growthProposals,
+        event,
+        growthProposalLimit,
+      );
+      return true;
+    case "growth.promoted":
+      if (state.growthPromotions.some((entry) => entry.id === event.id))
+        return true;
+      state.growthPromotions = appendBounded(
+        state.growthPromotions,
+        event,
+        growthPromotionLimit,
+      );
+      return true;
+    case "external_run.recorded":
+      if (state.externalRuns.some((entry) => entry.id === event.id))
+        return true;
+      state.externalRuns = appendBounded(
+        state.externalRuns,
+        event,
+        externalRunLimit,
+      );
+      return true;
+    case "self_review.completed":
+      state.selfReview = appendBounded(
+        state.selfReview,
+        event,
+        selfReviewLimit,
+      );
+      return true;
+    case "feedback.recorded":
+      if (state.feedback.some((entry) => entry.id === event.id)) return true;
+      state.feedback = appendBounded(state.feedback, event, feedbackLimit);
       return true;
     case "diagnostic":
       state.footer = `${event.level}: ${event.message}`;

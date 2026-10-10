@@ -92,6 +92,8 @@ const GOVERNANCE_TABS: GovernanceTab[] = [
   "completions",
   "workgraph",
   "notices",
+  "growth",
+  "eval",
 ];
 
 /**

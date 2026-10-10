@@ -367,6 +367,106 @@ const CLASSIFIED: Partial<Record<RuntimeEvent["type"], EventClassification>> = {
       String((event as { ruleID?: string }).ruleID ?? "rule"),
     label: () => "rule updated",
   },
+  // The self-iteration lane (L1): every one of these facts reached the
+  // journal and nothing reached the memory, so the model could not recall
+  // "what did the system propose, refuse, or score last week" — the
+  // observation layer's second half. Labels come from the events' own
+  // short fields (names, counts, task ids), never from bodies.
+  "growth.proposed": {
+    recordType: "evidence",
+    entityOf: (event) => {
+      const suggestions =
+        (event as { suggestions?: Array<{ capability?: string }> })
+          .suggestions ?? [];
+      return String(suggestions[0]?.capability ?? "growth");
+    },
+    label: (event) => {
+      const suggestions =
+        (event as { suggestions?: Array<{ capability?: string }> })
+          .suggestions ?? [];
+      const capabilities = suggestions
+        .map((entry) => entry.capability ?? "")
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ");
+      return label(
+        `growth: ${capabilities || "(none)"} (${suggestions.length} suggestion(s))`,
+      );
+    },
+  },
+  "growth.promoted": {
+    recordType: "decision",
+    entityOf: (event) =>
+      String(
+        (event as { trigger?: { capability?: string } }).trigger?.capability ??
+          "growth",
+      ),
+    label: (event) => {
+      const promoted = event as {
+        trigger?: { capability?: string };
+        destination?: string;
+        approval?: string;
+      };
+      return label(
+        `promoted: ${promoted.trigger?.capability ?? "?"} → ${promoted.destination ?? "?"} (${promoted.approval ?? "?"})`,
+      );
+    },
+  },
+  "self_review.completed": {
+    recordType: "evidence",
+    // The subject is the skills it touched — that is what a later recall
+    // about this workspace's skills should match.
+    entityOf: (event) => {
+      const review = event as {
+        skillsCreated?: string[];
+        skillsUpdated?: string[];
+      };
+      return (
+        [...(review.skillsCreated ?? []), ...(review.skillsUpdated ?? [])][0] ??
+        "self-review"
+      );
+    },
+    label: (event) => {
+      const review = event as {
+        skillsCreated?: string[];
+        skillsUpdated?: string[];
+        rejected?: number;
+      };
+      return label(
+        `self-review: created ${(review.skillsCreated ?? []).length}, updated ${(review.skillsUpdated ?? []).length}, rejected ${review.rejected ?? 0}`,
+      );
+    },
+  },
+  "self_review.skipped": {
+    recordType: "evidence",
+    entityOf: () => "self-review",
+    label: (event) =>
+      label(
+        `self-review skipped: ${String((event as { reason?: string }).reason ?? "")}`,
+      ),
+  },
+  "external_run.recorded": {
+    recordType: "evidence",
+    entityOf: (event) =>
+      String((event as { externalTaskID?: string }).externalTaskID ?? "eval"),
+    label: (event) => {
+      const run = event as {
+        benchmark?: string;
+        externalTaskID?: string;
+        success?: boolean;
+        baselineSuccessRate?: number;
+      };
+      const outcome =
+        run.success === undefined
+          ? "unscored"
+          : run.success
+            ? "success"
+            : "failure";
+      return label(
+        `external run: ${run.benchmark ?? "?"} ${run.externalTaskID ?? "?"} ${outcome} (baseline ${Math.round((run.baselineSuccessRate ?? 0) * 100)}%)`,
+      );
+    },
+  },
 };
 
 /** bm25 squashed to (0,1): bigger-better and bounded, so the weight

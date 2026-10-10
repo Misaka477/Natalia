@@ -1300,7 +1300,7 @@ Deployment notes:
 ### Events and projection (source scan)
 
 - Runtime event types (`RuntimeEventData` union): 135.
-- view-store projections (`case` labels in `packages/hosts/view-store/src`): 127.
+- view-store projections (`case` labels in `packages/hosts/view-store/src`): 132.
 
 ### SDK methods → RPC routes (source scan of `packages/tooling/sdk/src/sdk.ts`)
 
@@ -2738,7 +2738,7 @@ createRuntimeHttpServer({
 ### Events and projection (source scan)
 
 - Runtime event types (`RuntimeEventData` union): 135.
-- view-store projections (`case` labels in `packages/hosts/view-store/src`): 127.
+- view-store projections (`case` labels in `packages/hosts/view-store/src`): 132.
 
 ### SDK methods → RPC routes (source scan of `packages/tooling/sdk/src/sdk.ts`)
 

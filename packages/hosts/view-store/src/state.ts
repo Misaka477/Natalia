@@ -50,6 +50,17 @@ export const driftFindingLimit = 200;
 export const constitutionConflictLimit = 50;
 export const constitutionOverrideLimit = 100;
 /**
+ * The self-iteration observation slices (L1). Bounded like every other list
+ * here; the numbers are deliberately smaller than the decision/evidence
+ * limits because these facts are rarer and each one is a whole review or a
+ * whole proposal, not a line item.
+ */
+export const growthProposalLimit = 100;
+export const growthPromotionLimit = 100;
+export const externalRunLimit = 200;
+export const selfReviewLimit = 50;
+export const feedbackLimit = 100;
+/**
  * A terminal's transcript grows for as long as the pane lives, so the projection
  * keeps a bounded tail with an explicit note about what was dropped. Storing the
  * event as-is would grow without limit for the whole session.
@@ -504,6 +515,32 @@ export type AppState = {
   driftFindings: DriftFindingView[];
   mailbox: Record<string, MailboxMessageView>;
   plans: Record<string, PlanDocView>;
+  /**
+   * The self-iteration observation slices (L1). Before these, every
+   * self-iteration fact existed in exactly one place — the journal — and no
+   * projection carried them, so a client could not render "what the system
+   * thinks it is missing" without re-reading the event stream itself. The
+   * nine dead links of the self-iteration audit died of exactly that: an
+   * implementation with a contract, a route, and no consumer. These slices
+   * are the consumer-side floor; the governance panel's Growth and Eval
+   * tabs read them.
+   */
+  /** The growth lane's journaled proposals (self-review's writer, G-a). */
+  growthProposals: Array<Extract<RuntimeEvent, { type: "growth.proposed" }>>;
+  /** Block ②'s promotions: a trigger that reached a destination class. */
+  growthPromotions: Array<Extract<RuntimeEvent, { type: "growth.promoted" }>>;
+  /** Our runs against external benchmark tasks (G-c's per-task join). */
+  externalRuns: Array<Extract<RuntimeEvent, { type: "external_run.recorded" }>>;
+  /**
+   * Finished background reviews — the only self-iteration link that runs
+   * today. `self_review.skipped` is deliberately NOT folded: most of its
+   * reasons are per-turn noise (a superseded review is the common case),
+   * and a slice that floods is a slice nobody reads. The honest edges stay
+   * journal facts.
+   */
+  selfReview: Array<Extract<RuntimeEvent, { type: "self_review.completed" }>>;
+  /** Human feedback about the output (D6a): a signal, never model input. */
+  feedback: Array<Extract<RuntimeEvent, { type: "feedback.recorded" }>>;
   /** Current same-session goal, folded from the journal for the status bar. */
   goal?: GoalStatusView;
 };
@@ -627,6 +664,11 @@ export function initialState(): AppState {
     driftFindings: [],
     mailbox: {},
     plans: {},
+    growthProposals: [],
+    growthPromotions: [],
+    externalRuns: [],
+    selfReview: [],
+    feedback: [],
     runtimeNotices: [],
     sessionUsage: emptySessionUsageStats(),
     usageByChannel: {
@@ -706,6 +748,11 @@ export function cloneState(state: AppState): AppState {
     })),
     mailbox: mapRecord(state.mailbox, (value) => ({ ...value })),
     plans: mapRecord(state.plans, (value) => ({ ...value })),
+    growthProposals: [...state.growthProposals],
+    growthPromotions: [...state.growthPromotions],
+    externalRuns: [...state.externalRuns],
+    selfReview: [...state.selfReview],
+    feedback: [...state.feedback],
     runtimeNotices: state.runtimeNotices.map((notice) => ({ ...notice })),
     sessionUsage: { ...state.sessionUsage },
     usageByChannel: {

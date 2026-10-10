@@ -18,7 +18,9 @@ export type GovernanceTab =
   | "completions"
   | "drift"
   | "workgraph"
-  | "notices";
+  | "notices"
+  | "growth"
+  | "eval";
 type Tab = GovernanceTab;
 
 /**
@@ -134,6 +136,18 @@ export type GovernanceSliceBundle = {
    */
   workGraphNodes: WorkGraphNodeView[];
   workGraphEdges: WorkGraphEdgeView[];
+  /**
+   * The self-iteration read surfaces (L1). The growth faces were implemented,
+   * contracted and routed long before anything consumed them; these four are
+   * that consumer. Proposals and promotions are journaled facts (durable);
+   * triggers are DERIVED on each read — there is no trigger event, so the
+   * RPC face is the only source and the live state carries no mirror of it.
+   */
+  growthProposals: any[];
+  growthTriggers: any[];
+  growthPromotions: any[];
+  /** The external benchmark's per-task comparison (baseline vs our runs). */
+  externalJoinedTasks: any[];
   /** Cursor metadata for the first page of each paginated list tab. */
   pageInfo: Partial<Record<GovernanceListTab, GovernancePageInfo>>;
   errors: string[];
@@ -287,6 +301,10 @@ export async function loadGovernanceSlices(
     notices,
     workGraphNodes,
     workGraphEdges,
+    growthProposals,
+    growthTriggers,
+    growthPromotions,
+    externalJoinedTasks,
   ] = await Promise.all([
     loadSlice(
       "Constitution",
@@ -320,6 +338,24 @@ export async function loadGovernanceSlices(
         runtime?.workGraphEdges?.(sessionID ? { sessionID } : undefined) ??
         Promise.resolve([]),
     ),
+    loadSlice(
+      "GrowthProposals",
+      () => runtime?.growthProposals?.(sessionID) ?? Promise.resolve([]),
+    ),
+    // Derived per read — the trigger is an assembly of the four growth
+    // systems' views, not a journaled fact, so it has no durable mirror.
+    loadSlice(
+      "GrowthTriggers",
+      () => runtime?.growthTriggers?.(sessionID) ?? Promise.resolve([]),
+    ),
+    loadSlice(
+      "GrowthPromotions",
+      () => runtime?.growthPromotions?.(sessionID) ?? Promise.resolve([]),
+    ),
+    loadSlice(
+      "ExternalJoinedTasks",
+      () => runtime?.externalJoinedTasks?.(sessionID) ?? Promise.resolve([]),
+    ),
   ]);
   return {
     constitution,
@@ -332,6 +368,10 @@ export async function loadGovernanceSlices(
     notices,
     workGraphNodes,
     workGraphEdges,
+    growthProposals,
+    growthTriggers,
+    growthPromotions,
+    externalJoinedTasks,
     pageInfo: {
       decisions: decisions.pageInfo,
       evidence: evidence.pageInfo,
@@ -908,6 +948,19 @@ export function GovernancePane(props: {
   // ADR Phase C: the projected runtime notices (dual ingestion — the live
   // event stream and the server-projected contract converge here).
   const [liveNotices, setLiveNotices] = createSignal<any[]>([]);
+  // L1: the self-iteration read surfaces. Proposals and promotions also
+  // exist in the view-store's observation slices, so a live session and a
+  // reloaded one converge (the RPC read is the durable half, the state fold
+  // the live half — the same dual ingestion the notices tab uses). Triggers
+  // are derived per read and exist nowhere else.
+  const [liveGrowthProposals, setLiveGrowthProposals] = createSignal<any[]>([]);
+  const [liveGrowthTriggers, setLiveGrowthTriggers] = createSignal<any[]>([]);
+  const [liveGrowthPromotions, setLiveGrowthPromotions] = createSignal<any[]>(
+    [],
+  );
+  const [liveExternalJoinedTasks, setLiveExternalJoinedTasks] = createSignal<
+    any[]
+  >([]);
   const [liveWorkGraphNodes, setLiveWorkGraphNodes] = createSignal<
     WorkGraphNodeView[]
   >([]);
@@ -978,6 +1031,10 @@ export function GovernancePane(props: {
     setLiveCompletions(bundle.completions);
     setLiveDrift(bundle.drift);
     setLiveNotices(bundle.notices);
+    setLiveGrowthProposals(bundle.growthProposals);
+    setLiveGrowthTriggers(bundle.growthTriggers);
+    setLiveGrowthPromotions(bundle.growthPromotions);
+    setLiveExternalJoinedTasks(bundle.externalJoinedTasks);
     setLiveWorkGraphNodes(bundle.workGraphNodes);
     setLiveWorkGraphEdges(bundle.workGraphEdges);
     setPageInfo(bundle.pageInfo);
@@ -1427,6 +1484,22 @@ export function GovernancePane(props: {
           onClick={() => setTab("notices")}
         >
           Notices
+        </button>
+        <button
+          type="button"
+          class="review-subtab"
+          data-active={tab() === "growth"}
+          onClick={() => setTab("growth")}
+        >
+          Growth
+        </button>
+        <button
+          type="button"
+          class="review-subtab"
+          data-active={tab() === "eval"}
+          onClick={() => setTab("eval")}
+        >
+          Eval
         </button>
       </div>
       <div
@@ -2221,6 +2294,155 @@ export function GovernancePane(props: {
             <div class="neu-gov-empty">
               No runtime notices yet — a config reload or agent switch records
               one here.
+            </div>
+          </Show>
+        </Show>
+        <Show when={tab() === "growth"}>
+          <div class="neu-gov-section-title">Growth Triggers</div>
+          <For each={liveGrowthTriggers()}>
+            {(trigger) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">{trigger.capability}</span>
+                <span class="neu-gov-text">{trigger.reason}</span>
+                <span class="neu-gov-meta">
+                  {trigger.rule} · {trigger.class} ·{" "}
+                  {Object.entries(trigger.evidence ?? {})
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(" ")}
+                </span>
+              </div>
+            )}
+          </For>
+          <Show when={!liveGrowthTriggers().length}>
+            <div class="neu-gov-empty">
+              No growth trigger right now. A trigger is derived on each read
+              from the four growth systems (internal runs, external benchmark
+              gaps, correction patterns, capability curriculum) — nothing is
+              staged, and a trigger applies nothing.
+            </div>
+          </Show>
+          <div class="neu-gov-section-title">Growth Proposals</div>
+          <For
+            each={
+              liveGrowthProposals().length
+                ? liveGrowthProposals()
+                : (props.state.growthProposals ?? [])
+            }
+          >
+            {(proposal) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">{proposal.at}</span>
+                <For each={proposal.suggestions ?? []}>
+                  {(suggestion) => (
+                    <span class="neu-gov-text">
+                      [{suggestion.kind}] {suggestion.capability} —{" "}
+                      {suggestion.reason} ({suggestion.observations}{" "}
+                      observations)
+                    </span>
+                  )}
+                </For>
+                <span class="neu-gov-meta">
+                  considered {proposal.considered?.tasks ?? 0} tasks ·{" "}
+                  {proposal.considered?.gaps ?? 0} gaps
+                </span>
+              </div>
+            )}
+          </For>
+          <Show
+            when={
+              !liveGrowthProposals().length &&
+              !(props.state.growthProposals ?? []).length
+            }
+          >
+            <div class="neu-gov-empty">
+              No growth proposal yet. A proposal is a FACT — recording one
+              applies nothing; the destination's approval policy decides.
+            </div>
+          </Show>
+          <div class="neu-gov-section-title">Growth Promotions</div>
+          <For
+            each={
+              liveGrowthPromotions().length
+                ? liveGrowthPromotions()
+                : (props.state.growthPromotions ?? [])
+            }
+          >
+            {(promotion) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">
+                  {promotion.trigger?.capability ?? promotion.promotionID}
+                </span>
+                <span class="neu-gov-text">
+                  → {promotion.destination} ({promotion.approval}) ·{" "}
+                  {promotion.next}
+                </span>
+                <span class="neu-gov-meta">{promotion.at}</span>
+              </div>
+            )}
+          </For>
+          <Show
+            when={
+              !liveGrowthPromotions().length &&
+              !(props.state.growthPromotions ?? []).length
+            }
+          >
+            <div class="neu-gov-empty">
+              No promotion yet. Promoting a trigger records where it lands and
+              what approval it needs — it applies nothing by itself.
+            </div>
+          </Show>
+        </Show>
+        <Show when={tab() === "eval"}>
+          <div class="neu-gov-section-title">
+            External Benchmark — Per-Task Comparison
+          </div>
+          <For each={liveExternalJoinedTasks()}>
+            {(task) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">{task.externalTaskID}</span>
+                <span class="neu-gov-text">
+                  baseline {Math.round((task.baselineSuccessRate ?? 0) * 100)}%
+                  · ours {Math.round((task.ourSuccessRate ?? 0) * 100)}% over{" "}
+                  {task.ourRuns} run{task.ourRuns === 1 ? "" : "s"}
+                </span>
+                <span class="neu-gov-meta">
+                  {task.ourRuns > 0 &&
+                  (task.ourSuccessRate ?? 0) > (task.baselineSuccessRate ?? 0)
+                    ? "above baseline"
+                    : task.ourRuns > 0
+                      ? "at or below baseline"
+                      : "no runs yet"}
+                </span>
+              </div>
+            )}
+          </For>
+          <Show when={!liveExternalJoinedTasks().length}>
+            <div class="neu-gov-empty">
+              No external benchmark runs joined yet. `natalia eval` records one
+              join per task; the comparison reads the benchmark's own baseline
+              against our recorded runs.
+            </div>
+          </Show>
+          <div class="neu-gov-section-title">This Session's Recorded Runs</div>
+          <For each={props.state.externalRuns ?? []}>
+            {(run) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">{run.externalTaskID}</span>
+                <span class="neu-gov-text">
+                  {run.success === undefined
+                    ? "unscored"
+                    : run.success
+                      ? "success"
+                      : "failure"}{" "}
+                  · {run.benchmark}
+                </span>
+                <span class="neu-gov-meta">{run.at}</span>
+              </div>
+            )}
+          </For>
+          <Show when={!(props.state.externalRuns ?? []).length}>
+            <div class="neu-gov-empty">
+              No external run recorded in this session yet.
             </div>
           </Show>
         </Show>

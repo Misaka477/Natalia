@@ -56,6 +56,12 @@ test("loadGovernanceSlices handles data and all-empty surfaces", async () => {
     workGraphEdges: async () => [
       { sourceID: "a", targetID: "b", kind: "caused" },
     ],
+    growthProposals: async () => [{ proposalID: "growth:1" }],
+    growthTriggers: async () => [{ capability: "release-evidence" }],
+    growthPromotions: async () => [{ promotionID: "promo:1" }],
+    externalJoinedTasks: async () => [
+      { externalTaskID: "terminal-bench/x", baselineSuccessRate: 0.3 },
+    ],
   } as unknown as RuntimeClient;
   const data = await loadGovernanceSlices(filled, "ses_panel");
   expect(data.constitution).toHaveLength(1);
@@ -68,6 +74,10 @@ test("loadGovernanceSlices handles data and all-empty surfaces", async () => {
   expect(data.notices).toHaveLength(1);
   expect(data.workGraphNodes).toHaveLength(1);
   expect(data.workGraphEdges).toHaveLength(1);
+  expect(data.growthProposals).toHaveLength(1);
+  expect(data.growthTriggers).toHaveLength(1);
+  expect(data.growthPromotions).toHaveLength(1);
+  expect(data.externalJoinedTasks).toHaveLength(1);
   expect(data.errors).toEqual([]);
 
   const empty = await loadGovernanceSlices({} as RuntimeClient, "ses_panel");
@@ -82,6 +92,10 @@ test("loadGovernanceSlices handles data and all-empty surfaces", async () => {
     notices: [],
     workGraphNodes: [],
     workGraphEdges: [],
+    growthProposals: [],
+    growthTriggers: [],
+    growthPromotions: [],
+    externalJoinedTasks: [],
     pageInfo: {
       decisions: { total: 0, truncated: false },
       evidence: { total: 0, truncated: false },
@@ -90,6 +104,91 @@ test("loadGovernanceSlices handles data and all-empty surfaces", async () => {
     },
     errors: [],
   });
+});
+
+test("the Growth and Eval tabs read their own surfaces, and one failure never blanks the other", async () => {
+  // The four growth/eval faces are the consumer the self-iteration audit
+  // found missing: implemented, contracted, routed — and read by nobody.
+  // Each loads independently, so an unavailable face is a reported error
+  // with the rest of the bundle intact.
+  const runtime = {
+    growthProposals: async () => [
+      {
+        proposalID: "growth:1",
+        at: "2026-10-11T00:00:00.000Z",
+        suggestions: [
+          {
+            kind: "tool",
+            capability: "release-evidence",
+            observations: 3,
+            sources: ["completion:known_gap"],
+            reason: "three completions named the same gap",
+          },
+        ],
+        considered: { tasks: 4, gaps: 1 },
+      },
+    ],
+    growthTriggers: async () => [
+      {
+        rule: "capability_gap",
+        class: "skill",
+        capability: "release-evidence",
+        evidence: { observations: 3 },
+        reason: "the gap kept costing the release",
+      },
+    ],
+    growthPromotions: async () => [
+      {
+        promotionID: "promo:1",
+        at: "2026-10-11T00:01:00.000Z",
+        trigger: { capability: "release-evidence" },
+        destination: "skill",
+        approval: "human",
+        next: "a human reviews the candidate",
+      },
+    ],
+    externalJoinedTasks: async () => [
+      {
+        externalTaskID: "terminal-bench/x",
+        baselineSuccessRate: 0.3,
+        ourRuns: 4,
+        ourSuccessRate: 0.5,
+      },
+    ],
+  } as unknown as RuntimeClient;
+  const bundle = await loadGovernanceSlices(runtime, "ses_growth");
+  expect(bundle.growthProposals[0]).toMatchObject({
+    proposalID: "growth:1",
+    suggestions: [{ capability: "release-evidence", kind: "tool" }],
+  });
+  expect(bundle.growthTriggers[0]).toMatchObject({
+    rule: "capability_gap",
+    capability: "release-evidence",
+  });
+  expect(bundle.growthPromotions[0]).toMatchObject({
+    destination: "skill",
+    approval: "human",
+  });
+  expect(bundle.externalJoinedTasks[0]).toMatchObject({
+    externalTaskID: "terminal-bench/x",
+    ourRuns: 4,
+    ourSuccessRate: 0.5,
+  });
+  expect(bundle.errors).toEqual([]);
+
+  // A face that throws is reported by name; the other three still answer.
+  const broken = {
+    growthProposals: async () => {
+      throw new Error("journal unreadable");
+    },
+    growthTriggers: async () => [],
+    growthPromotions: async () => [],
+    externalJoinedTasks: async () => [],
+  } as unknown as RuntimeClient;
+  const failed = await loadGovernanceSlices(broken, "ses_growth");
+  expect(failed.growthProposals).toEqual([]);
+  expect(failed.errors).toContain("GrowthProposals: journal unreadable");
+  expect(failed.externalJoinedTasks).toEqual([]);
 });
 
 test("each governance tab reports its own load failure without blanking the rest", async () => {

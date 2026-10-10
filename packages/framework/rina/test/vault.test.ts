@@ -111,6 +111,102 @@ test("classification: a journaled composition.switched becomes a record; a body-
   }
 });
 
+test("classification: the self-iteration lane reaches the memory (L1)", () => {
+  // Every one of these facts existed only in the journal before L1: the
+  // model could not recall what the system proposed, refused, or scored.
+  // Labels come from the events' own short fields, so a recall about a
+  // capability matches its proposal.
+  const v = vault();
+  v.enqueue({
+    type: "growth.proposed",
+    id: "growth:1",
+    at: "2026-10-11T00:00:00.000Z",
+    sessionID: "s-growth",
+    workspaceID: "w1",
+    suggestions: [
+      {
+        kind: "tool",
+        capability: "release-evidence",
+        observations: 3,
+        sources: ["completion:known_gap"],
+        reason: "three completions named the same gap",
+      },
+    ],
+    considered: { tasks: 4, gaps: 1 },
+  } as unknown as RuntimeEvent);
+  v.enqueue({
+    type: "growth.promoted",
+    id: "promo:1",
+    at: "2026-10-11T00:01:00.000Z",
+    sessionID: "s-growth",
+    workspaceID: "w1",
+    trigger: {
+      rule: "capability_gap",
+      capability: "release-evidence",
+      evidence: { observations: 3 },
+      reason: "the gap kept costing the release",
+    },
+    destination: "skill",
+    approval: "human",
+    appliedBy: "skills.upsert",
+    next: "a human reviews the candidate",
+    reason: "class policy",
+  } as unknown as RuntimeEvent);
+  v.enqueue({
+    type: "self_review.completed",
+    at: "2026-10-11T00:02:00.000Z",
+    sessionID: "s-growth",
+    workspaceID: "w1",
+    skillsCreated: ["release-checklist"],
+    skillsUpdated: [],
+    rejected: 1,
+    refusals: ["vague-skill: restates the existing skill"],
+    proposals: 2,
+    deficiencies: 1,
+    aspirations: 1,
+  } as unknown as RuntimeEvent);
+  v.enqueue({
+    type: "external_run.recorded",
+    id: "xrun:1",
+    at: "2026-10-11T00:03:00.000Z",
+    sessionID: "s-growth",
+    externalTaskID: "terminal-bench/x",
+    benchmark: "terminal-bench",
+    turnID: "turn-1",
+    success: true,
+    baselineSuccessRate: 0.31,
+  } as unknown as RuntimeEvent);
+  v.flushNow();
+  // A recall about the capability matches the proposal's entity.
+  const proposal = v.recall("release-evidence", { sessionID: "s-growth" });
+  expect(proposal.length).toBeGreaterThanOrEqual(2);
+  expect(
+    proposal.some((row) => row.summary.startsWith("growth: release-evidence")),
+  ).toBe(true);
+  expect(
+    proposal.some((row) =>
+      row.summary.startsWith("promoted: release-evidence"),
+    ),
+  ).toBe(true);
+  // The review's subject is the skill it created.
+  const review = v.recall("release-checklist", { sessionID: "s-growth" });
+  expect(review).toHaveLength(1);
+  expect(review[0]!.summary).toContain("created 1, updated 0, rejected 1");
+  // The external run's subject is its task id, with the baseline in the label.
+  const run = v.recall("terminal-bench", { sessionID: "s-growth" });
+  expect(run).toHaveLength(1);
+  expect(run[0]!.summary).toContain("success");
+  expect(run[0]!.summary).toContain("baseline 31%");
+  // An unjournaled-for-session event is still not a memory.
+  v.enqueue({
+    type: "self_review.skipped",
+    at: "2026-10-11T00:04:00.000Z",
+    reason: "superseded",
+  } as unknown as RuntimeEvent);
+  v.flushNow();
+  expect(v.recall("self-review skipped", {})).toHaveLength(0);
+});
+
 test("the write-behind timer lands records without an explicit flush", async () => {
   const v = vault(5);
   v.enqueue(switched("s4", "gen-t", 1));

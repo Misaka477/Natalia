@@ -4330,6 +4330,41 @@ export type RuntimeClient = {
     resourceID: string;
     sessionID?: string;
   }): Promise<RuntimeSandboxResource>;
+  /**
+   * Brings a candidate up to date with the host's newer commits (T6-2).
+   *
+   * Only the worktree backend has a branch to refresh; on a snapshot backend
+   * this answers `refreshed: false` with the reason rather than throwing, so a
+   * caller can tell "nothing to refresh" from "the refresh failed".
+   */
+  sandboxRefresh?(
+    id: string,
+    sessionID?: string,
+  ): Promise<{
+    refreshed: boolean;
+    conflicted: boolean;
+    paths?: string[];
+    before?: string;
+    detail?: string;
+    reason?: string;
+  }>;
+  /**
+   * Clears a conflicted candidate (T6-3): take the resolution, or rebase.
+   * Snapshot-only workspaces answer `refreshed: false` with the reason.
+   */
+  sandboxResolveConflict?(
+    id: string,
+    resolution:
+      | { kind: "resolve"; contents: Record<string, string> }
+      | { kind: "rebase"; base?: string },
+    sessionID?: string,
+  ): Promise<{
+    refreshed: boolean;
+    conflicted: boolean;
+    paths?: string[];
+    detail?: string;
+    reason?: string;
+  }>;
   sessionList?(): Promise<RuntimeSessionSummary[]>;
   sessionTouch?(id: string): Promise<void>;
   sessionRename?(id: string, title: string): Promise<RuntimeSessionSummary>;

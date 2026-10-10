@@ -336,6 +336,20 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "an unknown resource is an argument error",
   },
+  sandboxRefresh: {
+    // A VALUE, not an error: on a snapshot backend there is no branch to
+    // refresh, and that is an answer about the workspace rather than a failed
+    // call. A caller must be able to tell "nothing to refresh" from "the
+    // refresh failed" without parsing a message.
+    refusal: "value",
+    expressedBy: "recorded",
+    note: "a snapshot workspace answers refreshed:false with the reason; a worktree candidate reports its own conflict state the same way",
+  },
+  sandboxResolveConflict: {
+    refusal: "value",
+    expressedBy: "recorded",
+    note: "a snapshot workspace answers refreshed:false with the reason; a worktree candidate reports whether the resolution took",
+  },
 
   // --- sessions ---
   sessionList: { refusal: "none", note: "pure read" },

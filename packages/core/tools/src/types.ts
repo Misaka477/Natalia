@@ -365,6 +365,26 @@ export type TerminalToolService = {
   ): Promise<TerminalSessionView>;
 };
 
+/**
+ * What a refresh or a conflict resolution reports (T6-2/T6-3).
+ *
+ * `conflicted` is a STATE, not a failure: the candidate is mid-merge with the
+ * paths named, and the resolver is what clears it. A caller must be able to
+ * tell "brought up to date" from "still conflicted, here is where" without
+ * parsing a message.
+ */
+export type SandboxRefreshResult = {
+  refreshed: boolean;
+  conflicted: boolean;
+  /** The conflicted paths, when `conflicted`. */
+  paths?: string[];
+  /** The candidate's tip before the refresh. */
+  before?: string;
+  detail?: string;
+  /** Why the backend could not refresh at all (a snapshot workspace). */
+  reason?: string;
+};
+
 export type SandboxChangeView = {
   kind: SandboxDiffKind;
   path: string;
@@ -499,6 +519,24 @@ export type SandboxToolService = {
     id: string,
     command: string,
   ): Promise<{ ok: boolean; exitCode: number; output: string }>;
+  /**
+   * Brings a candidate up to date with the host's newer commits (T6-2).
+   *
+   * Only a backend with a BRANCH can do this — the worktree manager. A
+   * snapshot backend leaves it absent, and a caller that finds it absent says
+   * so rather than pretending a refresh happened.
+   */
+  refresh?(id: string): Promise<SandboxRefreshResult>;
+  /**
+   * Clears a conflicted candidate (T6-3). Same story: only the worktree
+   * backend has a merge to resolve.
+   */
+  resolveConflict?(
+    id: string,
+    resolution:
+      | { kind: "resolve"; contents: Record<string, string> }
+      | { kind: "rebase"; base?: string },
+  ): Promise<SandboxRefreshResult>;
   /**
    * The sandbox's status event. `status` names a transition the manifest cannot
    * describe, such as a merge that was previewed, landed or conflicted.

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { ObjectStore } from "@anthelia/object-store";
 import { SnapshotSandboxManager } from "../src/snapshot-sandbox";
 import { SandboxPromotionConflict, SnapshotStore } from "../src/snapshot-store";
+import { sandboxTools } from "../src/tools";
 
 test("SnapshotStore captures, diffs and promotes by content hash", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-snapshot-store-"));
@@ -317,4 +318,25 @@ test("a promotion conflict names a remedy that exists (F14)", () => {
   expect(conflict.message).toContain("sandbox_create");
   // And the instruction to do something impossible is gone.
   expect(conflict.message).not.toContain("Rebase the candidate");
+});
+
+test("the conflict's guidance names a tool the surface actually exposes (F14)", () => {
+  // F14's second half: the message used to say "Rebase the candidate" — an
+  // action with no tool. It now names `sandbox_refresh`, so THAT name has to
+  // exist, or the fix has just moved the dead reference.
+  const conflict = new SandboxPromotionConflict(["a.txt"]);
+  // Every `sandbox_*` name the message mentions is a registered tool.
+  const registered = new Set(sandboxTools().map((tool) => tool.name));
+  for (const match of conflict.message.matchAll(/sandbox_[a-z_]+/gu))
+    expect(
+      registered.has(match[0]),
+      `the conflict message names "${match[0]}", which is not a registered tool`,
+    ).toBe(true);
+  // And the refresh tool it names is the one that brings a candidate up to
+  // date, not a same-named impostor.
+  const refresh = sandboxTools().find(
+    (tool) => tool.name === "sandbox_refresh",
+  );
+  expect(refresh).toBeDefined();
+  expect(refresh!.description).toContain("up to date");
 });

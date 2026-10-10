@@ -122,6 +122,9 @@ type SandboxFacts = {
   deleted?: boolean;
   discardedChanges?: number;
   reason?: string;
+  /** A refresh's outcome, and whether it left the candidate conflicted. */
+  refreshed?: boolean;
+  conflicted?: boolean;
   /** A change set's real hunks, for the diff card. */
   hunks?: RuntimeStructuredDiffHunk[];
   paths?: string[];
@@ -819,6 +822,189 @@ function sandboxDeleteTool(): RuntimeTool {
   };
 }
 
+/**
+ * `sandbox_refresh` (T6-2/F14).
+ *
+ * A candidate branch is cut from the head at creation time, so a long-running
+ * subagent works against a snapshot that goes stale the moment anything else
+ * lands. This brings it up to date. It exists as a TOOL because
+ * `SandboxPromotionConflict` tells a caller to use it by name — guidance that
+ * pointed at a name the model could not call is the F14 defect all over again.
+ */
+function sandboxRefreshTool(): RuntimeTool {
+  return {
+    name: "sandbox_refresh",
+    description:
+      "Bring a sandbox candidate up to date with the host's newer commits, so a long-running candidate is not promoting against a base that no longer exists. Git workspaces only; a snapshot workspace answers that it has no branch to refresh. A conflict is a STATE to resolve with sandbox_resolve_conflict, not a failure.",
+    // It mutates the CANDIDATE (a merge of the host's head into it) and never
+    // the host, so it is gated like a sandbox write rather than a promotion.
+    requiresApproval: true,
+    parameters: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    output: sandboxToolCard({
+      title: "id",
+      callSummary: "refresh",
+      resultSummary: (facts) =>
+        facts.conflicted === true
+          ? `conflicted · ${facts.total ?? 0} path(s)`
+          : facts.refreshed === true
+            ? "refreshed"
+            : "not refreshed",
+      facets: (facts) => [
+        ...(facts.refreshed === undefined
+          ? []
+          : [pill("refreshed", String(facts.refreshed))]),
+        ...(facts.conflicted === undefined
+          ? []
+          : [pill("conflicted", String(facts.conflicted))]),
+        ...(facts.total === undefined
+          ? []
+          : [pill("paths", String(facts.total))]),
+      ],
+    }),
+    async execute(input, context) {
+      const id = requireString(requireObject(input).id, "id");
+      const manager = requireSandboxes(context);
+      if (typeof manager.refresh !== "function")
+        return JSON.stringify(
+          {
+            refreshed: false,
+            conflicted: false,
+            reason:
+              "this workspace is not a git repository: a snapshot candidate " +
+              "has no branch to refresh. Delete it and create a new one from " +
+              "the current host.",
+          },
+          null,
+          2,
+        );
+      const result = await manager.refresh(id);
+      if (result.conflicted)
+        context.onSandboxEvent?.({
+          type: "sandbox.update",
+          id,
+          status: "conflicted",
+          root: "",
+          isolationLevel: "workspace",
+          changedFiles: result.paths?.length ?? 0,
+          runningResources: 0,
+          target: { kind: "host", cwd: context.workspaceRoot },
+          resourcePolicy: "candidate conflicts with the host's newer commits",
+        });
+      return JSON.stringify(result, null, 2);
+    },
+  };
+}
+
+/**
+ * `sandbox_resolve_conflict` (T6-3/F14).
+ *
+ * A conflict is a state, not a failure: the candidate is mid-merge with the
+ * conflict markers in place, and there are exactly two honest ways out. Take
+ * the resolution (write the merged content per path and commit it), or rebase
+ * (re-derive the merge against a named base, replaying the candidate's own
+ * commits). Both leave the candidate on a clean commit, so a promotion
+ * afterwards is an ordinary promotion.
+ */
+function sandboxResolveConflictTool(): RuntimeTool {
+  return {
+    name: "sandbox_resolve_conflict",
+    description:
+      "Clear a conflicted sandbox candidate. Take the resolution (pass contents: a path -> the merged file's full text for EVERY conflicted path, which is committed) or rebase (pass kind: rebase, optionally with the base to re-derive against, which replays the candidate's own commits). Both leave the candidate on a clean commit, so sandbox_merge afterwards is an ordinary promotion. Git workspaces only.",
+    requiresApproval: true,
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        kind: {
+          type: "string",
+          enum: ["resolve", "rebase"],
+          description:
+            "resolve: commit the contents you supply. rebase: abort this merge and derive it again against the base.",
+        },
+        contents: {
+          type: "object",
+          additionalProperties: { type: "string" },
+          description:
+            "For kind=resolve: every conflicted path mapped to the merged file's full text. A path left out refuses the whole resolution — a partial one would commit a tree that still carries conflict markers.",
+        },
+        base: {
+          type: "string",
+          description:
+            "For kind=rebase: the commit to re-derive against. Omit for the host's current head.",
+        },
+      },
+      required: ["id", "kind"],
+      additionalProperties: false,
+    },
+    output: sandboxToolCard({
+      title: "id",
+      callSummary: "resolve",
+      resultSummary: (facts) =>
+        facts.conflicted === true
+          ? "still conflicted"
+          : facts.refreshed === true
+            ? "resolved"
+            : "not resolved",
+      facets: (facts) => [
+        ...(facts.refreshed === undefined
+          ? []
+          : [pill("resolved", String(facts.refreshed))]),
+        ...(facts.conflicted === undefined
+          ? []
+          : [pill("conflicted", String(facts.conflicted))]),
+      ],
+    }),
+    async execute(input, context) {
+      const args = requireObject(input);
+      const id = requireString(args.id, "id");
+      const kind = requireString(args.kind, "kind");
+      const manager = requireSandboxes(context);
+      if (typeof manager.resolveConflict !== "function")
+        return JSON.stringify(
+          {
+            refreshed: false,
+            conflicted: false,
+            reason:
+              "this workspace is not a git repository: a snapshot candidate " +
+              "has no merge to resolve. Delete it and create a new one from " +
+              "the current host.",
+          },
+          null,
+          2,
+        );
+      const contents = (args.contents ?? {}) as Record<string, string>;
+      const resolution =
+        kind === "rebase"
+          ? {
+              kind: "rebase" as const,
+              ...(typeof args.base === "string" && args.base
+                ? { base: args.base }
+                : {}),
+            }
+          : { kind: "resolve" as const, contents };
+      const result = await manager.resolveConflict(id, resolution);
+      if (!result.conflicted)
+        context.onSandboxEvent?.({
+          type: "sandbox.update",
+          id,
+          status: "merged",
+          root: "",
+          isolationLevel: "workspace",
+          changedFiles: 0,
+          runningResources: 0,
+          target: { kind: "host", cwd: context.workspaceRoot },
+          resourcePolicy: "candidate conflict resolved; ready to promote",
+        });
+      return JSON.stringify(result, null, 2);
+    },
+  };
+}
+
 function sandboxResourceStartTool(): RuntimeTool {
   return {
     name: "sandbox_resource_start",
@@ -1027,6 +1213,11 @@ export function sandboxTools(): RuntimeTool[] {
     sandboxWriteTool(),
     sandboxDiffTool(),
     sandboxMergeTool(),
+    sandboxRefreshTool(),
+    // T6-2/T6-3 (F14): a candidate's refresh and its conflict resolver. The
+    // conflict message names `sandbox_refresh`, so the surface it points at has
+    // to exist.
+    sandboxResolveConflictTool(),
     sandboxRollbackTool(),
     sandboxDeleteTool(),
     sandboxResourceStartTool(),

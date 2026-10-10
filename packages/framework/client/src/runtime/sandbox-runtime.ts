@@ -75,6 +75,10 @@ type SandboxRuntime = Pick<
   | "sandboxDelete"
   | "sandboxRollback"
   | "sandboxResourceStop"
+  // T6-2/T6-3 (F14): the conflict message names `sandbox_refresh`, so the
+  // surface it points at has to exist.
+  | "sandboxRefresh"
+  | "sandboxResolveConflict"
 >;
 
 export function createSandboxRuntime(
@@ -440,6 +444,79 @@ export function createSandboxRuntime(
         throw error;
       }
     },
+    /**
+     * Brings a candidate up to date with the host's newer commits (T6-2/F14).
+     *
+     * Exposed because the conflict message NAMES it: `SandboxPromotionConflict`
+     * tells a caller that on a git workspace the worktree backend "can refresh a
+     * candidate instead, with `sandbox_refresh`" — and until now there was no
+     * such surface, so the guidance pointed at a name the model could not call.
+     *
+     * It mutates the CANDIDATE (a merge of the host's head into it), never the
+     * host, so it clears the same management gate a sandbox write does rather
+     * than the promotion's.
+     */
+    async sandboxRefresh(id: string, sessionID?: string) {
+      await ctx.ports.getReady();
+      const owner = await sessionOwner(sessionID);
+      await assertSandboxOwned(ctx, owner, id);
+      await ctx.ports.authorizeSandboxManagement(
+        "sandbox_refresh",
+        { id },
+        owner,
+      );
+      const controller =
+        requireSandboxes() as typeof requireSandboxes extends () => infer T
+          ? T
+          : never;
+      if (typeof controller.refresh !== "function")
+        return {
+          refreshed: false,
+          conflicted: false,
+          reason:
+            "this workspace is not a git repository: a snapshot candidate has " +
+            "no branch to refresh. Delete it and create a new one from the " +
+            "current host.",
+        };
+      return await controller.refresh(id);
+    },
+
+    /**
+     * Clears a conflicted candidate (T6-3/F14): take the resolution (write the
+     * content per path and commit it) or rebase (re-derive the merge against a
+     * named base). Both leave the candidate on a clean commit, so a promotion
+     * afterwards is an ordinary promotion.
+     */
+    async sandboxResolveConflict(
+      id: string,
+      resolution:
+        | { kind: "resolve"; contents: Record<string, string> }
+        | { kind: "rebase"; base?: string },
+      sessionID?: string,
+    ) {
+      await ctx.ports.getReady();
+      const owner = await sessionOwner(sessionID);
+      await assertSandboxOwned(ctx, owner, id);
+      // It writes into the candidate and commits, so it clears the same gate a
+      // sandbox write does — never the promotion's.
+      await ctx.ports.authorizeSandboxManagement(
+        "sandbox_resolve_conflict",
+        { id },
+        owner,
+      );
+      const controller = requireSandboxes();
+      if (typeof controller.resolveConflict !== "function")
+        return {
+          refreshed: false,
+          conflicted: false,
+          reason:
+            "this workspace is not a git repository: a snapshot candidate has " +
+            "no merge to resolve. Delete it and create a new one from the " +
+            "current host.",
+        };
+      return await controller.resolveConflict(id, resolution);
+    },
+
     async sandboxRollback(id, sessionID?) {
       await ctx.ports.getReady();
       const owner = await sessionOwner(sessionID);

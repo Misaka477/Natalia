@@ -148,6 +148,11 @@ export function runtimeToolNames(): string[] {
     "sandbox_resource_output",
     "sandbox_resource_start",
     "sandbox_resource_stop",
+    // T6-2/T6-3 (F14): a candidate's refresh and its conflict resolver. The
+    // promotion conflict message names `sandbox_refresh`, so it is advertised
+    // — guidance pointing at a name the model cannot call is F14 all over again.
+    "sandbox_refresh",
+    "sandbox_resolve_conflict",
     "sandbox_rollback",
     "sandbox_write",
     "session_history",

@@ -204,6 +204,8 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "sandboxDelete",
     "sandboxRollback",
     "sandboxResourceStop",
+    "sandboxRefresh",
+    "sandboxResolveConflict",
     "teamPRList",
   ],
   /** Managing sessions as durable records. */

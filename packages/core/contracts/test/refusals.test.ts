@@ -84,6 +84,12 @@ test("the members whose refusal must be a value are named, and each names its fi
     "respondInteractive",
     "respondQuestion",
     "resume",
+    // T6-2/T6-3 (F14): a refresh or a resolution answers with its state
+    // (`refreshed`/`conflicted`) rather than throwing — a snapshot workspace
+    // has no branch to refresh, and that is an answer about the workspace, not
+    // a failed call.
+    "sandboxRefresh",
+    "sandboxResolveConflict",
     "selectAgent",
     "sessionArchive",
     "sessionNew",

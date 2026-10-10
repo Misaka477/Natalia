@@ -25,7 +25,10 @@ function outputOf(name: string) {
 
 test("every sandbox tool declares the projection (R5)", () => {
   // P2-18: sandbox_list joined the family, so the model can see what exists.
-  expect(tools.size).toBe(12);
+  // 14: the family's 12 plus T6-2/T6-3's refresh and conflict resolver (F14:
+  // the promotion conflict names `sandbox_refresh`, so the surface it points
+  // at has to exist).
+  expect(tools.size).toBe(14);
   for (const [name, tool] of tools) {
     expect(
       typeof tool.output?.presentationMeta,

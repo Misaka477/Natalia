@@ -195,6 +195,12 @@ export const RPC_ROUTE_MEMBERS = {
   "sandbox.delete": "sandboxDelete",
   "sandbox.rollback": "sandboxRollback",
   "sandbox.resource.stop": "sandboxResourceStop",
+  // T6-2/T6-3 (F14): a candidate's refresh and its conflict resolver. The
+  // promotion conflict names `sandbox_refresh`, so a remote caller must be able
+  // to reach it — an implemented member with no route is the regression the
+  // reachability test refuses.
+  "sandbox.refresh": "sandboxRefresh",
+  "sandbox.resolve.conflict": "sandboxResolveConflict",
   "session.list": "sessionList",
   "session.touch": "sessionTouch",
   "session.rename": "sessionRename",
@@ -1533,6 +1539,47 @@ export async function handleRPCMessage(
             ? { sessionID: optionalStringParam(body.params, "sessionID") }
             : {}),
         }),
+      };
+    }
+    if (body.method === "sandbox.refresh") {
+      optionsGuard(client, "sandboxRefresh" as const);
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.sandboxRefresh(
+          stringParam(body.params, "id"),
+          optionalStringParam(body.params, "sessionID"),
+        ),
+      };
+    }
+    if (body.method === "sandbox.resolve.conflict") {
+      optionsGuard(client, "sandboxResolveConflict" as const);
+      const kind = stringParam(body.params, "kind");
+      if (kind !== "resolve" && kind !== "rebase")
+        throw invalidParams("sandbox.resolve.conflict.params.kind is invalid");
+      const contents = body.params?.contents;
+      if (kind === "resolve" && (contents === undefined || contents === null))
+        throw invalidParams(
+          "sandbox.resolve.conflict.params.contents is required for kind=resolve",
+        );
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.sandboxResolveConflict(
+          stringParam(body.params, "id"),
+          kind === "rebase"
+            ? {
+                kind: "rebase" as const,
+                ...(optionalStringParam(body.params, "base")
+                  ? { base: optionalStringParam(body.params, "base")! }
+                  : {}),
+              }
+            : {
+                kind: "resolve" as const,
+                contents: (contents ?? {}) as Record<string, string>,
+              },
+          optionalStringParam(body.params, "sessionID"),
+        ),
       };
     }
     if (body.method === "approval.respond") {

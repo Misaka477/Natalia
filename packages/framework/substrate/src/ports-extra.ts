@@ -151,7 +151,15 @@ export type RuntimePortsExtra = {
     exec?: SessionExecutionState,
   ) => Promise<void>;
   authorizeSandboxManagement: (
-    toolName: "sandbox_merge" | "sandbox_delete" | "sandbox_resource_stop",
+    toolName:
+      | "sandbox_merge"
+      | "sandbox_delete"
+      | "sandbox_resource_stop"
+      // T6-2/T6-3 (F14): refreshing a candidate and resolving its conflict
+      // mutate the CANDIDATE, never the host, so they clear the same
+      // management gate a sandbox write does rather than the promotion's.
+      | "sandbox_refresh"
+      | "sandbox_resolve_conflict",
     arguments_: Record<string, string>,
     exec: SessionExecutionState,
   ) => Promise<void>;

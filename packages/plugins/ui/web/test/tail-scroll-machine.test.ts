@@ -12,6 +12,11 @@ function input(overrides: Partial<TailScrollInput> = {}): TailScrollInput {
     historyLoading: false,
     virtualize: true,
     virtualReady: true,
+    // The live follow state, owned by the scroll controller. It is an INPUT
+    // here, not a field of the state: the reader's scroll is the only thing
+    // that clears it, and a machine that kept its own copy let the two drift
+    // apart — which locked the reader to the bottom while the model streamed.
+    following: true,
     ...overrides,
   };
 }
@@ -43,9 +48,20 @@ test("later growth follows only while the reader is pinned", () => {
   const followed = evaluateTailScroll(state, input({ count: 11 }));
   expect(followed.effect.type).toBe("scroll-end");
 
-  state = { ...state, following: false };
-  const notFollowed = evaluateTailScroll(state, input({ count: 12 }));
+  // The reader scrolled away: the live flag says not-following, so no
+  // streaming frame may issue a follow.
+  const notFollowed = evaluateTailScroll(
+    state,
+    input({ count: 12, following: false }),
+  );
   expect(notFollowed.effect.type).toBe("none");
+  // And it stays that way for every later frame, which is the whole point:
+  // one scroll-up must not be undone by the next delta.
+  const stillNot = evaluateTailScroll(
+    notFollowed.state,
+    input({ count: 13, following: false }),
+  );
+  expect(stillNot.effect.type).toBe("none");
 });
 
 test("prepend restores the older anchor and leaves follow", () => {
@@ -68,16 +84,14 @@ test("prepend restores the older anchor and leaves follow", () => {
     type: "restore-anchor",
     anchor: state.olderAnchor!,
   });
-  expect(result.state.following).toBe(false);
   expect(result.state.olderAnchor).toBeNull();
 });
 
 test("whole transcript replacement reinitializes the tail", () => {
   let state = evaluateTailScroll(initialTailScrollState(), input()).state;
-  state = { ...state, following: false };
   const replaced = evaluateTailScroll(
     state,
-    input({ firstKey: "other", count: 5 }),
+    input({ firstKey: "other", count: 5, following: false }),
   );
   expect(replaced.state.initialized).toBe(true);
   expect(replaced.effect.type).toBe("measure-and-scroll-end");

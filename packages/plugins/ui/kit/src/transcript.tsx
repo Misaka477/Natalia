@@ -384,6 +384,9 @@ export function Transcript(props: TranscriptProps) {
       historyLoading: props.historyLoading === true,
       virtualize: virtualize(),
       virtualReady: useVirtual(),
+      // The controller's live flag — the ONLY follow state. The reader's
+      // scroll clears it; nothing but the reader does.
+      following: controller?.isFollowing() ?? true,
     });
     tailState = result.state;
     if (!result.state.initialized) setScrollReady(false);
@@ -430,8 +433,12 @@ export function Transcript(props: TranscriptProps) {
       return;
     }
 
+    // A follow, not a jump: `followTailNow` is a no-op when the reader has
+    // scrolled away, which is what lets them read history while the model
+    // streams. (`scrollToBottom` re-arms follow and is for the reader's own
+    // "go to bottom".)
     requestAnimationFrame(() => {
-      controller?.scrollToBottom({ behavior: "auto" });
+      controller?.followTailNow();
     });
   });
 
@@ -491,11 +498,11 @@ export function Transcript(props: TranscriptProps) {
 
   const handleScroll = (event: Event) => {
     const startedAt = performance.now();
+    // The controller owns the follow flag; a scroll event is the reader
+    // telling us where they are, so it goes there and nowhere else. The
+    // mirror this used to keep in `tailState` is exactly what let the two
+    // copies drift apart.
     controller?.onScroll(event);
-    tailState = {
-      ...tailState,
-      following: controller?.isFollowing() ?? true,
-    };
     props.onScroll?.(event);
     if (!uiDebugEnabled()) return;
     const el = scrollEl();

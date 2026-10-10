@@ -307,3 +307,85 @@ test("a message's own body carries no height bound and no inner scrollbar", () =
   // grows to a cap, the way the reference implementation's does).
   expect(rule(".natalia-composer-textarea")).toContain("max-height");
 });
+
+test("a streaming frame cannot re-arm follow the reader just broke", () => {
+  // The reported bug: while the model streams, scrolling up did nothing —
+  // the reader was locked to the bottom. The cause was a data-driven
+  // follow that RE-ARMED the flag it was supposed to consult: the reader's
+  // scroll cleared `followTail`, the next streaming frame's follow call set
+  // it straight back and jumped to the end. The reference harness has one
+  // ref for this, written by `onScroll` and read by the layout effect, and
+  // no helper that writes it back to true.
+  const { element, state } = createFakeScrollElement({ scrollTop: 400 });
+  const followChanges: boolean[] = [];
+  let endCalls = 0;
+  const controller = new TailScrollController({
+    getScrollElement: () => element,
+    scrollToEnd: () => {
+      endCalls += 1;
+      state.scrollTop = state.scrollHeight;
+    },
+    onFollowChange: (following) => followChanges.push(following),
+  });
+
+  // The reader scrolls up while the model streams.
+  element.scrollTop = 200;
+  controller.onScroll(scrollEvent(element));
+  expect(controller.isFollowing()).toBe(false);
+
+  // The next frame's follow must be a no-op: no jump, no re-arm.
+  controller.followTailNow();
+  expect(endCalls).toBe(0);
+  expect(controller.isFollowing()).toBe(false);
+  expect(state.scrollTop).toBe(200);
+  expect(followChanges).not.toContain(true);
+
+  // And every later frame stays a no-op — one scroll-up is not undone by the
+  // next delta.
+  for (let frame = 0; frame < 5; frame++) {
+    state.scrollHeight += 50; // the stream grew the content
+    controller.followTailNow();
+  }
+  expect(endCalls).toBe(0);
+  expect(controller.isFollowing()).toBe(false);
+  expect(state.scrollTop).toBe(200);
+
+  // The reader's own "go to bottom" still works, and re-arms follow.
+  controller.scrollToBottom();
+  expect(endCalls).toBe(1);
+  expect(controller.isFollowing()).toBe(true);
+  expect(state.scrollTop).toBe(state.scrollHeight);
+  // And from there the frames follow again, as they should.
+  controller.followTailNow();
+  expect(endCalls).toBe(2);
+});
+
+test("the transcript feeds the controller's live flag to the tail machine", () => {
+  // The other half of the same bug, at the wiring level. The controller's
+  // flag is only authoritative if the layout effect READS it: this used to
+  // feed the machine a `following` field of its own state, which the
+  // reader's scroll never reached. The machine test proves a false input
+  // yields no follow; this proves the transcript passes the live one.
+  const source = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "ui",
+      "kit",
+      "src",
+      "transcript.tsx",
+    ),
+    "utf8",
+  );
+  // The machine's input is the controller's live flag.
+  expect(source).toContain("following: controller?.isFollowing() ?? true,");
+  // The data-driven branch is a follow, not the re-arming jump.
+  expect(source).toContain("controller?.followTailNow()");
+  // And no second copy of the flag is kept anywhere.
+  expect(source).not.toMatch(
+    /tailState\s*=\s*\{\s*\.\.\.tailState,\s*following/u,
+  );
+  expect(source).not.toMatch(/following:\s*tailState/u);
+});

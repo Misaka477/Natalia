@@ -22,7 +22,6 @@ export interface TailScrollAnchor {
 
 export interface TailScrollState {
   readonly initialized: boolean;
-  readonly following: boolean;
   readonly lastStartKey: string | null;
   readonly olderAnchor: TailScrollAnchor | null;
 }
@@ -35,6 +34,21 @@ export interface TailScrollInput {
   readonly virtualReady: boolean;
   /** Whether virtualization is active at all. */
   readonly virtualize: boolean;
+  /**
+   * The LIVE follow state, owned by the scroll controller — the reader's
+   * scroll is the only thing that clears it.
+   *
+   * This machine used to keep its own `following` flag, which made it a
+   * SECOND copy of the same fact: the reader's scroll cleared the
+   * controller's copy and left this one untouched, so during streaming the
+   * layout effect kept being told "follow" and yanked the viewport back to
+   * the bottom — the reader could not scroll up at all while the model
+   * streamed. The reference harness has exactly one ref for this, written by
+   * `onScroll` and read by the layout effect, and no helper that writes it
+   * back to true; this is that, with the flag passed in rather than
+   * shadowed.
+   */
+  readonly following: boolean;
 }
 
 export type TailScrollEffect =
@@ -46,7 +60,6 @@ export type TailScrollEffect =
 export function initialTailScrollState(): TailScrollState {
   return {
     initialized: false,
-    following: true,
     lastStartKey: null,
     olderAnchor: null,
   };
@@ -65,8 +78,9 @@ export function evaluateTailScroll(
   ) {
     const anchor = next.olderAnchor;
     next.olderAnchor = null;
-    next.following = false;
     next.lastStartKey = input.firstKey;
+    // The host breaks follow for the restore (the controller owns the flag),
+    // so this machine only reports WHAT to restore.
     return { state: next, effect: { type: "restore-anchor", anchor } };
   }
 
@@ -76,8 +90,9 @@ export function evaluateTailScroll(
     next.lastStartKey !== null &&
     next.lastStartKey !== input.firstKey
   ) {
+    // A different transcript starts at its own tail, whatever the reader was
+    // doing in the previous one.
     next.initialized = false;
-    next.following = true;
   }
   next.lastStartKey = input.firstKey;
 
@@ -90,10 +105,10 @@ export function evaluateTailScroll(
     if (input.virtualize && !input.virtualReady)
       return { state: next, effect: { type: "none" } };
     next.initialized = true;
-    next.following = true;
     return { state: next, effect: { type: "measure-and-scroll-end" } };
   }
 
-  if (!next.following) return { state: next, effect: { type: "none" } };
+  // The reader's own state decides, not a copy of it.
+  if (!input.following) return { state: next, effect: { type: "none" } };
   return { state: next, effect: { type: "scroll-end" } };
 }

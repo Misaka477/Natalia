@@ -230,6 +230,30 @@ export class TailScrollController {
     this.scheduleRestoreRetry(anchor);
   }
 
+  /**
+   * The data-driven follow: align the tail when the content grew.
+   *
+   * This is what the layout effect calls on every streaming frame, and it
+   * must NOT re-arm follow. It used to (`setFollowing(true)` was the first
+   * line of `scrollToBottom`), which is what locked the reader to the bottom
+   * while the model streamed: their scroll cleared `followTail`, the next
+   * frame's follow call set it straight back and jumped to the end. A
+   * follow-scroll is only ever issued while following, so there is nothing
+   * to re-arm — and when it is not following, this is a no-op.
+   */
+  followTailNow(): void {
+    if (this.disposed) return;
+    if (!this.followTail) return;
+    this.cancelPendingRestore();
+    this.performScrollToEnd("auto");
+    this.scheduleFollowToEnd();
+  }
+
+  /**
+   * The reader's explicit "go to the bottom" (the jump button, a session
+   * switch). Unlike {@link followTailNow} this RE-ARMS follow, because the
+   * reader asked for the tail and expects to stay on it.
+   */
   scrollToBottom(options?: { behavior?: ScrollBehavior }): void {
     if (this.disposed) return;
     this.setFollowing(true);

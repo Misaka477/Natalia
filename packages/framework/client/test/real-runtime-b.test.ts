@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, test } from "bun:test";
 import { createRealRuntimeClient as createRuntimeClient } from "../src";
+import { testGovernanceRootFor } from "@natalia/governance-ledger";
 import { recordTurnRequest } from "./e2e-harness";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type {
@@ -869,12 +870,19 @@ test("workspace governance decisions do not leak across workspace roots", async 
 });
 
 test("truncated instance governance degrades without dropping C-TERM enforcement", async () => {
-  const store = await mkdtemp(join(tmpdir(), "natalia-gov-bad-"));
+  const root = await mkdtemp(join(tmpdir(), "natalia-gov-ws-bad-"));
+  // The truncated ledger goes in THIS workspace's own governance root, through
+  // the same helper the resolver validates against. The seam used to be
+  // process-global and unconditional, which is what let one test file's value
+  // answer another file's `governanceViews(itsWorkspace)` — it is bound to its
+  // workspace now, so a test aiming at a specific ledger aims through that
+  // binding.
+  const store = testGovernanceRootFor(root);
+  await mkdir(store, { recursive: true });
   await writeFile(join(store, "constitution.jsonl"), "{truncated");
   const previous = process.env.NATALIA_TEST_GOVERNANCE_ROOT;
   process.env.NATALIA_TEST_GOVERNANCE_ROOT = store;
   try {
-    const root = await mkdtemp(join(tmpdir(), "natalia-gov-ws-bad-"));
     const events: RuntimeEvent[] = [];
     const client = createRealRuntimeClient({
       workspaceRoot: root,

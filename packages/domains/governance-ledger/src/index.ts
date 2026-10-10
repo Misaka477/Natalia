@@ -7,6 +7,8 @@ export {
   appendInstanceEvent,
   loadInstanceGovernance,
   resolveGovernanceRoot,
+  testGovernanceRootFor,
+  TEST_GOVERNANCE_ROOT_ENV,
 } from "./instance-store";
 export {
   SELF_PROTECTION_RULES,

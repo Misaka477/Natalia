@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { afterAll, expect, test } from "bun:test";
 import { createRealRuntimeClient as createRuntimeClient } from "../src";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
+import { testGovernanceRootFor } from "@natalia/governance-ledger";
 import type {
   ProviderStreamRequest,
   StreamingProvider,
@@ -123,12 +124,11 @@ export function createRealRuntimeClient(
     // which mkdir refuses (ENOENT / invalid name). Every real-runtime test that
     // does not pass an explicit pluginStoreRoot hit it on Windows, which is the
     // same Windows-path-separator family that has cost this project four times.
-    const suffix = basename(workspaceRoot) || "workspace";
-    const governanceRoot = join(
-      workspaceRoot,
-      "..",
-      `.natalia-test-governance-${suffix}`,
-    );
+    // Through the SAME helper the resolver validates against, so the two
+    // cannot drift on what "belongs to this workspace" means — a harness that
+    // derived the path its own way and a resolver that checked it another way
+    // would reintroduce exactly the cross-file leak this closes.
+    const governanceRoot = testGovernanceRootFor(workspaceRoot);
     process.env.NATALIA_TEST_GOVERNANCE_ROOT = governanceRoot;
     // The governance ledger lives beside the workspace so it survives a
     // workspace relocation; that also puts it outside the workspace removal,

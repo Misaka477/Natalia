@@ -1543,11 +1543,13 @@ test("the system prompt enumerates installed skills dynamically", async () => {
       .join("\n");
   };
 
-  // Nothing installed: the section must be absent rather than empty, so a
-  // workspace without skills neither pays tokens nor learns about skill_load.
-  expect(await promptFor("ses_prompt_skills_none" as SessionID)).not.toContain(
-    "<available_skills>",
-  );
+  // The official documents ship with the skills plugin, so the section is
+  // present from the first turn and enumerates them by source — a workspace
+  // is never without skills now, and the model is told which are official.
+  const official = await promptFor("ses_prompt_skills_official" as SessionID);
+  expect(official).toContain("<available_skills>");
+  expect(official).toContain("- write-tool (plugin):");
+  expect(official).toContain("None is loaded yet.");
 
   const skillRoot = join(root, ".natalia", "skills", "probe-skill");
   await mkdir(skillRoot, { recursive: true });

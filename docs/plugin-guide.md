@@ -214,6 +214,11 @@ the plugin authoring API.
   packages with npm lifecycle scripts disabled, and does not execute plugin
   hook commands implicitly.
 - `integrationPoints` must include every contribution API used by `setup`.
+- `skills` (optional) declares the package-relative directory that holds the
+  skills this plugin ships (one `SKILL.md` per subdirectory, default
+  `skills/`). The skills plugin discovers that directory like any other root,
+  so a shipped skill is listed as source `plugin`, can be disabled in the
+  settings panel, and cannot be rewritten by self-review.
 
 Manifest validation, dependency checks, and configuration validation complete
 before activation. If `setup` fails, registrations made during that activation

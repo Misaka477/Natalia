@@ -27,6 +27,16 @@ export const SKILLS_PLUGIN_MANIFEST: PluginManifest = {
   dependencies: [],
   hooks: {},
   integrationPoints: ["tools", "commands", "services"],
+  // The package's shipped skills: the three official documents (how to write
+  // a tool, how to edit the framework, how to run one self-iteration), which
+  // the skills plugin discovers like any other root. The declaration is
+  // mirrored in natalia.plugin.json — the installer compares the built
+  // entry's exported manifest against the package manifest byte for byte, so
+  // the two cannot drift. A plugin-shipped skill is discovered as
+  // source "plugin" and cannot be rewritten by self-review (the validated
+  // write boundary only writes the project root), which is what keeps the
+  // official documents official.
+  skills: { dir: "skills" },
   ui: {
     entry: "ui/plugin.js",
     panels: [

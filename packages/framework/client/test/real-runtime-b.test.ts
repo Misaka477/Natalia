@@ -1342,17 +1342,28 @@ test("runtime skill catalog exposes discovery metadata without skill body", asyn
     provider: scriptedProvider("unused"),
   });
   client.start(() => undefined);
-  expect(await client.skills?.()).toEqual([
-    {
-      name: "release",
-      enabled: true,
-      qualifiedName: "project:release",
-      description: "Prepare release evidence",
-      source: "project",
-      requireApproval: true,
-      sandboxRequired: false,
-    },
+  // The catalog carries the official documents the skills plugin ships
+  // (source "plugin") beside the workspace's own skill, sorted by qualified
+  // name — and the workspace entry keeps its exact metadata shape (no body,
+  // no extra fields).
+  const catalog = await client.skills?.();
+  expect(catalog?.map((entry) => entry.qualifiedName)).toEqual([
+    "plugin:edit-framework",
+    "plugin:evolve-artifact",
+    "plugin:write-tool",
+    "project:release",
   ]);
+  expect(
+    catalog?.find((entry) => entry.qualifiedName === "project:release"),
+  ).toEqual({
+    name: "release",
+    enabled: true,
+    qualifiedName: "project:release",
+    description: "Prepare release evidence",
+    source: "project",
+    requireApproval: true,
+    sandboxRequired: false,
+  });
   expect(
     (await client.capabilities?.())?.find(
       (capability) => capability.id === "natalia-skills",

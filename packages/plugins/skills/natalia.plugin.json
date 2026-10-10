@@ -13,6 +13,7 @@
   "dependencies": [],
   "hooks": {},
   "integrationPoints": ["tools", "commands", "services"],
+  "skills": { "dir": "skills" },
   "ui": {
     "entry": "src/ui/plugin.tsx",
     "panels": [

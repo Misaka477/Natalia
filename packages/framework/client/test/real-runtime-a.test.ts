@@ -1375,7 +1375,13 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
   await writeFile(configPath, JSON.stringify({ version: 3 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has(SKILLS_PLUGIN_ID)).toBe(true);
+  // The project skill plus the official documents the skills plugin ships
+  // (source "plugin", discovered from the package's declared skills
+  // directory): the catalog lists both, sorted by qualified name.
   expect(await client.skills?.()).toEqual([
+    expect.objectContaining({ qualifiedName: "plugin:edit-framework" }),
+    expect.objectContaining({ qualifiedName: "plugin:evolve-artifact" }),
+    expect.objectContaining({ qualifiedName: "plugin:write-tool" }),
     expect.objectContaining({ qualifiedName: "project:reloadable" }),
   ]);
   await waitForAsync(

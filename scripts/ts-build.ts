@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import solid from "vite-plugin-solid";
@@ -55,6 +55,9 @@ type PluginManifest = {
   // Declared, not reached through the index signature: the two `ui.entry`
   // accesses below were `unknown`-typed, so nothing checked them.
   ui?: { entry: string };
+  // A plugin's shipped skills directory (package-relative). Declared for the
+  // same reason as `ui`: the staging below reads `skills.dir`.
+  skills?: { dir: string };
   [key: string]: unknown;
 };
 type PackageManifest = {
@@ -158,6 +161,26 @@ for (const root of pluginRoots) {
     releaseFiles.push(uiEntry);
     const uiCss = join(uiOutdir, "plugin.css");
     if (await Bun.file(uiCss).exists()) releaseFiles.push("ui/plugin.css");
+  }
+  if (manifest.skills) {
+    // The plugin's shipped skills ride the release exactly like its UI does:
+    // the declared directory is staged into the package and listed in `files`,
+    // so an install from the distribution carries the documents the skills
+    // plugin then discovers as source "plugin". A declaration whose directory
+    // is absent from the source package fails the build here rather than
+    // shipping a plugin whose skills silently never appear — discovery walks
+    // a missing root as empty, which is the one failure mode nobody sees.
+    const skillsDir = manifest.skills.dir;
+    const from = join(root, skillsDir);
+    const staged = await stat(from).catch(
+      () => undefined as { isDirectory(): boolean } | undefined,
+    );
+    if (!staged?.isDirectory())
+      throw new Error(
+        `${root}: declared skills directory is missing: ${skillsDir}`,
+      );
+    await cp(from, join(packageOutdir, skillsDir), { recursive: true });
+    releaseFiles.push(skillsDir);
   }
   if (manifest.id === "natalia-tool-terminal") {
     // The shell-integration rc scripts. Without these a pane starts, its argv

@@ -62,3 +62,31 @@ test("the team channel runs through subagents, so it inherits the widen", () => 
   expect(fanout).toContain("input.subagents.spawn");
   expect(fanout).toContain("input.subagents.wait");
 });
+
+test("a sandboxed child's tool list carries one entry per name", () => {
+  // F-A: every sandboxed child died on its first step with
+  // "ProviderError: Tool names must be unique". The runner pushes its own
+  // `sandbox_diff` (the self-scoped one) beside the host's `sandbox_diff`
+  // instead of replacing it, so the provider refused the whole list.
+  // `team_fanout` spawns sandboxed children — the whole team path was down —
+  // while `agent_spawn` (this path pushes nothing) worked.
+  const source = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "src",
+      "runtime",
+      "initialize",
+      "subagent-runner.ts",
+    ),
+    "utf8",
+  );
+  // The runner's own tools go through the displacement helper.
+  expect(source).toContain("withRunnerTools(visibleTools, [");
+  // And no bare push of a same-named tool survives next to it.
+  expect(source).not.toContain("visibleTools.push(sandboxSelfDiffTool())");
+  // The helper filters the host's same-named entries out before appending.
+  expect(source).toMatch(
+    /visible\.filter\(\(tool\) => !names\.has\(tool\.name\)\)/u,
+  );
+});

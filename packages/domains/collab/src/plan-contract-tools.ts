@@ -79,6 +79,44 @@ async function sessionConstitutionRules(
 }
 
 /**
+ * The ONE effective rule set, and where each rule is effective (F-C).
+ *
+ * A rule can be effective at either of two tiers: this session's journal, or
+ * the workspace's instance store (where a rule proposed and approved in an
+ * EARLIER session, or by the CLI face, lives). The read face already unioned
+ * both — and the revoke face consulted only the session fold. A rule that
+ * lives in the instance store therefore read back `active` and then refused
+ * to revoke with "no rule with that ruleID is in the effective set": two
+ * sources for one question, and the contradiction that makes every
+ * governance verification untrustworthy.
+ *
+ * Both faces go through here now. `tiers` says WHERE each rule is effective,
+ * so a reader can tell a session fact from a workspace fact instead of
+ * seeing one flat "active".
+ */
+async function effectiveConstitutionRules(
+  ctx: RuntimeContext,
+  exec: SessionExecutionState,
+): Promise<{
+  rules: Awaited<ReturnType<typeof sessionConstitutionRules>>;
+  tiers: Map<string, "session" | "workspace" | "both">;
+}> {
+  const sessionRules = await sessionConstitutionRules(ctx, exec);
+  const views = governanceViews(ctx.ports.getWorkspaceRoot());
+  const tiers = new Map<string, "session" | "workspace" | "both">();
+  const rules = [...sessionRules];
+  for (const rule of sessionRules) tiers.set(rule.ruleID, "session");
+  for (const rule of views.rules) {
+    const existing = tiers.get(rule.ruleID);
+    if (existing === undefined) {
+      tiers.set(rule.ruleID, "workspace");
+      rules.push(rule);
+    } else if (existing === "session") tiers.set(rule.ruleID, "both");
+  }
+  return { rules, tiers };
+}
+
+/**
  * EI §3.4 auto-correction: when a contract revision is accepted (plan_propose
  * or a detour's v+1), any open target_drift finding whose flagged paths are now
  * inside the revised scope loses its premise — the reference frame moved to
@@ -941,14 +979,16 @@ export function createConstitutionRuleReadTool(
       // instance store, so reading only the session fold answered `unknown`
       // for a rule that exists — the 2026-10-08 audit's P1-1, measured on
       // `C-TERM-001` (real) and `C-NOPE-999` (fabricated) answering alike.
+      const effective = await effectiveConstitutionRules(ctx, exec);
       const views = governanceViews(ctx.ports.getWorkspaceRoot());
-      const sessionRules = await sessionConstitutionRules(ctx, exec);
-      const active =
-        sessionRules.find((rule) => rule.ruleID === ruleID) ??
-        views.rules.find((rule) => rule.ruleID === ruleID);
+      const active = effective.rules.find((rule) => rule.ruleID === ruleID);
       if (active)
         return JSON.stringify({
           status: "active",
+          // Where it is effective: this session's journal, the workspace's
+          // instance store, or both. A flat "active" hid the difference, and
+          // the difference is what the revoke face got wrong.
+          effectiveIn: effective.tiers.get(ruleID) ?? "session",
           rule: {
             ruleID: active.ruleID,
             statement: active.statement,
@@ -1060,7 +1100,10 @@ export function createConstitutionRuleRevokeTool(
         governanceLedgerController,
       );
       if (!governanceLedger) return "governance ledger unavailable";
-      const rules = await sessionConstitutionRules(ctx, exec);
+      // The same effective set the read face answers from (F-C): consulting
+      // only the session fold made a workspace-tier rule unrevocable while
+      // still reading `active`.
+      const rules = (await effectiveConstitutionRules(ctx, exec)).rules;
       const rule = rules.find((candidate) => candidate.ruleID === ruleID);
       if (!rule) {
         const views = governanceViews(ctx.ports.getWorkspaceRoot());

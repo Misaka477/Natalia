@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { appendInstanceEvent } from "@natalia/governance-ledger";
-import { createConstitutionRuleReadTool } from "../src/plan-contract-tools";
+import {
+  createConstitutionRuleReadTool,
+  createConstitutionRuleRevokeTool,
+} from "../src/plan-contract-tools";
 import type { RuntimeContext } from "@anthelia/substrate";
 
 /**
@@ -89,4 +92,92 @@ test("a fabricated rule reads as unknown — and is distinguishable from a real 
   expect(answer.status).not.toBe(
     JSON.parse(await readTool("C-PROBE-001")).status,
   );
+});
+
+test("a workspace-tier rule revokes instead of answering unknown", async () => {
+  // F-C, the contradiction itself: the read face unioned the session fold and
+  // the workspace instance store; the revoke face consulted only the session
+  // fold. A rule approved in an earlier session therefore read back `active`
+  // and then refused to revoke with "no rule with that ruleID is in the
+  // effective set" — measured on the real `P-AGENT-mv0ybb3u`. Two sources
+  // for one question is what made every governance verification untrustworthy.
+  const root = await mkdtemp(join(tmpdir(), "natalia-rule-revoke-"));
+  appendInstanceEvent(
+    join(root, ".natalia", "governance"),
+    "constitution.jsonl",
+    ADDED,
+  );
+  const exec = {
+    session: { id: "ses_rule_revoke", events: [] },
+    factState: undefined,
+    factStateComplete: true,
+    fullEventsLoaded: true,
+  };
+  const ports = {
+    getReady: () => Promise.resolve(),
+    getWorkspaceRoot: () => root,
+    getSessionID: () => "ses_rule_revoke",
+    getExecutionBySession: () => new Map([["ses_rule_revoke", exec]]),
+    getActiveExec: () => exec,
+    ensureExecution: async () => exec,
+    publishForSession: () => {},
+    nextDecisionSequence: () => 1,
+    // Reaching the approval gate IS the proof the lookup succeeded: the
+    // "unknown" answer is returned before any gate is asked.
+    getInteractive: () => {
+      throw new Error("REACHED_APPROVAL_GATE");
+    },
+  };
+  const ctx = {
+    ports,
+    // The revoke face asks the governance ledger for its event builder. The
+    // stub returns the shape the tool needs; the harness never reaches the
+    // approval gate (the interactive port is absent), which is the proof the
+    // LOOKUP succeeded.
+    state: {
+      serviceDirectory: {
+        getOptional: () => ({
+          buildConstitutionRuleRemoved: (input: unknown) => ({
+            type: "constitution.rule_removed",
+            ...(input as Record<string, unknown>),
+          }),
+        }),
+      },
+    },
+  } as unknown as RuntimeContext;
+  const context = {
+    sessionID: "ses_rule_revoke",
+    workspaceRoot: root,
+  } as never;
+
+  // The read face says active, and now says WHERE.
+  const read = JSON.parse(
+    await createConstitutionRuleReadTool(ctx).execute(
+      { ruleID: "C-PROBE-001" },
+      context,
+    ),
+  );
+  expect(read.status).toBe("active");
+  expect(read.effectiveIn).toBe("workspace");
+
+  // The revoke face must find the SAME rule. The proof is that it gets as far
+  // as the approval gate — "unknown" is returned before any gate is asked.
+  let gate: string | undefined;
+  try {
+    await createConstitutionRuleRevokeTool(ctx).execute(
+      { ruleID: "C-PROBE-001" },
+      context,
+    );
+  } catch (error) {
+    gate = (error as Error).message;
+  }
+  expect(gate).toBe("REACHED_APPROVAL_GATE");
+  // And a rule that exists nowhere still answers unknown.
+  const absent = JSON.parse(
+    await createConstitutionRuleRevokeTool(ctx).execute(
+      { ruleID: "C-NOPE-999" },
+      context,
+    ),
+  );
+  expect(absent.status).toBe("unknown");
 });

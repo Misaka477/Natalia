@@ -307,27 +307,100 @@ export type WebSearchResult = {
   snippet: string;
 };
 
+/**
+ * Every attribute of one HTML tag, in any order.
+ *
+ * The parser used to assume `class` came before `href` on the result anchor
+ * and that the result block's own `<div>` opened with `class=` as its FIRST
+ * attribute. DuckDuckGo's markup does neither reliably — it emits other
+ * attributes first, and the anchor's own order varies — so the regexes
+ * matched nothing and every search answered `results=0` while the results
+ * were sitting in the body. Reading the attributes and looking them up by
+ * name is order-agnostic, which is the whole fix.
+ */
+function tagAttributes(tag: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const pattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*"([^"]*)"/gu;
+  for (const match of tag.matchAll(pattern))
+    attributes[match[1]!.toLowerCase()] = decodeEntities(match[2] ?? "");
+  return attributes;
+}
+
+/** Every `<a ...>...</a>` opening tag's attributes and inner text, in order. */
+function anchors(html: string): Array<{
+  attributes: Record<string, string>;
+  text: string;
+}> {
+  const out: Array<{ attributes: Record<string, string>; text: string }> = [];
+  const pattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
+  for (const match of html.matchAll(pattern))
+    out.push({
+      attributes: tagAttributes(`<a${match[1] ?? ""}>`),
+      text: stripTags(decodeEntities(match[2] ?? "")),
+    });
+  return out;
+}
+
+function hasClass(attributes: Record<string, string>, name: string): boolean {
+  return (attributes.class ?? "").split(/\s+/u).includes(name);
+}
+
+/**
+ * The text of the next element carrying `className`, searched from `from`.
+ *
+ * Any tag, not just an anchor: the snippet rides a `<div>` in some
+ * DuckDuckGo layouts and an `<a>` in others, and the sweep measured the
+ * selector `.result__snippet` — a class, not a tag. Matching on the tag is
+ * what made the parser miss half the results.
+ */
+function nextElementTextByClass(
+  html: string,
+  from: number,
+  className: string,
+): string {
+  const pattern = /<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>([\s\S]*?)<\/\1>/giu;
+  pattern.lastIndex = from;
+  for (const match of html.matchAll(pattern)) {
+    const attributes = tagAttributes(`<${match[1] ?? ""}${match[2] ?? ""}>`);
+    if (!hasClass(attributes, className)) continue;
+    return stripTags(decodeEntities(match[3] ?? ""));
+  }
+  return "";
+}
+
 export function parseDuckDuckGoResults(html: string): WebSearchResult[] {
   const results: WebSearchResult[] = [];
-  // Each result is an anchor with class result__a inside a result block;
-  // the snippet is the result__snippet node's text.
-  const blocks = html.split(/<div[^>]*class="[^"]*result[^"]*"/u).slice(1);
-  for (const block of blocks) {
-    const anchor =
-      /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/u.exec(
-        block,
-      );
-    if (!anchor) continue;
-    const href = decodeEntities(anchor[1] ?? "");
-    const title = stripTags(decodeEntities(anchor[2] ?? ""));
-    const snippetMatch =
-      /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/u.exec(
-        block,
-      ) ??
-      /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/u.exec(block);
-    const snippet = snippetMatch
-      ? stripTags(decodeEntities(snippetMatch[1] ?? ""))
-      : "";
+  // Each result is an anchor carrying `result__a`; its snippet is the
+  // nearest following `result__snippet`. Walking the anchors directly (rather
+  // than splitting on a `<div class="result...">` block first) means a
+  // markup change on the CONTAINER no longer takes the results down with it.
+  const found = anchors(html);
+  // Where each anchor sits in the raw markup, so a result's snippet search
+  // starts after its own title and stops at the next result's anchor — one
+  // result never borrows the next one's snippet.
+  const positions: number[] = [];
+  {
+    const pattern = /<a\b[^>]*>[\s\S]*?<\/a>/giu;
+    for (const match of html.matchAll(pattern))
+      positions.push(match.index ?? 0);
+  }
+  for (let index = 0; index < found.length; index++) {
+    const anchor = found[index]!;
+    if (!hasClass(anchor.attributes, "result__a")) continue;
+    const href = anchor.attributes.href ?? "";
+    const title = anchor.text;
+    const from = positions[index] ?? 0;
+    const nextResult = found.findIndex(
+      (candidate, at) =>
+        at > index && hasClass(candidate.attributes, "result__a"),
+    );
+    const to =
+      nextResult === -1 ? html.length : (positions[nextResult] ?? html.length);
+    const snippet = nextElementTextByClass(
+      html.slice(from, to),
+      0,
+      "result__snippet",
+    );
     // DuckDuckGo wraps outbound links in a redirect; unwrap it so the URL a
     // model reads is the destination it can fetch.
     const url = unwrapDuckDuckGoRedirect(href);

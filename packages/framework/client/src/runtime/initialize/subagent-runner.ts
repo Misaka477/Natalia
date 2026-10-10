@@ -23,6 +23,7 @@ import {
 import { activePlanForExec } from "@natalia/collab";
 import { sandboxService, subagentsService } from "@anthelia/runtime-services";
 import { sandboxSelfDiffTool } from "@anthelia/sandbox";
+import { uniqueProviderToolCallIds } from "@anthelia/runtime";
 import type { RuntimeContextLedger } from "@natalia/context-ledger";
 
 /**
@@ -60,6 +61,28 @@ function agentTypeSystemPrompt(
   if (!agentType) return undefined;
   const definition = scope.agentRegistry?.get(agentType);
   return definition?.systemPrompt || undefined;
+}
+
+/**
+ * Appends the runner's own tools to a child's visible set, displacing any
+ * host tool of the same name.
+ *
+ * The provider refuses a tool list with two entries of one name ("Tool names
+ * must be unique"), so a pushed tool must REPLACE its host counterpart rather
+ * than sit beside it. `sandboxSelfDiffTool()` is named `sandbox_diff` — the
+ * same name the host's sandbox family registers — so pushing it without this
+ * displacement handed the provider two `sandbox_diff` entries and every
+ * sandboxed child died on its first step with that error. `team_fanout`
+ * spawns sandboxed children, which is why the whole team path was down while
+ * `agent_spawn` (the non-sandboxed path, which pushes nothing) worked.
+ */
+export function withRunnerTools<T extends { name: string }>(
+  visible: T[],
+  pushed: T[],
+): T[] {
+  if (!pushed.length) return visible;
+  const names = new Set(pushed.map((tool) => tool.name));
+  return [...visible.filter((tool) => !names.has(tool.name)), ...pushed];
 }
 
 export async function installSubagents(
@@ -251,7 +274,7 @@ export async function installSubagents(
     for (let step = 1; step <= maxSubagentSteps; step++) {
       const isLastStep =
         Number.isFinite(maxSubagentSteps) && step >= maxSubagentSteps;
-      const visibleTools = [...scope.tools.values()].filter(
+      let visibleTools = [...scope.tools.values()].filter(
         (tool) =>
           scope.isToolAllowed(tool.name, exec) &&
           (exec.permissionMode !== "read_only" || !tool.requiresApproval) &&
@@ -265,38 +288,44 @@ export async function installSubagents(
       // this one answers for the sandbox the child runs in. Reading its own
       // diff is what lets it self-review before settling; merging and
       // promoting stay the parent's.
-      if (sandbox && !excluded.has("sandbox_diff"))
-        visibleTools.push(sandboxSelfDiffTool());
       // The child's own channel to its parent, as a tool: the model can
       // only call tools, and a mid-run finding must be reportable while
       // it is being found (the send_result channel). Always visible,
       // never approval-gated — it is a message, not an action.
-      visibleTools.push({
-        name: "send_to_parent",
-        description:
-          "Send a message to the session that spawned you (and to the user watching it), live: a finding worth hearing NOW — one decomposed task done, a blocker, the result. Never wait for your whole run to end to report. One fact per message.",
-        requiresApproval: false,
-        parameters: {
-          type: "object",
-          properties: { text: { type: "string" } },
-          required: ["text"],
-          additionalProperties: false,
+      //
+      // Both of the runner's own tools displace a same-named host tool: a
+      // provider handed two entries of one name refuses the whole list.
+      visibleTools = withRunnerTools(visibleTools, [
+        ...(sandbox && !excluded.has("sandbox_diff")
+          ? [sandboxSelfDiffTool()]
+          : []),
+        {
+          name: "send_to_parent",
+          description:
+            "Send a message to the session that spawned you (and to the user watching it), live: a finding worth hearing NOW — one decomposed task done, a blocker, the result. Never wait for your whole run to end to report. One fact per message.",
+          requiresApproval: false,
+          parameters: {
+            type: "object",
+            properties: { text: { type: "string" } },
+            required: ["text"],
+            additionalProperties: false,
+          },
+          async execute(parsed) {
+            const args = parsed as { text?: string };
+            if (typeof args.text !== "string" || !args.text.trim())
+              return "send_to_parent requires a non-empty text";
+            runner.sendToParent(args.text.trim());
+            return JSON.stringify({ sent: true });
+          },
         },
-        async execute(parsed) {
-          const args = parsed as { text?: string };
-          if (typeof args.text !== "string" || !args.text.trim())
-            return "send_to_parent requires a non-empty text";
-          runner.sendToParent(args.text.trim());
-          return JSON.stringify({ sent: true });
-        },
-      });
+      ]);
       if (isLastStep)
         ledger.add({
           id: `${runner.agentId}:${step}:max-steps`,
           role: "assistant",
           content: scope.MAX_STEPS_PROMPT,
         });
-      const { output, calls } = await runSubagentProviderStep(
+      const { output, calls, thinking } = await runSubagentProviderStep(
         ledger,
         visibleTools,
         runner,
@@ -357,7 +386,15 @@ export async function installSubagents(
         await releaseSubagentSteering(runner);
         return;
       }
-      appendSubagentAssistant(ledger, runner, step, output, calls);
+      // The same normalization the main runner applies before executing a
+      // batch: an OpenAI-compatible gateway can emit one id on two streamed
+      // calls, and two ledger entries sharing a `pairID` make the replay fold
+      // drop one of them — a tool result that silently vanishes from the
+      // conversation the provider is shown next step.
+      const normalizedCalls = uniqueProviderToolCallIds(calls).calls;
+      appendSubagentAssistant(ledger, runner, step, output, normalizedCalls, {
+        ...(thinking ? { content: thinking } : {}),
+      });
       for (const call of calls) {
         const result = await executeSubagentToolCall({
           call,
@@ -442,13 +479,16 @@ export async function installSubagents(
             !excluded.has(tool.name) &&
             (!allowed.length || allowed.includes(tool.name)),
         );
+        // This path pushes no tool of its own, so the filtered set is already
+        // unique by name (the registry is keyed by it). The displacement rule
+        // lives in `withRunnerTools` for the path that does.
         if (isLastStep)
           ledger.add({
             id: `${runner.agentId}:${step}:max-steps`,
             role: "assistant",
             content: scope.MAX_STEPS_PROMPT,
           });
-        const { output, calls } = await runSubagentProviderStep(
+        const { output, calls, thinking } = await runSubagentProviderStep(
           ledger,
           visibleTools,
           runner,
@@ -508,7 +548,10 @@ export async function installSubagents(
           releaseSubagentSteering(runner);
           return;
         }
-        appendSubagentAssistant(ledger, runner, step, output, calls);
+        const normalizedCalls = uniqueProviderToolCallIds(calls).calls;
+        appendSubagentAssistant(ledger, runner, step, output, normalizedCalls, {
+          ...(thinking ? { content: thinking } : {}),
+        });
         for (const call of calls) {
           const result = await executeSubagentToolCall({
             call,

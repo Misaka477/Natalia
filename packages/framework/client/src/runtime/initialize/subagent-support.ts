@@ -30,6 +30,61 @@ import type {
   RuntimeContextLedger,
 } from "@natalia/context-ledger";
 
+/**
+ * The ledger entries one subagent step's assistant turn produces.
+ *
+ * The shared replay fold (`contextEntriesToProviderMessages` in
+ * `@anthelia/runtime`) rebuilds a provider message's reasoning FROM the
+ * ledger entries — it reads `reasoningContent` / `reasoningField` /
+ * `reasoningSignature` / `reasoningRedacted` / `reasoningBlocks` /
+ * `contentParts` / `providerMetadata` / `textSignature` off the tool_call
+ * entries, and `thoughtSignature` per call. The main runner writes all of
+ * them; the subagent wrote none. So from a subagent's SECOND step onward the
+ * provider was handed an assistant message with no thinking blocks at all,
+ * and a resumed child (its ledger restored from the durable checkpoint)
+ * replayed a history with the same hole — for a model that requires its
+ * thinking preserved mid-conversation that is an invalid request, and for
+ * every model it is a chain of thought that silently stops existing.
+ *
+ * `thoughtSignature` is per call and `reasoningContent` rides the first call
+ * of the batch, exactly as the main path places them.
+ */
+export function subagentAssistantEntries(
+  runner: SubagentRunnerContext,
+  step: number,
+  output: string,
+  calls: readonly ProviderToolCall[],
+  reasoning?: { content?: string; field?: string },
+): ContextEntry[] {
+  const entries: ContextEntry[] = [];
+  if (output)
+    entries.push({
+      id: `${runner.agentId}:${step}:assistant`,
+      role: "assistant",
+      content: output,
+    });
+  for (const [index, call] of calls.entries())
+    entries.push({
+      id: `${runner.agentId}:${step}:${call.id}:call`,
+      role: "tool_call",
+      content: `${call.name} ${call.arguments}`,
+      pairID: call.id,
+      ...(call.thoughtSignature
+        ? { thoughtSignature: call.thoughtSignature }
+        : {}),
+      ...(call.providerMetadata
+        ? { providerMetadata: call.providerMetadata }
+        : {}),
+      ...(index === 0 && reasoning?.content !== undefined
+        ? { reasoningContent: reasoning.content }
+        : {}),
+      ...(index === 0 && reasoning?.field
+        ? { reasoningField: reasoning.field }
+        : {}),
+    });
+  return entries;
+}
+
 export async function createSubagentSupport(
   ctx: RuntimeContext,
   _options: InitializeOptions,
@@ -622,21 +677,18 @@ export async function createSubagentSupport(
     step: number,
     output: string,
     calls: ProviderToolCall[],
+    reasoning?: { content?: string; field?: string },
   ) {
-    if (output)
-      ledger.add({
-        id: `${runner.agentId}:${step}:assistant`,
-        role: "assistant",
-        content: output,
-      });
-    for (const call of calls)
-      ledger.add({
-        id: `${runner.agentId}:${step}:${call.id}:call`,
-        role: "tool_call",
-        content: `${call.name} ${call.arguments}`,
-        pairID: call.id,
-      });
+    for (const entry of subagentAssistantEntries(
+      runner,
+      step,
+      output,
+      calls,
+      reasoning,
+    ))
+      ledger.add(entry);
   }
+
   function appendSubagentToolResult(
     ledger: RuntimeContextLedger,
     runner: SubagentRunnerContext,

@@ -176,12 +176,20 @@ export type SubagentSupport = {
     calls: ProviderToolCall[];
     protocolViolation: string;
   }>;
+  /**
+   * Records one subagent step's assistant turn. `reasoning` carries the
+   * step's thinking so the replay fold can rebuild the provider message's
+   * reasoning blocks — the main runner's placement, without which a
+   * subagent's second step onward (and any resumed child) is handed a
+   * conversation whose chain of thought stops existing.
+   */
   appendSubagentAssistant(
     ledger: ContextLedger,
     runner: SubagentRunnerContext,
     step: number,
     output: string,
     calls: ProviderToolCall[],
+    reasoning?: { content?: string; field?: string },
   ): void;
 
   appendSubagentToolResult(

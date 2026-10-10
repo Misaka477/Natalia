@@ -93,3 +93,51 @@ test("web_search answers with the parsed results, not the page's markup (P1-16)"
     globalThis.fetch = originalFetch;
   }
 });
+
+test("results parse whatever order the attributes arrive in", () => {
+  // F-D: every search answered `results=0` while the results were sitting in
+  // the body. The parser assumed `class` came before `href` on the result
+  // anchor and that the block's `<div>` opened with `class=` first — neither
+  // holds in DuckDuckGo's real markup.
+  const realShaped = [
+    '<div data-testid="result" class="result results_links">',
+    '<a rel="nofollow noopener" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fone" class="result__a">First result</a>',
+    '<div class="result__snippet">The first snippet</div>',
+    "</div>",
+    '<div data-testid="result" class="result results_links">',
+    '<a href="https://example.org/two" class="result__a">Second result</a>',
+    '<a class="result__snippet" href="https://example.org/two">The second snippet</a>',
+    "</div>",
+  ].join("\n");
+  expect(parseDuckDuckGoResults(realShaped)).toEqual([
+    {
+      title: "First result",
+      url: "https://example.com/one",
+      snippet: "The first snippet",
+    },
+    {
+      title: "Second result",
+      url: "https://example.org/two",
+      snippet: "The second snippet",
+    },
+  ]);
+});
+
+test("a container the parser does not recognise no longer hides the results", () => {
+  // The old parser split on `<div class="...result...">` before looking at
+  // anything, so a container whose attributes changed took every result down
+  // with it. The results are found by their own anchor class now.
+  const noBlocks = [
+    "<main>",
+    '<a class="result__a" href="https://example.com/solo">Solo result</a>',
+    '<span class="result__snippet">A snippet</span>',
+    "</main>",
+  ].join("\n");
+  expect(parseDuckDuckGoResults(noBlocks)).toEqual([
+    {
+      title: "Solo result",
+      url: "https://example.com/solo",
+      snippet: "A snippet",
+    },
+  ]);
+});

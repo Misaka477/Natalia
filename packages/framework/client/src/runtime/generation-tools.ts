@@ -108,12 +108,19 @@ function guardsFaceFor(ctx: RuntimeContext): VerificationFace {
 
 function niaSurfaces(ctx: RuntimeContext) {
   const planDoc = ctx.ports.planDocRuntime;
+  // The session the switch runs in. The audit gate activates the plan ON it
+  // and submits the wake TO it, so `activePlanForExec` answers for the turn
+  // that actually starts; without it the `activePlanID` lands on whatever
+  // exec happens to be active and the audit machinery sees no plan.
+  const sessionID = activeExec(ctx)?.session?.id;
   return {
     planDocWrite: planDoc.planDocWrite.bind(planDoc),
     planDocMark: planDoc.planDocMark.bind(planDoc),
     planDocActivate: planDoc.planDocActivate.bind(planDoc),
     planDocStatus: planDoc.planDocStatus.bind(planDoc),
+    planDocUpdateStatus: planDoc.planDocUpdateStatus.bind(planDoc),
     niaChat: createNiaChatSurface(ctx),
+    sessionID,
   };
 }
 
@@ -281,7 +288,9 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         faces: {
           guards: guardsFaceFor(ctx),
           smoke: smokeFace(),
-          nia: niaFace(niaSurfaces(ctx)),
+          nia: niaFace(niaSurfaces(ctx), {
+            sessionID: activeExec(ctx)?.session?.id,
+          }),
         },
         reason: args.reason ?? "apply_generation",
         when: args.now ? "now" : "next-session",

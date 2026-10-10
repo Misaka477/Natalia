@@ -5,6 +5,7 @@ import type {
   ChatMessageRow,
   ChatModelProfile,
   ChatStreamSurface,
+  ChatTurnIntent,
   RuntimeEvent,
   RuntimeReasoningEffort,
   SessionID,
@@ -60,6 +61,19 @@ type SubmitInput = {
   reasoningEffort?: RuntimeReasoningEffort;
   attachments?: string[];
   sessionID?: string;
+  /**
+   * How this turn is framed. `user_chat` (the default) is a human talking to
+   * Nia and must never be dressed up as an audit wake. A caller that is
+   * waking her TO audit — the generation verification gate — says `audit`,
+   * which is what engages the audit-order machinery (the AUDIT_ORDER nudge
+   * before `collab_chat`, and the `audit_pending` fallback at turn end).
+   *
+   * Without it the gate's wake was framed as a user chat: none of that
+   * engaged, the plan stayed `auditing` forever, and the gate waited out its
+   * whole budget to report "no audit_report verdict" for an audit that was
+   * never actually asked for.
+   */
+  intent?: ChatTurnIntent;
 };
 type StreamSurface = {
   messages(
@@ -401,10 +415,10 @@ export function createNiaChatSurface(ctx: RuntimeContext): StreamSurface {
           sessionID: exec.session.id as SessionID,
           text,
           responseMessageID,
-          // The user's own conversation, said out loud rather than left to
-          // the default: this is the path that must never be framed as an
-          // audit wake or a sister message.
-          intent: "user_chat",
+          // The user's own conversation by default — said out loud rather
+          // than left to the default — unless the caller names another
+          // framing (the verification gate's audit wake).
+          intent: input.intent ?? "user_chat",
           model: input.model,
           reasoningEffort: input.reasoningEffort,
           attachments,

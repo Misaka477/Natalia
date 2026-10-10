@@ -183,12 +183,33 @@ export type NiaFaceSurfaces = {
     planID: string,
     sessionID?: string,
   ) => Promise<{ status: string }>;
-  niaChat?: { submit?: (input: { text: string }) => Promise<unknown> };
+  /** Moves a plan through its lifecycle (the gate's `awaiting_audit` entry). */
+  planDocUpdateStatus?: (input: {
+    planID: string;
+    status: string;
+    sessionID?: string;
+  }) => Promise<unknown>;
+  niaChat?: {
+    submit?: (input: {
+      text: string;
+      /**
+       * The turn's framing. `audit` is what engages the audit-order
+       * machinery; a plain submit is a user chat and never does.
+       */
+      intent?: import("@anthelia/contracts").ChatTurnIntent;
+    }) => Promise<unknown>;
+  };
 };
 
 export function niaFace(
   client: NiaFaceSurfaces,
   options: {
+    /**
+     * The session this face runs in. The plan is activated on it and the
+     * audit wake is submitted to it, so the audit machinery sees the plan
+     * for the turn it actually starts.
+     */
+    sessionID?: string;
     timeoutMs?: number;
     /**
      * The plan the audit is filed under, reported as soon as it exists
@@ -270,9 +291,37 @@ export function niaFace(
         title: "Generation audit",
       });
       options.onAuditPlan?.(marked.planID, path);
-      await client.planDocActivate!(marked.planID);
+      // The plan is activated ON THE SESSION THIS FACE RUNS IN. Activating
+      // without one lands the `activePlanID` on whatever the active exec
+      // happens to be — a different session — and then `activePlanForExec`
+      // answers undefined for the turn the wake actually starts, so the
+      // audit-order machinery (and its `audit_pending` fallback) never sees
+      // a plan at all.
+      await client.planDocActivate!(marked.planID, options.sessionID);
+      // The plan enters the AUDIT LIFECYCLE here. `awaiting_audit` is the
+      // state the audit machinery's entry condition names — Nia's turn-start
+      // projection (marked -> auditing), the AUDIT_ORDER nudge before
+      // collab_chat and the turn-end audit_pending fallback are all gated on
+      // the plan being in a pre-verdict state. A freshly marked plan sits at
+      // `marked`, and the only producer of `awaiting_audit` is the
+      // completion-recorded audit request — which a generation switch never
+      // records. So the gate's plan never entered the lifecycle at all: no
+      // `auditing`, no order, no fallback, and a plan that sat at `marked`
+      // while the gate waited out its whole budget.
+      await client.planDocUpdateStatus?.({
+        planID: marked.planID,
+        status: "awaiting_audit",
+        ...(options.sessionID ? { sessionID: options.sessionID } : {}),
+      });
       await client.niaChat!.submit!({
         text: `Audit plan ${marked.planID} (${path}): a composition generation candidate. Verify it against the plan document and call audit_report with planID=${marked.planID}.`,
+        // The audit framing, said out loud: a plain submit is a USER CHAT,
+        // and a user-chat turn never engages the audit-order machinery (no
+        // AUDIT_ORDER before collab_chat, no audit_pending fallback at turn
+        // end) — so the plan stayed `auditing` and this gate waited out its
+        // whole budget for a verdict nobody had been asked for.
+        intent: "audit",
+        ...(options.sessionID ? { sessionID: options.sessionID } : {}),
       });
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
@@ -284,12 +333,33 @@ export function niaFace(
             ok: false,
             detail: `Nia reported audit_gaps (evidence: the audit round checkpoint and evidence.recorded in the journal)`,
           };
+        // `audit_pending` is the runtime's OWN conclusion for an audit turn
+        // that ended without an `audit_report` call: the plan is left
+        // recoverable (re-wake / restart) rather than stuck in `auditing`
+        // forever. Waiting the whole budget for a verdict that has already
+        // been decided — and then reporting "no audit_report verdict" — is
+        // what made this gate look permanently broken: it answered a question
+        // nobody was still asking. Report the state the runtime actually
+        // reached, and what clears it.
+        if (status === "audit_pending")
+          return {
+            check: "nia",
+            ok: false,
+            detail:
+              `Nia's audit turn ended without calling audit_report, so the plan is ` +
+              `${status} (recoverable: re-wake Nia on plan ${marked.planID} and ask ` +
+              `for the verdict). The gate is not bypassed — the audit simply has ` +
+              `not been given yet.`,
+          };
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       return {
         check: "nia",
         ok: false,
-        detail: `no audit_report verdict for plan ${marked.planID} within ${timeoutMs}ms`,
+        detail:
+          `no audit_report verdict for plan ${marked.planID} within ${timeoutMs}ms ` +
+          `(the plan is still ${(await client.planDocStatus!(marked.planID).catch(() => ({ status: "unknown" }))).status}; ` +
+          `a verdict is required, never skipped)`,
       };
     } catch (error) {
       return {

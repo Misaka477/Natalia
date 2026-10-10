@@ -58,25 +58,37 @@ test("sandbox controller close releases its initialized manager", async () => {
   );
 });
 
-test("the default sandbox backend is our own git-free snapshot manager", async () => {
-  // A git repo workspace, but no backend configured: our own snapshot backend
-  // is the default — git is not required.
+test("a git repository gets the worktree backend by default", async () => {
+  // T6-1: the gate used to be the other way round — the worktree backend was
+  // an opt-in — so the history-integrating backend (real branches, a real
+  // promotion, a real rollback) was the exception in exactly the repositories
+  // that could support it, and the snapshot backend's copy promotion was the
+  // norm. A git repo now gets worktree unless a caller says `snapshot`.
   const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-default-"));
   await mkdir(join(root, ".git"), { recursive: true });
+  const controller = createSandboxController({ workspaceRoot: root });
+  await controller.init();
+  expect(await controller.referencedObjectIDs()).toBeUndefined();
+});
+
+test("a workspace that is not a git repository gets the snapshot backend", async () => {
+  // The other half of the same rule: git is not required, so a plain
+  // directory still gets our own git-free backend.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-nogit-"));
   const controller = createSandboxController({ workspaceRoot: root });
   await controller.init();
   expect(await controller.referencedObjectIDs()).toBeInstanceOf(Set);
 });
 
-test("sandbox.backend=worktree opts into the real-git backend when a repo exists", async () => {
+test("sandbox.backend=snapshot still forces the git-free backend in a repo", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-worktree-opt-"));
   await mkdir(join(root, ".git"), { recursive: true });
   const controller = createSandboxController({
     workspaceRoot: root,
-    backend: () => "worktree",
+    backend: () => "snapshot",
   });
   await controller.init();
-  expect(await controller.referencedObjectIDs()).toBeUndefined();
+  expect(await controller.referencedObjectIDs()).toBeInstanceOf(Set);
 });
 
 test("the controller passes the resolved confinement mode to its manager", async () => {

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   SnapshotSandboxManager,
   detectPromoteCommand,
+  sandboxSelfDiffTool,
   sandboxToolFamily,
   sandboxTools,
   WorkspaceSandboxManager,
@@ -840,4 +841,70 @@ test("a rollback removes the directories an addition made (F3)", async () => {
   expect(existsSync(join(root, "deep"))).toBe(false);
   // What predated the promotion is untouched.
   expect(existsSync(join(root, "base.txt"))).toBe(true);
+});
+
+test("a sandboxed subagent's own diff needs no id and names no other candidate", async () => {
+  // T6-4: a sandboxed child used to get no sandbox surface at all, so every
+  // `sandbox_*` tool threw "sandbox runtime unavailable" — it could not look
+  // at the diff it was about to hand back and settled blind. It gets exactly
+  // one tool: its OWN candidate's preview, with no id parameter, because the
+  // only sandbox it may read is the one it runs in.
+  const tool = sandboxSelfDiffTool();
+  expect(tool.name).toBe("sandbox_diff");
+  expect(tool.requiresApproval).toBe(false);
+  // No id to name: a child that could pass one could read another
+  // candidate's work.
+  expect(tool.parameters).toMatchObject({
+    type: "object",
+    properties: {},
+    required: [],
+  });
+
+  // With the self surface present, it answers.
+  const changes = [
+    { kind: "modify", path: "a.txt", additions: 1, deletions: 1 },
+  ];
+  const answered = await tool.execute({}, {
+    sandboxSelf: { id: "child", preview: async () => changes },
+  } as never);
+  expect(JSON.parse(answered as string)).toEqual(changes);
+
+  // Without it (a main-agent context, or a non-sandboxed child), it refuses
+  // rather than falling back to the host service.
+  await expect(tool.execute({}, {} as never)).rejects.toThrow(
+    /only available inside a sandboxed subagent/u,
+  );
+});
+
+test("a sandboxed subagent's own diff needs no id and names no other candidate", async () => {
+  // T6-4: a sandboxed child used to get no sandbox surface at all, so every
+  // `sandbox_*` tool threw "sandbox runtime unavailable" — it could not look
+  // at the diff it was about to hand back and settled blind. It gets exactly
+  // one tool: its OWN candidate's preview, with no id parameter, because the
+  // only sandbox it may read is the one it runs in.
+  const tool = sandboxSelfDiffTool();
+  expect(tool.name).toBe("sandbox_diff");
+  expect(tool.requiresApproval).toBe(false);
+  // No id to name: a child that could pass one could read another
+  // candidate's work.
+  expect(tool.parameters).toMatchObject({
+    type: "object",
+    properties: {},
+    required: [],
+  });
+
+  // With the self surface present, it answers.
+  const changes = [
+    { kind: "modify", path: "a.txt", additions: 1, deletions: 1 },
+  ];
+  const answered = await tool.execute({}, {
+    sandboxSelf: { id: "child", preview: async () => changes },
+  } as never);
+  expect(JSON.parse(answered as string)).toEqual(changes);
+
+  // Without it (a main-agent context, or a non-sandboxed child), it refuses
+  // rather than falling back to the host service.
+  await expect(tool.execute({}, {} as never)).rejects.toThrow(
+    /only available inside a sandboxed subagent/u,
+  );
 });

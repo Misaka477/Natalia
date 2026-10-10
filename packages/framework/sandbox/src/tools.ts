@@ -206,8 +206,12 @@ function pill(label: string, value: string): [label: string, value: string] {
 }
 
 type SandboxCardInput = {
-  /** The row's title: the sandbox id, the command, or the family. */
-  title: "id" | "command" | "family";
+  /**
+   * The row's title: the sandbox id, the command, the family, or `self` —
+   * the sandboxed subagent's own-candidate diff (T6-4), whose title is the
+   * child rather than an id it must not name.
+   */
+  title: "id" | "command" | "family" | "self";
   callSummary: string;
   resultSummary: (facts: SandboxFacts) => string;
   facets?: (facts: SandboxFacts) => Array<[label: string, value: string]>;
@@ -509,6 +513,62 @@ function sandboxDiffTool(): RuntimeTool {
       return JSON.stringify(changes, null, 2);
     },
   );
+}
+
+/**
+ * The `sandbox_diff` a SANDBOXED SUBAGENT gets (T6-4).
+ *
+ * A sandboxed child used to receive no sandbox surface at all, so every
+ * `sandbox_*` tool threw "sandbox runtime unavailable": it could not look at
+ * the diff it was about to hand back and settled blind. It gets exactly one
+ * tool — its OWN candidate's preview — and no id parameter, because the only
+ * sandbox it may read is the one it runs in. No merge, no promote, no
+ * delete: those stay the parent's, and a child that could name another
+ * candidate's id could read (or, worse, promote) work that is not its own.
+ */
+export function sandboxSelfDiffTool(): RuntimeTool {
+  return {
+    name: "sandbox_diff",
+    description:
+      "Show the changes in YOUR OWN sandbox candidate, so you can review what you are about to hand back.",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+    output: sandboxToolCard({
+      title: "self",
+      callSummary: "diff",
+      kind: "diff",
+      hunks: true,
+      resultSummary: (facts) =>
+        facts.total === undefined
+          ? "read"
+          : `${facts.total} change${facts.total === 1 ? "" : "s"}`,
+      facets: (facts) => [
+        ...(facts.total === undefined
+          ? []
+          : [pill("files", String(facts.total))]),
+        ...(facts.additions === undefined
+          ? []
+          : [pill("added", String(facts.additions))]),
+        ...(facts.deletions === undefined
+          ? []
+          : [pill("removed", String(facts.deletions))]),
+      ],
+    }),
+    async execute(_input, context) {
+      const self = context.sandboxSelf;
+      if (!self)
+        throw new Error(
+          "sandbox_diff is only available inside a sandboxed subagent, for its own candidate",
+        );
+      const changes = await self.preview();
+      return JSON.stringify(changes, null, 2);
+    },
+  };
 }
 
 function sandboxMergeTool(): RuntimeTool {

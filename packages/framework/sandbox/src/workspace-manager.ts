@@ -868,7 +868,12 @@ export class WorkspaceSandboxManager
     );
   }
 
-  private mustGet(id: string) {
+  /**
+   * The manifest for a sandbox, or a refusal. `protected` because the
+   * worktree backend extends this manager and its git operations need the
+   * same "does this sandbox exist" answer the base surface gives.
+   */
+  protected mustGet(id: string) {
     const manifest = this.sandboxes.get(id);
     if (!manifest) throw new Error(`unknown sandbox: ${id}`);
     return manifest;

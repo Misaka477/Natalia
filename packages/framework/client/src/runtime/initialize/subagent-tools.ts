@@ -15,6 +15,7 @@ import {
   subagentsService,
   terminalController,
 } from "@anthelia/runtime-services";
+import type { SandboxChangeView } from "@anthelia/tools";
 import { createInitializeRuntime } from "./runtime";
 import {
   clearRepeat,
@@ -48,6 +49,16 @@ export async function createSubagentTools(
       path: string;
     }) => Promise<void>;
     exposeSandboxes?: boolean;
+    /**
+     * The child's OWN candidate, read-only (T6-4). A sandboxed subagent's
+     * worktree is created by this runtime, so the useful surface for it is
+     * "what does my own diff look like" — not the host's sandbox controller,
+     * which would let a child merge or promote another candidate's work.
+     */
+    sandboxSelf?: {
+      id: string;
+      preview(): Promise<SandboxChangeView[]>;
+    };
   }) {
     const { call, runner } = input;
     const displayCallID = `step:${input.step}:${call.id}`;
@@ -158,6 +169,7 @@ export async function createSubagentTools(
         subagents: subagents ?? undefined,
         terminal: terminal ?? undefined,
         ...(input.exposeSandboxes ? { sandboxes: sandbox ?? undefined } : {}),
+        ...(input.sandboxSelf ? { sandboxSelf: input.sandboxSelf } : {}),
         workspaceReadAuthorize: (request) =>
           scope.authorizeWorkspaceRead(request, input.exec),
         ...(input.writeAuthorize

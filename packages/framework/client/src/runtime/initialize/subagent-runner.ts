@@ -22,6 +22,7 @@ import {
 } from "./subagent-settled-notice";
 import { activePlanForExec } from "@natalia/collab";
 import { sandboxService, subagentsService } from "@anthelia/runtime-services";
+import { sandboxSelfDiffTool } from "@anthelia/sandbox";
 import type { RuntimeContextLedger } from "@natalia/context-ledger";
 
 /**
@@ -257,6 +258,15 @@ export async function installSubagents(
           !excluded.has(tool.name) &&
           (!allowed.length || allowed.includes(tool.name)),
       );
+      // T6-4: the child's OWN candidate's diff, as the only sandbox tool it
+      // may call. The host's `sandbox_diff` (which takes an id) is not
+      // exposed to a sandboxed child at all — its sandbox service is not
+      // handed over, so it would throw "sandbox runtime unavailable" — and
+      // this one answers for the sandbox the child runs in. Reading its own
+      // diff is what lets it self-review before settling; merging and
+      // promoting stay the parent's.
+      if (sandbox && !excluded.has("sandbox_diff"))
+        visibleTools.push(sandboxSelfDiffTool());
       // The child's own channel to its parent, as a tool: the model can
       // only call tools, and a mid-run finding must be reportable while
       // it is being found (the send_result channel). Always visible,
@@ -358,6 +368,24 @@ export async function installSubagents(
           repeatedCalls,
           exec,
           writeAuthorize,
+          // The child's OWN candidate, read-only (T6-4): a sandboxed subagent
+          // used to get no sandbox surface at all, so every `sandbox_*` tool
+          // threw "sandbox runtime unavailable" — it could not look at the
+          // diff it was about to hand back, and settled blind. It gets a
+          // preview of its own candidate and nothing else: no merge, no
+          // promotion, no promotion's approval gate. Those stay the parent's.
+          sandboxSelf: sandbox
+            ? {
+                id: runner.agentId,
+                preview: async () =>
+                  (await sandbox.previewMerge(runner.agentId)).map(
+                    (change) => ({
+                      ...change,
+                      path: change.path,
+                    }),
+                  ),
+              }
+            : undefined,
         });
         appendSubagentToolResult(ledger, runner, step, call, result);
       }

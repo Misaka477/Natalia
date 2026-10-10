@@ -309,3 +309,117 @@ test("a worktree candidate links the host's dependencies and never commits them"
   );
   await manager.delete("sbx.deps");
 });
+
+test("a refresh brings the candidate up to the host's newer commits", async () => {
+  // T6-2: a candidate branch is cut from the head at creation time, so a
+  // long-running subagent works against a snapshot that goes stale the
+  // moment anything else lands — another candidate's promotion, the user's
+  // own commit. Without a refresh it cannot SEE that work, and it promotes a
+  // branch whose merge-base is promotions behind.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  const sandbox = await manager.create("sbx.refresh");
+  // The host moves on while the candidate is open.
+  await writeFile(join(root, "host-new.txt"), "from the host\n");
+  await git(root, ["add", "host-new.txt"]);
+  await git(root, ["commit", "-m", "host advances"]);
+
+  const result = await manager.refresh("sbx.refresh");
+  expect(result.conflicted).toBe(false);
+  expect(result.refreshed).toBe(true);
+  // The candidate now holds the host's newer file — and its own base has
+  // moved with it, so a promotion is against the current head.
+  expect(await readFile(join(sandbox.root, "host-new.txt"), "utf8")).toBe(
+    "from the host\n",
+  );
+  expect(await manager.previewMerge("sbx.refresh")).toEqual([]);
+  // The candidate's OWN work survives the refresh.
+  await writeFile(join(sandbox.root, "agent.txt"), "agent work\n");
+  await git(sandbox.root, ["add", "agent.txt"]);
+  await git(sandbox.root, ["commit", "-m", "agent change"]);
+  await writeFile(join(root, "host-two.txt"), "two\n");
+  await git(root, ["add", "host-two.txt"]);
+  await git(root, ["commit", "-m", "host advances again"]);
+  const second = await manager.refresh("sbx.refresh");
+  expect(second.conflicted).toBe(false);
+  expect(await readFile(join(sandbox.root, "agent.txt"), "utf8")).toBe(
+    "agent work\n",
+  );
+  expect(
+    (await manager.previewMerge("sbx.refresh")).map((change) => change.path),
+  ).toEqual(["agent.txt"]);
+  await manager.delete("sbx.refresh");
+});
+
+test("a refresh conflict is a state to resolve, not a discarded error", async () => {
+  // T6-3: the conflict used to be `git merge --abort` + rethrow, which threw
+  // away MERGE_HEAD and the conflict markers — the only things that say WHAT
+  // conflicted. The candidate is left mid-merge and the conflict is reported.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  const sandbox = await manager.create("sbx.conflict");
+  // Both sides change the same line.
+  await writeFile(join(sandbox.root, "file.txt"), "candidate side\n");
+  await git(sandbox.root, ["add", "file.txt"]);
+  await git(sandbox.root, ["commit", "-m", "candidate edit"]);
+  await writeFile(join(root, "file.txt"), "host side\n");
+  await git(root, ["add", "file.txt"]);
+  await git(root, ["commit", "-m", "host edit"]);
+
+  const conflicted = await manager.refresh("sbx.conflict");
+  expect(conflicted.conflicted).toBe(true);
+  expect(conflicted.paths).toEqual(["file.txt"]);
+  // The worktree is still there, mid-merge, with the markers in place.
+  expect(existsSync(join(sandbox.root, "file.txt"))).toBe(true);
+  const marked = await readFile(join(sandbox.root, "file.txt"), "utf8");
+  expect(marked).toContain("<<<<<<<");
+
+  // Take the resolution: write the merged content and commit it.
+  const resolved = await manager.resolveConflict("sbx.conflict", {
+    kind: "resolve",
+    contents: { "file.txt": "both sides reconciled\n" },
+  });
+  expect(resolved.conflicted).toBe(false);
+  expect(resolved.refreshed).toBe(true);
+  expect(await readFile(join(sandbox.root, "file.txt"), "utf8")).toBe(
+    "both sides reconciled\n",
+  );
+  // And the candidate is on a clean commit, so a promotion is ordinary.
+  const changes = await manager.previewMerge("sbx.conflict");
+  expect(changes.map((change) => change.path)).toEqual(["file.txt"]);
+  await manager.delete("sbx.conflict");
+});
+
+test("a conflict resolution must answer every conflicted path", async () => {
+  // A partial resolution would commit a tree that still carries conflict
+  // markers, and the next preview would promote them into the host.
+  const root = await scratchRepo();
+  const manager = new WorktreeSandboxManager(root);
+  const sandbox = await manager.create("sbx.partial");
+  await writeFile(join(sandbox.root, "file.txt"), "candidate side\n");
+  await git(sandbox.root, ["add", "file.txt"]);
+  await git(sandbox.root, ["commit", "-m", "candidate edit"]);
+  await writeFile(join(root, "file.txt"), "host side\n");
+  await git(root, ["add", "file.txt"]);
+  await git(root, ["commit", "-m", "host edit"]);
+  await manager.refresh("sbx.partial");
+
+  await expect(
+    manager.resolveConflict("sbx.partial", { kind: "resolve", contents: {} }),
+  ).rejects.toThrow(/unresolved conflict at file\.txt/u);
+  // A path that is not conflicted is refused too: the resolution answers the
+  // conflict, it does not invent one.
+  await expect(
+    manager.resolveConflict("sbx.partial", {
+      kind: "resolve",
+      contents: { "file.txt": "ok\n", "other.txt": "nope\n" },
+    }),
+  ).rejects.toThrow(/not conflicted/u);
+  // The candidate is still mid-merge, so a real resolution still works.
+  const resolved = await manager.resolveConflict("sbx.partial", {
+    kind: "resolve",
+    contents: { "file.txt": "settled\n" },
+  });
+  expect(resolved.conflicted).toBe(false);
+  await manager.delete("sbx.partial");
+});

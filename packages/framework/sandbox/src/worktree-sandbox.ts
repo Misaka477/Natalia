@@ -16,7 +16,7 @@
  * threat-model-driven step.
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   ensureNataliaIgnoreFile,
   isSnapshotIgnored,
@@ -36,6 +36,41 @@ import {
   type SandboxRiskTier,
 } from "./governance";
 import { unifiedPatchToStructured } from "./diff";
+
+/**
+ * True when `target` resolves inside `root`. A conflict path arrives from git
+ * (trustworthy) but a RESOLUTION's content is written at it, so the path is
+ * re-checked at the write: a path that escaped the candidate would write
+ * outside the sandbox.
+ */
+function isContained(root: string, target: string): boolean {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * What a refresh reports (T6-2). `conflicted` is a state, not a failure: the
+ * candidate is mid-merge with the paths named, and {@link
+ * WorktreeSandboxManager.resolveConflict} is what clears it.
+ */
+export type SandboxRefreshResult = {
+  refreshed: boolean;
+  conflicted: boolean;
+  /** The conflicted paths, when `conflicted`. */
+  paths?: string[];
+  /** The candidate's tip before the refresh. */
+  before?: string;
+  detail?: string;
+};
+
+/**
+ * How a conflicted candidate is resolved (T6-3): take the resolution (write
+ * the content per path and commit it) or rebase (abort this merge and derive
+ * it again against a named base).
+ */
+export type SandboxConflictResolution =
+  | { kind: "resolve"; contents: Record<string, string> }
+  | { kind: "rebase"; base?: string };
 import { isDependencyLinkPath, linkDependencyRoots } from "./dependency-links";
 
 export type WorktreePromotion = {
@@ -549,9 +584,15 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
     return { restored: true };
   }
 
-  /** Whether a merge is half-applied in the host tree. */
-  private async mergeInProgress(): Promise<boolean> {
-    return await git(this.hostRoot, ["rev-parse", "--verify", "MERGE_HEAD"])
+  /**
+   * Whether a merge is half-applied. `where` defaults to the host tree (the
+   * promotion path's question); a candidate's worktree is what the refresh
+   * and conflict resolver ask about (T6-2/T6-3).
+   */
+  private async mergeInProgress(
+    where: string = this.hostRoot,
+  ): Promise<boolean> {
+    return await git(where, ["rev-parse", "--verify", "MERGE_HEAD"])
       .then(() => true)
       .catch(() => false);
   }
@@ -572,6 +613,142 @@ export class WorktreeSandboxManager extends WorkspaceSandboxManager {
   /** Where the last-known-good commit is written, so it survives a restart. */
   private lastKnownGoodPath(): string {
     return join(this["baseRoot"], "worktree-last-known-good.json");
+  }
+
+  /**
+   * Brings a candidate up to date with the host's newer commits (T6-2).
+   *
+   * A candidate branch is cut from the head at creation time, so a long
+   * running subagent works against a snapshot of the host that goes stale the
+   * moment anything else lands — another candidate's promotion, the user's
+   * own commit. The refresh is what lets it SEE that work instead of
+   * promoting a branch whose merge-base is three promotions behind.
+   *
+   * The base is the host's current system head, merged INTO the candidate
+   * (never the other way round: the candidate's own commits are the agent's
+   * work and must survive). A conflict during the refresh is left in place
+   * and REPORTED — the same conflicted state a promotion conflict produces,
+   * and the same {@link resolveConflict} clears it. Aborting here would throw
+   * away the information the resolver needs.
+   */
+  async refresh(id: string): Promise<SandboxRefreshResult> {
+    await this.initialize();
+    this.mustGet(id);
+    const root = resolve(this["baseRoot"], id);
+    // A remote is fetched when one exists; a purely local repo refreshes
+    // from the host's own branch, which is where its newer commits are.
+    const remote = await this.defaultRemote();
+    if (remote) {
+      await git(root, ["fetch", remote]).catch(() => undefined);
+    }
+    const base = await this.systemHead();
+    const before = await git(root, ["rev-parse", "HEAD"]);
+    await this.commitPendingChanges(id);
+    try {
+      await git(root, ["merge", "--no-edit", base]);
+    } catch (error) {
+      const paths = await this.conflictedPaths(root);
+      // The candidate is left mid-merge on purpose: the worktree keeps the
+      // conflict markers and MERGE_HEAD, which is exactly what the resolver
+      // reads. `merge --abort` here would destroy both.
+      return {
+        refreshed: false,
+        conflicted: true,
+        paths,
+        before,
+        detail: error instanceof Error ? error.message : String(error),
+      };
+    }
+    return { refreshed: true, conflicted: false, before };
+  }
+
+  /**
+   * Resolves a conflicted candidate (T6-3).
+   *
+   * A conflict is a STATE, not a failure: the worktree is mid-merge with
+   * conflict markers, and there are exactly two honest ways out. Take the
+   * resolution — the caller (a human, or the agent after reading the
+   * markers) writes the resolved content per path, and the candidate commits
+   * it and carries on. Or rebase the candidate onto the current base and
+   * start the merge over, which is what the old error message told the
+   * operator to do by hand while providing no way to do it.
+   *
+   * Both paths leave the candidate on a clean commit, so a promotion
+   * afterwards is an ordinary promotion.
+   */
+  async resolveConflict(
+    id: string,
+    resolution: SandboxConflictResolution,
+  ): Promise<SandboxRefreshResult> {
+    await this.initialize();
+    this.mustGet(id);
+    const root = resolve(this["baseRoot"], id);
+    if (!(await this.mergeInProgress(root)))
+      throw new Error(`candidate ${id} has no conflict to resolve`);
+    if (resolution.kind === "rebase") {
+      // Start the merge over against the base the caller names (default: the
+      // host's current head). The candidate's own commits are replayed on
+      // top, so the agent's work survives and the conflict is re-derived
+      // against the newer base.
+      await git(root, ["merge", "--abort"]).catch(() => undefined);
+      const base = resolution.base ?? (await this.systemHead());
+      try {
+        await git(root, ["merge", "--no-edit", base]);
+      } catch (error) {
+        const paths = await this.conflictedPaths(root);
+        return {
+          refreshed: false,
+          conflicted: true,
+          paths,
+          detail: error instanceof Error ? error.message : String(error),
+        };
+      }
+      return { refreshed: true, conflicted: false };
+    }
+    // Take the resolution: every conflicted path must be answered.
+    const conflicted = new Set(await this.conflictedPaths(root));
+    for (const [path] of Object.entries(resolution.contents)) {
+      if (!conflicted.has(path))
+        throw new Error(
+          `path ${path} is not conflicted in candidate ${id}; the resolution must answer the conflict, not invent one`,
+        );
+    }
+    for (const path of conflicted) {
+      const content = resolution.contents[path];
+      if (content === undefined)
+        throw new Error(
+          `candidate ${id} still has an unresolved conflict at ${path}`,
+        );
+      const target = resolve(root, path);
+      if (!isContained(root, target))
+        throw new Error(`conflict path escapes the candidate: ${path}`);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, content);
+      await git(root, ["add", "--", path]);
+    }
+    await git(root, ["commit", "--no-edit"]);
+    return { refreshed: true, conflicted: false };
+  }
+
+  /** The conflicted paths in a worktree, from git's own unmerged list. */
+  private async conflictedPaths(root: string): Promise<string[]> {
+    const output = await git(root, ["diff", "--name-only", "--diff-filter=U"])
+      .then((value) => value)
+      .catch(() => "");
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  /** The remote to fetch from, when the repo has one. */
+  private async defaultRemote(): Promise<string | undefined> {
+    const output = await git(this.hostRoot, ["remote"]).catch(() => "");
+    const first = output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return first[0];
   }
 
   private async setLastKnownGood(

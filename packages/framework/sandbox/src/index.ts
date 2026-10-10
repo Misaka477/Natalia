@@ -1,10 +1,11 @@
 /**
  * `@anthelia/sandbox` — the sandbox backends and their governance.
  *
- * `WorkspaceSandboxManager` is the directory-copy backend; `WorktreeSandboxManager`
- * extends it with git worktree/candidate/promotion/rollback semantics and is the
- * production backend when the workspace is a git repo. Both share the operational
- * surface (execute, resources, file ops, persistence).
+ * `WorkspaceSandboxManager` is the directory-copy backend, used when the
+ * workspace is not a git repository; `WorktreeSandboxManager` extends it with
+ * git worktree/candidate/promotion/rollback semantics and is the backend a
+ * git repository gets by default (T6-1). Both share the operational surface
+ * (execute, resources, file ops, persistence).
  */
 export * from "./workspace-manager";
 export {
@@ -30,7 +31,12 @@ export {
   type IndexedFile,
   type SnapshotIndex,
 } from "./snapshot-store";
-export { detectPromoteCommand, sandboxToolFamily, sandboxTools } from "./tools";
+export {
+  detectPromoteCommand,
+  sandboxSelfDiffTool,
+  sandboxToolFamily,
+  sandboxTools,
+} from "./tools";
 // The diff engine the sandbox family draws its hunks with. The write family
 // (write_file/edit_file/apply_edits) composes its diff card from the same
 // engine, so a write's hunks are real (context lines, correct line numbers)

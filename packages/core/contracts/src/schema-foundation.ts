@@ -78,10 +78,13 @@ export const sandboxConfigSchema = z.object({
    * backend (content-addressed object store, candidate/promote/rollback) and
    * needs nothing external; `worktree` uses the host's real git when the
    * workspace is a git repo, so a promoted sandbox change lands as a commit in
-   * the user's own history. Default `snapshot`: the framework ships its own
-   * git, git is opt-in for history integration.
+   * the user's own history. Default `worktree` (T6-1): a git repository is
+   * exactly where the history-integrating backend applies, so it is what one
+   * gets unless a deployment says otherwise — the snapshot backend is chosen
+   * by naming `snapshot`, or by the workspace not being a git repository at
+   * all, which the controller decides.
    */
-  backend: z.enum(["snapshot", "worktree"]).default("snapshot"),
+  backend: z.enum(["snapshot", "worktree"]).default("worktree"),
   /**
    * Command run inside the candidate before a promote may land. Empty is
    * rejected; absent means DISCOVER — the runtime reads the workspace's own

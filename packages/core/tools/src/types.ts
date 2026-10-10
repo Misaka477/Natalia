@@ -679,6 +679,16 @@ export type ToolExecutionContext = {
   subagents?: SubagentToolService;
   terminal?: TerminalToolService;
   sandboxes?: SandboxToolService;
+  /**
+   * The caller's OWN sandbox candidate, read-only (T6-4). Present only for a
+   * sandboxed subagent, whose worktree this runtime created: it can read the
+   * diff it is about to hand back, and nothing else — no merge, no promote,
+   * no other candidate's id.
+   */
+  sandboxSelf?: {
+    id: string;
+    preview(): Promise<SandboxChangeView[]>;
+  };
   workspaceReadAuthorize?: (input: {
     toolName: string;
     paths: string[];

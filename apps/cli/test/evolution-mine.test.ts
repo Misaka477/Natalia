@@ -215,3 +215,81 @@ test("evolution evaluate on an unmined target says what to run", () => {
     "natalia evolution mine --target nope",
   );
 });
+
+test("evolution optimize reports per-attempt failures when no daemon answers", async () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-optimize-"));
+  await seed(base);
+  const mined = run(
+    ["evolution", "mine", "--target", "release-skill", "--workspace", base],
+    base,
+  );
+  expect(mined.exitCode).toBe(0);
+  const child = run(
+    [
+      "evolution",
+      "optimize",
+      "--target",
+      "release-skill",
+      "--engine",
+      "best-of-n",
+      "--n",
+      "2",
+      "--workspace",
+      base,
+      "--json",
+    ],
+    base,
+  );
+  expect(child.exitCode).toBe(0);
+  const report = JSON.parse(new TextDecoder().decode(child.stdout)) as {
+    engine: string;
+    best: unknown;
+    beatBaseline: boolean;
+    failures: Array<{ attempt: number; reason: string }>;
+  };
+  expect(report.engine).toBe("best-of-n");
+  // No daemon is a per-attempt answer, never a fake success: every attempt
+  // failed, there is no best, and nothing claims to have beaten anything.
+  expect(report.best).toBeNull();
+  expect(report.beatBaseline).toBe(false);
+  expect(report.failures).toHaveLength(2);
+  expect(report.failures[0]!.reason).toContain("no_daemon");
+});
+
+test("evolution optimize refuses a bad engine and a bad attempt count", () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-optimize-gate-"));
+  const badEngine = run(
+    [
+      "evolution",
+      "optimize",
+      "--target",
+      "x",
+      "--engine",
+      "reflective",
+      "--n",
+      "2",
+      "--workspace",
+      base,
+    ],
+    base,
+  );
+  expect(badEngine.exitCode).not.toBe(0);
+  expect(new TextDecoder().decode(badEngine.stderr)).toContain("--engine");
+  const badN = run(
+    [
+      "evolution",
+      "optimize",
+      "--target",
+      "x",
+      "--engine",
+      "best-of-n",
+      "--n",
+      "0",
+      "--workspace",
+      base,
+    ],
+    base,
+  );
+  expect(badN.exitCode).not.toBe(0);
+  expect(new TextDecoder().decode(badN.stderr)).toContain("--n");
+});

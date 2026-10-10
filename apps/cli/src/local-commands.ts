@@ -2,6 +2,7 @@ import { EGRESS_ADVISORY } from "@natalia/client";
 import {
   createRuntimeDaemonStore,
   daemonToken,
+  readRuntimeDaemonRegistration,
   runtimeDaemonStatus,
 } from "@natalia/transport/host";
 import { daemonDir } from "./command-helpers";
@@ -14,8 +15,10 @@ import {
 import {
   evaluateBaseline,
   groupRunsByPrompt,
+  keywordOverlapJudge,
   mineSessionPairs,
   readDataset,
+  runBestOfN,
   samplesFromPairs,
   scoreRun,
   segmentTurns,
@@ -25,7 +28,11 @@ import {
 import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
 import { evalListLines, evalRun } from "./eval-cli";
-import { createRecordedFetch, readCassette } from "@natalia/transport";
+import {
+  callRuntimeRPC,
+  createRecordedFetch,
+  readCassette,
+} from "@natalia/transport";
 import {
   deleteLocalSession,
   duplicateLocalSession,
@@ -422,9 +429,10 @@ export async function handleLocalCommands(argv: string[]) {
       // session's live cache is never touched.
       const usage =
         "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]\n" +
-        "       natalia evolution evaluate --target <name> [--workspace <root>] [--json]";
+        "       natalia evolution evaluate --target <name> [--workspace <root>] [--json]\n" +
+        "       natalia evolution optimize --target <name> --engine best-of-n --n <count> [--workspace <root>] [--json]";
       const action = argv[1];
-      if (action !== "mine" && action !== "evaluate") {
+      if (action !== "mine" && action !== "evaluate" && action !== "optimize") {
         console.error(usage);
         process.exit(1);
       }
@@ -478,47 +486,170 @@ export async function handleLocalCommands(argv: string[]) {
       // strict-improvement rule. The holdout's score rides the sealed
       // door (a number, never its cases); the dimensions the cheap judge
       // cannot measure are REPORTED, not invented.
-      const dataset = await readDataset(workspaceRoot, target);
-      if (!dataset) {
-        console.error(
-          `no dataset named ${target} under ${workspaceRoot}/.natalia/evolution/datasets — run: natalia evolution mine --target ${target}`,
+      if (action === "evaluate") {
+        const dataset = await readDataset(workspaceRoot, target);
+        if (!dataset) {
+          console.error(
+            `no dataset named ${target} under ${workspaceRoot}/.natalia/evolution/datasets — run: natalia evolution mine --target ${target}`,
+          );
+          process.exit(1);
+        }
+        const { baseline, holdoutScore } = evaluateBaseline({
+          pool: {
+            samples: samplesFromPairs(dataset.visible, (pair) =>
+              splitForPair(pair),
+            ),
+          },
+          holdout: samplesFromPairs(dataset.holdout, () => "holdout" as const),
+        });
+        const report = {
+          target,
+          dir: dataset.dir,
+          samples: {
+            train: dataset.train.length,
+            val: dataset.val.length,
+            holdout: dataset.holdout.length,
+          },
+          baseline: {
+            score: baseline.score,
+            holdoutScore,
+            unjudgedDimensions: ["procedureFollowing", "conciseness"],
+          },
+        };
+        if (argv.includes("--json")) {
+          console.log(JSON.stringify(report, null, 2));
+          break;
+        }
+        console.log(
+          [
+            `dataset: ${target} → ${dataset.dir}`,
+            `samples: ${dataset.train} train / ${dataset.val} val / ${dataset.holdout.length} holdout (sealed)`,
+            `baseline score: ${baseline.score.toFixed(4)} (holdout ${holdoutScore.toFixed(4)})`,
+            `judge: keyword overlap — procedure_following and conciseness are UNJUDGED, not measured`,
+          ].join("\n"),
         );
-        process.exit(1);
-      }
-      const { baseline, holdoutScore } = evaluateBaseline({
-        pool: {
-          samples: samplesFromPairs(dataset.visible, (pair) =>
-            splitForPair(pair),
-          ),
-        },
-        holdout: samplesFromPairs(dataset.holdout, () => "holdout" as const),
-      });
-      const report = {
-        target,
-        dir: dataset.dir,
-        samples: {
-          train: dataset.train.length,
-          val: dataset.val.length,
-          holdout: dataset.holdout.length,
-        },
-        baseline: {
-          score: baseline.score,
-          holdoutScore,
-          unjudgedDimensions: ["procedureFollowing", "conciseness"],
-        },
-      };
-      if (argv.includes("--json")) {
-        console.log(JSON.stringify(report, null, 2));
         break;
       }
-      console.log(
-        [
-          `dataset: ${target} → ${dataset.dir}`,
-          `samples: ${dataset.train} train / ${dataset.val} val / ${dataset.holdout.length} holdout (sealed)`,
-          `baseline score: ${baseline.score.toFixed(4)} (holdout ${holdoutScore.toFixed(4)})`,
-          `judge: keyword overlap — procedure_following and conciseness are UNJUDGED, not measured`,
-        ].join("\n"),
-      );
+      // optimize: L4a's floor engine. N independent answers to the
+      // dataset's first train task, each submitted through the daemon as
+      // its own turn, scored by the cheap judge against the recorded
+      // reference. No daemon answers no_daemon per attempt — nothing is
+      // faked, the batch reports what it could not do.
+      if (argv[1] === "optimize") {
+        const engine = valueAfter(argv, "--engine");
+        if (engine !== "best-of-n") {
+          console.error(
+            "usage: natalia evolution optimize --target <name> --engine best-of-n --n <count> [--workspace <root>] [--json]",
+          );
+          process.exit(1);
+        }
+        const nRaw = valueAfter(argv, "--n");
+        const n = nRaw === undefined ? Number.NaN : Number(nRaw);
+        if (!Number.isInteger(n) || n < 1) {
+          console.error(
+            "natalia evolution optimize requires --n <count> (a positive integer)",
+          );
+          process.exit(1);
+        }
+        const optimizeRoot = valueAfter(argv, "--workspace") ?? process.cwd();
+        const dataset = await readDataset(optimizeRoot, target);
+        if (!dataset || !dataset.train.length) {
+          console.error(
+            `no mined dataset named ${target} with train samples under ${optimizeRoot} — run: natalia evolution mine --target ${target}`,
+          );
+          process.exit(1);
+        }
+        const task = dataset.train[0]!;
+        const { baseline } = evaluateBaseline({
+          pool: {
+            samples: samplesFromPairs(dataset.visible, (pair) =>
+              splitForPair(pair),
+            ),
+          },
+          holdout: samplesFromPairs(dataset.holdout, () => "holdout" as const),
+        });
+        const store = createRuntimeDaemonStore({ dir: daemonDir() });
+        const registration = await readRuntimeDaemonRegistration(store);
+        const token = registration ? await daemonToken(store) : undefined;
+        const sampleTurn = async (prompt: string): Promise<string> => {
+          if (!registration)
+            throw new Error("no_daemon: start one with `natalia daemon`");
+          await callRuntimeRPC<{ turnID?: string }>({
+            url: registration.url,
+            token,
+            method: "submit.andWait",
+            params: { text: prompt },
+            signal: AbortSignal.timeout(45_000),
+          });
+          const rows = await callRuntimeRPC<
+            Array<{ role: string; text?: string }>
+          >({
+            url: registration.url,
+            token,
+            method: "session.messages",
+          });
+          const last = [...(rows ?? [])]
+            .reverse()
+            .find((row) => row.role === "assistant" && (row.text ?? "").trim());
+          if (!last?.text?.trim())
+            throw new Error("the turn produced no assistant text");
+          return last.text;
+        };
+        const result = await runBestOfN({
+          prompt: task.task,
+          n,
+          sampler: async ({ prompt }) => await sampleTurn(prompt),
+          score: (text) =>
+            keywordOverlapJudge(task.response, text).dimensions.correctness,
+          baselineScore: baseline.score,
+        });
+        const report = {
+          target,
+          engine: "best-of-n",
+          task: { turnID: task.turnID, chars: task.task.length },
+          baselineScore: baseline.score,
+          best: result.best
+            ? {
+                attempt: result.best.attempt,
+                score: result.best.score,
+                chars: result.best.chars,
+              }
+            : null,
+          beatBaseline: result.beatBaseline,
+          attempts: result.attempts.map((attempt) => ({
+            attempt: attempt.attempt,
+            score: attempt.score,
+            chars: attempt.chars,
+          })),
+          failures: result.failures,
+        };
+        if (argv.includes("--json")) {
+          console.log(JSON.stringify(report, null, 2));
+          break;
+        }
+        console.log(
+          [
+            `best-of-n on ${target} (task ${task.turnID}):`,
+            `baseline score: ${baseline.score.toFixed(4)}`,
+            ...result.attempts.map(
+              (attempt) =>
+                `  attempt ${attempt.attempt}: ${attempt.score.toFixed(4)} (${attempt.chars} chars)`,
+            ),
+            ...result.failures.map(
+              (failure) =>
+                `  attempt ${failure.attempt}: FAILED — ${failure.reason}`,
+            ),
+            result.best
+              ? `best: attempt ${result.best.attempt} — ${result.beatBaseline ? "BEATS" : "does not beat"} the baseline`
+              : "best: none (every attempt failed)",
+            `judge: keyword overlap — the recorded reference scores 1.0 against itself, so the floor's ceiling is the reference; the reflective engine is what closes the gap`,
+          ].join("\n"),
+        );
+        break;
+      }
+      // The gate above refuses any other action; this break is the
+      // structural proof of it (a switch case that can fall through is a
+      // case that one day will).
       break;
     }
     case "consults": {

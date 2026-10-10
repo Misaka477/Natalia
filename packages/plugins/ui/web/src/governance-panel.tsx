@@ -465,6 +465,22 @@ export async function promoteConstitutionDocRuleViaRpc(
 }
 
 /**
+ * L7's trigger surface: the RPC action behind a Growth trigger row's
+ * [晋升为提案]. It records the `growth.promoted` fact — where the trigger
+ * lands (its destination class) and what approval it needs. **It applies
+ * nothing**: the promotion's `next` names who acts, and the approval
+ * policy decides. The loop's automation ends at this button on purpose —
+ * the human is the one who hands a ranked trigger to the mutation path.
+ */
+export async function promoteGrowthTriggerViaRpc(
+  runtime: RuntimeClient | undefined,
+  sessionID: string | undefined,
+  capability: string,
+) {
+  return runtime?.promoteGrowthTrigger?.({ capability }, sessionID);
+}
+
+/**
  * The RPC action behind a constitution document-rule [编辑] click (EI §3.8
  * P-1.c 软规则): the user rewrites the section's prose and syncs its
  * enforcement / appliesTo annotations; the runtime writes the document back.
@@ -2310,6 +2326,32 @@ export function GovernancePane(props: {
                     .map(([key, value]) => `${key}=${value}`)
                     .join(" ")}
                 </span>
+                {/* L7: the trigger surface. One click records the promotion
+                    fact (destination + required approval) and reloads — it
+                    does NOT run a mutation. The human hands the ranked
+                    trigger onward; the loop never takes itself from here. */}
+                <button
+                  type="button"
+                  class="constitution-btn"
+                  disabled={actionBusy()}
+                  onClick={() =>
+                    void (async () => {
+                      const result = await promoteGrowthTriggerViaRpc(
+                        props.runtime,
+                        props.sessionID,
+                        trigger.capability,
+                      );
+                      setActionNotice(
+                        result?.promoted
+                          ? `已记录晋升：${trigger.capability} → ${result.destination}（${result.approval}）· ${result.next}`
+                          : `晋升未记录：${result?.reason ?? "未知原因"}`,
+                      );
+                      await load();
+                    })()
+                  }
+                >
+                  晋升为提案
+                </button>
               </div>
             )}
           </For>

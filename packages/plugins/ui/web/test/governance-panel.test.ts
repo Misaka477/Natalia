@@ -16,6 +16,7 @@ import {
   loadGovernancePage,
   loadGovernanceSlices,
   promoteConstitutionDocRuleViaRpc,
+  promoteGrowthTriggerViaRpc,
   removeConstitutionRuleViaRpc,
   reopenDriftFindingViaRpc,
   updateConstitutionDocRuleViaRpc,
@@ -1053,4 +1054,52 @@ test("the overrides slice loads beside the constitution slice", async () => {
       approvedBy: "user",
     }),
   ).toBe("whole-scope exception");
+});
+
+test("the Growth trigger surface records a promotion and applies nothing", async () => {
+  // L7: the button behind a Growth trigger row. It records the
+  // `growth.promoted` fact through the RPC face — destination, required
+  // approval, and who acts next — and applies NOTHING itself. The loop's
+  // automation ends at this click on purpose.
+  const promotions: Array<{ capability: string }> = [];
+  const runtime = {
+    growthProposals: async () => [],
+    growthTriggers: async () => [
+      {
+        rule: "capability_gap",
+        class: "skill",
+        capability: "release-evidence",
+        evidence: { observations: 3 },
+        reason: "the gap kept costing the release",
+      },
+    ],
+    growthPromotions: async () => [],
+    externalJoinedTasks: async () => [],
+    promoteGrowthTrigger: async (input: { capability: string }) => {
+      promotions.push(input);
+      return {
+        promoted: true,
+        destination: "skill",
+        approval: "human",
+        appliedBy: "skills.upsert",
+        next: "a human reviews the candidate",
+        reason:
+          "class policy: a skill may auto-apply, the write still validates",
+      };
+    },
+  } as unknown as RuntimeClient;
+  const result = await promoteGrowthTriggerViaRpc(
+    runtime,
+    "ses_growth",
+    "release-evidence",
+  );
+  expect(promotions).toEqual([{ capability: "release-evidence" }]);
+  // The answer names the destination, the approval and the next actor —
+  // and the promotion's own doc says it applies nothing.
+  expect(result).toMatchObject({
+    promoted: true,
+    destination: "skill",
+    approval: "human",
+    next: "a human reviews the candidate",
+  });
 });

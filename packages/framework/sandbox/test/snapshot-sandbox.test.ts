@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ObjectStore } from "@anthelia/object-store";
 import { SnapshotSandboxManager } from "../src/snapshot-sandbox";
-import { SnapshotStore } from "../src/snapshot-store";
+import { SandboxPromotionConflict, SnapshotStore } from "../src/snapshot-store";
 
 test("SnapshotStore captures, diffs and promotes by content hash", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-snapshot-store-"));
@@ -302,4 +302,19 @@ test("a promotion is undoable by sandbox id through the manager", async () => {
 
   expect(result.restored).toBe(true);
   expect(await readFile(join(root, "file.txt"), "utf8")).toBe("before\n");
+});
+
+test("a promotion conflict names a remedy that exists (F14)", () => {
+  // The sweep: the conflict told the caller to "Rebase the candidate onto the
+  // current host and review it again" — an action with no tool behind it, so a
+  // model following the instruction found nothing to call. This backend has no
+  // rebase: a snapshot candidate is a copy, and the remedy is to recreate it.
+  const conflict = new SandboxPromotionConflict(["a.txt", "b.txt"]);
+  // The conflicting paths are still named — that is the state.
+  expect(conflict.paths).toEqual(["a.txt", "b.txt"]);
+  // The remedy is one a caller can actually perform.
+  expect(conflict.message).toContain("sandbox_delete");
+  expect(conflict.message).toContain("sandbox_create");
+  // And the instruction to do something impossible is gone.
+  expect(conflict.message).not.toContain("Rebase the candidate");
 });

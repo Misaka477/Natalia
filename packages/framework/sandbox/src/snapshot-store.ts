@@ -74,8 +74,18 @@ export class SandboxPromotionConflict extends Error {
     super(
       `promotion conflicts with changes already on the host: ${paths.join("; ")}. ` +
         `The candidate was built from a snapshot that no longer matches, so ` +
-        `promoting it would discard the newer work. Rebase the candidate onto ` +
-        `the current host and review it again.`,
+        `promoting it would discard the newer work. ` +
+        // F14 (2026-10-10 sweep): the message used to end "Rebase the
+        // candidate onto the current host and review it again" — an action
+        // with no tool behind it, so a model following the instruction found
+        // nothing to call. This backend has no rebase: a snapshot candidate is
+        // a copy, and the remedy is to delete it and create a fresh one from
+        // the current host. The worktree backend (a git repo) is the one that
+        // can refresh and resolve, and it says so.
+        `Delete this candidate and create a new one from the current host ` +
+        `(sandbox_delete then sandbox_create); on a git workspace the ` +
+        `worktree backend can refresh a candidate instead, with ` +
+        `sandbox_refresh.`,
     );
     this.name = "SandboxPromotionConflict";
     this.paths = paths;

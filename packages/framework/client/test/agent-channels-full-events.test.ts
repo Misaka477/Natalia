@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { capRowText } from "../src/runtime/session-history-tool";
 import { join } from "node:path";
 
 /**
@@ -89,4 +90,61 @@ test("a sandboxed child's tool list carries one entry per name", () => {
   expect(source).toMatch(
     /visible\.filter\(\(tool\) => !names\.has\(tool\.name\)\)/u,
   );
+});
+
+test("a session_history page bounds its rows, not only its turns", () => {
+  // F4: `limit=2` returned 13 pages / 1.2 MB. The limit reaches the store as a
+  // TURN count, and each turn expands into as many rows as its events produced
+  // — so two turns carrying long tool results answer with megabytes. Truncating
+  // after the expansion is the defect; the rows are the unit the model reads,
+  // so they are the unit the limit bounds.
+  const source = readFileSync(
+    join(import.meta.dir, "..", "src", "runtime", "session-history-tool.ts"),
+    "utf8",
+  );
+  // The answer's rows are bounded by the limit.
+  expect(source).toContain("const kept = rows.slice(0, limit);");
+  // And the truncation is visible, so a page cannot masquerade as the truth.
+  expect(source).toContain("truncated: true");
+  expect(source).toContain("returnedRows");
+  // Each row's text is capped rather than echoing the whole event payload.
+  expect(source).toContain("ROW_TEXT_MAX_CHARS");
+  expect(source).toContain("more chars truncated");
+  // Thinking rows are still dropped at the surface that answers.
+  expect(source).toContain('if (row.kind === "thinking") continue;');
+});
+
+test("a session_history row's text is capped, and says how much was cut", () => {
+  // The behavioural half of F4: one row must not cost a page. A tool result's
+  // whole body used to arrive verbatim, so `limit=2` answered with 1.2 MB.
+  const long = "x".repeat(500_000);
+  const capped = capRowText({
+    kind: "tool",
+    event: { type: "tool.update", result: long } as never,
+  });
+  // The head survives, readable.
+  expect(capped.startsWith("x".repeat(100))).toBe(true);
+  // And the cut is declared, so a model can tell a long row from a short one.
+  expect(capped).toContain("more chars truncated");
+  expect(capped.length).toBeLessThan(long.length / 10);
+  // A short row is untouched — no ellipsis on something that fits.
+  const short = capRowText({
+    kind: "assistant",
+    event: { type: "content.delta", text: "brief" } as never,
+  });
+  expect(short).toBe("brief");
+});
+
+test("a session_history row's text is capped at the exported ceiling", async () => {
+  // The behavioural half of F4: one row must not cost a page. The cap is a
+  // number the answering surface applies, so it is asserted against the
+  // exported ceiling rather than the presence of a constant.
+  const { SESSION_HISTORY_ROW_TEXT_MAX_CHARS } = await import(
+    "../src/runtime/session-history-tool"
+  );
+  expect(SESSION_HISTORY_ROW_TEXT_MAX_CHARS).toBeGreaterThan(500);
+  expect(SESSION_HISTORY_ROW_TEXT_MAX_CHARS).toBeLessThanOrEqual(10_000);
+  // A tool result's whole body is what used to arrive verbatim; the cap is
+  // small enough that even a 1 MB result answers with a readable head.
+  expect(SESSION_HISTORY_ROW_TEXT_MAX_CHARS).toBeLessThan(100_000);
 });

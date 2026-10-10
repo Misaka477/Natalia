@@ -1,11 +1,50 @@
 import type { RuntimeTool } from "@anthelia/tools";
 import { sessionStoreController } from "@anthelia/session-store";
-import type { SessionID } from "@anthelia/contracts";
+import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionStoreController } from "@anthelia/session-store";
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 200;
+/** One row's text ceiling: enough to read a finding, small enough to page. */
+const ROW_TEXT_MAX_CHARS = 2_000;
+
+/** A row as the answering surface returns it: identity, kind, bounded text. */
+type SessionHistoryRow = {
+  id: string;
+  turnID: string;
+  kind: string;
+  text: string;
+};
+
+/**
+ * The row's own text, capped.
+ *
+ * The row carries its EVENT, and an event carries the whole payload — a tool
+ * result's complete body, a content delta's full text. The projection keeps
+ * the head and says how much was cut, so a model can tell "this row is long"
+ * from "this row is short" instead of receiving a megabyte it cannot use.
+ */
+export function capRowText(row: { kind: string; event: RuntimeEvent }): string {
+  const raw = rowEventText(row.event);
+  if (raw.length <= ROW_TEXT_MAX_CHARS) return raw;
+  return `${raw.slice(0, ROW_TEXT_MAX_CHARS)}\n… [${raw.length - ROW_TEXT_MAX_CHARS} more chars truncated]`;
+}
+
+/** Exported for the guard: the row ceiling the answering surface applies. */
+export const SESSION_HISTORY_ROW_TEXT_MAX_CHARS = ROW_TEXT_MAX_CHARS;
+
+/** The text an event contributes to its row, by the row's kind. */
+function rowEventText(event: RuntimeEvent): string {
+  if ("text" in event && typeof event.text === "string") return event.text;
+  if ("result" in event && typeof event.result === "string")
+    return event.result;
+  if ("content" in event && typeof event.content === "string")
+    return event.content;
+  if ("message" in event && typeof event.message === "string")
+    return event.message;
+  return "";
+}
 
 /**
  * Model-facing transcript paging.
@@ -167,12 +206,47 @@ export function createSessionHistoryTool(ctx: RuntimeContext): RuntimeTool {
       // the no-private-reasoning rule the prompt states. The transcript page
       // is a record of what was SAID; the thinking rows are dropped here, at
       // the surface that answers, so the projection the UI draws is unchanged.
+      //
+      // The limit also bounds the ROWS, not only the turns it was asked of.
+      // `limit` reaches the store as a TURN count, and each turn expands into
+      // as many rows as its events produced — so `limit=2` returned 13 pages /
+      // 1.2 MB whenever those two turns carried long tool results. Truncating
+      // after the expansion is what the sweep named; the rows are the unit the
+      // model reads, so they are the unit the limit bounds.
+      const rows: SessionHistoryRow[] = [];
+      for (const message of page.data) {
+        for (const row of message.rows) {
+          if (row.kind === "thinking") continue;
+          rows.push({
+            id: row.id,
+            turnID: row.turnID,
+            kind: row.kind,
+            // A compact projection, not the raw event: the event carries the
+            // whole payload (a tool result's full body, a delta's text), and
+            // echoing it is what made one row cost a page.
+            text: capRowText(row),
+          });
+        }
+      }
+      const kept = rows.slice(0, limit);
       return JSON.stringify({
-        ...page,
         data: page.data.map((message) => ({
-          ...message,
-          rows: message.rows.filter((row) => row.kind !== "thinking"),
+          id: message.id,
+          turnID: message.turnID,
+          submitted: message.submitted,
+          ...(message.stopReason ? { stopReason: message.stopReason } : {}),
+          rows: kept.filter((row) => row.turnID === message.turnID),
         })),
+        cursor: page.cursor,
+        // The truncation is visible: a model that asked for 40 rows and got
+        // 40 of 300 must be able to tell that it is looking at a page.
+        ...(kept.length < rows.length
+          ? {
+              truncated: true,
+              returnedRows: kept.length,
+              totalRows: rows.length,
+            }
+          : {}),
       });
     },
   };

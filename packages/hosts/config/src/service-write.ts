@@ -107,6 +107,41 @@ async function loadOverlay(path: string): Promise<Record<string, unknown>> {
   }
 }
 
+/**
+ * Writes a COMPLETE config as the project overlay, replacing what is there.
+ *
+ * `updateConfigAtScope` merges: a field the patch does not mention keeps the
+ * value already on disk. That is right for a user's incremental edit and
+ * WRONG for a generation apply or rollback, which hold the whole composition
+ * — a candidate that never set `checkpoint.maxFiles` merged over a disk that
+ * had it left the candidate's value in place, so rolling back to the
+ * previous generation did not actually restore it. A replace is the honest
+ * primitive there: the generation IS the configuration.
+ *
+ * The global-model keys keep their existing routing (the global file is
+ * shared across workspaces, so it is updated, never replaced).
+ */
+export async function replaceProjectConfig(
+  workspaceRoot: string,
+  config: ConfigV3,
+  options: { globalPath?: string } = {},
+) {
+  const globalPatch = onlyGlobalModelConfig(config as unknown as ConfigPatch);
+  if (Object.keys(globalPatch).length)
+    await updateGlobalConfig(globalPatch, options.globalPath);
+  const { projectConfigPath } = await resolveConfig({
+    workspaceRoot,
+    globalPath: options.globalPath,
+  });
+  const projectOverlay = withoutGlobalModelConfig(
+    config as unknown as ConfigPatch,
+  ) as Record<string, unknown>;
+  await saveConfigOverlayFile(projectConfigPath, projectOverlay);
+  return (
+    await resolveConfig({ workspaceRoot, globalPath: options.globalPath })
+  ).config;
+}
+
 export async function updateConfigAtScope(
   workspaceRoot: string,
   patch: ConfigPatch,

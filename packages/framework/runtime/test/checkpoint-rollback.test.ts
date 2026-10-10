@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { expect, test } from "bun:test";
+import { checkpointConfigSchema } from "@anthelia/contracts";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import {
   defaultCheckpointStoreDir,
@@ -23,6 +24,8 @@ import {
 } from "@anthelia/platform";
 import { appendSessionEvent, createSessionRecord } from "@anthelia/session";
 import {
+  CheckpointJournalCorruptionError,
+  CheckpointJournalUnsupportedError,
   CheckpointStore,
   ChunkStore,
   ContextLedger,
@@ -1002,4 +1005,278 @@ test("pruneV2Backups keeps the backup when v3 cannot reconstruct", async () => {
 
   await expect(pruneV2Backups(root)).rejects.toThrow();
   expect(existsSync(backupPath)).toBe(true);
+});
+
+test("a second capture reuses the stat cache instead of re-reading the tree", async () => {
+  // T5-1: the checkpoint used to readFile+sha256 every file on every
+  // checkpoint — ~8 GiB of I/O per tool call on this repository's own tree,
+  // which is what the 20,000-file / 512 MiB guards exist to cap. The stat
+  // cache makes an unchanged file neither read nor hashed again: this counts
+  // the reads through a spy on the file the scan opens.
+  const root = await tempWorkspace();
+  await writeFile(join(root, "keep.txt"), "stable content\n");
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_stat_cache",
+    workspaceRoot: root,
+    context: new ContextLedger(),
+  });
+  const manifestBefore = await store.loadManifest((await store.list())[0]!);
+  expect(manifestBefore.entries["keep.txt"]?.objectHash).toMatch(
+    /^[0-9a-f]{64}$/,
+  );
+
+  // A second capture: nothing changed, so the hash must come from the cache.
+  // Proof by mutation of the cached hash — if the scan re-read the file it
+  // would recompute the true one.
+  const cacheFile = join(
+    defaultCheckpointStoreDir(root, "ses_stat_cache"),
+    "stat-cache.json",
+  );
+  const cache = JSON.parse(await readFile(cacheFile, "utf8")) as {
+    entries: Record<string, { objectHash: string }>;
+  };
+  expect(Object.keys(cache.entries)).toContain("keep.txt");
+  cache.entries["keep.txt"]!.objectHash = "f".repeat(64);
+  await writeFile(cacheFile, JSON.stringify(cache));
+
+  // A fresh CAPTURE (not a journal replay: that would rebuild the manifest
+  // from the stored delta chain and never touch the file) with nothing
+  // changed on disk.
+  const reopened = await CheckpointStore.open({
+    sessionID: "ses_stat_cache",
+    workspaceRoot: root,
+  });
+  const captured = await reopened.createCheckpoint({
+    reason: "manual",
+    context: new ContextLedger(),
+    step: 1,
+  });
+  const manifestAfter = await reopened.loadManifest(captured);
+  // The poisoned hash came back: the file was NOT re-read.
+  expect(manifestAfter.entries["keep.txt"]?.objectHash).toBe("f".repeat(64));
+  // And the cache now carries it forward (the record overwrote the poison),
+  // which is what the NEXT capture will trust.
+  const rewritten = JSON.parse(await readFile(cacheFile, "utf8")) as {
+    entries: Record<string, { objectHash: string }>;
+  };
+  expect(rewritten.entries["keep.txt"]?.objectHash).toBe("f".repeat(64));
+});
+
+test("a changed file is re-hashed even when its size is unchanged", async () => {
+  // The stat tuple, not a shortcut: a same-size in-place rewrite keeps the
+  // size and (often) lands inside one mtime tick, so size+mtime alone is
+  // exactly the check that loses writes. ino is part of the tuple for the
+  // replace-in-place case.
+  const root = await tempWorkspace();
+  await writeFile(join(root, "data.txt"), "aaaa\n");
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_stat_change",
+    workspaceRoot: root,
+    context: new ContextLedger(),
+  });
+  const first = await store.loadManifest((await store.list())[0]!);
+  // Same length, different bytes.
+  await writeFile(join(root, "data.txt"), "bbbb\n");
+  const changed = await store.createCheckpoint({
+    reason: "manual",
+    context: new ContextLedger(),
+    step: 1,
+  });
+  const after = await store.loadManifest(changed);
+  expect(after.entries["data.txt"]?.objectHash).not.toBe(
+    first.entries["data.txt"]?.objectHash,
+  );
+});
+
+test("a corrupt stat cache degrades to a full recompute, never a wrong hash", async () => {
+  const root = await tempWorkspace();
+  await writeFile(join(root, "real.txt"), "real content\n");
+  const storeDirless = join(root, ".natalia", "checkpoints");
+  await mkdir(storeDirless, { recursive: true });
+  await writeFile(join(storeDirless, "stat-cache.json"), "{ this is not json");
+  const store = await CheckpointStore.open({
+    sessionID: "ses_stat_corrupt",
+    workspaceRoot: root,
+    storeDir: storeDirless,
+  });
+  const record = await store.createCheckpoint({
+    reason: "manual",
+    context: new ContextLedger(),
+    step: 1,
+  });
+  const manifest = await store.loadManifest(record);
+  // The true hash, recomputed from the file — not the garbage in the cache.
+  expect(manifest.entries["real.txt"]?.objectHash).toBe(
+    createHash("sha256").update("real content\n").digest("hex"),
+  );
+});
+
+test("an unbounded capture keeps a large tree complete, and a configured ceiling still guards", async () => {
+  // T5-2: the 20,000-file / 512 MiB defaults were fail-closed proxies for
+  // the full-tree re-read cost. This repository's own tree crossed the file
+  // count at the 20,000th file (457.6 MiB), so its baseline was born
+  // incomplete and /rollback refused. With the stat cache the cost is
+  // O(changed files), so the proxy is gone by default — while a deployment
+  // that WANTS a ceiling still gets one.
+  const root = await tempWorkspace();
+  await writeFile(join(root, "one.txt"), "one\n");
+  await writeFile(join(root, "two.txt"), "two\n");
+  const ledger = new ContextLedger();
+  const unbounded = await CheckpointStore.open({
+    sessionID: "ses_stat_unbounded",
+    workspaceRoot: root,
+  });
+  const complete = await unbounded.createCheckpoint({
+    reason: "baseline",
+    context: ledger,
+    step: 0,
+  });
+  expect(complete.complete).toBe(true);
+  expect(complete.errors).toEqual([]);
+
+  // The same tree, with an operator's ceiling: the guard still fires and
+  // still marks the manifest incomplete (a configured cap is a real cap).
+  const capped = await CheckpointStore.open({
+    sessionID: "ses_stat_capped",
+    workspaceRoot: root,
+    maxFiles: 1,
+  });
+  const guarded = await capped.createCheckpoint({
+    reason: "baseline",
+    context: ledger,
+    step: 0,
+  });
+  expect(guarded.complete).toBe(false);
+  expect(guarded.errors.join("\n")).toContain("file count guard exceeded: 1");
+});
+
+test("the checkpoint ceilings are opt-in: an unset config ships no cap", async () => {
+  // T5-2's actual change, at the layer that shipped it: the config no
+  // longer carries 20,000 files / 512 MiB defaults. The temp-workspace
+  // capture above cannot tell Infinity from 20,000 (three files are below
+  // both), so the assertion is on the shipped default itself — the thing
+  // that used to make this repository's own baseline incomplete.
+  const parsed = checkpointConfigSchema.parse({});
+  expect(parsed.maxFiles).toBeUndefined();
+  expect(parsed.maxBytes).toBeUndefined();
+  // And an explicit ceiling is still honoured (a configured cap is a real
+  // cap — the guard fires at it, as the test above shows).
+  expect(checkpointConfigSchema.parse({ maxFiles: 7 }).maxFiles).toBe(7);
+});
+
+test("disk usage counts the object and chunk libraries, not just the journal", async () => {
+  // T5-9: the number an operator reads before touching a ceiling used to be
+  // `directorySize(storeDir)` — the journal alone — while the objects and
+  // chunks deliberately live outside it. On a real workspace the journal is
+  // kilobytes and the shared objects are the gigabytes, so the reported
+  // footprint was off by the two largest parts.
+  const root = await tempWorkspace();
+  // A file past the object store's chunkMin: it lands in the object library
+  // (chunked), which is exactly the part the old number missed. The bytes
+  // are deliberately incompressible and non-repeating: constant content
+  // dedupes to a handful of chunks and the library stays tiny, which would
+  // make the assertion below vacuous.
+  await writeFile(
+    join(root, "big.payload"),
+    Buffer.from(
+      Array.from({ length: 200 * 1024 }, (_, index) => (index * 31) & 0xff),
+    ),
+  );
+  const store = await initializeDefaultCheckpointStore({
+    sessionID: "ses_disk_usage",
+    workspaceRoot: root,
+    context: new ContextLedger(),
+  });
+  const usage = await store.diskUsageBytes();
+  const journalOnly = await directorySizeForTest(
+    defaultCheckpointStoreDir(root, "ses_disk_usage"),
+  );
+  expect(journalOnly).toBeGreaterThan(0);
+  // The object library holds the payload's bytes, so the total is strictly
+  // larger than the journal it used to report.
+  expect(usage).toBeGreaterThan(journalOnly + 100 * 1024);
+});
+
+async function directorySizeForTest(path: string): Promise<number> {
+  const { readdir, lstat } = await import("node:fs/promises");
+  const walk = async (target: string): Promise<number> => {
+    try {
+      const info = await lstat(target);
+      if (info.isFile() || info.isSymbolicLink()) return info.size;
+      if (!info.isDirectory()) return 0;
+      const entries = await readdir(target);
+      let size = 0;
+      for (const entry of entries) size += await walk(join(target, entry));
+      return size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+      throw error;
+    }
+  };
+  return walk(path);
+}
+
+test("a damaged journal line and a newer-format journal are different refusals", async () => {
+  // T5-8: the two rejections a reader must tell apart. A line that is not
+  // JSON is a DAMAGED file — a storage fact naming the file and line. A
+  // journal written by a NEWER build is intact but unreadable HERE — the
+  // refusal names the upgrade, because "your file is corrupt" would send an
+  // operator hunting a disk problem that does not exist. Conflating them is
+  // how a version skew becomes a support ticket about disks.
+  const root = await tempWorkspace();
+  const damaged = await CheckpointStore.open({
+    sessionID: "ses_journal_damaged",
+    workspaceRoot: root,
+  });
+  await damaged.createCheckpoint({
+    reason: "manual",
+    context: new ContextLedger(),
+    step: 1,
+  });
+  const journalPath = join(
+    defaultCheckpointStoreDir(root, "ses_journal_damaged"),
+    "journal.jsonl",
+  );
+  const good = await readFile(journalPath, "utf8");
+  await writeFile(journalPath, `${good}{ this line is not json\n`);
+  const reopened = await CheckpointStore.open({
+    sessionID: "ses_journal_damaged",
+    workspaceRoot: root,
+  });
+  await expect(reopened.list()).rejects.toThrow(
+    CheckpointJournalCorruptionError,
+  );
+  await expect(reopened.list()).rejects.toThrow(
+    /is damaged: line \d+ is not valid JSON/u,
+  );
+
+  // The version skew: an intact v4 record.
+  const future = await CheckpointStore.open({
+    sessionID: "ses_journal_future",
+    workspaceRoot: root,
+  });
+  await future.createCheckpoint({
+    reason: "manual",
+    context: new ContextLedger(),
+    step: 1,
+  });
+  const futurePath = join(
+    defaultCheckpointStoreDir(root, "ses_journal_future"),
+    "journal.jsonl",
+  );
+  const stored = await readFile(futurePath, "utf8");
+  await writeFile(
+    futurePath,
+    stored.replace(/"schemaVersion":3/gu, '"schemaVersion":4'),
+  );
+  const futureReopened = await CheckpointStore.open({
+    sessionID: "ses_journal_future",
+    workspaceRoot: root,
+  });
+  await expect(futureReopened.list()).rejects.toThrow(
+    CheckpointJournalUnsupportedError,
+  );
+  await expect(futureReopened.list()).rejects.toThrow(
+    /upgrade Natalia to open it/u,
+  );
 });

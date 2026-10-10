@@ -4,6 +4,8 @@ export * from "./compaction";
 export * from "./context";
 export * from "./checkpoint";
 export {
+  CheckpointJournalCorruptionError,
+  CheckpointJournalUnsupportedError,
   migrateAllCheckpointJournals,
   pruneV2Backups,
 } from "./checkpoint-journal";

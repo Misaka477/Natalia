@@ -18,7 +18,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
-import { mergeConfig, updateConfigAtScope } from "@anthelia/config";
+import {
+  mergeConfig,
+  replaceProjectConfig,
+  updateConfigAtScope,
+} from "@anthelia/config";
 import type { ConfigV3, RuntimeEvent } from "@anthelia/contracts";
 import {
   buildGeneration,
@@ -288,7 +292,10 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         // not a second bespoke channel.
         requestApproval: async () => "granted",
         applyConfig: async (config) => {
-          await updateConfigAtScope(workspaceRoot(ctx), config, "project", {
+          // A replace, not a merge: the generation holds the whole
+          // composition, and a merge would leave the previous generation's
+          // values in every field this one does not mention.
+          await replaceProjectConfig(workspaceRoot(ctx), config, {
             globalPath: ctx.ports.configGlobalPath?.(),
           });
         },
@@ -359,14 +366,13 @@ export function createRollbackGenerationTool(ctx: RuntimeContext): RuntimeTool {
       const live = ctx.ports.getTsRuntimeConfig();
       if (!live) return "no running config to roll back from";
       const generation = await loadGeneration(objectStore(ctx), target);
-      await updateConfigAtScope(
-        workspaceRoot(ctx),
-        generation.config,
-        "project",
-        {
-          globalPath: ctx.ports.configGlobalPath?.(),
-        },
-      );
+      // A replace, not a merge (same reason as the apply path): a rollback
+      // restores the whole previous composition, so a field the target does
+      // not mention must be REMOVED, not inherited from the candidate being
+      // undone.
+      await replaceProjectConfig(workspaceRoot(ctx), generation.config, {
+        globalPath: ctx.ports.configGlobalPath?.(),
+      });
       await ctx.ports.reloadConfigFromDisk();
       const profile =
         ctx.state.serviceDirectory.getOptional(compositionProfile);

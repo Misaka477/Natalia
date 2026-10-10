@@ -6,6 +6,7 @@ export {
 } from "./service-resolution";
 export {
   migrateProjectModelConfigToGlobal,
+  replaceProjectConfig,
   updateConfig,
   updateConfigAtScope,
   updateGlobalConfig,

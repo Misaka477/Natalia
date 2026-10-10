@@ -2,6 +2,7 @@ import { DiffCache, ObjectStore } from "@anthelia/object-store";
 import { createHash } from "node:crypto";
 import { getLogger } from "@anthelia/logging";
 import { ChunkStore } from "./chunk-store";
+import { StatCache, statCachePath } from "./stat-cache";
 import {
   CheckpointJournal,
   contextMetaOf,
@@ -240,6 +241,12 @@ export class CheckpointStore {
   private readonly chunks: ChunkStore;
   private readonly chunkRoot: string;
   private journal: CheckpointJournal | undefined;
+  /**
+   * The stat cache: path -> stat tuple + object hash, so an unchanged file
+   * is neither read nor hashed again. Loaded lazily on the first capture and
+   * saved when a capture changed it.
+   */
+  private readonly statCache: StatCache;
 
   constructor(options: CheckpointStoreOptions) {
     this.sessionID = options.sessionID;
@@ -260,8 +267,15 @@ export class CheckpointStore {
     );
     this.diffCache = new DiffCache(this.objects, "checkpoint-diff");
     this.enabled = options.enabled ?? true;
-    this.maxFiles = options.maxFiles ?? 20000;
-    this.maxBytes = options.maxBytes ?? 512 * 1024 * 1024;
+    // Unbounded unless an operator opts in (T5-2). The old defaults (20,000
+    // files / 512 MiB) were fail-closed proxies for "every checkpoint costs
+    // a full-tree re-read": this repository's own tree hit the file count at
+    // the 20,000th file (457.6 MiB), so its baseline checkpoint was born
+    // `complete: false` and /rollback was refused. With the stat cache the
+    // cost is O(changed files), so the proxy is gone; a deployment that
+    // wants a ceiling names one.
+    this.maxFiles = options.maxFiles ?? Number.POSITIVE_INFINITY;
+    this.maxBytes = options.maxBytes ?? Number.POSITIVE_INFINITY;
     this.legacyIgnore = [...(options.ignore ?? [])];
     this.additionalDirs = options.additionalDirs ?? [];
     this.now = options.now ?? (() => new Date());
@@ -274,6 +288,7 @@ export class CheckpointStore {
       ? join(this.workspaceRoot, ".natalia", "chunks")
       : resolveWorkspaceChunksRoot(this.workspaceRoot);
     this.chunks = new ChunkStore(this.chunkRoot);
+    this.statCache = new StatCache(statCachePath(this.storeDir));
   }
 
   private async loadJournal(): Promise<CheckpointJournal> {
@@ -1049,8 +1064,22 @@ export class CheckpointStore {
     };
   }
 
+  /**
+   * The checkpoint subsystem's real disk footprint (T5-9).
+   *
+   * This used to report only `storeDir` — the journal — while the object
+   * library and the chunk library deliberately live outside it. The number
+   * an operator reads before deciding whether to raise a ceiling was
+   * therefore off by the two largest components: on this repository's own
+   * tree the journal is kilobytes and the shared objects are gigabytes. All
+   * three roots are counted now; a missing root counts as zero rather than
+   * failing the checkpoint that asked.
+   */
   async diskUsageBytes() {
-    return directorySize(this.storeDir);
+    let size = await directorySize(this.storeDir);
+    size += await directorySize(this.objectRoot());
+    size += await directorySize(this.chunkRoot);
+    return size;
   }
 
   async captureManifest(
@@ -1078,8 +1107,17 @@ export class CheckpointStore {
         );
       }
     }
+    // Loaded before the scan so an unchanged tree never touches a file, and
+    // saved after so the next capture sees the fresh tuples. A load failure
+    // degrades to an empty cache (a full recompute), which is why the scan
+    // can proceed either way.
+    await this.statCache.load();
     for (const root of roots)
       await this.scanDirectory(root, manifest, writeObjects, ignoreRules);
+    // The cache must not outlive the tree: paths the scan did not see are
+    // dropped, so a deleted file cannot linger with a stale hash.
+    this.statCache.retain(Object.keys(manifest.entries));
+    await this.statCache.save();
     return manifest;
   }
 
@@ -1129,9 +1167,25 @@ export class CheckpointStore {
           );
           return;
         }
-        const bytes = await readFile(full);
-        const objectHash = createHash("sha256").update(bytes).digest("hex");
-        if (writeObjects) await this.writeObject(objectHash, bytes);
+        // The stat cache: an unchanged file (full stat tuple match, not racy)
+        // reuses its hash without a read — this is what makes a checkpoint
+        // O(changed files) instead of O(tree).
+        const stat = {
+          size: info.size,
+          mtimeMs: info.mtimeMs,
+          ino: info.ino,
+          mode: info.mode & 0o777,
+        };
+        const cached = this.statCache.match(rel, stat);
+        let objectHash: string;
+        if (cached !== undefined) {
+          objectHash = cached;
+        } else {
+          const bytes = await readFile(full);
+          objectHash = createHash("sha256").update(bytes).digest("hex");
+          if (writeObjects) await this.writeObject(objectHash, bytes);
+          this.statCache.record(rel, stat, objectHash);
+        }
         manifest.entries[rel] = {
           path: rel,
           kind: "regular",

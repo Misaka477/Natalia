@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
-import { resolveConfig, updateConfigAtScope } from "@anthelia/config";
+import { replaceProjectConfig, resolveConfig } from "@anthelia/config";
 import {
   configV3Schema,
   type ConstitutionRule,
@@ -138,7 +138,13 @@ async function acceptance(
       // default global config lives under the user's home, which this
       // harness mounts read-only (a real user's home is writable — the
       // product path is unchanged).
-      await updateConfigAtScope(root, config, "project", { globalPath });
+      //
+      // A REPLACE, matching the product: a generation holds the whole
+      // composition, and the merge this used to call left the candidate's
+      // values in every field the target does not mention — so rolling back
+      // to a generation that never set `checkpoint.maxFiles` left the
+      // candidate's 12345 on disk and the rollback restored nothing.
+      await replaceProjectConfig(root, config, { globalPath });
     },
     reloadRuntime: async () => {
       await client.reloadConfig!();
@@ -242,12 +248,16 @@ test("P2 acceptance: a failed health check rolls back, journal-observable", asyn
         "rolled back to the previous composition",
       ),
     });
-    // The durable source no longer carries the candidate's marker.
+    // The durable source no longer carries the candidate's marker. The
+    // marker is `enabled`, not `maxFiles`: the checkpoint ceilings became
+    // opt-in (T5-2), so an unset `maxFiles` is now the unbounded default
+    // rather than a rollback-relevant value.
     const resolved = await resolveConfig({
       workspaceRoot: root,
       globalPath: join(root, ".natalia", "global-config.json"),
     });
-    expect(resolved.config.checkpoint.maxFiles).not.toBe(12345);
+    expect(resolved.config.checkpoint.maxFiles).toBeUndefined();
+    expect(resolved.config.checkpoint.enabled).toBe(true);
     void out;
   } finally {
     await client.dispose?.();

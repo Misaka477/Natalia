@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { modelSelectionStatus, evaluatePolicy } from "../src/policy";
+import { replaceProjectConfig, resolveConfig } from "../src/service";
 import { configV3Schema } from "@anthelia/contracts";
-import { resolveConfig } from "../src/service";
 
 test("provider policy defaults to the caller fallback", () => {
   expect(evaluatePolicy([], "provider.use", "anthropic", "allow")).toBe(
@@ -129,4 +129,37 @@ test("a rejected configuration file reports why, not just that it failed", async
   expect(project.diagnostic).toContain("invalid_config:");
   expect(project.diagnostic).toContain("approval");
   expect(resolved.config.agentModes.unattended).toBeUndefined();
+});
+
+test("replaceProjectConfig removes the keys a full config does not mention", async () => {
+  // A generation apply/rollback holds the WHOLE composition, so its write
+  // must replace: `updateConfigAtScope` merges, and a field the new config
+  // does not mention keeps the value already on disk. Rolling back to a
+  // generation that never set `checkpoint.maxFiles` therefore left the
+  // candidate's 12345 in place — the rollback restored nothing.
+  const root = await mkdtemp(join(tmpdir(), "natalia-config-replace-"));
+  const globalPath = join(root, "global.json");
+  await mkdir(join(root, ".natalia"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "config.json"),
+    JSON.stringify({ version: 3, checkpoint: { maxFiles: 12345 } }),
+  );
+  const before = await resolveConfig({ workspaceRoot: root, globalPath });
+  expect(before.config.checkpoint.maxFiles).toBe(12345);
+
+  await replaceProjectConfig(root, configV3Schema.parse({ version: 3 }), {
+    globalPath,
+  });
+  const after = await resolveConfig({ workspaceRoot: root, globalPath });
+  // The key is gone, not inherited: the opt-in ceiling reverts to unbounded
+  // (T5-2) because the target configuration does not set it.
+  expect(after.config.checkpoint.maxFiles).toBeUndefined();
+  // And a value the new config DOES set still lands.
+  await replaceProjectConfig(
+    root,
+    configV3Schema.parse({ version: 3, checkpoint: { maxFiles: 42 } }),
+    { globalPath },
+  );
+  const set = await resolveConfig({ workspaceRoot: root, globalPath });
+  expect(set.config.checkpoint.maxFiles).toBe(42);
 });

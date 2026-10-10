@@ -38,6 +38,32 @@ import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { join } from "node:path";
 import { ChunkStore, type ChunkRef } from "./chunk-store";
+
+/**
+ * A journal that was read successfully but is DAMAGED: a line that is not
+ * JSON at all (a torn write, a truncated disk). The message names the file
+ * and the line, because this is a storage fact an operator can act on.
+ */
+export class CheckpointJournalCorruptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckpointJournalCorruptionError";
+  }
+}
+
+/**
+ * A journal that is intact but written by a NEWER build: this one reads v3
+ * and the file says v4+. Reading it as the legacy shape would misinterpret
+ * every record, so the refusal names the upgrade path — "your file is
+ * corrupt" would send an operator hunting a disk problem that does not
+ * exist.
+ */
+export class CheckpointJournalUnsupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckpointJournalUnsupportedError";
+  }
+}
 import type {
   CheckpointManifestMeta,
   CheckpointRecord,
@@ -173,7 +199,18 @@ export async function journalNeedsMigration(path: string): Promise<boolean> {
       // Tolerate whitespace: real journals are `JSON.stringify` output, but a
       // hand-written or re-serialized record may not be.
       const version = /"schemaVersion"\s*:\s*(\d+)/u.exec(head)?.[1];
-      return version !== undefined && version !== "3";
+      if (version === undefined) return false; // legacy record without the field
+      const parsed = Number.parseInt(version, 10);
+      if (parsed > 3) {
+        // A journal written by a NEWER build. Migrating it would silently
+        // DOWNGRADE records this build cannot interpret — the two rejections
+        // exist precisely so this is refused here, before a single record is
+        // rewritten.
+        throw new CheckpointJournalUnsupportedError(
+          `checkpoint journal ${path} uses format v${parsed}, but this build reads v3: the journal was written by a newer Natalia — upgrade Natalia to open it (do not edit the file by hand)`,
+        );
+      }
+      return parsed !== 3;
     } finally {
       await handle.close();
     }
@@ -240,12 +277,37 @@ export class CheckpointJournal {
       throw error;
     }
     const entries: JournalEntry[] = [];
-    for (const line of text.split("\n")) {
+    const lines = text.split("\n");
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index]!;
       if (!line) continue;
-      const parsed = JSON.parse(line) as { schemaVersion?: number };
+      let parsed: { schemaVersion?: number };
+      try {
+        parsed = JSON.parse(line) as { schemaVersion?: number };
+      } catch (error) {
+        // The two rejections a reader must tell apart (T5-8): a line that is
+        // not JSON at all is a DAMAGED file (a torn write, a truncated
+        // disk), and it names the file and the line so an operator can look.
+        // That is a different fact from "this build cannot read this
+        // format", which is handled below and names the upgrade instead.
+        throw new CheckpointJournalCorruptionError(
+          `checkpoint journal ${path} is damaged: line ${index + 1} is not valid JSON (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
       if (parsed.schemaVersion === 3)
         entries.push({ schema: 3, stored: parsed as StoredCheckpoint });
-      else entries.push({ schema: 2, record: parsed as CheckpointRecord });
+      else if (
+        typeof parsed.schemaVersion === "number" &&
+        parsed.schemaVersion > 3
+      ) {
+        // Written by a NEWER build. Reading it as the legacy v2 shape would
+        // silently misinterpret every record — the direction-aware refusal
+        // names the upgrade, because "your file is corrupt" would send an
+        // operator hunting a disk problem that does not exist.
+        throw new CheckpointJournalUnsupportedError(
+          `checkpoint journal ${path} uses format v${parsed.schemaVersion}, but this build reads v3: the journal was written by a newer Natalia — upgrade Natalia to open it (do not edit the file by hand)`,
+        );
+      } else entries.push({ schema: 2, record: parsed as CheckpointRecord });
     }
     return new CheckpointJournal(path, chunks, entries);
   }

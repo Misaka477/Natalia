@@ -306,12 +306,17 @@ export const contextConfigSchema = z.object({
 export const checkpointConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
-    maxFiles: z.number().int().positive().default(20000),
-    maxBytes: z
-      .number()
-      .int()
-      .positive()
-      .default(512 * 1024 * 1024),
+    /**
+     * Optional ceilings on ONE checkpoint's manifest — absent means
+     * unbounded (T5-2). The old defaults (20,000 files / 512 MiB) were
+     * fail-closed proxies for the full-tree re-read every checkpoint used to
+     * pay; a workspace whose own tree crossed them was born with an
+     * incomplete baseline and a refused /rollback. The stat cache removed
+     * the cost the proxy was capping, so a ceiling is now an operator's
+     * choice, not a shipped assumption.
+     */
+    maxFiles: z.number().int().positive().optional(),
+    maxBytes: z.number().int().positive().optional(),
     ignore: z.array(z.string()).default([]),
     additionalDirs: z.array(z.string()).default([]),
   })

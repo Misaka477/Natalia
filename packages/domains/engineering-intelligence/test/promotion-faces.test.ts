@@ -40,6 +40,9 @@ function harness(events: RuntimeEvent[]) {
     ports: {
       getReady: async () => undefined,
       getSessionID: () => sessionID,
+      // S8: the queue face reads the workspace's run directory; the harness
+      // points it at a temp dir with no runs (an empty queue, said out loud).
+      getWorkspaceRoot: () => dir,
       getExecutionBySession: () => new Map([[sessionID, exec]]) as never,
       getActiveExec: () => exec,
       getSessionPersistenceForSession: () => Promise.resolve(undefined),
@@ -116,6 +119,16 @@ test("the growthTriggers face answers in triage order, with the rank's numbers",
     Number(trigger.evidence.triageScore),
   );
   expect([...scores].sort((left, right) => right - left)).toEqual(scores);
+});
+
+test("the queue face answers an empty queue when no run directory exists", async () => {
+  // The runtime owns this read (the panel cannot import this package). No
+  // run directory yet is an empty queue SAID OUT LOUD — never a silent
+  // failure, and never a throw that would take the panel's tab down.
+  const { surface } = harness(gapJournal());
+  const queue = await surface.evolutionQueue!("ses_live_001");
+  expect(queue.items).toEqual([]);
+  expect(queue.skipped).toBe(0);
 });
 
 test("a trigger promotes to a proposal routed by the class policy, recorded and read back", async () => {

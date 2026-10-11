@@ -76,3 +76,14 @@ test("the approval queue's faces are routed — a missing row makes the button d
   expect(routes).toContain('upsertSkill: "skill.upsert"');
   expect(routes).toContain('collabSend: "collab.send"');
 });
+
+test("the approval queue's reader is routed on both surfaces", () => {
+  // The panel cannot import the intelligence package (the tsconfig
+  // boundary), so the queue's rows come through a face — and a face that
+  // is not routed is `undefined` at the call site, which is a dead button.
+  const routes = readFileSync(
+    join(import.meta.dir, "..", "src", "runtime-rpc.ts"),
+    "utf8",
+  );
+  expect(routes).toContain('evolutionQueue: "evolution.queue"');
+});

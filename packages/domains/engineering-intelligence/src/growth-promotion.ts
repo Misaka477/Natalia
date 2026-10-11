@@ -107,10 +107,13 @@ export function deriveGrowthPromotion(trigger: GrowthTrigger): GrowthPromotion {
     destination,
     approval: policy.approval,
     appliedBy: policy.appliedBy,
+    // S5: `next` names the COMMAND, not the actor. "Applied by the skill
+    // boundary" left the reader to guess the invocation; the landing path
+    // exists now, so the promotion says exactly what to run.
     next:
       policy.approval === "auto"
-        ? `stage the candidate and apply through ${policy.appliedBy}`
-        : `await the human's decision — applied by ${policy.appliedBy}`,
+        ? `run: natalia evolution land --from <candidate.json>`
+        : `await the human's decision, then run: natalia evolution land --from <candidate.json>`,
     reason: `${trigger.reason} — routed to ${destination} (${policy.note})`,
   };
 }

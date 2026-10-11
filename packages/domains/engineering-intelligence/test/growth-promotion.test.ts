@@ -33,7 +33,10 @@ test("the study's class policy routes each trigger to its destination", () => {
   ).toMatchObject({
     destination: "skill",
     approval: "auto",
-    next: expect.stringContaining("stage") as unknown as string,
+    // S5: `next` names the command to run, not the actor who applies.
+    next: expect.stringContaining(
+      "natalia evolution land",
+    ) as unknown as string,
   });
   // 改策略行需人类.
   expect(

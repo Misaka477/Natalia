@@ -152,6 +152,10 @@ export const RPC_ROUTE_MEMBERS = {
   "settings.set": "settingsSet",
   "skill.setEnabled": "skillSetEnabled",
   "skill.remove": "skillRemove",
+  // S5: the landing path's write face. The boundary existed (the ONLY
+  // autonomous write path, validated) but had no route, so a candidate
+  // could be produced by the loop and written by nothing.
+  "skill.upsert": "upsertSkill",
   "agent.list": "agents",
   "agent.select": "selectAgent",
   "model.catalog": "modelCatalog",
@@ -424,6 +428,7 @@ export const RPC_WRITE_METHODS: ReadonlySet<string> = new Set([
   // it is a write for a read-only credential.
   "skill.setEnabled",
   "skill.remove",
+  "skill.upsert",
   // growth.propose journals the proposal fact (proposals are records).
   "growth.propose",
   // eval.external_run journals the join fact.
@@ -3907,6 +3912,20 @@ export async function handleRPCMessage(
             ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
             : {}),
         }),
+      };
+    }
+    if (body.method === "skill.upsert") {
+      optionsGuard(client, "upsertSkill");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("skill.upsert.params must be an object");
+      // The candidate passes through as-is: the boundary (name + size +
+      // rebuilt frontmatter) is the validator, and a refusal from it is
+      // the answer — this route never pre-validates and never writes.
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.upsertSkill?.(params),
       };
     }
     if (body.method === "skill.remove") {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,6 +52,47 @@ test("skills remove without a name is refused before the daemon is asked", () =>
     expect(new TextDecoder().decode(child.stderr)).toContain(
       "requires a skill name",
     );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("evolution land refuses a missing card path and a malformed card before touching the daemon", () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-land-gate-"));
+  try {
+    // No --from: the usage, not a crash.
+    const noFrom = run(["evolution", "land"]);
+    expect(noFrom.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(noFrom.stderr)).toContain("--from");
+
+    // A malformed card is refused by shape BEFORE the daemon is asked —
+    // the boundary's job is the write, and this is the caller's.
+    const bad = join(base, "bad.json");
+    writeFileSync(bad, JSON.stringify({ name: "x" }), "utf8");
+    const malformed = run([
+      "evolution",
+      "land",
+      "--from",
+      "bad.json",
+      "--workspace",
+      base,
+    ]);
+    expect(malformed.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(malformed.stderr)).toContain(
+      "name, description, body",
+    );
+
+    // An unreadable card names the path.
+    const missing = run([
+      "evolution",
+      "land",
+      "--from",
+      "nope.json",
+      "--workspace",
+      base,
+    ]);
+    expect(missing.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(missing.stderr)).toContain("cannot read");
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

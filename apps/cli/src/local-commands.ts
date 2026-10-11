@@ -57,7 +57,7 @@ import {
   createRecordedFetch,
   readCassette,
 } from "@natalia/transport";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join as joinPath, resolve } from "node:path";
 import {
   deleteLocalSession,
@@ -485,15 +485,24 @@ export async function handleLocalCommands(argv: string[]) {
       // session's live cache is never touched.
       const usage =
         "usage: natalia evolution mine --target <name> [--workspace <root>] [--json]\n" +
+        "       natalia evolution land --from <candidate.json> [--workspace <root>] [--json]\n" +
         "       natalia evolution evaluate --target <name> [--workspace <root>] [--json]\n" +
         "       natalia evolution optimize --target <name> --engine best-of-n --n <count> [--workspace <root>] [--json]";
       const action = argv[1];
-      if (action !== "mine" && action !== "evaluate" && action !== "optimize") {
+      if (
+        action !== "mine" &&
+        action !== "evaluate" &&
+        action !== "optimize" &&
+        // S5: the landing path reads a candidate card, not a target name.
+        action !== "land"
+      ) {
         console.error(usage);
         process.exit(1);
       }
-      const target = valueAfter(argv, "--target");
-      if (!target) {
+      // `land` reads a candidate card instead of a target name; the empty
+      // string is its placeholder and no land path ever reads it.
+      const target = valueAfter(argv, "--target") ?? "";
+      if (action !== "land" && !target) {
         console.error(usage);
         process.exit(1);
       }
@@ -592,6 +601,76 @@ export async function handleLocalCommands(argv: string[]) {
       // its own turn, scored by the cheap judge against the recorded
       // reference. No daemon answers no_daemon per attempt — nothing is
       // faked, the batch reports what it could not do.
+      if (argv[1] === "land") {
+        // S5: the landing path. The loop's output used to be a report line
+        // and nothing else — a candidate could be produced and written by
+        // nothing. This is the ONE write, and it goes through the
+        // validated boundary (`skill.upsert`): a candidate the boundary
+        // refuses is a named refusal with nothing written, never a file
+        // written around the check.
+        const from = valueAfter(argv, "--from");
+        if (!from) {
+          console.error(
+            "usage: natalia evolution land --from <candidate.json> [--workspace <root>] [--json]",
+          );
+          process.exit(1);
+        }
+        const landRoot = valueAfter(argv, "--workspace") ?? process.cwd();
+        const cardPath = resolve(landRoot, from);
+        let card: {
+          name?: unknown;
+          description?: unknown;
+          body?: unknown;
+        };
+        try {
+          card = JSON.parse(await readFile(cardPath, "utf8")) as typeof card;
+        } catch (error) {
+          console.error(
+            `cannot read the candidate card at ${cardPath}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          process.exit(1);
+        }
+        if (
+          typeof card.name !== "string" ||
+          typeof card.description !== "string" ||
+          typeof card.body !== "string"
+        ) {
+          console.error(
+            "the candidate card needs string fields: name, description, body",
+          );
+          process.exit(1);
+        }
+        const store = createRuntimeDaemonStore({ dir: daemonDir() });
+        const registration = await readRuntimeDaemonRegistration(store);
+        if (!registration) {
+          console.error(
+            "no daemon is running — start one with `natalia daemon` (the skill service lives there)",
+          );
+          process.exit(1);
+        }
+        const token = await daemonToken(store);
+        // The boundary validates and writes; its refusal is the answer.
+        const landed = await callRuntimeRPC<{ created: boolean; name: string }>(
+          {
+            url: registration.url,
+            token,
+            method: "skill.upsert",
+            params: { candidate: card },
+          },
+        );
+        console.log(
+          argv.includes("--json")
+            ? JSON.stringify(
+                { landed: true, created: landed.created, name: landed.name },
+                null,
+                2,
+              )
+            : `${landed.created ? "created" : "updated"} skill ${landed.name}`,
+        );
+        break;
+      }
       if (argv[1] === "optimize") {
         const engine = valueAfter(argv, "--engine");
         if (engine !== "best-of-n" && engine !== "reflective") {
@@ -1035,6 +1114,17 @@ export async function handleLocalCommands(argv: string[]) {
                   instruction: best.components.instruction,
                   hypothesis: best.hypothesis,
                   axis: best.axis,
+                }
+              : null,
+            // S5: the candidate card — what `evolution land --from` consumes.
+            // The loop's output is now a thing that can LAND, not just a
+            // number in a report.
+            card: best
+              ? {
+                  name: `${target}-evolved`,
+                  description:
+                    best.hypothesis ?? `evolved instruction for ${target}`,
+                  body: best.components.instruction ?? "",
                 }
               : null,
             beatBaseline: gate.ok,

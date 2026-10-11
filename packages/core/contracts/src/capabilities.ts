@@ -129,6 +129,8 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "skills",
     "skillSetEnabled",
     "skillRemove",
+    // S5: the landing write face (the validated boundary).
+    "upsertSkill",
     "agentCreate",
     "agentUpdate",
     "agentDelete",

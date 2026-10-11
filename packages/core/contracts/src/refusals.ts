@@ -186,6 +186,10 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "a name that is not a skill, or a plugin/remote source the workspace does not own, throws with the reason",
   },
+  upsertSkill: {
+    refusal: "error",
+    note: "the boundary validates (action whitelist + name + size + rebuilt frontmatter) and throws with the reason; nothing is written on a refusal",
+  },
 
   // --- workspace ---
   workspaceFiles: { refusal: "none", note: "pure read of the catalog" },

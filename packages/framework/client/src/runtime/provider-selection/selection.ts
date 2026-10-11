@@ -20,6 +20,8 @@ type Surface = Pick<
   | "skills"
   | "skillSetEnabled"
   | "skillRemove"
+  // S5: the landing write face (the validated boundary).
+  | "upsertSkill"
   | "agentCreate"
   | "agentUpdate"
   | "agentDelete"
@@ -215,6 +217,15 @@ export function createSelectionSurface(
       const services = ctx.state.serviceDirectory.getOptional(skillService);
       if (!services) throw new Error("skill service is unavailable");
       return await services.removeSkill(input.name);
+    },
+    // S5: the landing path's only write. The candidate goes to the
+    // boundary (name + size + rebuilt frontmatter) and the boundary's
+    // refusal is the answer — this face never pre-validates.
+    async upsertSkill(input: { candidate?: unknown }) {
+      await ctx.ports.getReady();
+      const services = ctx.state.serviceDirectory.getOptional(skillService);
+      if (!services) throw new Error("skill service is unavailable");
+      return await services.upsertSkill(input.candidate);
     },
     async agentCreate(input) {
       await ctx.ports.getReady();

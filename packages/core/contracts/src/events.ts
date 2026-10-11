@@ -4110,6 +4110,16 @@ export type RuntimeClient = {
     name: string;
     workspaceID?: string;
   }): Promise<{ removed: string }>;
+  /**
+   * S5: the landing path's ONLY write. A candidate goes to the validated
+   * boundary (action whitelist + name + size + rebuilt frontmatter); the
+   * boundary's refusal is the answer, and the caller never writes around
+   * it. This is how an evolved candidate becomes real.
+   */
+  upsertSkill?(input: {
+    candidate?: unknown;
+    workspaceID?: string;
+  }): Promise<{ created: boolean; name: string }>;
   workspaceFiles?(input?: {
     workspaceID?: string;
     query?: string;

@@ -92,3 +92,46 @@ export function applyDecision(
     return { kind: "land", candidate: item.candidate };
   return { kind: "rejected", reason: decision.reason };
 }
+
+/**
+ * The queue's state: which items still await a human.
+ *
+ * The decision is durable (one line per decision in the run directory), so
+ * the panel's list is a FOLD of the items and the decisions rather than a
+ * local guess: a refresh, a restart, or a second tab all see the same
+ * queue. An item that was decided — either way — leaves the pending list,
+ * because a human's attention is the scarce thing and re-asking a answered
+ * question spends it.
+ */
+export type StoredDecision = {
+  /** The candidate's name (the item's key). */
+  item: string;
+  decision: "approve" | "reject";
+  reason?: string;
+  at: string;
+};
+
+export function pendingItems(input: {
+  items: readonly ApprovalItem[];
+  decisions: readonly StoredDecision[];
+}): ApprovalItem[] {
+  const decided = new Set(
+    input.decisions.map((entry) => `${entry.item}:${entry.decision}`),
+  );
+  // A decided item leaves the queue whichever way it went.
+  return input.items.filter(
+    (item) =>
+      !decided.has(`${item.candidate.name}:approve`) &&
+      !decided.has(`${item.candidate.name}:reject`),
+  );
+}
+
+/** The reason a human gave for a rejection, for the record. */
+export function rejectionReason(
+  decisions: readonly StoredDecision[],
+  item: string,
+): string | undefined {
+  return decisions
+    .filter((entry) => entry.item === item && entry.decision === "reject")
+    .at(-1)?.reason;
+}

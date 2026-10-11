@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import {
   approvalItemFrom,
   applyDecision,
+  pendingItems,
+  rejectionReason,
   type ApprovalCandidate,
+  type StoredDecision,
 } from "../src/approval-queue";
 
 /**
@@ -60,4 +63,60 @@ test("approving hands the candidate to the boundary; rejecting keeps it", () => 
   expect(rejected.kind).toBe("rejected");
   if (rejected.kind === "rejected")
     expect(rejected.reason).toContain("confuse a new reader");
+});
+
+test("a decided item leaves the queue either way — attention is the scarce thing", () => {
+  // The decision is durable, so the panel's list is a fold of items and
+  // decisions, not a local guess: a refresh or a second tab sees the same
+  // queue.
+  const item = approvalItemFrom({
+    candidate,
+    gate: { passed: true, refusals: [] },
+  });
+  const other = approvalItemFrom({
+    candidate: { ...candidate, name: "live-002-evolved" },
+    gate: { passed: true, refusals: [] },
+  });
+  const decided: StoredDecision[] = [
+    {
+      item: "live-001-evolved",
+      decision: "approve",
+      at: "2026-10-13T12:00:00.000Z",
+    },
+  ];
+  const pending = pendingItems({ items: [item, other], decisions: decided });
+  expect(pending.map((row) => row.candidate.name)).toEqual([
+    "live-002-evolved",
+  ]);
+  // A REJECTED item also leaves — re-asking an answered question spends the
+  // human's attention, which is the scarcest resource in the loop.
+  const rejected = pendingItems({
+    items: [item, other],
+    decisions: [
+      {
+        item: "live-001-evolved",
+        decision: "reject",
+        reason: "too wordy",
+        at: "2026-10-13T12:00:00.000Z",
+      },
+    ],
+  });
+  expect(rejected.map((row) => row.candidate.name)).toEqual([
+    "live-002-evolved",
+  ]);
+  // And the reason stays readable for the record.
+  expect(rejectionReason(decided, "live-001-evolved")).toBeUndefined();
+  expect(
+    rejectionReason(
+      [
+        {
+          item: "live-001-evolved",
+          decision: "reject",
+          reason: "too wordy",
+          at: "x",
+        },
+      ],
+      "live-001-evolved",
+    ),
+  ).toBe("too wordy");
 });

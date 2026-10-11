@@ -50,6 +50,11 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   skills: "skills.list",
   skillSetEnabled: "skill.setEnabled",
   skillRemove: "skill.remove",
+  // The human-feedback entry (the transcript's rating buttons). The route
+  // and the server-side face existed; this row is what made the button
+  // reach the daemon at all — without it the Proxy answered `undefined`
+  // and the click did nothing, visibly.
+  feedback: "feedback.record",
   workspaceFiles: "workspace.files",
   workspaceSearch: "workspace.search",
   workspaceList: "workspace.list",

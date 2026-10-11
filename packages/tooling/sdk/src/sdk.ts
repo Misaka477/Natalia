@@ -72,6 +72,9 @@ export type NataliaSDK = {
   skills(input?: {
     workspaceID?: string;
   }): Promise<import("@anthelia/contracts").RuntimeSkillCatalogEntry[]>;
+  feedback(
+    input: import("@anthelia/contracts").FeedbackInput,
+  ): Promise<import("@anthelia/contracts").FeedbackResult>;
   workspaceFiles(input?: {
     workspaceID?: string;
     query?: string;
@@ -902,6 +905,7 @@ export function createNataliaSDK(options: NataliaSDKOptions): NataliaSDK {
       });
     },
     skills: async (input) => await call("skills.list", input ?? {}),
+    feedback: async (input) => await call("feedback.record", input),
     workspaceFiles: async (input = {}) => await call("workspace.files", input),
     workspaceSearch: async (input) => await call("workspace.search", input),
     workspaceList: async (input = {}) => await call("workspace.list", input),

@@ -2743,22 +2743,43 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [messageVerdicts, setMessageVerdicts] = createSignal<
     Record<string, "up" | "down">
   >({});
+  const [feedbackNotice, setFeedbackNotice] = createSignal("");
+  let feedbackNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+  function flashFeedbackNotice(message: string) {
+    setFeedbackNotice(message);
+    if (feedbackNoticeTimer) clearTimeout(feedbackNoticeTimer);
+    feedbackNoticeTimer = setTimeout(() => setFeedbackNotice(""), 4000);
+  }
   async function rateMessage(messageID: string, verdict: "up" | "down") {
     const runtime = props.ctx.runtime;
     const sessionID = selectedSessionID() || state().sessionID;
-    if (!runtime.feedback || !sessionID) return;
+    // Every dead end says so out loud: a click that changes nothing and
+    // explains nothing is the bug this button shipped with (the route was
+    // missing, the catch was silent, and the user reported "点击后没反应").
+    if (!runtime.feedback) {
+      flashFeedbackNotice("评分不可用：运行时没有反馈入口");
+      return;
+    }
+    if (!sessionID) {
+      flashFeedbackNotice("评分不可用：没有活动会话");
+      return;
+    }
     try {
-      await runtime.feedback({
+      const result = await runtime.feedback({
         scope: "message",
         sessionID: sessionID as SessionID,
         messageID,
         verdict,
       });
+      if (result && !result.recorded) {
+        flashFeedbackNotice("评分未记录");
+        return;
+      }
       setMessageVerdicts((current) => ({ ...current, [messageID]: verdict }));
-    } catch {
-      // A refused rating is a silent no-op: the human clicks again. The
-      // surface validates (scope/verdict/messageID), so a throw here is a
-      // runtime answer, not a UI bug worth a banner.
+    } catch (error) {
+      flashFeedbackNotice(
+        `评分失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   // Which rows carry the thumbs is the kit's decision (rateableRow): a
@@ -3653,6 +3674,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     when={selectedSessionID() || state().sessionID || "none"}
                     keyed
                   >
+                    <Show when={feedbackNotice()}>
+                      <div class="neu-gov-action-note">{feedbackNotice()}</div>
+                    </Show>
                     <div class="main-transcript-wrap">
                       <Transcript
                         messages={renderedMainMessages()}

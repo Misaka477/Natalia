@@ -40,3 +40,24 @@ test("the skill panel's switch and remove have web routes", () => {
   expect(RPC_METHOD_ROUTES.skillSetEnabled).toBe("skill.setEnabled");
   expect(RPC_METHOD_ROUTES.skillRemove).toBe("skill.remove");
 });
+
+test("the transcript's rating buttons have a web route", () => {
+  // The button shipped dead: the RPC route and the server-side face both
+  // existed, but the web client's proxy answers `undefined` for a face the
+  // route table does not name — so the click did nothing and the silent
+  // catch explained nothing. The row below is the whole fix's load-bearing
+  // half (the other half is the notice the failure now flashes).
+  expect(RPC_METHOD_ROUTES.feedback).toBe("feedback.record");
+  // The rating call passes one object (scope/sessionID/messageID/verdict);
+  // it must reach the daemon flat, not nested.
+  expect(
+    buildParams("feedback", [
+      { scope: "message", sessionID: "ses_1", messageID: "m1", verdict: "up" },
+    ]),
+  ).toEqual({
+    scope: "message",
+    sessionID: "ses_1",
+    messageID: "m1",
+    verdict: "up",
+  });
+});

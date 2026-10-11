@@ -452,3 +452,34 @@ test("a secret in a short answer is counted as the secret it is", () => {
   expect(dropped.secrets).toBe(1);
   expect(dropped.trivial).toBe(0);
 });
+
+test("the rubric rides the JSONL round-trip and reaches the sample", () => {
+  // W2(a)'s acceptance: the rubric field enters the JSONL AND the judge
+  // uses it. A field that is written but never read back is a field that
+  // only ever worked in the writer's own test.
+  const pairs: DatasetPair[] = [
+    {
+      sessionID: "ses_1",
+      turnID: "turn_1",
+      task: "record the rollback step",
+      response: "Record it first.",
+      expected_behavior:
+        "names the rollback step before the destructive action",
+    },
+  ];
+  const lines = datasetSplitLines(pairs);
+  expect(lines).toContain("expected_behavior");
+  // And it survives the read back.
+  const back = lines
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as DatasetPair);
+  expect(back[0]!.expected_behavior).toBe(
+    "names the rollback step before the destructive action",
+  );
+  // And it reaches the sample the judge scores.
+  const samples = samplesFromPairs(back, () => "train" as const);
+  expect(samples[0]!.expected_behavior).toBe(
+    "names the rollback step before the destructive action",
+  );
+});

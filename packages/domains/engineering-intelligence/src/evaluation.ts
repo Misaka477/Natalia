@@ -449,6 +449,11 @@ export function samplesFromPairs(
     input: pair.task,
     output: pair.response,
     ...(pair.feedback ? { feedback: pair.feedback } : {}),
+    // W2(a): the rubric rides the pair into the sample, so the judge can
+    // measure the criterion rather than the recorded attempt.
+    ...(pair.expected_behavior
+      ? { expected_behavior: pair.expected_behavior }
+      : {}),
   }));
 }
 

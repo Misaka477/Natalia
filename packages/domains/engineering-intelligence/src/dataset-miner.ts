@@ -140,6 +140,13 @@ export type DatasetPair = {
    * (the common case); a retracted rating leaves it absent too.
    */
   feedback?: string;
+  /**
+   * W2(a): the RUBRIC for this pair — what a good answer to its task
+   * should contain or do. Distinct from `response` (one attempt): the
+   * rubric is the criterion. Without it the judge can only measure
+   * "resembles the answer we recorded".
+   */
+  expected_behavior?: string;
 };
 
 export type DatasetDropCounts = {
@@ -384,6 +391,9 @@ export function datasetSplitLines(pairs: readonly DatasetPair[]): string {
         task: pair.task,
         response: pair.response,
         ...(pair.feedback ? { feedback: pair.feedback } : {}),
+        ...(pair.expected_behavior
+          ? { expected_behavior: pair.expected_behavior }
+          : {}),
       }),
     )
     .join("\n")

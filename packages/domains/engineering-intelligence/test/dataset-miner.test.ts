@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { contentTokens as tokens } from "../src/text-tokens";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -482,4 +483,23 @@ test("the rubric rides the JSONL round-trip and reaches the sample", () => {
   expect(samples[0]!.expected_behavior).toBe(
     "names the rollback step before the destructive action",
   );
+});
+
+test("every mined pair carries the first-pass rubric", () => {
+  // W2(a): the miner is where the rubric is BORN. A field the writer can
+  // emit and the reader can read is still dead if nothing ever sets it —
+  // the plan's acceptance is "量规字段进 JSONL", and the JSONL comes from
+  // here.
+  // The fixture is PROBED, not guessed: a task whose answer echoes its own
+  // words is dropped by the density filter, and a short answer is dropped by
+  // the informative floor — neither has anything to do with the rubric, and
+  // both would have made this test pass for the wrong reason.
+  const answer =
+    "Re-run it in isolation to confirm the flake is real before changing any production code, then record what you found in the test's own comment.";
+  const events = turn("s1", "t1", "how should I handle a flaky test?", answer);
+  const { pairs, dropped } = mineSessionPairs("s1", events);
+  expect(pairs).toHaveLength(1);
+  expect(dropped.trivial).toBe(0);
+  // The coarse rubric is the recorded answer's own content tokens.
+  expect(pairs[0]!.expected_behavior).toBe([...tokens(answer)].join(" "));
 });

@@ -1,3 +1,4 @@
+import { expectedBehaviorFrom } from "./evaluation";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
@@ -329,6 +330,13 @@ export function mineSessionPairs(
       task,
       response,
       ...(combined ? { feedback: combined } : {}),
+      // W2(a): the first-pass rubric — the recorded answer's own content
+      // tokens, the plan's sanctioned coarse rubric ("先用记录答复抽关键词
+      // 当粗量规"). The judge then measures the CRITERION rather than the
+      // attempt; the rubric's content is refined from real failure modes
+      // later, which is why this ships as the coarse pass and not as the
+      // finished thing.
+      expected_behavior: expectedBehaviorFrom(response),
     });
   }
   return { pairs, dropped };

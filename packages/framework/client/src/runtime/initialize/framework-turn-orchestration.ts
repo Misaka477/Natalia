@@ -16,9 +16,13 @@ import { providerModelController } from "@anthelia/provider-model";
 import { sessionStoreController } from "@anthelia/session-store";
 import {
   createIntelligenceSurface,
+  readDataset,
+  runEvolutionRound,
+  roundSummaryLine,
+  samplesFromPairs,
   triggerFactFrom,
 } from "@natalia/engineering-intelligence";
-import { readFile, readdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionID } from "@anthelia/contracts";
 import type { SessionStoreController } from "@anthelia/session-store";
@@ -70,6 +74,11 @@ export function wireTurnOrchestration(
   // boundary — would spend an entire runtime to read one ranking, in the
   // one place that must stay cheap.
   const intelligence = createIntelligenceSurface(ctx, {});
+  // S8 step 2's bounds: one sample's patience and one sample's size. A
+  // scheduler that waits forever on a provider is a scheduler that hangs a
+  // turn boundary.
+  const ROUND_SAMPLE_TIMEOUT_MS = 120_000;
+  const ROUND_SAMPLE_LIMIT = 8_000;
   const controller = createTurnController({
     session: ctx.ports.getSession,
     activeAbort: () => ctx.ports.getActiveExec()?.activeAbort,
@@ -259,6 +268,95 @@ export function wireTurnOrchestration(
                     reason: out.fact.reason,
                     at: out.fact.at,
                   });
+                  // S8 step 2: the round that runs on the noticing. The
+                  // sampler is the SESSION'S OWN provider (the same one
+                  // self-review uses), so an evolution round costs model
+                  // calls the session was already paying for — not a new
+                  // credential, not a new process. The candidate then lands
+                  // in the run's own record, which is what the approval
+                  // queue reads.
+                  const provider = exec.provider;
+                  if (!provider) return;
+                  const datasetRoot = join(
+                    ctx.ports.getWorkspaceRoot(),
+                    ".natalia",
+                    "evolution",
+                    "datasets",
+                  );
+                  let targets: string[] = [];
+                  try {
+                    targets = (await readdir(datasetRoot)).sort();
+                  } catch {
+                    // No mined dataset: there is nothing to evolve against,
+                    // and that is a different fact from "nothing evolved".
+                    return;
+                  }
+                  const target = targets.at(-1);
+                  if (!target) return;
+                  const sampler = async (call: {
+                    prompt: string;
+                    component: string;
+                  }): Promise<string> => {
+                    const controller = new AbortController();
+                    const timer = setTimeout(
+                      () => controller.abort(),
+                      ROUND_SAMPLE_TIMEOUT_MS,
+                    );
+                    try {
+                      let text = "";
+                      for await (const chunk of provider.stream({
+                        signal: controller.signal,
+                        messages: [{ role: "user", content: call.prompt }],
+                      })) {
+                        if (chunk.type === "content") text += chunk.text;
+                        if (text.length >= ROUND_SAMPLE_LIMIT) break;
+                      }
+                      return text;
+                    } finally {
+                      clearTimeout(timer);
+                    }
+                  };
+                  // The dataset is read the same way the CLI reads it —
+                  // one reader, one shape, no second copy that drifts.
+                  const dataset = await readDataset(
+                    ctx.ports.getWorkspaceRoot(),
+                    target,
+                  ).catch(() => undefined);
+                  if (!dataset) return;
+                  const round = await runEvolutionRound({
+                    pool: samplesFromPairs(
+                      dataset.train,
+                      () => "train" as const,
+                    ),
+                    holdout: samplesFromPairs(
+                      dataset.holdout,
+                      () => "holdout" as const,
+                    ),
+                    // The artifact under evolution is the target's own
+                    // instruction text; the caller that knows it better
+                    // will pass it (the CLI's path already does).
+                    currentInstruction: dataset.train[0]?.response ?? "",
+                    sampler,
+                    iteration: 1,
+                    name: `${target}-evolved`,
+                    suite: { ok: true, detail: "not run by the scheduler" },
+                  });
+                  // The round's own record is the queue's input: the summary
+                  // line lands where `evolutionQueue` reads it.
+                  if (round.ok) {
+                    const runDir = join(
+                      ctx.ports.getWorkspaceRoot(),
+                      ".natalia",
+                      "evolution",
+                      "runs",
+                      `${target}-${Date.now().toString(36)}`,
+                    );
+                    await mkdir(runDir, { recursive: true });
+                    await appendFile(
+                      join(runDir, "evolution_summary.jsonl"),
+                      `${roundSummaryLine(round.entry)}\n`,
+                    );
+                  }
                 } catch {
                   // A failed noticing is silent BY DESIGN: the trigger is
                   // an optimization, and a turn boundary must never fail

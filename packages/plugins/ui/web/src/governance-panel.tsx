@@ -2315,6 +2315,15 @@ export function GovernancePane(props: {
         </Show>
         <Show when={tab() === "growth"}>
           <div class="neu-gov-section-title">Growth Triggers</div>
+          {/* S4: the order is the triage's (frequency × potential, stable
+              tie-break), not the sources' own — the rank used to be
+              computed and read by nobody, so the operator re-derived the
+              priority by eye. The subtitle says which yardstick the order
+              is, so a reader never mistakes it for a chronology. */}
+          <div class="neu-gov-text" style="margin-bottom:6px;">
+            按潜在收益 × 出现频率排序（平局按能力名）· 点「晋升为提案」只记录
+            事实，不触发变异
+          </div>
           <For each={liveGrowthTriggers()}>
             {(trigger) => (
               <div class="neu-gov-row">

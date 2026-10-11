@@ -81,17 +81,24 @@ test("a benchmark gap reads its baseline, a correction pattern its observations"
 });
 
 test("the triage only ranks: no action seam exists to call", () => {
-  // The structural rule, as a test: the module's exports are the ranking
-  // and its two inputs — nothing that applies, executes, or triggers.
+  // The structural rule, as a test: a row is the ranking plus the
+  // provenance it was computed from (the trigger's own reason and
+  // evidence, carried through unchanged) — nothing that applies, executes,
+  // or triggers. `reason` and `evidence` are what the reader acts WITH;
+  // there is still no seam to act THROUGH.
   const rows = triageGrowth([candidate("x", { gap: 0.5, usage: 2 })]);
   expect(rows).toHaveLength(1);
   expect(Object.keys(rows[0]!).sort()).toEqual([
     "capability",
     "class",
+    "evidence",
     "potentialImprovement",
     "reason",
     "rule",
     "score",
     "usageFrequency",
   ]);
+  // And the provenance survived the ranking intact.
+  expect(rows[0]!.reason).toBe("x keeps costing the work");
+  expect(rows[0]!.evidence).toEqual({ gap: 0.5, usage: 2 });
 });

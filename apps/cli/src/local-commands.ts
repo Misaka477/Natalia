@@ -30,6 +30,8 @@ import {
   runBestOfN,
   runRound,
   samplesFromPairs,
+  selectReportedBest,
+  scoreUnderProtocol,
   scoreRun,
   segmentTurns,
   splitForPair,
@@ -665,31 +667,30 @@ export async function handleLocalCommands(argv: string[]) {
           // turn per candidate); the sealed holdout runs in full — it is
           // the whole point of sealing it.
           const visible = pool.slice(0, samplesWanted);
-          const recorded = new Map(
-            [...visible, ...sealed].map((sample) => [sample.id, sample.output]),
-          );
           // The judge: the run's answer against the sample's recorded
-          // response, through the documented cheap proxy. procedure and
-          // conciseness stay UNJUDGED — the report says so.
-          const judge = (answer: string, reference: string) =>
-            keywordOverlapJudge(reference, answer).dimensions;
+          // response, through the documented cheap proxy, with the
+          // candidate's instruction in hand so procedure following has a
+          // criterion (W1). conciseness stays UNJUDGED — the report says
+          // so.
           const evaluateInstruction = async (
             id: string,
             instruction: string,
           ) => {
-            const judged = [];
+            // One real run per sample (the reference harness's SkillModule
+            // pattern), then the ONE protocol (W10) assembles the score —
+            // the same function the BestOfN floor is measured by.
+            const answers: string[] = [];
             for (const sample of [...visible, ...sealed]) {
-              const answer = await sampleTurn(
-                `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
+              answers.push(
+                await sampleTurn(
+                  `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
+                ),
               );
-              judged.push({
-                sampleID: sample.id,
-                dimensions: judge(answer, recorded.get(sample.id) ?? ""),
-                sealed: sample.id.startsWith("holdout:"),
-              });
             }
-            return assembleResult({
-              judged,
+            return scoreUnderProtocol({
+              outputs: answers,
+              samples: [...visible, ...sealed],
+              instruction,
               sizes: {
                 artifactSize: Buffer.byteLength(instruction, "utf8"),
                 maxSize: Number.MAX_SAFE_INTEGER,
@@ -891,7 +892,13 @@ export async function handleLocalCommands(argv: string[]) {
             }
             await writeRunState();
           }
-          const best = bestMember(population);
+          // S3 (selection half): the reported best is drawn from the
+          // Pareto front with frequency weighting — a candidate that is
+          // extraordinary on one kind of example and ordinary elsewhere
+          // OWNS the front it wins, which is how it stays selectable. The
+          // max-score pick would let one well-rounded average bury every
+          // specialist. The seed is fixed, so the draw is reproducible.
+          const best = selectReportedBest(population, seededRandom(seed));
           const gate = beatsFloor({
             best,
             floorScore: baselineResult.score,
@@ -956,8 +963,11 @@ export async function handleLocalCommands(argv: string[]) {
           prompt: task.task,
           n,
           sampler: async ({ prompt }) => await sampleTurn(prompt),
+          // The ONE protocol (W10): the same score function the reflective
+          // engine is measured by, so the floor and the engine's numbers
+          // are comparable. One sampled answer, judged across the pool.
           score: (text) =>
-            keywordOverlapJudge(task.response, text).dimensions.correctness,
+            scoreUnderProtocol({ outputs: text, samples: pool }).score,
           baselineScore: baseline.score,
         });
         const report = {

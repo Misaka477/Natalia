@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  EVALUATION_PROTOCOL,
   acceptCandidate,
   checkGrowth,
   compositeFitness,
@@ -8,6 +9,7 @@ import {
   keywordOverlapJudge,
   lengthPenalty,
   samplesFromPairs,
+  scoreUnderProtocol,
   type EvaluationSample,
   type FitnessDimensions,
 } from "../src/evaluation";
@@ -284,4 +286,108 @@ test("the baseline evaluation is a real floor, and the holdout's door is a numbe
   // back at all.
   expect(holdoutScore).toBe(1);
   expect(JSON.stringify(baseline)).not.toContain("holdout:c");
+});
+
+test("the judge reads the instruction: the same answer scores differently under two", () => {
+  // W1: the reference harness's judge takes the artifact text as a fourth
+  // input because procedure following is unjudgeable without it. Before
+  // this the dimension was a constant 1 — half the composite formula was
+  // dead weight.
+  const answer = "I recorded the rollback step and ran the guards.";
+  const underA = keywordOverlapJudge(
+    "record the rollback step then run the guards",
+    answer,
+    "Always record the rollback step, then run the guards.",
+  );
+  const underB = keywordOverlapJudge(
+    "record the rollback step then run the guards",
+    answer,
+    "Compose a sonnet about the moon in iambic pentameter.",
+  );
+  // The answer engages A's procedure (half its steps, by the word-level
+  // proxy) and not B's — a 3.5× separation, which is the whole point.
+  expect(underA.dimensions.procedureFollowing).toBeGreaterThanOrEqual(0.5);
+  expect(underB.dimensions.procedureFollowing).toBeLessThan(0.2);
+  // Correctness is the reference comparison and does not move.
+  expect(underA.dimensions.correctness).toBe(underB.dimensions.correctness);
+  // The judged dimension is no longer reported as unjudged.
+  expect(underA.unjudged).toEqual(["conciseness"]);
+  // Without an instruction the dimension stays honestly unjudged.
+  expect(
+    keywordOverlapJudge("record the rollback step", answer).unjudged,
+  ).toEqual(["procedureFollowing", "conciseness"]);
+});
+
+test("the face substitutes the candidate's instruction for the judge", () => {
+  // The same wiring as the output: the candidate's text becomes the
+  // instruction each sample was produced under.
+  const seen: Array<string | undefined> = [];
+  const face = createEvaluationFace({
+    pool: { samples: [sample("train:a"), sample("val:b")] },
+    holdout: [sample("holdout:c")],
+    judge: (candidate) => {
+      seen.push(candidate.instruction);
+      return dims(1);
+    },
+  });
+  face.evaluate({
+    id: "c1",
+    artifactSize: 1,
+    maxSize: 100,
+    instruction: "the candidate text",
+  });
+  expect(seen).toEqual([
+    "the candidate text",
+    "the candidate text",
+    "the candidate text",
+  ]);
+  // The baseline (no candidate text) leaves the samples' own state alone.
+  seen.length = 0;
+  face.evaluate({ id: "baseline", artifactSize: 1, maxSize: 100 });
+  expect(seen).toEqual([undefined, undefined, undefined]);
+});
+
+test("the protocol is one score function: the same text, the same number, either engine's shape", () => {
+  // W10: BestOfN used to report a raw correctness and the reflective engine
+  // a composite — two scales, so "beat the floor" compared incomparable
+  // things. Both engines now call this function.
+  const samples = [
+    sample("train:a", "record the rollback step"),
+    sample("val:b", "run the guards"),
+    sample("holdout:c", "rotate the key"),
+  ];
+  const answer = "I recorded the rollback step and ran the guards.";
+
+  // The BestOfN shape: ONE output judged across every sample's reference.
+  const asAnswer = scoreUnderProtocol({ outputs: answer, samples });
+  // The reflective shape: per-sample outputs (here the same text, so the
+  // two paths must agree exactly — that agreement is the protocol).
+  const asPerSample = scoreUnderProtocol({
+    outputs: samples.map(() => answer),
+    samples,
+  });
+  expect(asPerSample.score).toBe(asAnswer.score);
+  expect(asPerSample.perExample).toEqual(asAnswer.perExample);
+
+  // The sealed sample counts toward the score but not toward the
+  // trainable bucket (the same seal as the face's).
+  expect(
+    asAnswer.trainableFailureCases.every(
+      (c) => !c.sampleID.startsWith("holdout:"),
+    ),
+  ).toBe(true);
+  expect(asAnswer.perExample["holdout:c"]).toBeUndefined();
+  expect(asAnswer.perExample["train:a"]).toBeGreaterThan(0);
+
+  // A perfect match on every sample is the floor a weak candidate cannot
+  // beat — which is the documented ceiling of the cheap judge.
+  const perfect = scoreUnderProtocol({
+    outputs: samples.map((s) => s.output),
+    samples,
+  });
+  expect(perfect.score).toBe(1);
+});
+
+test("the protocol's id is stamped so a run says which yardstick it used", () => {
+  expect(EVALUATION_PROTOCOL).toBe("keyword-overlap/v1");
 });

@@ -99,6 +99,25 @@ function gapJournal(): RuntimeEvent[] {
   ];
 }
 
+test("the growthTriggers face answers in triage order, with the rank's numbers", async () => {
+  // S4: the triage was computed and read by nobody — the face used to
+  // answer in the sources' own order and the panel re-derived the priority
+  // by eye. The order is now the rank's, and it says so.
+  const { surface, sessionID } = harness(gapJournal());
+  const triggers = await surface.growthTriggers!(sessionID);
+  // The rank's numbers ride the evidence beside the trigger's own.
+  for (const trigger of triggers) {
+    expect(typeof trigger.evidence.triageScore).toBe("number");
+    expect(typeof trigger.evidence.usageFrequency).toBe("number");
+    expect(typeof trigger.evidence.potentialImprovement).toBe("number");
+  }
+  // And the order is the descending rank, not the sources'.
+  const scores = triggers.map((trigger) =>
+    Number(trigger.evidence.triageScore),
+  );
+  expect([...scores].sort((left, right) => right - left)).toEqual(scores);
+});
+
 test("a trigger promotes to a proposal routed by the class policy, recorded and read back", async () => {
   const events = gapJournal();
   const { surface, sessionID } = harness(events);

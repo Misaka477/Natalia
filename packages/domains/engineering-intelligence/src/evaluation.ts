@@ -39,6 +39,15 @@ export type EvaluationSample = {
    * the mutator. Scores order; this steers.
    */
   feedback?: string;
+  /**
+   * The instruction the output was produced UNDER — the artifact text a
+   * candidate is evolving. Procedure following ("did it follow the
+   * artifact's own procedure") is unjudgeable without it: a judge that
+   * cannot see the instruction can score the answer but not the
+   * following. The evaluation face substitutes the candidate's
+   * instruction here, exactly as it substitutes the candidate's output.
+   */
+  instruction?: string;
 };
 
 /** The judge's per-sample dimensions, each 0..1. */
@@ -276,6 +285,12 @@ export type Candidate = {
    * recorded responses ARE the outputs being scored.
    */
   output?: string;
+  /**
+   * The candidate's own text — the instruction the output was produced
+   * under. Substituted into each sample as `instruction`, so the judge
+   * can score procedure following against the artifact it is evolving.
+   */
+  instruction?: string;
 };
 
 export type EvaluationFace = {
@@ -312,6 +327,28 @@ export function createEvaluationFace(input: {
   judge: SampleJudge;
 }): EvaluationFace {
   const holdout = [...input.holdout];
+  /**
+   * The sample as the judge reads it for one candidate: the candidate's
+   * output substituted for the recorded one, and the candidate's own text
+   * substituted as the instruction that output was produced under. The
+   * second substitution is what makes procedure following judgeable at
+   * all — the reference harness's judge takes the skill text as a fourth
+   * input for exactly this reason.
+   */
+  const forCandidate = (
+    sample: EvaluationSample,
+    candidate: Candidate,
+  ): EvaluationSample => {
+    if (candidate.output === undefined && candidate.instruction === undefined)
+      return sample;
+    return {
+      ...sample,
+      ...(candidate.output === undefined ? {} : { output: candidate.output }),
+      ...(candidate.instruction === undefined
+        ? {}
+        : { instruction: candidate.instruction }),
+    };
+  };
   return {
     evaluate(candidate) {
       // A candidate's own output substitutes for each sample's recorded
@@ -319,21 +356,13 @@ export function createEvaluationFace(input: {
       const judged = [
         ...input.pool.samples.map((sample) => ({
           sampleID: sample.id,
-          dimensions: input.judge(
-            candidate.output === undefined
-              ? sample
-              : { ...sample, output: candidate.output },
-          ),
+          dimensions: input.judge(forCandidate(sample, candidate)),
           sealed: false,
           ...(sample.feedback ? { feedback: sample.feedback } : {}),
         })),
         ...holdout.map((sample) => ({
           sampleID: sample.id,
-          dimensions: input.judge(
-            candidate.output === undefined
-              ? sample
-              : { ...sample, output: candidate.output },
-          ),
+          dimensions: input.judge(forCandidate(sample, candidate)),
           sealed: true,
           ...(sample.feedback ? { feedback: sample.feedback } : {}),
         })),
@@ -355,11 +384,7 @@ export function createEvaluationFace(input: {
       return assembleResult({
         judged: holdout.map((sample) => ({
           sampleID: sample.id,
-          dimensions: input.judge(
-            candidate.output === undefined
-              ? sample
-              : { ...sample, output: candidate.output },
-          ),
+          dimensions: input.judge(forCandidate(sample, candidate)),
           sealed: true,
           ...(sample.feedback ? { feedback: sample.feedback } : {}),
         })),
@@ -433,13 +458,43 @@ export type KeywordJudgeReport = {
 export function keywordOverlapJudge(
   expected: string,
   output: string,
+  instruction?: string,
 ): KeywordJudgeReport {
   const expectedTokens = contentTokens(expected);
   const outputTokens = contentTokens(output);
+  // Procedure following: the fraction of the instruction's own content the
+  // answer actually engages. A word-level proxy — it cannot tell "followed
+  // the step" from "mentioned the step", and the report says the dimension
+  // is a proxy. What it CAN do is separate an answer produced under
+  // instruction A from the same answer under instruction B, which is the
+  // whole point: without an instruction this dimension has no criterion at
+  // all and half the composite formula is dead weight.
+  const instructionTokens = instruction
+    ? contentTokens(instruction)
+    : new Set<string>();
+  let procedureFollowing = 1;
+  let procedureJudged = false;
+  if (instructionTokens.size) {
+    const engaged = [...instructionTokens].filter((token) =>
+      outputTokens.has(token),
+    ).length;
+    procedureFollowing = engaged / instructionTokens.size;
+    procedureJudged = true;
+  }
+  // The canonical dimension order (the weights' order), with the unjudged
+  // ones reported in it — a consumer printing the score reads one order.
+  const unjudged: Array<keyof FitnessDimensions> = [
+    ...(procedureJudged ? [] : (["procedureFollowing"] as const)),
+    "conciseness",
+  ];
   if (!expectedTokens.size)
     return {
-      dimensions: { correctness: 0, procedureFollowing: 1, conciseness: 1 },
-      unjudged: ["procedureFollowing", "conciseness"],
+      dimensions: {
+        correctness: 0,
+        procedureFollowing,
+        conciseness: 1,
+      },
+      unjudged,
     };
   const hits = [...expectedTokens].filter((token) =>
     outputTokens.has(token),
@@ -450,8 +505,8 @@ export function keywordOverlapJudge(
       (1 - KEYWORD_OVERLAP_FLOOR) * (hits / expectedTokens.size),
   );
   return {
-    dimensions: { correctness, procedureFollowing: 1, conciseness: 1 },
-    unjudged: ["procedureFollowing", "conciseness"],
+    dimensions: { correctness, procedureFollowing, conciseness: 1 },
+    unjudged,
   };
 }
 
@@ -500,4 +555,65 @@ export function evaluateBaseline(input: {
       maxSize: Number.MAX_SAFE_INTEGER,
     }),
   };
+}
+
+/**
+ * The evaluation protocol: ONE score function both engines are measured
+ * by.
+ *
+ * Before this, BestOfN reported a raw correctness and the reflective engine
+ * a composite — two numbers on two scales, so the phase gate's "beat the
+ * floor" compared incomparable things and a report could manufacture a win.
+ * The reference harness's holdout comparison runs the SAME metric over
+ * baseline and evolved for exactly this reason.
+ *
+ * The protocol: the candidate's output(s) are judged against each sample's
+ * own recorded reference by the keyword judge (with the instruction in hand
+ * when there is one), assembled into the composite with the two buckets and
+ * the per-example map. A sample whose id carries the `holdout:` prefix is
+ * sealed: it counts toward the score and never toward the trainable bucket.
+ */
+export const EVALUATION_PROTOCOL = "keyword-overlap/v1";
+
+export function scoreUnderProtocol(input: {
+  /**
+   * The candidate's output per sample, or ONE output judged against every
+   * sample's reference (the BestOfN shape: one sampled answer, scored
+   * across the pool so the engines stay comparable).
+   */
+  outputs: readonly string[] | string;
+  samples: readonly EvaluationSample[];
+  /** The instruction the outputs were produced under (procedure's criterion). */
+  instruction?: string;
+  sizes?: { artifactSize: number; maxSize: number };
+}): EvaluationResult {
+  const outputs =
+    typeof input.outputs === "string"
+      ? input.samples.map(() => input.outputs as string)
+      : input.outputs;
+  const judged = input.samples.map((sample, index) => ({
+    sampleID: sample.id,
+    dimensions: keywordOverlapJudge(
+      sample.output,
+      outputs[index] ?? "",
+      input.instruction ?? sample.instruction,
+    ).dimensions,
+    sealed: sample.id.startsWith("holdout:"),
+    ...(sample.feedback ? { feedback: sample.feedback } : {}),
+  }));
+  const size =
+    input.sizes ??
+    (typeof input.outputs === "string"
+      ? {
+          artifactSize: Buffer.byteLength(input.outputs, "utf8"),
+          maxSize: Number.MAX_SAFE_INTEGER,
+        }
+      : {
+          artifactSize: outputs.reduce(
+            (sum, text) => sum + Buffer.byteLength(text ?? "", "utf8"),
+            0,
+          ),
+          maxSize: Number.MAX_SAFE_INTEGER,
+        });
+  return assembleResult({ judged, sizes: size });
 }

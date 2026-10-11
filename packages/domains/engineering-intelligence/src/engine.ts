@@ -467,6 +467,25 @@ export function beatsFloor(input: {
 }
 
 /** The population's best member by aggregate score (the generation's result). */
+/**
+ * The population's REPORTED best: a draw from the Pareto front with
+ * frequency weighting, falling back to the max score when the front is
+ * empty (a one-member population, or one where every member is dominated).
+ *
+ * This is the selection the loop's report and phase gate read. The
+ * max-score pick alone would let one well-rounded average bury every
+ * specialist: a candidate that is extraordinary on one kind of example and
+ * ordinary elsewhere OWNS the front it wins, which is how it stays
+ * selectable — and a loop that can only ever report the average has no
+ * reason to keep specialists around.
+ */
+export function selectReportedBest(
+  population: Population,
+  random: Random,
+): PopulationMember | undefined {
+  return selectFromParetoFront(population, random) ?? bestMember(population);
+}
+
 export function bestMember(
   population: Population,
 ): PopulationMember | undefined {

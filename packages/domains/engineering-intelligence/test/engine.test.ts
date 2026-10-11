@@ -6,12 +6,13 @@ import {
   commonAncestor,
   isAncestorOf,
   mergeCandidates,
-  paretoFronts,
   parentWeight,
+  paretoFronts,
   runRound,
+  scoreMidpoint,
   selectFromParetoFront,
   selectParent,
-  scoreMidpoint,
+  selectReportedBest,
   type Population,
   type PopulationMember,
   type Random,
@@ -425,4 +426,39 @@ test("a round started from a barren seed still runs, and the stop reason is acti
     },
   });
   expect(stopped.stopped).toContain("too easy for the current judge");
+});
+
+test("the reported best can be a specialist the max-score pick would bury", () => {
+  // S3 (selection half): a generalist averages 0.70 on both examples; a
+  // specialist owns one example at 0.95 and is ordinary at 0.40 elsewhere.
+  // The max-score pick reports the generalist every time; the Pareto draw
+  // reports the specialist whenever the ticket lands on it — which is the
+  // only reason the loop keeps specialists around.
+  const generalist = member("generalist", {
+    perExample: { "train:a": 0.7, "train:b": 0.7 },
+    score: 0.7,
+  });
+  const specialist = member("specialist", {
+    perExample: { "train:a": 0.95, "train:b": 0.4 },
+    score: 0.675,
+  });
+  const population = { members: [generalist, specialist] };
+  // Each wins one example, so each owns a front with weight 1.
+  expect(bestMember(population)!.id).toBe("generalist");
+  // The draw is the front's, not the average's: the specialist is
+  // selectable, and the generalist no longer wins by default.
+  expect(selectReportedBest(population, scriptedRandom([0.1]))!.id).toBe(
+    "specialist",
+  );
+  expect(selectReportedBest(population, scriptedRandom([0.99]))!.id).toBe(
+    "generalist",
+  );
+  // An empty front (a one-member population) falls back to the max score
+  // rather than inventing a draw.
+  expect(
+    selectReportedBest({ members: [generalist] }, scriptedRandom([0.5]))!.id,
+  ).toBe("generalist");
+  expect(
+    selectReportedBest({ members: [] }, scriptedRandom([0.5])),
+  ).toBeUndefined();
 });

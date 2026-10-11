@@ -45,6 +45,7 @@ import { groupRunsByPrompt, scoreRun, segmentTurns } from "./run-scorer";
 import { loadExternalTask, readExternalBenchmark } from "./eval-reader";
 import { deriveCorrectionPatterns, readCorrections } from "./corrections";
 import { deriveGrowthTriggers } from "./growth-trigger";
+import { triageGrowth } from "./triage";
 import { deriveGrowthPromotion } from "./growth-promotion";
 import { isHardProtectedConstitutionRule } from "@anthelia/contracts";
 import type { EpisodeID } from "@anthelia/contracts";
@@ -809,12 +810,34 @@ export function createIntelligenceSurface(
         this.correctionPatterns!(sessionID),
         this.growthPropose!(undefined, sessionID),
       ]);
-      return deriveGrowthTriggers({
-        runGroups: groups,
-        joins,
-        corrections: corrections.suggestions,
-        curriculum: curriculum.suggestions,
-      });
+      // The triggers come back in TRIAGE order — ranked by how often the
+      // capability came up times how much improving it would help, with a
+      // stable tie-break. The ranking used to be computed and read by
+      // nobody, so the panel showed the sources' own order and an operator
+      // had to re-derive the priority by eye. A rank that no consumer
+      // reads is a rank that never influenced a decision.
+      return triageGrowth(
+        deriveGrowthTriggers({
+          runGroups: groups,
+          joins,
+          corrections: corrections.suggestions,
+          curriculum: curriculum.suggestions,
+        }),
+      ).map((row) => ({
+        capability: row.capability,
+        rule: row.rule,
+        class: row.class,
+        reason: row.reason,
+        // The trigger's OWN evidence is preserved (its provenance) and the
+        // rank's numbers ride alongside — overwriting them would leave a
+        // reader a ranking they cannot trace back to its source.
+        evidence: {
+          ...row.evidence,
+          usageFrequency: row.usageFrequency,
+          potentialImprovement: row.potentialImprovement,
+          triageScore: row.score,
+        },
+      }));
     },
     /**
      * The joined per-task view alone (the trigger's G-c input): the

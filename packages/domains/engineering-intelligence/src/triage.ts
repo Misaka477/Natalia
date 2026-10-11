@@ -16,10 +16,12 @@
  * ranking on purpose.
  */
 
+import type { GrowthTrigger } from "./growth-trigger";
+
 /** What the triage reads (the growth trigger face's shape). */
 export type TriageCandidate = {
   /** The trigger's rule (which growth system raised it). */
-  rule: string;
+  rule: GrowthTrigger["rule"];
   /** The capability it names. */
   capability: string;
   /** The destination class the class policy assigns. */
@@ -65,14 +67,20 @@ export function potentialImprovement(candidate: TriageCandidate): number {
 
 export type TriageRow = {
   capability: string;
-  rule: string;
-  class: TriageCandidate["class"];
-  /** The product the ranking sorts by (frequency × potential). */
+  rule: GrowthTrigger["rule"];
+  class: GrowthTrigger["class"];
+  /** The ranking number (frequency × potential), for display and sorting. */
   score: number;
   usageFrequency: number;
   potentialImprovement: number;
-  /** Why it ranks here, in one line. */
+  /**
+   * Why the trigger fired, carried through unchanged. A ranking that drops
+   * the reason leaves the reader a number they cannot act on — the row is
+   * what a human reads, so it must stay whole.
+   */
   reason: string;
+  /** The trigger's own evidence numbers (its provenance). */
+  evidence: Record<string, number | string>;
 };
 
 /**
@@ -93,9 +101,10 @@ export function triageGrowth(
         rule: candidate.rule,
         class: candidate.class,
         score: frequency * potential,
+        reason: candidate.reason,
+        evidence: candidate.evidence,
         usageFrequency: frequency,
         potentialImprovement: potential,
-        reason: candidate.reason,
       };
     })
     .sort(

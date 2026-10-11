@@ -49,6 +49,20 @@ export type EvaluationSample = {
    * instruction here, exactly as it substitutes the candidate's output.
    */
   instruction?: string;
+  /**
+   * W2(a): the RUBRIC — what a good answer to this task should contain or
+   * do. Distinct from `output` (the recorded answer): the rubric is the
+   * criterion, the answer is one attempt at it. Without this the judge can
+   * only measure "like the last answer", which optimizes resemblance
+   * rather than quality — the study's `expected_behavior`, which is
+   * explicitly NOT exact text.
+   *
+   * The first pass derives it from the recorded answer's own content
+   * tokens (the plan's sanctioned coarse rubric); the rubric's CONTENT is
+   * refined from real candidates' failure modes, which is why the field
+   * ships with the plumbing and the content waits for data.
+   */
+  expected_behavior?: string;
 };
 
 /** The judge's per-sample dimensions, each 0..1. */
@@ -456,12 +470,29 @@ export type KeywordJudgeReport = {
   unjudged: Array<keyof FitnessDimensions>;
 };
 
+/**
+ * W2(a)'s first pass: a coarse rubric from the recorded answer's own
+ * content tokens. The plan sanctions this explicitly ("first pass 可以先用
+ *记录答复抽关键词当粗量规") — the rubric's SHAPE and plumbing ship now,
+ * its CONTENT is refined from real failure modes later.
+ *
+ * An empty answer has no rubric to derive, and an empty rubric is not a
+ * rubric: the caller falls back to the answer itself rather than scoring
+ * against nothing.
+ */
+export function expectedBehaviorFrom(answer: string): string {
+  return [...contentTokens(answer)].join(" ");
+}
+
 export function keywordOverlapJudge(
   expected: string,
   output: string,
   instruction?: string,
 ): KeywordJudgeReport {
   const expectedTokens = contentTokens(expected);
+  // The caller passes the rubric when the sample has one (see
+  // `scoreUnderProtocol`); this keeps the function's own signature honest
+  // about what it measures.
   const outputTokens = contentTokens(output);
   // Procedure following: the fraction of the instruction's own content the
   // answer actually engages. A word-level proxy — it cannot tell "followed
@@ -595,7 +626,13 @@ export function scoreUnderProtocol(input: {
     dimensions:
       input.dimensions?.[index] ??
       keywordOverlapJudge(
-        sample.output,
+        // W2(a): the rubric when the sample carries one, the recorded
+        // answer otherwise. This is the whole point of the field — the
+        // judge measures "contains what a good answer contains" rather
+        // than "resembles the answer we happened to record".
+        sample.expected_behavior?.trim()
+          ? sample.expected_behavior
+          : sample.output,
         outputs[index] ?? "",
         input.instruction ?? sample.instruction,
       ).dimensions,

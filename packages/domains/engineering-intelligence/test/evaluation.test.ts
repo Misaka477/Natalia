@@ -9,6 +9,7 @@ import {
   compositeFitness,
   createEvaluationFace,
   evaluateBaseline,
+  expectedBehaviorFrom,
   keywordOverlapJudge,
   lengthPenalty,
   meanStability,
@@ -483,4 +484,51 @@ test("the protocol takes pre-judged dimensions, and falls back per sample", () =
     samples,
   });
   expect(cheap.perExample["train:a"]).not.toBeCloseTo(0.9, 6);
+});
+
+test("the judge measures the rubric when the sample carries one", () => {
+  // W2(a): without the rubric the judge can only measure "like the last
+  // answer" — resemblance, not quality. With it, correctness is "contains
+  // what a good answer contains".
+  const rubric = "alpha beta gamma";
+  const base = sample("train:rubric");
+  const withRubric = scoreUnderProtocol({
+    outputs: ["alpha beta"],
+    samples: [{ ...base, expected_behavior: rubric }],
+  });
+  // Two of the rubric's three points covered.
+  expect(withRubric.perExample["train:rubric"]).toBeGreaterThan(0);
+  const without = scoreUnderProtocol({
+    outputs: ["alpha beta"],
+    samples: [base],
+  });
+  // The recorded answer is the criterion without a rubric, so the same
+  // output scores differently — and that difference is the whole point of
+  // the field.
+  expect(withRubric.perExample["train:rubric"]).not.toBeCloseTo(
+    without.perExample["train:rubric"]!,
+    6,
+  );
+});
+
+test("an empty rubric is not a rubric — the answer stays the criterion", () => {
+  // A sample carrying an empty string must not score against nothing.
+  const base = sample("train:empty-rubric");
+  const out = scoreUnderProtocol({
+    outputs: [base.output],
+    samples: [{ ...base, expected_behavior: "   " }],
+  });
+  expect(out.perExample["train:empty-rubric"]).toBeCloseTo(1, 6);
+});
+
+test("the first-pass rubric is the recorded answer's own content tokens", () => {
+  // The plan's sanctioned coarse rubric: the plumbing ships now, the
+  // rubric's content is refined from real failure modes later.
+  // The true value was PROBED, not written from imagination (the recorded
+  // lesson: a true-value assertion is computed first). "the" survives the
+  // tokenizer's length>2 filter, so it rides along.
+  expect(expectedBehaviorFrom("Record the rollback step first")).toBe(
+    "record the rollback step first",
+  );
+  expect(expectedBehaviorFrom("")).toBe("");
 });

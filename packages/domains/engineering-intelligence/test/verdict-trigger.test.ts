@@ -1,31 +1,18 @@
 import { expect, test } from "bun:test";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import {
-  shouldWakeForVerdict,
+  lastFinishedTurnID,
   verdictAlreadyRequested,
+  verdictWakeDue,
 } from "../src/verdict-trigger";
 
 /**
- * S9's trigger law. A verdict wake is due when a HUMAN turn follows a
- * FINISHED assistant turn — the user's follow-up is the verdict on the
- * answer that preceded it. Each exclusion is a real way to wake her for
- * nothing.
+ * S9's trigger law: a HUMAN submission after a FINISHED assistant turn.
+ * Each exclusion is a real way to wake her for nothing.
  */
-
-const submitted = (internal?: boolean) =>
-  ({
-    type: "turn.submitted",
-    id: "adm",
-    text: "why is the build red",
-    byteLength: 17,
-    lineCount: 1,
-    sha256: "sha",
-    ...(internal ? { internal: true } : {}),
-  }) as unknown as RuntimeEvent;
 
 const started = (id: string) =>
   ({ type: "turn.started", id }) as unknown as RuntimeEvent;
-
 const finished = (id: string) =>
   ({
     type: "turn.finished",
@@ -34,41 +21,42 @@ const finished = (id: string) =>
     durationMs: 10,
   }) as unknown as RuntimeEvent;
 
-test("a human turn after a finished assistant turn is the verdict shape", () => {
-  const decision = shouldWakeForVerdict([
-    submitted(),
-    started("turn_a"),
-    finished("turn_a"),
-    submitted(),
-  ]);
+test("a human submission after a finished turn is the verdict shape", () => {
+  const decision = verdictWakeDue({ lastFinishedTurnID: "turn_a" });
   expect(decision.wake).toBe(true);
   expect(decision.turnID).toBe("turn_a");
 });
 
 test("an internal wake is nobody speaking — no verdict", () => {
-  const decision = shouldWakeForVerdict([
-    submitted(),
-    started("turn_a"),
-    finished("turn_a"),
-    submitted(true),
-  ]);
+  const decision = verdictWakeDue({
+    lastFinishedTurnID: "turn_a",
+    submissionInternal: true,
+  });
   expect(decision.wake).toBe(false);
   expect(decision.reason).toContain("internal wake");
 });
 
-test("an unfinished turn has no answer to judge", () => {
-  const decision = shouldWakeForVerdict([
-    submitted(),
-    started("turn_a"),
-    submitted(),
-  ]);
+test("a turn still in flight has no answer to judge", () => {
+  // The journal's newest turn started but never finished.
+  expect(lastFinishedTurnID([started("turn_a"), finished("turn_b")])).toBe(
+    "turn_b",
+  );
+  expect(
+    lastFinishedTurnID([finished("turn_a"), started("turn_b")]),
+  ).toBeUndefined();
+  expect(lastFinishedTurnID([])).toBeUndefined();
+  const decision = verdictWakeDue({
+    lastFinishedTurnID: lastFinishedTurnID([
+      finished("turn_a"),
+      started("turn_b"),
+    ]),
+  });
   expect(decision.wake).toBe(false);
-  expect(decision.reason).toContain("still in flight");
+  expect(decision.reason).toContain("nothing to judge");
 });
 
 test("the wake is idempotent: the journal's fact says she was already asked", () => {
   const events = [
-    ...[],
     {
       type: "verdict.requested",
       id: "vr_1",

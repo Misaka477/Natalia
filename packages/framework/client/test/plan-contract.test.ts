@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -1244,3 +1245,26 @@ test("the read surfaces paginate with a cursor (B6)", async () => {
   expect(all?.items).toHaveLength(1);
   await client.dispose?.();
 }, 30_000);
+
+test("the verdict wake ships dark: a human turn does not wake Nia unless the config says so", () => {
+  // S9: the wiring, the trigger law and the persona are all in, but the
+  // wake costs one extra model turn per exchange — so it is OFF until it
+  // has been seen running in a real session. This pins the default,
+  // because a wake that fires silently doubles every session's model
+  // calls and steals a provider request from the main agent (which is
+  // exactly what the tests above would see).
+  const config = readFileSync(
+    join(
+      import.meta.dir,
+      "..",
+      "..",
+      "..",
+      "core",
+      "contracts",
+      "src",
+      "schema-foundation.ts",
+    ),
+    "utf8",
+  );
+  expect(config).toContain("verdictWake: z.boolean().default(false)");
+});

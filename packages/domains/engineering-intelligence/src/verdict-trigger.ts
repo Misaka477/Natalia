@@ -17,49 +17,53 @@
 
 import type { RuntimeEvent } from "@anthelia/contracts";
 
-/** What the trigger reads: the session's event tail. */
-export function shouldWakeForVerdict(events: readonly RuntimeEvent[]): {
-  wake: boolean;
-  turnID?: string;
-  reason: string;
-} {
-  // The newest admission decides, and what precedes it supplies the turn
-  // to judge. Two passes, in that order: find the newest submission, then
-  // look at everything before it for the last assistant turn that
-  // FINISHED (a turn still in flight has no answer to judge).
-  let newestSubmission = -1;
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    if (events[index]!.type === "turn.submitted") {
-      newestSubmission = index;
-      break;
-    }
-  }
-  if (newestSubmission < 0)
-    return { wake: false, reason: "no turn submission in the tail" };
-  const admission = events[newestSubmission] as { internal?: boolean };
-  if (admission.internal === true)
+/**
+ * The verdict-wake decision, from the two facts the caller already holds:
+ * the turn that just finished, and whether the submission arriving now is
+ * the user's own. Pure, so the law is a unit test rather than a hope — and
+ * so the runtime wiring is a one-liner that cannot get the law wrong.
+ *
+ * The shape: a HUMAN submission after a FINISHED assistant turn. The
+ * user's follow-up is the verdict on the answer that preceded it, and Nia
+ * is woken to read the exchange and judge it.
+ */
+export function verdictWakeDue(input: {
+  /** The turn that just finished (undefined when none has). */
+  lastFinishedTurnID?: string;
+  /** Whether the arriving submission is a runtime-generated wake. */
+  submissionInternal?: boolean;
+}): { wake: boolean; turnID?: string; reason: string } {
+  if (input.submissionInternal === true)
     return {
       wake: false,
-      reason: "the newest admission is an internal wake — nobody spoke",
+      reason: "the arriving submission is an internal wake — nobody spoke",
     };
-  for (let index = newestSubmission - 1; index >= 0; index -= 1) {
-    const event = events[index]!;
-    if (event.type === "turn.finished")
-      return {
-        wake: true,
-        turnID: event.id,
-        reason: `a human turn follows the finished turn ${event.id}`,
-      };
-    if (event.type === "turn.started")
-      return {
-        wake: false,
-        reason: `turn ${event.id} is still in flight — no answer to judge`,
-      };
-  }
+  if (!input.lastFinishedTurnID)
+    return {
+      wake: false,
+      reason: "no finished assistant turn precedes it — nothing to judge",
+    };
   return {
-    wake: false,
-    reason: "no finished assistant turn precedes it — nothing to judge",
+    wake: true,
+    turnID: input.lastFinishedTurnID,
+    reason: `a human turn follows the finished turn ${input.lastFinishedTurnID}`,
   };
+}
+
+/**
+ * The turn that finished most recently, read from the journal's tail.
+ * `undefined` when the newest turn is still in flight (no answer to judge)
+ * or when nothing has run yet.
+ */
+export function lastFinishedTurnID(
+  events: readonly RuntimeEvent[],
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.type === "turn.finished") return event.id;
+    if (event.type === "turn.started") return undefined;
+  }
+  return undefined;
 }
 
 /**

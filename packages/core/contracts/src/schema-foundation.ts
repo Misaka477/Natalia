@@ -336,6 +336,14 @@ export const checkpointConfigSchema = z
 export const backgroundReviewConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
+    /**
+     * S9: the RLHF verdict wake — every human turn after a finished answer
+     * wakes Nia to judge that answer. It costs one extra model turn per
+     * exchange, so it ships DARK: off until it has been seen running in a
+     * real session. The wiring, the trigger law and the persona are all
+     * in; this is the switch.
+     */
+    verdictWake: z.boolean().default(false),
   })
   .default({});
 

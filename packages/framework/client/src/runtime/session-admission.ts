@@ -8,6 +8,11 @@
  * state through `RuntimeContext` at call time.
  */
 import {
+  lastFinishedTurnID,
+  verdictAlreadyRequested,
+  verdictWakeDue,
+} from "@natalia/engineering-intelligence";
+import {
   admittedInputs,
   admitInput,
   buildInputAdmission,
@@ -128,6 +133,36 @@ export function createSessionAdmission(
       Boolean(targetExec?.activeTurnID);
     targetExec.lastSubmitted = submitted;
     if (targetExec === getActiveExec()) setLastSubmitted(submitted);
+    // S9: the RLHF verdict wake. The user's follow-up is the verdict on the
+    // answer that preceded it, so a HUMAN submission after a FINISHED turn
+    // wakes Nia to read the exchange and judge it (her verdict rides back
+    // through collab_chat into the next turn's context and into the
+    // dataset miner's feedback pipe). The law is pure and lives in EI; this
+    // is the one line that cannot get it wrong. The fact makes the wake
+    // idempotent — a replay or a second submission must not ask her twice
+    // about the same exchange.
+    const verdictWakeEnabled =
+      ctx.ports.getTsRuntimeConfig?.()?.backgroundReview?.verdictWake ?? false;
+    if (!input.internal && verdictWakeEnabled && ctx.ports.requestNiaWake) {
+      const judged = lastFinishedTurnID(targetSession.events);
+      const due = verdictWakeDue({
+        ...(judged ? { lastFinishedTurnID: judged } : {}),
+        submissionInternal: input.internal,
+      });
+      if (
+        due.wake &&
+        due.turnID &&
+        !verdictAlreadyRequested(targetSession.events, due.turnID)
+      ) {
+        publishForSession(targetExec, {
+          type: "verdict.requested",
+          id: `verdict_${due.turnID}`,
+          turnID: due.turnID,
+          at: new Date().toISOString(),
+        });
+        ctx.ports.requestNiaWake(targetExec, "verdict");
+      }
+    }
     turnSession.set(id, targetSessionID);
     // Admission is durable and observable whether the input will be injected
     // or start its own turn; `turn.submitted` is published when a turn begins.

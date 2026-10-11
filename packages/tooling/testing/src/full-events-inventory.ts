@@ -107,6 +107,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "explicit-history",
     note: "the restart audit re-wake scan behind its own ensureSessionFullEvents — the study's sanctioned class (the scan must see the whole log: the fast-attach tail both missed early audit.requested events and missed the plan.doc.status events that closed them)",
   },
+  "packages/framework/client/src/runtime/session-admission.ts": {
+    count: 2,
+    cls: "state-first",
+    note: "the verdict trigger reads the journal tail for the last finished turn and the idempotence fact — a bounded derivation over what is resident (the turn that just finished is in the tail), not a full-history scan",
+  },
   "packages/framework/client/src/runtime/composition/foundation.ts": {
     count: 1,
     cls: "state-first",

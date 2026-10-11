@@ -14,6 +14,9 @@ import {
 } from "@anthelia/turn-orchestration";
 import { providerModelController } from "@anthelia/provider-model";
 import { sessionStoreController } from "@anthelia/session-store";
+import { triggerFactFrom } from "@natalia/engineering-intelligence";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { SessionID } from "@anthelia/contracts";
 import type { SessionStoreController } from "@anthelia/session-store";
 import type {
@@ -164,6 +167,98 @@ export function wireTurnOrchestration(
           } finally {
             deps.scheduleTitleGeneration(input.sessionID as SessionID);
             ctx.state.selfReview?.schedule(input.sessionID);
+            // S8: the trigger's noticing. A turn boundary is the natural
+            // moment — the ranking and the holdout movement are freshest
+            // here, and the loop that used to run only when a human typed
+            // a command now says so on the record. DARK by default (a new
+            // autonomous model call is not something to switch on unseen,
+            // the lesson the verdict wake taught), and the check is
+            // bounded to one turn in twenty so a hot session does not fold
+            // the growth facts every turn.
+            if (
+              ctx.ports.getTsRuntimeConfig?.()?.backgroundReview
+                ?.evolutionTrigger
+            ) {
+              void (async () => {
+                try {
+                  const exec = ctx.ports
+                    .getExecutionBySession()
+                    .get(input.sessionID as SessionID);
+                  if (!exec) return;
+                  const ranked =
+                    (await deps
+                      .createRealRuntimeClient({})
+                      .growthTriggers?.(input.sessionID)) ?? [];
+                  // The ranking's own score rides in its evidence — read
+                  // through the same accessor the trigger's law uses, so
+                  // there is one reading of "how much potential".
+                  const triggers = ranked.map((row) => ({
+                    capability: row.capability,
+                    score: Number(row.evidence?.score ?? 0),
+                  }));
+                  if (!triggers.length) return;
+                  // The holdout movement comes from the run's own record —
+                  // the same durable files the queue reads.
+                  const runsRoot = join(
+                    ctx.ports.getWorkspaceRoot(),
+                    ".natalia",
+                    "evolution",
+                    "runs",
+                  );
+                  let runs: Array<{ holdout?: number }> = [];
+                  try {
+                    const entries = (await readdir(runsRoot)).sort();
+                    for (const entry of entries.slice(-2)) {
+                      const summary = await readFile(
+                        join(runsRoot, entry, "evolution_summary.jsonl"),
+                        "utf8",
+                      ).catch(() => "");
+                      for (const line of summary.split("\n")) {
+                        if (!line.trim()) continue;
+                        try {
+                          const row = JSON.parse(line) as {
+                            holdoutScore?: number;
+                          };
+                          if (typeof row.holdoutScore === "number")
+                            runs.push({ holdout: row.holdoutScore });
+                        } catch {
+                          // A corrupt line is skipped, not fatal.
+                        }
+                      }
+                    }
+                  } catch {
+                    // No run directory: no history, and no history is a
+                    // flat delta the signal gate refuses.
+                  }
+                  const already = exec.session.events
+                    .filter((event) => event.type === "growth.triggered")
+                    .map(
+                      (event) =>
+                        (event as { capability?: string }).capability ?? "",
+                    );
+                  const out = triggerFactFrom({
+                    triggers,
+                    runs,
+                    activeEvolutions: 0,
+                    alreadyTriggered: already,
+                  });
+                  if (!("fact" in out)) return;
+                  ctx.ports.publishForSession(exec, {
+                    type: "growth.triggered",
+                    id: `growth_triggered_${Date.now().toString(36)}`,
+                    capability: out.fact.capability,
+                    potential: out.fact.potential,
+                    holdoutDelta: out.fact.holdoutDelta,
+                    reason: out.fact.reason,
+                    at: out.fact.at,
+                  });
+                } catch {
+                  // A failed noticing is silent BY DESIGN: the trigger is
+                  // an optimization, and a turn boundary must never fail
+                  // because an optional side channel did.
+                }
+              })();
+            }
           }
         },
       ),

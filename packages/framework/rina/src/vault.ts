@@ -423,6 +423,27 @@ const CLASSIFIED: Partial<Record<RuntimeEvent["type"], EventClassification>> = {
       );
     },
   },
+  "growth.triggered": {
+    // An observation, not a decision: the system noticed; nothing was
+    // decided. The vault's type set has no "observation" and inventing
+    // one for this would be a schema change for a label — "evidence" is
+    // the honest existing member.
+    recordType: "evidence",
+    // The capability the round is for is the entity: a later recall about
+    // that capability's history should match this noticing.
+    entityOf: (event) =>
+      String((event as { capability?: string }).capability ?? "growth"),
+    label: (event) => {
+      const triggered = event as {
+        capability?: string;
+        potential?: number;
+        holdoutDelta?: number;
+      };
+      return label(
+        `round due: ${triggered.capability ?? "?"} (potential ${(triggered.potential ?? 0).toFixed(3)}, holdout ${(triggered.holdoutDelta ?? 0).toFixed(4)})`,
+      );
+    },
+  },
   "self_review.completed": {
     recordType: "evidence",
     // The subject is the skills it touched — that is what a later recall

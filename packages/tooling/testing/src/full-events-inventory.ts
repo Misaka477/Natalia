@@ -102,6 +102,12 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "resident-defaults and a telemetry field pass in the wire",
   },
+  "packages/framework/client/src/runtime/initialize/framework-turn-orchestration.ts":
+    {
+      count: 1,
+      cls: "explicit-history",
+      note: "the S8 trigger's dedupe scan: which capabilities were already announced is a question about the WHOLE log, and the fast-attach tail both misses early announcements and misses the ones a restart replayed (the same shape finalize's restart audit re-wake uses)",
+    },
   "packages/framework/client/src/runtime/initialize/finalize.ts": {
     count: 1,
     cls: "explicit-history",

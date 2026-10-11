@@ -1,4 +1,5 @@
 import { callRuntimeRPC } from "@natalia/transport";
+import { skillGcReport } from "@natalia/engineering-intelligence";
 import {
   createRuntimeDaemonStore,
   daemonToken,
@@ -28,7 +29,8 @@ const USAGE =
   "usage: natalia skills [list] [--json]\n" +
   "       natalia skills remove <name>\n" +
   "       natalia skills disable <name>\n" +
-  "       natalia skills enable <name>";
+  "       natalia skills enable <name>\n" +
+  "       natalia skills gc [--json]   (dry run: lists, never deletes)";
 
 /** The daemon's URL and token, or undefined when none is running. */
 async function daemonConnection() {
@@ -44,16 +46,26 @@ export async function skillsCli(argv: string[]): Promise<void> {
     action !== "list" &&
     action !== "remove" &&
     action !== "disable" &&
-    action !== "enable"
+    action !== "enable" &&
+    // W6: the lifecycle dry run. It LISTS what a gc would take; the
+    // eviction itself is a human act (G6), same as the landing path.
+    action !== "gc"
   ) {
     console.error(USAGE);
     process.exit(1);
   }
+  // W6: the lifecycle dry run. It reads the catalog (no name, no write)
+  // and reports what a gc WOULD take — never taking it.
   // The argument shape is checked BEFORE the daemon is asked: a missing
   // name is a caller error, and answering it with "no daemon" sends the
   // operator to start a service for nothing.
   const name = argv[1];
-  if (action !== "list" && (!name || name.startsWith("-"))) {
+  if (
+    action !== "list" &&
+    // W6: gc reads the catalog, not a name.
+    action !== "gc" &&
+    (!name || name.startsWith("-"))
+  ) {
     console.error(`natalia skills ${action} requires a skill name`);
     console.error(USAGE);
     process.exit(1);
@@ -64,6 +76,43 @@ export async function skillsCli(argv: string[]): Promise<void> {
       "no daemon is running — start one with `natalia daemon` (the skills service lives there)",
     );
     process.exit(1);
+  }
+
+  if (action === "gc") {
+    const rows = (await callRuntimeRPC<Array<{ name: string; source: string }>>(
+      {
+        url: connection.url,
+        token: connection.token,
+        method: "skills.list",
+        params: {},
+      },
+    )) as Array<{ name: string; source: string }>;
+    // The honest caveat, in the output: this system journals no skill-usage
+    // fact (activation is runtime state, command executions are not
+    // journaled), so uses/successes/lastUsedAt have no source yet. A gc
+    // that cannot see usage refuses to guess rather than deleting on
+    // zeros — an eviction policy running on invented numbers would delete
+    // the skills nobody measured.
+    const report = skillGcReport(
+      rows.map((row) => ({
+        name: row.name,
+        uses: 0,
+        successes: 0,
+        bytes: 0,
+        createdAt: Date.now(),
+      })),
+      Date.now(),
+    );
+    console.log(
+      argv.includes("--json")
+        ? JSON.stringify(report, null, 2)
+        : [
+            `skill gc (dry run): ${report.evict.length} evictable, ${report.keep.length} kept`,
+            ...report.keep.map((row) => `  keep ${row.name} — ${row.reason}`),
+            "no usage facts are journaled yet, so nothing is evictable — this is the guard working, not a bug",
+          ].join("\n"),
+    );
+    return;
   }
   const { url, token } = connection;
   if (action === "list") {

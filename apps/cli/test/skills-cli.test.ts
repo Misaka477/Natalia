@@ -97,3 +97,20 @@ test("evolution land refuses a missing card path and a malformed card before tou
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+test("skills gc is a dry run: it lists and never deletes, and says when it cannot see usage", () => {
+  base = mkdtempSync(join(tmpdir(), "skills-cli-gc-"));
+  try {
+    // No daemon: named failure (the catalog lives there).
+    const noDaemon = run(["skills", "gc"]);
+    expect(noDaemon.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(noDaemon.stderr)).toContain(
+      "natalia daemon",
+    );
+    // An unknown action still shows the usage, and the usage names gc.
+    const unknown = run(["skills", "sweep"]);
+    expect(new TextDecoder().decode(unknown.stderr)).toContain("skills gc");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

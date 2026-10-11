@@ -12,6 +12,7 @@ export * from "./best-of-n";
 export * from "./reflective-mutator";
 export * from "./engine";
 export * from "./escalation";
+export * from "./skill-lifecycle";
 export * from "./evolution-state";
 export * from "./gates";
 export * from "./benchmark";

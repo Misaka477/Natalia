@@ -18,6 +18,7 @@ export * from "./verdict-trigger";
 export * from "./candidate-gate";
 export * from "./judge";
 export * from "./evolution-trigger";
+export * from "./trigger-facts";
 export * from "./evolution-state";
 export * from "./gates";
 export * from "./benchmark";

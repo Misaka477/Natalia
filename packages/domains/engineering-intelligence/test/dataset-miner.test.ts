@@ -321,7 +321,7 @@ test("a human rating rides its own turn's pair; a retraction takes it back", () 
   ];
   const { pairs } = mineSessionPairs("s1", events);
   expect(pairs.find((pair) => pair.turnID === "turn_a")!.feedback).toBe(
-    "down: you skipped the rollback step",
+    "then: rotate the key | user: down: you skipped the rollback step",
   );
   // An unrated turn stays absent (the common case).
   expect(
@@ -341,9 +341,12 @@ test("a human rating rides its own turn's pair; a retraction takes it back", () 
       verdict: "down",
     } as unknown as RuntimeEvent,
   ]);
+  // The retraction withdraws the EXPLICIT rating (the `user:` part goes);
+  // what the user did next is a separate, always-present signal and stays
+  // as context.
   expect(
     withdrawn.pairs.find((pair) => pair.turnID === "turn_a")!.feedback,
-  ).toBeUndefined();
+  ).toBe("then: rotate the key");
 });
 
 test("a rating on another message never rides this turn's pair", () => {

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { segmentTurns } from "./run-scorer";
 import { contentTokens } from "./text-tokens";
+import { foldVerdicts, verdictFeedback } from "./verdict";
 
 /**
  * L2's dataset miner: turn a workspace's own session journal into an
@@ -262,7 +263,12 @@ export function mineSessionPairs(
     trivial: 0,
   };
   const feedback = foldFeedbackIndex(events);
-  for (const window of segmentTurns(events)) {
+  // S9: Nia's verdicts and the user's own follow-up. The follow-up is the
+  // ground truth (the next window's own words); the verdict is the
+  // independent reading. Both ride the pair's feedback.
+  const verdicts = foldVerdicts(events);
+  const windows = segmentTurns(events);
+  for (const [index, window] of windows.entries()) {
     const submitted = window.submitted;
     if (!submitted) {
       // No visible admission: runtime choreography (an internal wake, a
@@ -301,16 +307,21 @@ export function mineSessionPairs(
       dropped.trivial += 1;
       continue;
     }
+    const followUp = windows[index + 1]?.submitted;
+    const explicit = feedbackForTurn(feedback, window.turnID);
+    const combined = verdictFeedback({
+      ...(followUp ? { userFollowUp: followUp.text } : {}),
+      ...(explicit ? { explicitRating: explicit } : {}),
+      ...(verdicts.byTurn.get(window.turnID)
+        ? { verdict: verdicts.byTurn.get(window.turnID) }
+        : {}),
+    });
     pairs.push({
       sessionID,
       turnID: window.turnID,
       task,
       response,
-      // The human's judgment on THIS answer, when they gave one: the
-      // reflection dataset's Feedback field finally has a source.
-      ...(feedbackForTurn(feedback, window.turnID)
-        ? { feedback: feedbackForTurn(feedback, window.turnID) }
-        : {}),
+      ...(combined ? { feedback: combined } : {}),
     });
   }
   return { pairs, dropped };

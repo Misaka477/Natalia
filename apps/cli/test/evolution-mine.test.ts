@@ -381,3 +381,32 @@ test("evolution optimize --engine reflective refuses a bad engine and reports a 
   expect(report.engine).toBe("reflective");
   expect(report.failed).toContain("no_daemon");
 });
+
+test("evolution benchmark --generate refuses without --generate, and the domain filter is the guard", () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-bench-gate-"));
+  try {
+    const noGenerate = run(["evolution", "benchmark", "--target", "x"], base);
+    expect(noGenerate.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(noGenerate.stderr)).toContain("--generate");
+    // No daemon: the synthesis runs a real turn, so it says which command
+    // starts one instead of failing somewhere confusing.
+    const noDaemon = run(
+      [
+        "evolution",
+        "benchmark",
+        "--generate",
+        "--target",
+        "x",
+        "--workspace",
+        base,
+      ],
+      base,
+    );
+    expect(noDaemon.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(noDaemon.stderr)).toContain(
+      "natalia daemon",
+    );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

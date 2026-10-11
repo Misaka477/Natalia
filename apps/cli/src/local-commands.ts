@@ -16,6 +16,9 @@ import {
   assembleResult,
   beatsFloor,
   bestMember,
+  synthesizeCapabilityBenchmark,
+  escalationAdvice,
+  plasticityIndex,
   gateCandidate,
   curiosityAxis,
   INITIAL_CURIOSITY,
@@ -493,8 +496,9 @@ export async function handleLocalCommands(argv: string[]) {
         action !== "mine" &&
         action !== "evaluate" &&
         action !== "optimize" &&
-        // S5: the landing path reads a candidate card, not a target name.
-        action !== "land"
+        action !== "land" &&
+        // W13: the per-gap benchmark's synthesis (a target name, like mine).
+        action !== "benchmark"
       ) {
         console.error(usage);
         process.exit(1);
@@ -507,6 +511,94 @@ export async function handleLocalCommands(argv: string[]) {
         process.exit(1);
       }
       const workspaceRoot = valueAfter(argv, "--workspace") ?? process.cwd();
+      // W13: synthesize a per-capability benchmark for a target that has
+      // none (a new capability cannot be gated by the fixed engineering
+      // tasks). The synthesizer's domain filter is the guard: an off-topic
+      // benchmark gates on the wrong thing and reports a pass.
+      if (action === "benchmark") {
+        if (!argv.includes("--generate")) {
+          console.error(
+            "usage: natalia evolution benchmark --generate --target <name> [--count <n>] [--workspace <root>] [--json]",
+          );
+          process.exit(1);
+        }
+        const count = positiveInt(valueAfter(argv, "--count"), 4, "count");
+        const store = createRuntimeDaemonStore({ dir: daemonDir() });
+        const registration = await readRuntimeDaemonRegistration(store);
+        if (!registration) {
+          console.error(
+            "no daemon is running — start one with `natalia daemon` (the synthesis runs a real turn)",
+          );
+          process.exit(1);
+        }
+        const token = await daemonToken(store);
+        const sampler = async (prompt: string): Promise<string> => {
+          const turn = await callRuntimeRPC<{ id?: string }>({
+            url: registration.url,
+            token,
+            method: "submit.andWait",
+            params: { text: prompt },
+            signal: AbortSignal.timeout(45_000),
+          });
+          const page = await callRuntimeRPC<TurnMessagePage>({
+            url: registration.url,
+            token,
+            method: "session.messages",
+          });
+          const answer = assistantAnswerFromPage(page, turn.id);
+          if (!answer.ok) throw new Error(answer.reason);
+          return answer.text;
+        };
+        const synthesized = await synthesizeCapabilityBenchmark({
+          capability: target,
+          // The capability's own name and the mined dataset's tasks are the
+          // seed facts — the domain's vocabulary, no second telemetry.
+          seedFacts: [`${target} capability`],
+          sampler,
+          count,
+        });
+        const dir = joinPath(
+          workspaceRoot,
+          ".natalia",
+          "evolution",
+          "benchmarks",
+        );
+        await mkdir(dir, { recursive: true });
+        const file = joinPath(dir, `${target}.jsonl`);
+        await writeFile(
+          file,
+          synthesized.tasks
+            .map((task) =>
+              JSON.stringify({
+                id: task.id,
+                capability: task.capability,
+                task: task.task,
+                expected: task.expected,
+                layer: task.layer,
+              }),
+            )
+            .join("\n")
+            .concat(synthesized.tasks.length ? "\n" : ""),
+        );
+        console.log(
+          argv.includes("--json")
+            ? JSON.stringify(
+                {
+                  target,
+                  file,
+                  tasks: synthesized.tasks.length,
+                  dropped: synthesized.dropped,
+                },
+                null,
+                2,
+              )
+            : [
+                `benchmark for ${target}: ${synthesized.tasks.length} task(s) (${synthesized.dropped} dropped as off-domain)`,
+                `written: ${file}`,
+              ].join("\n"),
+        );
+        break;
+      }
       if (action === "mine") {
         const service = createLocalSessionService(workspaceRoot);
         const rows = await service.list();
@@ -1077,6 +1169,29 @@ export async function handleLocalCommands(argv: string[]) {
             best,
             floorScore: baselineResult.score,
           });
+          // W8: a failed phase gate names the rung instead of shrugging.
+          // The plasticity index reads this run's own record: acquisitions
+          // (candidates that beat their parent) over rollbacks (candidates
+          // the gates refused or that regressed).
+          const acquisitions = population.members.filter(
+            (member) =>
+              member.lineage.parent !== undefined &&
+              member.score >
+                (population.members.find(
+                  (other) => other.id === member.lineage.parent,
+                )?.score ?? 0),
+          ).length;
+          const rollbacks = summaryLines.filter(
+            (line) =>
+              line.includes('"outcome":"rejected"') ||
+              line.includes('"passed":false'),
+          ).length;
+          const escalation = escalationAdvice({
+            beatFloor: gate.ok,
+            plasticity: plasticityIndex({ acquisitions, rollbacks }),
+            consecutiveFailures: curiosity.failures,
+            evaluated: population.members.length - 1,
+          });
           // S2/S6: the seven gates on the reported best, and on the
           // baseline (a gate the baseline fails is pre-existing, not the
           // candidate's fault).
@@ -1129,6 +1244,16 @@ export async function handleLocalCommands(argv: string[]) {
               : null,
             beatBaseline: gate.ok,
             gateReason: gate.reason,
+            // W8: the ladder's rung, when there is one.
+            ...(escalation.step
+              ? {
+                  escalation: {
+                    step: escalation.step,
+                    reason: escalation.reason,
+                    plasticity: escalation.plasticity.value,
+                  },
+                }
+              : {}),
             // The controller's last state, so a reader sees WHY the last
             // rounds asked for what they asked for.
             curiosity: {
@@ -1174,6 +1299,9 @@ export async function handleLocalCommands(argv: string[]) {
                     ? `best: ${best.id} at ${best.score.toFixed(4)}`
                     : "best: none",
                   `phase gate: ${gate.reason}`,
+                  ...(escalation.step
+                    ? [`escalate: ${escalation.step} — ${escalation.reason}`]
+                    : []),
                   `judge: keyword overlap — the recorded responses score 1.0 against themselves, so the ceiling is the reference; a real judge is what closes the gap`,
                 ].join("\n"),
           );

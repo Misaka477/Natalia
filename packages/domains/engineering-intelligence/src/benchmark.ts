@@ -22,6 +22,8 @@
  */
 
 /** One benchmark task: a command, and what "passing" means for it. */
+import { contentTokens } from "./text-tokens";
+
 export type BenchmarkTask = {
   id: string;
   /** The command the runner executes (a shell string, like validation's). */
@@ -178,4 +180,147 @@ export function tasksForLayer(input: {
 }): BenchmarkTask[] {
   const tasks = input.tasks ?? ENGINEERING_BENCHMARK;
   return tasks.filter((task) => task.layer === input.layer);
+}
+
+// --- the per-gap benchmark (W13) --------------------------------------------
+
+/**
+ * A synthesized capability task: what a NEW capability is measured by.
+ *
+ * The engineering benchmark above is fixed shell commands — it measures
+ * the framework, and it cannot measure a capability that did not exist
+ * when it was written. The user's design note fills that hole: from a
+ * gap (the domain vector) plus seed facts, synthesize a task set for that
+ * capability. A capability with no benchmark cannot be gated (G7 refuses
+ * "unmeasured"), so this is the other half of L6.
+ */
+export type CapabilityTask = {
+  id: string;
+  /** The capability this task measures (the gap's name). */
+  capability: string;
+  /** The task text a turn would receive. */
+  task: string;
+  /** What a good answer contains or does — a rubric, not a gold answer. */
+  expected: string;
+  layer: "fast" | "full";
+};
+
+/**
+ * Whether a synthesized task is about the capability at all.
+ *
+ * The filter is the point: an LLM asked to "generate benchmark tasks for
+ * X" will happily produce tasks about anything, and an off-topic benchmark
+ * is worse than no benchmark — it gates on the wrong thing and reports a
+ * pass. A task whose content does not overlap the capability's own tokens
+ * (or the seed facts') is dropped and counted.
+ */
+export function acceptCapabilityTask(input: {
+  task: { task: string; expected: string };
+  capability: string;
+  seedFacts: readonly string[];
+  minOverlap?: number;
+}): { ok: boolean; overlap: number; reason: string } {
+  const floor = input.minOverlap ?? 0.1;
+  const domain = new Set([
+    ...contentTokens(input.capability),
+    ...input.seedFacts.flatMap((fact) => [...contentTokens(fact)]),
+  ]);
+  if (!domain.size)
+    return {
+      ok: false,
+      overlap: 0,
+      reason: "no domain tokens to measure against",
+    };
+  const taskTokens = contentTokens(`${input.task.task} ${input.task.expected}`);
+  const shared = [...domain].filter((token) => taskTokens.has(token)).length;
+  const overlap = shared / domain.size;
+  if (overlap < floor)
+    return {
+      ok: false,
+      overlap,
+      reason: `the task is off-domain (overlap ${overlap.toFixed(2)} < ${floor}) — an off-topic benchmark gates on the wrong thing`,
+    };
+  return {
+    ok: true,
+    overlap,
+    reason: `on-domain (overlap ${overlap.toFixed(2)})`,
+  };
+}
+
+/**
+ * Synthesize a per-capability benchmark through a sampler seam (the daemon
+ * in the CLI, a scripted fake in tests). Every task passes the domain
+ * filter; the dropped ones are counted, because a synthesizer that mostly
+ * produces off-domain tasks is telling you the capability is not
+ * expressible as tasks yet.
+ */
+export async function synthesizeCapabilityBenchmark(input: {
+  capability: string;
+  seedFacts: readonly string[];
+  sampler: (prompt: string) => Promise<string>;
+  count?: number;
+  layer?: "fast" | "full";
+}): Promise<{
+  tasks: CapabilityTask[];
+  dropped: number;
+}> {
+  const count = input.count ?? 4;
+  const layer = input.layer ?? "fast";
+  const prompt = [
+    `Generate ${count} benchmark tasks for the capability: ${input.capability}.`,
+    "Seed facts (the domain's own vocabulary):",
+    ...input.seedFacts.map((fact) => `- ${fact}`),
+    "",
+    "Answer with a JSON array; each item:",
+    '{"task": "<the task text a turn would receive>", "expected": "<what a good answer contains or does — a rubric, not a gold answer>"}',
+    "Every task MUST be about the capability and use the seed facts' vocabulary.",
+  ].join("\n");
+  const answer = await input.sampler(prompt);
+  const parsed = parseTaskArray(answer);
+  const tasks: CapabilityTask[] = [];
+  let dropped = 0;
+  for (const [index, item] of parsed.entries()) {
+    const verdict = acceptCapabilityTask({
+      task: item,
+      capability: input.capability,
+      seedFacts: input.seedFacts,
+    });
+    if (!verdict.ok) {
+      dropped += 1;
+      continue;
+    }
+    tasks.push({
+      id: `${input.capability}:${index}`,
+      capability: input.capability,
+      task: item.task,
+      expected: item.expected,
+      layer,
+    });
+  }
+  return { tasks, dropped };
+}
+
+/** The sampler's JSON array, or nothing (a malformed answer drops all). */
+function parseTaskArray(
+  answer: string,
+): Array<{ task: string; expected: string }> {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/u.exec(answer);
+  const body = fenced ? fenced[1]! : answer;
+  const start = body.indexOf("[");
+  const end = body.lastIndexOf("]");
+  if (start < 0 || end <= start) return [];
+  try {
+    const value: unknown = JSON.parse(body.slice(start, end + 1));
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        const row = item as { task?: unknown; expected?: unknown };
+        return typeof row.task === "string" && typeof row.expected === "string"
+          ? { task: row.task, expected: row.expected }
+          : undefined;
+      })
+      .filter((item): item is { task: string; expected: string } => !!item);
+  } catch {
+    return [];
+  }
 }

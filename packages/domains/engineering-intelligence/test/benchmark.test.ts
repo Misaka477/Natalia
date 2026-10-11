@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import {
   ENGINEERING_BENCHMARK,
+  acceptCapabilityTask,
   checkSeparation,
   fastTaskIDs,
   fullTaskIDs,
   runBenchmark,
+  synthesizeCapabilityBenchmark,
   tasksForLayer,
   type BenchmarkRunner,
 } from "../src/benchmark";
@@ -117,4 +119,47 @@ test("the full layer runs only for the top few (the layering's cost rule)", () =
   // Every candidate's gate is the fast layer alone.
   const candidateGate = tasksForLayer({ layer: "fast" }).map((task) => task.id);
   expect(candidateGate).not.toContain("full-suite");
+});
+
+test("a synthesized off-domain task is dropped — an off-topic benchmark gates on the wrong thing", async () => {
+  // W13: an LLM asked to generate tasks for X will happily produce tasks
+  // about anything. The filter is the point.
+  const { tasks, dropped } = await synthesizeCapabilityBenchmark({
+    capability: "retry backoff",
+    seedFacts: ["exponential backoff", "jitter", "max attempts"],
+    sampler: async () =>
+      JSON.stringify([
+        {
+          task: "Does the retry backoff use exponential jitter within max attempts?",
+          expected: "yes, with capped exponential backoff and jitter",
+        },
+        {
+          task: "Bake a sourdough loaf with a poolish pre-ferment",
+          expected: "a open crumb and a blistered crust",
+        },
+      ]),
+  });
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0]!.capability).toBe("retry backoff");
+  expect(tasks[0]!.layer).toBe("fast");
+  expect(dropped).toBe(1);
+
+  // The overlap verdict is inspectable, not just a boolean.
+  const verdict = acceptCapabilityTask({
+    task: { task: "Bake a sourdough loaf", expected: "an open crumb" },
+    capability: "retry backoff",
+    seedFacts: ["exponential backoff", "jitter"],
+  });
+  expect(verdict.ok).toBe(false);
+  expect(verdict.reason).toContain("off-domain");
+});
+
+test("a malformed sampler answer drops everything instead of inventing tasks", async () => {
+  const { tasks, dropped } = await synthesizeCapabilityBenchmark({
+    capability: "retry backoff",
+    seedFacts: ["exponential backoff"],
+    sampler: async () => "I'm sorry, I can't help with that.",
+  });
+  expect(tasks).toEqual([]);
+  expect(dropped).toBe(0);
 });

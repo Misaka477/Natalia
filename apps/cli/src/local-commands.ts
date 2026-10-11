@@ -35,6 +35,7 @@ import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
 import { evalListLines, evalRun } from "./eval-cli";
 import { skillsCli } from "./skills-cli";
+import { assistantAnswerFromPage, type TurnMessagePage } from "./turn-answer";
 import {
   callRuntimeRPC,
   createRecordedFetch,
@@ -615,29 +616,34 @@ export async function handleLocalCommands(argv: string[]) {
         // the turn's final assistant text comes back. The reference
         // harness's SkillModule pattern — the artifact under optimization
         // IS the instruction a real turn follows.
+        //
+        // The answer is located BY TURN, not by "the last assistant row in
+        // the session": every sample of every candidate submits into the
+        // SAME session, so a turn that produced no answer would otherwise
+        // silently hand back the PREVIOUS sample's answer and score it as
+        // this one's — corrupt data that looks like a weak candidate.
+        // `session.messages` answers a page of projected turns
+        // (`{data: [{turnID, submitted, rows}]}`); the assistant's
+        // confirmed text is the `content.done` row inside the turn's own
+        // projection.
         const sampleTurn = async (prompt: string): Promise<string> => {
           if (!registration)
             throw new Error("no_daemon: start one with `natalia daemon`");
-          await callRuntimeRPC<{ turnID?: string }>({
+          const turn = await callRuntimeRPC<{ id?: string }>({
             url: registration.url,
             token,
             method: "submit.andWait",
             params: { text: prompt },
             signal: AbortSignal.timeout(45_000),
           });
-          const rows = await callRuntimeRPC<
-            Array<{ role: string; text?: string }>
-          >({
+          const page = await callRuntimeRPC<TurnMessagePage>({
             url: registration.url,
             token,
             method: "session.messages",
           });
-          const last = [...(rows ?? [])]
-            .reverse()
-            .find((row) => row.role === "assistant" && (row.text ?? "").trim());
-          if (!last?.text?.trim())
-            throw new Error("the turn produced no assistant text");
-          return last.text;
+          const answer = assistantAnswerFromPage(page, turn.id);
+          if (!answer.ok) throw new Error(answer.reason);
+          return answer.text;
         };
         if (engine === "reflective") {
           const rounds = positiveInt(valueAfter(argv, "--rounds"), 2, "rounds");

@@ -511,6 +511,15 @@ export function applyStatusEvent(
       if (state.feedback.some((entry) => entry.id === event.id)) return true;
       state.feedback = appendBounded(state.feedback, event, feedbackLimit);
       return true;
+    case "feedback.retracted":
+      // The withdrawal removes the record it names — the slice answers
+      // "what does the human currently think", not "what did they ever
+      // think". An unknown record id is an honest no-op (the journal is
+      // the truth; this is the projection).
+      state.feedback = state.feedback.filter(
+        (entry) => entry.id !== event.recordID,
+      );
+      return true;
     case "diagnostic":
       state.footer = `${event.level}: ${event.message}`;
       return true;

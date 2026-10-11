@@ -193,3 +193,39 @@ test("the observation slices survive a state clone, so a replay rehydrates them"
   expect(clone.selfReview).toHaveLength(1);
   expect(clone.feedback).toHaveLength(1);
 });
+
+test("a retracted rating leaves the feedback slice (the fold answers what holds now)", () => {
+  const state = fresh();
+  applyEvent(state, {
+    type: "feedback.recorded",
+    id: "fb_1",
+    at: "2026-10-12T00:00:00.000Z",
+    scope: "message",
+    messageID: "m1",
+    verdict: "up",
+  } as unknown as RuntimeEvent);
+  expect(state.feedback).toHaveLength(1);
+  applyEvent(state, {
+    type: "feedback.retracted",
+    id: "fbr_1",
+    at: "2026-10-12T00:01:00.000Z",
+    recordID: "fb_1",
+    scope: "message",
+    messageID: "m1",
+    verdict: "up",
+  } as unknown as RuntimeEvent);
+  // The slice answers "what does the human currently think", not "what did
+  // they ever think" — the journal keeps both, the projection keeps one.
+  expect(state.feedback).toEqual([]);
+  // A retraction naming an unknown record is an honest no-op.
+  applyEvent(state, {
+    type: "feedback.retracted",
+    id: "fbr_2",
+    at: "2026-10-12T00:02:00.000Z",
+    recordID: "fb_nope",
+    scope: "message",
+    messageID: "m9",
+    verdict: "down",
+  } as unknown as RuntimeEvent);
+  expect(state.feedback).toEqual([]);
+});

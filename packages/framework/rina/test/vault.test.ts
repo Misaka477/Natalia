@@ -598,3 +598,39 @@ test("a hyphenated plain query is a search, not an FTS syntax error (user smoke 
   expect(ftsPhraseQuery("a b")).toBe('"a" "b"');
   expect(ftsPhraseQuery('say "hi"')).toBe('"say" """hi"""');
 });
+
+test("a retracted rating is a memory that says the judgment was taken back", () => {
+  // The withdrawal shares the retracted record's entity, so a recall that
+  // matches one sees both facts — and the later one says withdrawn. Memory
+  // answers "what happened"; "what currently holds" is the journal fold's
+  // question, not the vault's.
+  const v = vault();
+  v.enqueue({
+    type: "feedback.recorded",
+    id: "fb_1",
+    at: "2026-10-12T00:00:00.000Z",
+    sessionID: "s-ret",
+    workspaceID: "w1",
+    scope: "message",
+    messageID: "m1",
+    verdict: "up",
+  } as unknown as RuntimeEvent);
+  v.enqueue({
+    type: "feedback.retracted",
+    id: "fbr_1",
+    at: "2026-10-12T00:01:00.000Z",
+    sessionID: "s-ret",
+    workspaceID: "w1",
+    recordID: "fb_1",
+    scope: "message",
+    messageID: "m1",
+    verdict: "up",
+  } as unknown as RuntimeEvent);
+  v.flushNow();
+  const rows = v.recall("fb_1", { sessionID: "s-ret" });
+  expect(rows).toHaveLength(2);
+  expect(rows.map((row) => row.summary).sort()).toEqual([
+    "feedback recorded",
+    "feedback retracted: up",
+  ]);
+});

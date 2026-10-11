@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { feedbackActions, rateableRow } from "../src/feedback-actions";
+import {
+  feedbackActions,
+  feedbackToggle,
+  rateableRow,
+} from "../src/feedback-actions";
 
 /**
  * L2's feedback entry as pure decisions (D6a): the thumbs belong on a
@@ -75,4 +79,15 @@ test("a row that is not rateable gets no actions at all", () => {
       rate: () => {},
     }),
   ).toEqual([]);
+});
+
+test("clicking the recorded verdict retracts; a different one re-records", () => {
+  // The reference harness's rule as a decision: a second click on the
+  // rating a row already carries withdraws it — never a second judgment.
+  expect(feedbackToggle({ requested: "up" })).toBe("record");
+  expect(feedbackToggle({ current: "up", requested: "down" })).toBe("record");
+  expect(feedbackToggle({ current: "up", requested: "up" })).toBe("retract");
+  expect(feedbackToggle({ current: "down", requested: "down" })).toBe(
+    "retract",
+  );
 });

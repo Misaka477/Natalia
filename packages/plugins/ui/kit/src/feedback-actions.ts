@@ -72,5 +72,24 @@ export function feedbackActions(input: {
   ];
 }
 
+/**
+ * What a click on a rating button DOES: record the judgment, or withdraw
+ * the one already recorded. Clicking the button for the verdict the row
+ * already carries is a retraction — the reference harness's rule ("a
+ * recorded rating retracts on click"), and the reason a second click is
+ * never a second judgment.
+ *
+ * Pure so the toggle has a guard without a DOM: the host calls it, then
+ * records or retracts accordingly.
+ */
+export function feedbackToggle(input: {
+  /** The verdict this row currently carries, if any. */
+  current?: MessageVerdict;
+  /** The verdict the human clicked. */
+  requested: MessageVerdict;
+}): "record" | "retract" {
+  return input.current === input.requested ? "retract" : "record";
+}
+
 /** The kit row type the host builds (re-exported for the host's own typing). */
 export type { Message };

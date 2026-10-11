@@ -2714,6 +2714,25 @@ type RuntimeEventData =
       /** From the fixed category taxonomy (a code change to extend, on purpose). */
       category?: string;
       note?: string;
+    }
+  | {
+      /**
+       * The withdrawal of a recorded rating (the reference harness's
+       * retraction, modeled as the compensating fact): the journal is
+       * append-only, so "the human took their judgment back" is its own
+       * event naming the record it undoes. Consumers REMOVE the retracted
+       * record rather than adding a second judgment.
+       */
+      type: "feedback.retracted";
+      id: string;
+      at: string;
+      sessionID?: SessionID;
+      workspaceID?: string;
+      /** The recorded event this retracts. */
+      recordID: string;
+      scope: "session" | "message";
+      messageID?: string;
+      verdict: "up" | "down";
     };
 
 /**
@@ -3567,6 +3586,15 @@ export type FeedbackInput = {
   /** From the fixed category taxonomy. */
   category?: string;
   note?: string;
+  /**
+   * Withdraw the recorded judgment instead of recording one. Required
+   * companion: `recordID` — the record being retracted. A retraction is a
+   * DELETE of the committed rating (the reference harness's model), not a
+   * second judgment, so it names exactly which record it undoes.
+   */
+  retract?: boolean;
+  /** The recorded event's id; required when `retract` is set. */
+  recordID?: string;
 };
 
 export type FeedbackResult = { recorded: boolean; id: string };

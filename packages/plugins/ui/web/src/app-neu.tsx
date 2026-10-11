@@ -29,6 +29,7 @@ import {
   PendingBadge,
   Transcript,
   feedbackActions,
+  feedbackToggle,
   toolCallRow,
   type Attachment,
   type PagedTranscriptState,
@@ -2695,7 +2696,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             isLast,
             attachments,
             feedbackRowActions.length,
-            messageVerdicts()[msg.id] ?? "",
+            messageVerdicts()[msg.id]?.verdict ?? "",
           ],
           create: () => ({
             id: msg.id,
@@ -2740,9 +2741,25 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // design law 3, "signals about the output, never input to it". The
   // per-message verdict is remembered here so a rated row shows its own
   // state instead of offering the same choice twice.
+  // The row's recorded judgment, with the journal record's id: a
+  // retraction names the record it undoes, so the id rides along. Seeded
+  // from the projected feedback slice (message-scope records), so a rating
+  // survives a reload and a retraction after one is still possible.
   const [messageVerdicts, setMessageVerdicts] = createSignal<
-    Record<string, "up" | "down">
+    Record<string, { verdict: "up" | "down"; recordID: string }>
   >({});
+  createEffect(() => {
+    const seeded: Record<string, { verdict: "up" | "down"; recordID: string }> =
+      {};
+    for (const record of state().feedback ?? []) {
+      if (record.scope !== "message" || !record.messageID) continue;
+      seeded[record.messageID] = {
+        verdict: record.verdict,
+        recordID: record.id,
+      };
+    }
+    setMessageVerdicts((current) => ({ ...seeded, ...current }));
+  });
   const [feedbackNotice, setFeedbackNotice] = createSignal("");
   let feedbackNoticeTimer: ReturnType<typeof setTimeout> | undefined;
   function flashFeedbackNotice(message: string) {
@@ -2764,7 +2781,33 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       flashFeedbackNotice("评分不可用：没有活动会话");
       return;
     }
+    const current = messageVerdicts()[messageID];
     try {
+      if (
+        feedbackToggle({ current: current?.verdict, requested: verdict }) ===
+        "retract"
+      ) {
+        // The withdrawal: the same face, the retract mode, naming the
+        // record. The row drops back to its unrated glyph.
+        const result = await runtime.feedback({
+          scope: "message",
+          sessionID: sessionID as SessionID,
+          messageID,
+          verdict,
+          retract: true,
+          recordID: current!.recordID,
+        });
+        if (result && !result.recorded) {
+          flashFeedbackNotice("撤回未记录");
+          return;
+        }
+        setMessageVerdicts((map) => {
+          const next = { ...map };
+          delete next[messageID];
+          return next;
+        });
+        return;
+      }
       const result = await runtime.feedback({
         scope: "message",
         sessionID: sessionID as SessionID,
@@ -2775,7 +2818,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         flashFeedbackNotice("评分未记录");
         return;
       }
-      setMessageVerdicts((current) => ({ ...current, [messageID]: verdict }));
+      setMessageVerdicts((map) => ({
+        ...map,
+        [messageID]: { verdict, recordID: result?.id ?? "" },
+      }));
     } catch (error) {
       flashFeedbackNotice(
         `评分失败：${error instanceof Error ? error.message : String(error)}`,
@@ -2794,7 +2840,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }) =>
     feedbackActions({
       row,
-      verdict: messageVerdicts()[row.id],
+      verdict: messageVerdicts()[row.id]?.verdict,
       rate: (verdict) => void rateMessage(row.id, verdict),
     });
 

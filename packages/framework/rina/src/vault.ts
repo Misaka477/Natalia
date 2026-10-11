@@ -295,6 +295,17 @@ const CLASSIFIED: Partial<Record<RuntimeEvent["type"], EventClassification>> = {
     entityOf: (event) => String((event as { id?: string }).id ?? "feedback"),
     label: () => "feedback recorded",
   },
+  // The withdrawal: the same entity as the record it undoes, so a recall
+  // that matches one sees both facts and the later one says the judgment
+  // was taken back. Memory answers "what happened", never "what currently
+  // holds" — that question belongs to the journal fold.
+  "feedback.retracted": {
+    recordType: "evidence",
+    entityOf: (event) =>
+      String((event as { recordID?: string }).recordID ?? "feedback"),
+    label: (event) =>
+      `feedback retracted: ${String((event as { verdict?: string }).verdict ?? "")}`,
+  },
   // The record family (2026-10-07): the journal's own record events are the
   // memory the context_* faces read. Before this table carried them, every
   // evidence/completion/decision the model wrote landed in the governance

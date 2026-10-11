@@ -746,6 +746,15 @@ export async function handleRPCMessage(
       const note = request.params?.note;
       if (note !== undefined && typeof note !== "string")
         throw invalidParams("feedback.record.params.note must be a string");
+      // The withdrawal rides the same route: it names the record it undoes.
+      const retract = request.params?.retract;
+      if (retract !== undefined && typeof retract !== "boolean")
+        throw invalidParams("feedback.record.params.retract must be a boolean");
+      const recordID = request.params?.recordID;
+      if (retract === true && (typeof recordID !== "string" || !recordID))
+        throw invalidParams(
+          "feedback.record.params.recordID required for a retraction",
+        );
       optionsGuard(client, "feedback");
       return {
         jsonrpc: "2.0",
@@ -758,6 +767,8 @@ export async function handleRPCMessage(
             ? { messageID: messageID as string }
             : {}),
           ...(category !== undefined ? { category: category as string } : {}),
+          ...(retract !== undefined ? { retract } : {}),
+          ...(recordID !== undefined ? { recordID: recordID as string } : {}),
           ...(note !== undefined ? { note: note as string } : {}),
         }),
       };

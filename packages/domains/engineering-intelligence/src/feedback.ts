@@ -61,6 +61,11 @@ export function validateFeedbackInput(candidate: unknown): FeedbackValidation {
     (typeof raw.messageID !== "string" || !raw.messageID)
   )
     return { ok: false, reason: "messageID required for message scope" };
+  // The retract mode: a withdrawal names the record it undoes. A retraction
+  // without its target is a request to delete something unnamed.
+  const retract = raw.retract === true;
+  if (retract && (typeof raw.recordID !== "string" || !raw.recordID))
+    return { ok: false, reason: "recordID required for a retraction" };
   if (
     raw.category !== undefined &&
     !(FEEDBACK_CATEGORIES as readonly unknown[]).includes(raw.category)
@@ -87,6 +92,8 @@ export function validateFeedbackInput(candidate: unknown): FeedbackValidation {
         : {}),
       ...(typeof raw.category === "string" ? { category: raw.category } : {}),
       ...(typeof raw.note === "string" ? { note: raw.note } : {}),
+      ...(retract ? { retract: true } : {}),
+      ...(retract ? { recordID: raw.recordID as string } : {}),
     } as FeedbackInput,
   };
 }
@@ -98,23 +105,43 @@ export function createFeedbackSurface(ctx: RuntimeContext): FeedbackSurface {
       if (!validated.ok) throw new Error(validated.reason);
       const input = validated.input;
       if (ctx.ports.isDisposed()) return { recorded: false, id: "" };
+      const at = new Date().toISOString();
+      const exec = ctx.ports
+        .getExecutionBySession()
+        .get(input.sessionID as never);
+      const publish = (event: RuntimeEvent) => {
+        if (exec) ctx.ports.publishForSession(exec, event);
+        else ctx.ports.publish(event);
+      };
+      // The withdrawal: the same isolation as the recording (a journal
+      // fact, never model-visible), published as the compensating event
+      // that names the record it undoes.
+      if (input.retract) {
+        const id = `fbr_${randomUUID().replace(/-/gu, "").slice(0, 12)}`;
+        publish({
+          type: "feedback.retracted",
+          id,
+          at,
+          sessionID: input.sessionID as never,
+          recordID: input.recordID!,
+          scope: input.scope,
+          ...(input.messageID ? { messageID: input.messageID } : {}),
+          verdict: input.verdict,
+        } as unknown as RuntimeEvent);
+        return { recorded: true, id };
+      }
       const id = `fb_${randomUUID().replace(/-/gu, "").slice(0, 12)}`;
-      const event: RuntimeEvent = {
+      publish({
         type: "feedback.recorded",
         id,
-        at: new Date().toISOString(),
+        at,
         sessionID: input.sessionID as never,
         scope: input.scope,
         ...(input.messageID ? { messageID: input.messageID } : {}),
         verdict: input.verdict,
         ...(input.category ? { category: input.category } : {}),
         ...(input.note ? { note: input.note } : {}),
-      } as unknown as RuntimeEvent;
-      const exec = ctx.ports
-        .getExecutionBySession()
-        .get(input.sessionID as never);
-      if (exec) ctx.ports.publishForSession(exec, event);
-      else ctx.ports.publish(event);
+      } as unknown as RuntimeEvent);
       return { recorded: true, id };
     },
   };

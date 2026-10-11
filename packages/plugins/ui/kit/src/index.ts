@@ -40,6 +40,7 @@ export type {
 export { toolCallCard, toolCallRow, toolRowLabel } from "./message";
 export {
   feedbackActions,
+  feedbackToggle,
   rateableRow,
   type MessageVerdict,
   type RateableRow,

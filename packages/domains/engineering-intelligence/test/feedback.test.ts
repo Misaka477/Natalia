@@ -111,3 +111,66 @@ test("a disposed runtime refuses without journaling; invalid input throws before
   ).rejects.toThrow(/verdict/u);
   expect(published).toHaveLength(0); // thrown BEFORE anything was recorded
 });
+
+test("a retraction names its record and journals the compensating fact", async () => {
+  // The withdrawal is a DELETE of the committed rating, not a second
+  // judgment: it names the record it undoes and publishes its own event.
+  const events: RuntimeEvent[] = [];
+  const surface = createFeedbackSurface({
+    ports: {
+      isDisposed: () => false,
+      getExecutionBySession: () => new Map(),
+      publish: (event: RuntimeEvent) => events.push(event),
+      publishForSession: (_exec: unknown, event: RuntimeEvent) =>
+        events.push(event),
+    },
+  } as never);
+  const recorded = await surface.feedback({
+    scope: "message",
+    sessionID: "s1",
+    messageID: "m1",
+    verdict: "up",
+  });
+  expect(recorded.recorded).toBe(true);
+  const retracted = await surface.feedback({
+    scope: "message",
+    sessionID: "s1",
+    messageID: "m1",
+    verdict: "up",
+    retract: true,
+    recordID: recorded.id,
+  });
+  expect(retracted.recorded).toBe(true);
+  expect(events.map((event) => event.type)).toEqual([
+    "feedback.recorded",
+    "feedback.retracted",
+  ]);
+  const withdrawal = events[1] as Extract<
+    RuntimeEvent,
+    { type: "feedback.retracted" }
+  >;
+  expect(withdrawal.recordID).toBe(recorded.id);
+  expect(withdrawal.verdict).toBe("up");
+  expect(withdrawal.messageID).toBe("m1");
+});
+
+test("a retraction without its record is refused", () => {
+  expect(
+    validateFeedbackInput({
+      scope: "message",
+      sessionID: "s1",
+      messageID: "m1",
+      verdict: "up",
+      retract: true,
+    }).ok,
+  ).toBe(false);
+  expect(
+    validateFeedbackInput({
+      scope: "session",
+      sessionID: "s1",
+      verdict: "up",
+      retract: true,
+      recordID: "fb_x",
+    }).ok,
+  ).toBe(true);
+});

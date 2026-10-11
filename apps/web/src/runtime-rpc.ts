@@ -50,6 +50,12 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   skills: "skills.list",
   skillSetEnabled: "skill.setEnabled",
   skillRemove: "skill.remove",
+  // S5: the landing path's write face — the approval queue's approve
+  // button routes here. A missing row makes the button dead: the Proxy
+  // synthesizes methods only for tabled faces.
+  upsertSkill: "skill.upsert",
+  // S9: the candidate gate's channel to Nia (the panel's gate button).
+  collabSend: "collab.send",
   // The human-feedback entry (the transcript's rating buttons). The route
   // and the server-side face existed; this row is what made the button
   // reach the daemon at all — without it the Proxy answered `undefined`

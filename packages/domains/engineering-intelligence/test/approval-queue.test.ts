@@ -3,6 +3,7 @@ import {
   approvalItemFrom,
   applyDecision,
   pendingItems,
+  queueItemsFromSummary,
   rejectionReason,
   type ApprovalCandidate,
   type StoredDecision,
@@ -119,4 +120,45 @@ test("a decided item leaves the queue either way — attention is the scarce thi
       "live-001-evolved",
     ),
   ).toBe("too wordy");
+});
+
+test("the panel's rows come from the run's own record, and a corrupt line is counted", () => {
+  // The panel reads the SAME durable record the loop wrote — a second copy
+  // could drift from it.
+  const summary = [
+    JSON.stringify({
+      name: "live-001-evolved",
+      score: 0.6123,
+      axis: "exploitation",
+      hypothesis:
+        "naming the rollback step prevents the forgotten-verify failure",
+      gate: {
+        passed: false,
+        refusals: [
+          "live-001-evolved: G7 unverified — the benchmark seam is not filled",
+        ],
+      },
+    }),
+    "not json at all",
+    JSON.stringify({ name: "live-002-evolved", score: 0.4 }),
+  ].join("\n");
+  const first = queueItemsFromSummary({ summary, decisions: "" });
+  expect(first.items).toHaveLength(2);
+  // The corrupt line is counted, not silently dropped.
+  expect(first.skipped).toBe(1);
+  // The gate's verdict rides the row verbatim.
+  expect(first.items[0]!.gate.refusals[0]).toContain("G7 unverified");
+  expect(first.items[0]!.gate.passed).toBe(false);
+  // A decided item leaves the queue through the same fold.
+  const second = queueItemsFromSummary({
+    summary,
+    decisions: JSON.stringify({
+      item: "live-001-evolved",
+      decision: "approve",
+      at: "2026-10-13T12:00:00.000Z",
+    }),
+  });
+  expect(second.items.map((row) => row.candidate.name)).toEqual([
+    "live-002-evolved",
+  ]);
 });

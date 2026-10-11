@@ -135,3 +135,95 @@ export function rejectionReason(
     .filter((entry) => entry.item === item && entry.decision === "reject")
     .at(-1)?.reason;
 }
+
+/**
+ * The panel's rows, from what the run persisted.
+ *
+ * The run directory already holds everything the queue needs — the summary
+ * line per candidate (with its score, axis, hypothesis and the gate's
+ * verdict) and the decisions file. This turns those two texts into rows, so
+ * the panel reads the SAME durable record the loop wrote rather than a
+ * second copy that can drift from it.
+ *
+ * A line that does not parse is skipped and counted: a corrupt line is not
+ * a reason to lose the rest of the queue, and silently dropping it would
+ * hide the corruption.
+ */
+export function queueItemsFromSummary(input: {
+  summary: string;
+  decisions: string;
+}): { items: ApprovalItem[]; skipped: number } {
+  const items: ApprovalItem[] = [];
+  let skipped = 0;
+  for (const line of input.summary.split("\n")) {
+    if (!line.trim()) continue;
+    let row: {
+      name?: unknown;
+      score?: unknown;
+      axis?: unknown;
+      hypothesis?: unknown;
+      gate?: { passed?: unknown; refusals?: unknown };
+    };
+    try {
+      row = JSON.parse(line) as typeof row;
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    if (typeof row.name !== "string" || typeof row.score !== "number") {
+      skipped += 1;
+      continue;
+    }
+    const refusals = Array.isArray(row.gate?.refusals)
+      ? row.gate.refusals.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [];
+    items.push(
+      approvalItemFrom({
+        candidate: {
+          name: row.name,
+          // The persisted line carries the hypothesis; the description and
+          // the body live in the candidate's own file beside the summary.
+          description:
+            typeof row.hypothesis === "string"
+              ? row.hypothesis
+              : "(no hypothesis recorded)",
+          body: "",
+          ...(typeof row.hypothesis === "string"
+            ? { hypothesis: row.hypothesis }
+            : {}),
+          ...(row.axis === "exploitation" || row.axis === "exploration"
+            ? { axis: row.axis }
+            : {}),
+          score: row.score,
+        },
+        gate: {
+          passed: row.gate?.passed === true,
+          refusals,
+        },
+      }),
+    );
+  }
+  // The decisions fold in, so the caller gets the PENDING rows directly.
+  const decided = parseDecisions(input.decisions);
+  return { items: pendingItems({ items, decisions: decided }), skipped };
+}
+
+/** The decisions file's lines (one JSON object per decision). */
+export function parseDecisions(text: string): StoredDecision[] {
+  const out: StoredDecision[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const row = JSON.parse(line) as StoredDecision;
+      if (typeof row.item === "string" && typeof row.decision === "string")
+        out.push(row);
+    } catch {
+      // A corrupt decision line is not a decision: skipping it keeps the
+      // item pending, which is the safe direction (asking again is cheaper
+      // than acting on an unread decision).
+    }
+  }
+  return out;
+}

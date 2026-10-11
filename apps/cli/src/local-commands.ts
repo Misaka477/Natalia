@@ -58,7 +58,7 @@ import {
   readCassette,
 } from "@natalia/transport";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join as joinPath } from "node:path";
+import { join as joinPath, resolve } from "node:path";
 import {
   deleteLocalSession,
   duplicateLocalSession,
@@ -596,7 +596,7 @@ export async function handleLocalCommands(argv: string[]) {
         const engine = valueAfter(argv, "--engine");
         if (engine !== "best-of-n" && engine !== "reflective") {
           console.error(
-            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--idle-only] [--idle-timeout <seconds>] [--workspace <root>] [--json]",
+            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--merge-every <K>] [--out <dir>] [--idle-only] [--idle-timeout <seconds>] [--workspace <root>] [--json]",
           );
           process.exit(1);
         }
@@ -704,6 +704,15 @@ export async function handleLocalCommands(argv: string[]) {
             "samples",
           );
           const seed = positiveInt(valueAfter(argv, "--seed"), 1, "seed");
+          // S3 (merge half): the free merge cadence. Off by default — the
+          // channel earns its keep on a population with branches, and a
+          // one-round run has none.
+          const mergeEvery = positiveInt(
+            valueAfter(argv, "--merge-every"),
+            0,
+            "merge-every",
+          );
+          const outOverride = valueAfter(argv, "--out");
           // The visible pool is bounded by the flag (each sample costs a
           // turn per candidate); the sealed holdout runs in full — it is
           // the whole point of sealing it.
@@ -772,10 +781,20 @@ export async function handleLocalCommands(argv: string[]) {
           // round's proposer reads — without it the mutator is amnesiac
           // and the cheapest way to waste an evaluation is to re-run a
           // hypothesis that already lost.
-          const runDir = evolutionStateDir(
-            optimizeRoot,
-            `runs/${target}-${Date.now()}`,
-          );
+          const runDir = outOverride
+            ? resolve(optimizeRoot, outOverride)
+            : evolutionStateDir(optimizeRoot, `runs/${target}-${Date.now()}`);
+          const gateVerdict = (text: string) =>
+            gateCandidate({
+              target: { kind: "prompt-segment" as const, name: target },
+              baseline: baselineInstruction,
+              candidate: text,
+              suite: {
+                ok: false,
+                detail:
+                  "unverified — the optimize path does not run the suite; apply_generation does",
+              },
+            });
           const summaryLines: string[] = [];
           const tried: TriedCandidate[] = [];
           // W4: the curiosity controller. It owns the explore/exploit mix:
@@ -854,6 +873,10 @@ export async function handleLocalCommands(argv: string[]) {
               outcome = await runRound({
                 population,
                 random: seededRandom(seed * 1000 + round),
+                // S3 (merge half): every K-th round also attempts one free
+                // merge over a common ancestor.
+                round,
+                mergeEvery,
                 hooks: {
                   propose: async (parent) => {
                     const parentResult = results.get(parent.id)!;
@@ -928,6 +951,9 @@ export async function handleLocalCommands(argv: string[]) {
                     member.components.instruction ?? "",
                   )
                 : undefined;
+              const memberGate = gateVerdict(
+                member.components.instruction ?? "",
+              );
               summaryLines.push(
                 summaryLine({
                   iteration: round,
@@ -943,6 +969,14 @@ export async function handleLocalCommands(argv: string[]) {
                   components: Object.keys(member.components),
                   ...(diff ? { parentDiff: diff.patch } : {}),
                   provenance,
+                  // W9: the gate verdict rides the line. A candidate that
+                  // scored well and was refused is the most instructive
+                  // line in the history — where the loop learned what
+                  // fitness cannot see.
+                  gate: {
+                    passed: memberGate.passed,
+                    refusals: memberGate.refusals,
+                  },
                 }),
               );
               tried.push({
@@ -964,6 +998,13 @@ export async function handleLocalCommands(argv: string[]) {
             best,
             floorScore: baselineResult.score,
           });
+          // S2/S6: the seven gates on the reported best, and on the
+          // baseline (a gate the baseline fails is pre-existing, not the
+          // candidate's fault).
+          const candidateGate = best
+            ? gateVerdict(best.components.instruction ?? "")
+            : undefined;
+          const baselineGate = gateVerdict(baselineInstruction);
           // S2/S6: the loop's output is GATED before it is reported, and
           // the baseline is gated too (a gate the baseline fails is a
           // pre-existing problem, not the candidate's fault). The seams the
@@ -973,21 +1014,6 @@ export async function handleLocalCommands(argv: string[]) {
           // verdict was measured. Blocking on them here would make the
           // command useless before L6 exists; they are the landing path's
           // job (apply_generation runs the real suite).
-          const gateVerdict = (text: string) =>
-            gateCandidate({
-              target: { kind: "prompt-segment" as const, name: target },
-              baseline: baselineInstruction,
-              candidate: text,
-              suite: {
-                ok: false,
-                detail:
-                  "unverified — the optimize path does not run the suite; apply_generation does",
-              },
-            });
-          const candidateGate = best
-            ? gateVerdict(best.components.instruction ?? "")
-            : undefined;
-          const baselineGate = gateVerdict(baselineInstruction);
           const report = {
             target,
             engine: "reflective",

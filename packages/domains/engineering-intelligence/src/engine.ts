@@ -277,6 +277,38 @@ export function commonAncestor(
   );
 }
 
+/**
+ * The first mergeable pair in member order: two DISTINCT members, neither
+ * an ancestor of the other, that share a common ancestor. Deterministic —
+ * the merge channel is not a place for a random draw, and a reproducible
+ * merge means a reproducible population path.
+ *
+ * The kin rule is the reference design's: only ancestor–descendant pairs
+ * are refused. Siblings over a shared ancestor are exactly what the
+ * channel is FOR — a sibling pair is where one branch's improvement can
+ * reach the other.
+ */
+export function firstMergeablePair(population: Population):
+  | {
+      left: PopulationMember;
+      right: PopulationMember;
+      ancestor: PopulationMember;
+    }
+  | undefined {
+  const members = population.members;
+  for (let left = 0; left < members.length; left += 1)
+    for (let right = left + 1; right < members.length; right += 1) {
+      const ancestor = commonAncestor(
+        members[left]!,
+        members[right]!,
+        population,
+      );
+      if (ancestor)
+        return { left: members[left]!, right: members[right]!, ancestor };
+    }
+  return undefined;
+}
+
 export type MergeResult =
   | { ok: true; components: Record<string, string>; id: string }
   | { ok: false; reason: string };
@@ -393,6 +425,18 @@ export async function runRound(input: {
   random: Random;
   /** How many parents to draw this round (default 1). */
   parents?: number;
+  /**
+   * The merge cadence: every K-th round also attempts a free merge (0 =
+   * never, the default). The merge is the reference design's hidden second
+   * engine — two candidates that already PASSED evaluation are combined
+   * component by component over their common ancestor, and the result is
+   * evaluated once. It costs one evaluation instead of a whole mutation,
+   * and it is the only way a good component on one branch reaches another
+   * branch that never explored it.
+   */
+  mergeEvery?: number;
+  /** Which round this is (1-based) — the merge cadence reads it. */
+  round?: number;
 }): Promise<RoundResult> {
   const opening = input.population;
   const parents: PopulationMember[] = [];
@@ -428,6 +472,50 @@ export async function runRound(input: {
         observedOutcome: `scored ${facts.score.toFixed(4)} against parent ${parent.id} at ${parent.score.toFixed(4)}`,
       },
     });
+  }
+  // The merge channel: on cadence, one free merge over a common ancestor.
+  // It joins the SAME atomic update — the merge's evaluation settles
+  // before anything lands, so the round stays same-round invisible.
+  const mergeEvery = input.mergeEvery ?? 0;
+  const round = input.round ?? 1;
+  if (mergeEvery > 0 && round % mergeEvery === 0) {
+    const pair = firstMergeablePair(opening);
+    if (pair) {
+      const merged = mergeCandidates({
+        left: pair.left,
+        right: pair.right,
+        ancestor: pair.ancestor,
+        id: `merge${round}_${pair.left.id}_${pair.right.id}`,
+      });
+      if (merged.ok) {
+        const proposal: RoundProposal = {
+          id: merged.id,
+          components: merged.components,
+          hypothesis: `merge of ${pair.left.id} and ${pair.right.id} over ${pair.ancestor.id}`,
+          axis: "exploitation",
+        };
+        const facts = await input.hooks.evaluate(proposal);
+        evaluated.push({
+          id: proposal.id,
+          components: proposal.components,
+          score: facts.score,
+          perExample: facts.perExample,
+          trainableFailures: facts.trainableFailures,
+          isViable: facts.isViable,
+          children: 0,
+          lineage: {
+            parent: pair.left.id,
+            additionalParents: [pair.right.id],
+          },
+          hypothesis: proposal.hypothesis,
+          axis: proposal.axis,
+          learningLog: {
+            attemptedChange: proposal.hypothesis ?? "(unstated)",
+            observedOutcome: `merged candidate scored ${facts.score.toFixed(4)}`,
+          },
+        });
+      }
+    }
   }
   // The atomic update: the parents' child counts move and the new members
   // land together, after every evaluation settled.

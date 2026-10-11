@@ -165,3 +165,42 @@ test("parentDiff produces a real patch through the maintained differ", async () 
   expect(same.additions).toBe(0);
   expect(same.deletions).toBe(0);
 });
+
+test("a refused candidate's line carries the gate verdict — the most instructive line in the history", async () => {
+  // W9: a candidate that scored well and was refused is where the loop
+  // learned what fitness cannot see. The verdict rides the summary line,
+  // not a separate file nobody opens.
+  const line = summaryLine({
+    iteration: 2,
+    name: "iter2_exploration",
+    score: 0.9,
+    axis: "exploration",
+    hypothesis: "dropping the verify step halves the work",
+    delta: 0.3,
+    outcome: "accepted",
+    components: ["instruction"],
+    gate: {
+      passed: false,
+      refusals: [
+        "iter2_exploration: G4 semantic drift — the verify step vanished",
+      ],
+    },
+  });
+  const [parsed] = parseSummary(line);
+  expect(parsed.gate!.passed).toBe(false);
+  expect(parsed.gate!.refusals[0]).toContain("G4 semantic drift");
+  // A line without a verdict stays absent (the baseline's, say).
+  const [bare] = parseSummary(
+    summaryLine({
+      iteration: 1,
+      name: "iter1",
+      score: 0.5,
+      axis: "exploitation",
+      hypothesis: "h",
+      delta: 0,
+      outcome: "accepted",
+      components: ["instruction"],
+    }),
+  );
+  expect(bare.gate).toBeUndefined();
+});

@@ -493,3 +493,87 @@ test("the curiosity controller: idle and gain raise it, consecutive failures pul
   expect(curiosityAxis(state)).toBe("exploitation");
   expect(curiosityAxis({ value: 0.9, failures: 0 })).toBe("exploration");
 });
+
+test("on cadence the round attempts a free merge over a common ancestor", async () => {
+  // S3 (merge half): the reference design's hidden second engine. Two
+  // candidates that already passed evaluation are combined component by
+  // component — one evaluation instead of a whole mutation, and the only
+  // way one branch's improvement reaches a branch that never explored it.
+  const seed = member("seed", {
+    components: { instruction: "answer directly", other: "keep" },
+    seed: true,
+  });
+  const left = member("left", {
+    parent: "seed",
+    components: { instruction: "answer with the rollback step", other: "keep" },
+  });
+  const right = member("right", {
+    parent: "seed",
+    components: { instruction: "answer directly", other: "verify twice" },
+  });
+  const population = { members: [seed, left, right] };
+
+  // Off cadence: no merge.
+  const off = await runRound({
+    population,
+    random: scriptedRandom([0.99]),
+    hooks: {
+      propose: async () => ({ id: "never", components: {} }),
+      evaluate: async () => ({
+        score: 1,
+        perExample: {},
+        trainableFailures: 1,
+        isViable: true,
+      }),
+    },
+  });
+  expect(off.added.some((m) => m.id.startsWith("merge"))).toBe(false);
+
+  // On cadence: the merge joins the same round.
+  const on = await runRound({
+    population,
+    random: scriptedRandom([0.99]),
+    round: 3,
+    mergeEvery: 3,
+    hooks: {
+      propose: async () => ({ id: "never", components: {} }),
+      evaluate: async (proposal) => ({
+        score: proposal.id.startsWith("merge") ? 0.8 : 1,
+        perExample: {},
+        trainableFailures: 1,
+        isViable: true,
+      }),
+    },
+  });
+  const merged = on.added.find((m) => m.id.startsWith("merge3_"));
+  expect(merged).toBeDefined();
+  // Both parents ride the lineage — a merge is a two-parent member.
+  expect(merged!.lineage.additionalParents).toEqual(["right"]);
+  // The merged components take each side's improvement over the ancestor.
+  expect(merged!.components).toEqual({
+    instruction: "answer with the rollback step",
+    other: "verify twice",
+  });
+});
+
+test("a round with no mergeable pair merges nothing, and that is not an error", async () => {
+  // A parent and its child are kin: no common ancestor to merge over.
+  const seed = member("seed", { seed: true });
+  const child = member("child", { parent: "seed" });
+  const result = await runRound({
+    population: { members: [seed, child] },
+    random: scriptedRandom([0.99]),
+    round: 2,
+    mergeEvery: 2,
+    hooks: {
+      propose: async () => ({ id: "never", components: {} }),
+      evaluate: async () => ({
+        score: 1,
+        perExample: {},
+        trainableFailures: 1,
+        isViable: true,
+      }),
+    },
+  });
+  expect(result.added.some((m) => m.id.startsWith("merge"))).toBe(false);
+});

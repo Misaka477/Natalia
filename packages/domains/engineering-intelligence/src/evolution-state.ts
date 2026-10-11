@@ -57,6 +57,14 @@ export type EvolutionSummaryEntry = {
    * history — it manufactures false trends.
    */
   provenance?: string;
+  /**
+   * The seven gates' verdict on this candidate: which passed, and the
+   * refusals verbatim. A candidate that scored well and was refused is
+   * the most instructive line in the whole history — it is where the loop
+   * learned what fitness cannot see — so the verdict rides the line
+   * rather than living in a separate file nobody opens.
+   */
+  gate?: { passed: boolean; refusals: string[] };
 };
 
 export function renderTaskFile(task: EvolutionTask): string {
@@ -85,6 +93,7 @@ export function summaryLine(entry: EvolutionSummaryEntry): string {
     components: entry.components,
     ...(entry.parentDiff === undefined ? {} : { parentDiff: entry.parentDiff }),
     ...(entry.provenance === undefined ? {} : { provenance: entry.provenance }),
+    ...(entry.gate === undefined ? {} : { gate: entry.gate }),
   });
 }
 

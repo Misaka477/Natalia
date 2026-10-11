@@ -166,6 +166,7 @@ test("the growth cap refuses past +20% and admits up to it", () => {
 test("acceptance is strict improvement; a tie is a rejection", () => {
   const result = (score: number) => ({
     score,
+    perExample: {},
     trainableFailureCases: [],
     holdoutFailureCases: [],
     isViable: true,

@@ -3782,6 +3782,16 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-extension-remove {
   color: var(--neu-error);
 }
+/* The source badge a non-owned row carries where its delete button would
+   be: it explains the absent button instead of leaving a gap. */
+.neu-extension-source {
+  font-size: 11px;
+  color: var(--neu-text-dim, var(--neu-text));
+  border: 1px solid var(--neu-shadow-dark);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
 .neu-extension-primary-btn {
   background: var(--neu-accent);
   color: var(--neu-on-accent);

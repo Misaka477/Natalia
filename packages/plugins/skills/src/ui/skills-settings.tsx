@@ -11,11 +11,29 @@ import type { UiEventBus } from "@natalia/ui-host";
  * The switch and the remove are the workspace's own two write faces
  * (`skill.setEnabled` / `skill.remove`) — a disabled skill stays LISTED with its
  * switch off, because `resolve` refuses it (so the model can neither load nor
- * run it) while the panel must still be able to switch it back on. Removing is
- * refused for a source the workspace does not own (a plugin's skill ships with
- * the plugin; a remote one is pulled), and the refusal's reason is shown rather
- * than swallowed.
+ * run it) while the panel must still be able to switch it back on.
+ *
+ * The REMOVE is offered only for a source the workspace owns (project /
+ * user). A plugin's skill ships with the plugin and a remote one is pulled
+ * into a cache: deleting either would be undone by the next reload (or would
+ * corrupt the package), so the boundary refuses it — and a button that can
+ * only ever produce a refusal is a button that trains people to ignore
+ * refusals. Those rows carry a source badge instead, which also tells the
+ * user WHY there is no delete. An operator who really wants an official
+ * skill gone has the CLI (and the durable off-switch here).
  */
+
+/** The sources whose skills the workspace owns and may delete. */
+export function removableSource(source: string): boolean {
+  return source === "project" || source === "user";
+}
+
+/** The badge a non-owned row carries where its delete button would be. */
+export function sourceLabel(source: string): string {
+  if (source === "plugin") return "插件内置";
+  if (source === "remote") return "远程索引";
+  return source;
+}
 export function SkillsSettings(props: {
   runtime: RuntimeClient;
   events: UiEventBus;
@@ -153,14 +171,27 @@ export function SkillsSettings(props: {
                       : "已停用"}
                 </span>
               </button>
-              <button
-                type="button"
-                class="neu-extension-btn neu-extension-remove"
-                disabled={busy() && pending() === skill.name}
-                onClick={() => void remove(skill)}
+              {/* The remove is the workspace's own: a skill that ships
+                  with a plugin or arrives from a remote index is not
+                  theirs to delete, and the badge says so where the button
+                  would have been. */}
+              <Show
+                when={removableSource(skill.source)}
+                fallback={
+                  <span class="neu-extension-source">
+                    {sourceLabel(skill.source)}
+                  </span>
+                }
               >
-                {pending() === skill.name && busy() ? "…" : "删除"}
-              </button>
+                <button
+                  type="button"
+                  class="neu-extension-btn neu-extension-remove"
+                  disabled={busy() && pending() === skill.name}
+                  onClick={() => void remove(skill)}
+                >
+                  {pending() === skill.name && busy() ? "…" : "删除"}
+                </button>
+              </Show>
             </div>
           )}
         </For>

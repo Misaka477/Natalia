@@ -120,6 +120,12 @@ export type EvaluationCase = {
  */
 export type EvaluationResult = {
   score: number;
+  /**
+   * Each sample's composite, keyed by sample id. The Pareto fronts' axes:
+   * a candidate that is extraordinary on one kind of example and ordinary
+   * elsewhere owns the front it wins, which is how it stays selectable.
+   */
+  perExample: Record<string, number>;
   /** Failures on the visible pool — the mutator's reading material. */
   trainableFailureCases: EvaluationCase[];
   /** Failures on the holdout — counted, never shown. */
@@ -132,6 +138,62 @@ export type EvaluationResult = {
    */
   isViable: boolean;
 };
+
+/** One sample's judged outcome, as the assembler reads it. */
+export type JudgedSample = {
+  sampleID: string;
+  dimensions: FitnessDimensions;
+  /**
+   * Whether this sample belongs to the sealed holdout. A sealed sample's
+   * failure still counts toward the score; it never reaches the trainable
+   * bucket, so it never reaches the mutator.
+   */
+  sealed: boolean;
+  /** The feedback text the mutator would read for this sample. */
+  feedback?: string;
+};
+
+/**
+ * Assemble one evaluation result from judged samples: the two failure
+ * buckets, the per-example map, the blended score and the viability.
+ *
+ * Shared by the synchronous face and by a caller whose judge is async (a
+ * real run per sample — the reference harness's SkillModule pattern), so
+ * both paths produce the SAME shape and the engine cannot tell them apart.
+ */
+export function assembleResult(input: {
+  judged: readonly JudgedSample[];
+  sizes: { artifactSize: number; maxSize: number };
+}): EvaluationResult {
+  const perExample: Record<string, number> = {};
+  const trainableFailureCases: EvaluationCase[] = [];
+  const holdoutFailureCases: EvaluationCase[] = [];
+  let total = 0;
+  for (const entry of input.judged) {
+    const composite = compositeFitness(entry.dimensions, input.sizes);
+    // The holdout contributes to the blended score and its own bucket —
+    // never to the per-example map, which feeds the Pareto fronts and the
+    // mutator. A sealed sample's per-example number in a mutator-facing
+    // structure is the leak the seal exists to prevent.
+    if (!entry.sealed) perExample[entry.sampleID] = composite;
+    total += composite;
+    if (entry.dimensions.correctness >= 1) continue;
+    const failure: EvaluationCase = {
+      sampleID: entry.sampleID,
+      failureType: "correctness",
+      detail: entry.feedback ?? "the judge scored it below full",
+    };
+    if (entry.sealed) holdoutFailureCases.push(failure);
+    else trainableFailureCases.push(failure);
+  }
+  return {
+    score: input.judged.length ? total / input.judged.length : 0,
+    perExample,
+    trainableFailureCases,
+    holdoutFailureCases,
+    isViable: trainableFailureCases.length > 0,
+  };
+}
 
 /**
  * The growth cap: a variant more than 20% longer than its baseline is
@@ -207,6 +269,13 @@ export type Candidate = {
   artifactSize: number;
   /** The artifact's size cap (its denominator). */
   maxSize: number;
+  /**
+   * The candidate's output for each sample, substituted for the sample's
+   * own recorded output when judging. Present when a real candidate is
+   * being evaluated (a run per sample); absent for the baseline, where the
+   * recorded responses ARE the outputs being scored.
+   */
+  output?: string;
 };
 
 export type EvaluationFace = {
@@ -243,67 +312,62 @@ export function createEvaluationFace(input: {
   judge: SampleJudge;
 }): EvaluationFace {
   const holdout = [...input.holdout];
-  const score = (
-    samples: readonly EvaluationSample[],
-    candidate: Candidate,
-  ) => {
-    const judged = samples.map((sample) => ({
-      sample,
-      dimensions: input.judge(sample),
-    }));
-    const total = judged.reduce(
-      (sum, entry) =>
-        sum +
-        compositeFitness(entry.dimensions, {
-          artifactSize: candidate.artifactSize,
-          maxSize: candidate.maxSize,
-        }),
-      0,
-    );
-    return {
-      total: judged.length ? total / judged.length : 0,
-      judged,
-    };
-  };
   return {
     evaluate(candidate) {
-      const visible = score(input.pool.samples, candidate);
-      const holdoutScored = score(holdout, candidate);
-      const trainableFailureCases = visible.judged
-        .filter((entry) => entry.dimensions.correctness < 1)
-        .map((entry) => ({
-          sampleID: entry.sample.id,
-          failureType: "correctness",
-          detail: entry.sample.feedback ?? "the judge scored it below full",
-        }));
-      const holdoutFailureCases = holdoutScored.judged
-        .filter((entry) => entry.dimensions.correctness < 1)
-        .map((entry) => ({
-          sampleID: entry.sample.id,
-          failureType: "correctness",
-          detail: entry.sample.feedback ?? "the judge scored it below full",
-        }));
+      // A candidate's own output substitutes for each sample's recorded
+      // one; the baseline (no output) scores the recorded responses.
+      const judged = [
+        ...input.pool.samples.map((sample) => ({
+          sampleID: sample.id,
+          dimensions: input.judge(
+            candidate.output === undefined
+              ? sample
+              : { ...sample, output: candidate.output },
+          ),
+          sealed: false,
+          ...(sample.feedback ? { feedback: sample.feedback } : {}),
+        })),
+        ...holdout.map((sample) => ({
+          sampleID: sample.id,
+          dimensions: input.judge(
+            candidate.output === undefined
+              ? sample
+              : { ...sample, output: candidate.output },
+          ),
+          sealed: true,
+          ...(sample.feedback ? { feedback: sample.feedback } : {}),
+        })),
+      ];
       // The holdout's failures still count toward the score — they are
-      // simply never handed out. The two pools are averaged into one
-      // number so a candidate cannot buy fitness by being great on the
-      // visible pool and terrible on the sealed one.
-      const combined = visible.judged.length + holdoutScored.judged.length;
-      const scoreValue = combined
-        ? (visible.total * visible.judged.length +
-            holdoutScored.total * holdoutScored.judged.length) /
-          combined
-        : 0;
-      return {
-        score: scoreValue,
-        trainableFailureCases,
-        holdoutFailureCases,
-        // No trainable failure case, nothing to evolve from: such a
-        // candidate may not become a parent.
-        isViable: trainableFailureCases.length > 0,
-      };
+      // simply never handed out. Both pools blend into one number so a
+      // candidate cannot buy fitness by being great on the visible pool
+      // and terrible on the sealed one.
+      return assembleResult({
+        judged,
+        sizes: {
+          artifactSize: candidate.artifactSize,
+          maxSize: candidate.maxSize,
+        },
+      });
     },
     scoreHoldout(candidate) {
-      return score(holdout, candidate).total;
+      // A number, never the cases — the sealed door's only opening.
+      return assembleResult({
+        judged: holdout.map((sample) => ({
+          sampleID: sample.id,
+          dimensions: input.judge(
+            candidate.output === undefined
+              ? sample
+              : { ...sample, output: candidate.output },
+          ),
+          sealed: true,
+          ...(sample.feedback ? { feedback: sample.feedback } : {}),
+        })),
+        sizes: {
+          artifactSize: candidate.artifactSize,
+          maxSize: candidate.maxSize,
+        },
+      }).score;
     },
     trainableCases(split) {
       // A split the face does not own is refused, not silently emptied:

@@ -35,6 +35,7 @@ const result = (
   holdout: EvaluationResult["holdoutFailureCases"] = [],
 ): EvaluationResult => ({
   score: 0.5,
+  perExample: {},
   trainableFailureCases: trainable,
   holdoutFailureCases: holdout,
   isViable: trainable.length > 0,

@@ -13,12 +13,18 @@ import {
   updateProgram,
 } from "@natalia/installer";
 import {
+  assembleResult,
+  beatsFloor,
+  bestMember,
+  type Population,
   evaluateBaseline,
   groupRunsByPrompt,
   keywordOverlapJudge,
   mineSessionPairs,
+  proposeReflective,
   readDataset,
   runBestOfN,
+  runRound,
   samplesFromPairs,
   scoreRun,
   segmentTurns,
@@ -28,6 +34,7 @@ import {
 import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
 import { evalListLines, evalRun } from "./eval-cli";
+import { skillsCli } from "./skills-cli";
 import {
   callRuntimeRPC,
   createRecordedFetch,
@@ -81,6 +88,35 @@ import {
   uninstallProgram,
 } from "./store-maintenance";
 
+/** A positive-integer flag, with its default and its name for the refusal. */
+function positiveInt(
+  raw: string | undefined,
+  fallback: number,
+  name: string,
+): number {
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    console.error(`${name} must be a positive integer, got ${raw}`);
+    process.exit(1);
+  }
+  return value;
+}
+
+/**
+ * A deterministic random for the engine's parent draw: a run's population
+ * path must be reproducible, or a score difference between two runs cannot
+ * be attributed to the candidates.
+ */
+function seededRandom(seed: number): () => number {
+  let state = (seed * 2654435761) % 2147483647;
+  if (state <= 0) state += 2147483646;
+  return () => {
+    state = (state * 16807) % 2147483647;
+    return (state - 1) / 2147483646;
+  };
+}
+
 export async function handleLocalCommands(argv: string[]) {
   const subcommand = argv[0];
   if (
@@ -104,6 +140,7 @@ export async function handleLocalCommands(argv: string[]) {
       "runs",
       "consults",
       "evolution",
+      "skills",
       "update",
     ]).has(subcommand ?? "")
   )
@@ -537,9 +574,9 @@ export async function handleLocalCommands(argv: string[]) {
       // faked, the batch reports what it could not do.
       if (argv[1] === "optimize") {
         const engine = valueAfter(argv, "--engine");
-        if (engine !== "best-of-n") {
+        if (engine !== "best-of-n" && engine !== "reflective") {
           console.error(
-            "usage: natalia evolution optimize --target <name> --engine best-of-n --n <count> [--workspace <root>] [--json]",
+            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--workspace <root>] [--json]",
           );
           process.exit(1);
         }
@@ -560,17 +597,24 @@ export async function handleLocalCommands(argv: string[]) {
           process.exit(1);
         }
         const task = dataset.train[0]!;
+        const pool = samplesFromPairs(dataset.visible, (pair) =>
+          splitForPair(pair),
+        );
+        const sealed = samplesFromPairs(
+          dataset.holdout,
+          () => "holdout" as const,
+        );
         const { baseline } = evaluateBaseline({
-          pool: {
-            samples: samplesFromPairs(dataset.visible, (pair) =>
-              splitForPair(pair),
-            ),
-          },
-          holdout: samplesFromPairs(dataset.holdout, () => "holdout" as const),
+          pool: { samples: pool },
+          holdout: sealed,
         });
         const store = createRuntimeDaemonStore({ dir: daemonDir() });
         const registration = await readRuntimeDaemonRegistration(store);
         const token = registration ? await daemonToken(store) : undefined;
+        // One daemon turn per sampling call: the instruction is submitted,
+        // the turn's final assistant text comes back. The reference
+        // harness's SkillModule pattern — the artifact under optimization
+        // IS the instruction a real turn follows.
         const sampleTurn = async (prompt: string): Promise<string> => {
           if (!registration)
             throw new Error("no_daemon: start one with `natalia daemon`");
@@ -595,6 +639,199 @@ export async function handleLocalCommands(argv: string[]) {
             throw new Error("the turn produced no assistant text");
           return last.text;
         };
+        if (engine === "reflective") {
+          const rounds = positiveInt(valueAfter(argv, "--rounds"), 2, "rounds");
+          const samplesWanted = positiveInt(
+            valueAfter(argv, "--samples"),
+            2,
+            "samples",
+          );
+          const seed = positiveInt(valueAfter(argv, "--seed"), 1, "seed");
+          // The visible pool is bounded by the flag (each sample costs a
+          // turn per candidate); the sealed holdout runs in full — it is
+          // the whole point of sealing it.
+          const visible = pool.slice(0, samplesWanted);
+          const recorded = new Map(
+            [...visible, ...sealed].map((sample) => [sample.id, sample.output]),
+          );
+          // The judge: the run's answer against the sample's recorded
+          // response, through the documented cheap proxy. procedure and
+          // conciseness stay UNJUDGED — the report says so.
+          const judge = (answer: string, reference: string) =>
+            keywordOverlapJudge(reference, answer).dimensions;
+          const evaluateInstruction = async (
+            id: string,
+            instruction: string,
+          ) => {
+            const judged = [];
+            for (const sample of [...visible, ...sealed]) {
+              const answer = await sampleTurn(
+                `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
+              );
+              judged.push({
+                sampleID: sample.id,
+                dimensions: judge(answer, recorded.get(sample.id) ?? ""),
+                sealed: sample.id.startsWith("holdout:"),
+              });
+            }
+            return assembleResult({
+              judged,
+              sizes: {
+                artifactSize: Buffer.byteLength(instruction, "utf8"),
+                maxSize: Number.MAX_SAFE_INTEGER,
+              },
+            });
+          };
+          // The baseline instruction: the trivial one, measured for real.
+          const baselineInstruction =
+            "Answer the user's task directly and completely.";
+          // A daemon that cannot answer even the baseline is a named
+          // failure, not a stack trace.
+          let baselineResult;
+          try {
+            baselineResult = await evaluateInstruction(
+              "baseline",
+              baselineInstruction,
+            );
+          } catch (error) {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            if (argv.includes("--json"))
+              console.log(
+                JSON.stringify(
+                  { target, engine: "reflective", failed: reason },
+                  null,
+                  2,
+                ),
+              );
+            else
+              console.error(`reflective run failed at the baseline: ${reason}`);
+            process.exit(1);
+          }
+          const results = new Map([["baseline", baselineResult]]);
+          let population: Population = {
+            members: [
+              {
+                id: "baseline",
+                components: { instruction: baselineInstruction },
+                score: baselineResult.score,
+                perExample: baselineResult.perExample,
+                trainableFailures: baselineResult.trainableFailureCases.length,
+                isViable: baselineResult.isViable,
+                children: 0,
+                lineage: {},
+              },
+            ],
+          };
+          let stopped: string | undefined;
+          for (let round = 1; round <= rounds && !stopped; round += 1) {
+            let outcome;
+            try {
+              outcome = await runRound({
+                population,
+                random: seededRandom(seed * 1000 + round),
+                hooks: {
+                  propose: async (parent) => {
+                    const parentResult = results.get(parent.id)!;
+                    const proposal = await proposeReflective({
+                      components: ["instruction"],
+                      currentParam: parent.components.instruction!,
+                      result: parentResult,
+                      pool: visible,
+                      sampler: async ({ prompt }) => await sampleTurn(prompt),
+                    });
+                    if (!proposal.ok)
+                      throw new Error(`reflection refused: ${proposal.reason}`);
+                    return {
+                      id: `iter${round}_${proposal.candidate.axis}`,
+                      components: { instruction: proposal.candidate.text },
+                      hypothesis: proposal.candidate.hypothesis,
+                      axis: proposal.candidate.axis,
+                    };
+                  },
+                  evaluate: async (proposal) => {
+                    const result = await evaluateInstruction(
+                      proposal.id,
+                      proposal.components.instruction!,
+                    );
+                    results.set(proposal.id, result);
+                    return {
+                      score: result.score,
+                      perExample: result.perExample,
+                      trainableFailures: result.trainableFailureCases.length,
+                      isViable: result.isViable,
+                    };
+                  },
+                },
+              });
+            } catch (error) {
+              // A dead turn mid-run stops the loop with its reason; the
+              // rounds that did run stay in the report.
+              stopped = `round failed: ${
+                error instanceof Error ? error.message : String(error)
+              }`;
+              break;
+            }
+            population = outcome.population;
+            stopped = outcome.stopped;
+          }
+          const best = bestMember(population);
+          const gate = beatsFloor({
+            best,
+            floorScore: baselineResult.score,
+          });
+          const report = {
+            target,
+            engine: "reflective",
+            rounds,
+            samples: visible.length,
+            holdoutSamples: sealed.length,
+            baseline: {
+              instruction: baselineInstruction,
+              score: baselineResult.score,
+              trainableFailures: baselineResult.trainableFailureCases.length,
+            },
+            best: best
+              ? {
+                  id: best.id,
+                  score: best.score,
+                  instruction: best.components.instruction,
+                  hypothesis: best.hypothesis,
+                  axis: best.axis,
+                }
+              : null,
+            beatBaseline: gate.ok,
+            gateReason: gate.reason,
+            population: population.members.map((member) => ({
+              id: member.id,
+              score: member.score,
+              children: member.children,
+              ...(member.hypothesis ? { hypothesis: member.hypothesis } : {}),
+              ...(member.axis ? { axis: member.axis } : {}),
+            })),
+            ...(stopped ? { stopped } : {}),
+            judge:
+              "keyword overlap — procedure_following and conciseness are UNJUDGED, not measured",
+          };
+          console.log(
+            argv.includes("--json")
+              ? JSON.stringify(report, null, 2)
+              : [
+                  `reflective on ${target}: ${rounds} round(s) × ${visible.length} sample(s) (+${sealed.length} sealed)`,
+                  `baseline: ${baselineResult.score.toFixed(4)} (${baselineResult.trainableFailureCases.length} trainable failures)`,
+                  ...population.members.map(
+                    (member) =>
+                      `  ${member.id}: ${member.score.toFixed(4)}${member.axis ? ` [${member.axis}]` : ""}`,
+                  ),
+                  best
+                    ? `best: ${best.id} at ${best.score.toFixed(4)}`
+                    : "best: none",
+                  `phase gate: ${gate.reason}`,
+                  `judge: keyword overlap — the recorded responses score 1.0 against themselves, so the ceiling is the reference; a real judge is what closes the gap`,
+                ].join("\n"),
+          );
+          break;
+        }
         const result = await runBestOfN({
           prompt: task.task,
           n,
@@ -650,6 +887,14 @@ export async function handleLocalCommands(argv: string[]) {
       // The gate above refuses any other action; this break is the
       // structural proof of it (a switch case that can fall through is a
       // case that one day will).
+      break;
+    }
+    case "skills": {
+      // The skills CLI: the catalog, the durable off-switch, and the
+      // remove (attempted for any name; the boundary's refusal is the
+      // answer). The daemon owns the service, so this is the operator's
+      // path for what the settings panel deliberately does not offer.
+      await skillsCli(argv.slice(1));
       break;
     }
     case "consults": {

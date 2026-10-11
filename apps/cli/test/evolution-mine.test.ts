@@ -258,6 +258,9 @@ test("evolution optimize reports per-attempt failures when no daemon answers", a
 
 test("evolution optimize refuses a bad engine and a bad attempt count", () => {
   base = mkdtempSync(join(tmpdir(), "evolution-optimize-gate-"));
+  // `reflective` used to be the unknown-engine probe; it is a real engine
+  // now (the loop turns through the daemon), so the probe is a genuinely
+  // unknown name.
   const badEngine = run(
     [
       "evolution",
@@ -265,7 +268,7 @@ test("evolution optimize refuses a bad engine and a bad attempt count", () => {
       "--target",
       "x",
       "--engine",
-      "reflective",
+      "chaos",
       "--n",
       "2",
       "--workspace",
@@ -274,7 +277,9 @@ test("evolution optimize refuses a bad engine and a bad attempt count", () => {
     base,
   );
   expect(badEngine.exitCode).not.toBe(0);
-  expect(new TextDecoder().decode(badEngine.stderr)).toContain("--engine");
+  expect(new TextDecoder().decode(badEngine.stderr)).toContain(
+    "--engine best-of-n|reflective",
+  );
   const badN = run(
     [
       "evolution",
@@ -292,4 +297,66 @@ test("evolution optimize refuses a bad engine and a bad attempt count", () => {
   );
   expect(badN.exitCode).not.toBe(0);
   expect(new TextDecoder().decode(badN.stderr)).toContain("--n");
+});
+
+test("evolution optimize --engine reflective refuses a bad engine and reports a dead daemon honestly", async () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-reflective-"));
+  await seed(base);
+  const mined = run(
+    ["evolution", "mine", "--target", "release-skill", "--workspace", base],
+    base,
+  );
+  expect(mined.exitCode).toBe(0);
+
+  // The engine gate names the two engines.
+  const badEngine = run(
+    [
+      "evolution",
+      "optimize",
+      "--target",
+      "release-skill",
+      "--engine",
+      "chaos",
+      "--n",
+      "1",
+      "--workspace",
+      base,
+    ],
+    base,
+  );
+  expect(badEngine.exitCode).not.toBe(0);
+  expect(new TextDecoder().decode(badEngine.stderr)).toContain(
+    "--engine best-of-n|reflective",
+  );
+
+  // No daemon: the baseline turn cannot run, and the run says so instead
+  // of crashing with a stack trace. (The loop's first cost IS a turn per
+  // sample — an honest price, honestly reported when it cannot be paid.)
+  const noDaemon = run(
+    [
+      "evolution",
+      "optimize",
+      "--target",
+      "release-skill",
+      "--engine",
+      "reflective",
+      "--n",
+      "1",
+      "--rounds",
+      "1",
+      "--samples",
+      "1",
+      "--workspace",
+      base,
+      "--json",
+    ],
+    base,
+  );
+  expect(noDaemon.exitCode).not.toBe(0);
+  const report = JSON.parse(new TextDecoder().decode(noDaemon.stdout)) as {
+    engine: string;
+    failed: string;
+  };
+  expect(report.engine).toBe("reflective");
+  expect(report.failed).toContain("no_daemon");
 });

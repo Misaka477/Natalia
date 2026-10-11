@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import { contentTokens as tokens } from "../src/text-tokens";
 import {
   EVALUATION_PROTOCOL,
   acceptCandidate,
   answerAgreement,
+  answerGroundedness,
   checkGrowth,
   compositeFitness,
   createEvaluationFace,
@@ -421,4 +423,34 @@ test("the stability dimension sees what keyword overlap cannot: phrasing sensiti
       { sampleID: "b", agreement: 0.5 },
     ]),
   ).toBe(0.75);
+});
+
+test("groundedness is precision where correctness is coverage — the invention signal", () => {
+  // W2: an answer that hits every point of the reference AND invents a
+  // paragraph scores well on correctness and badly on groundedness.
+  const source =
+    "the retry helper pins the clock so the flaky test passes on every run of the suite";
+  const grounded =
+    "pinning the clock in the retry helper makes the test pass on every run";
+  const inventive =
+    "pinning the clock in the retry helper makes the test pass on every run; " +
+    "furthermore the scheduler quantum should be retuned and the allocator replaced with a slab design";
+  // A 2x separation: the inventive answer carries a third of its content
+  // with no support in the source, and that third is what a self-evolving
+  // loop must not select for.
+  expect(answerGroundedness(grounded, source)).toBeGreaterThan(0.6);
+  expect(answerGroundedness(inventive, source)).toBeLessThan(0.45);
+  // And it is NOT correctness: the inventive answer covers the reference
+  // just as well as the grounded one does.
+  const coverage = (answer: string) => {
+    const expected = tokens(source);
+    const got = tokens(answer);
+    return (
+      [...expected].filter((token) => got.has(token)).length / expected.size
+    );
+  };
+  expect(coverage(inventive)).toBe(coverage(grounded));
+  // Degenerate cases are defined.
+  expect(answerGroundedness("", source)).toBe(0);
+  expect(answerGroundedness("nothing shared here at all", source)).toBe(0);
 });

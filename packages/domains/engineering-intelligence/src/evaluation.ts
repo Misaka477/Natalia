@@ -661,3 +661,30 @@ export function meanStability(
     observations.length
   );
 }
+
+/**
+ * W2's groundedness dimension: how much of the answer is SUPPORTED by the
+ * source it came from.
+ *
+ * This is not correctness. Correctness measures coverage (how much of the
+ * reference the answer hits); groundedness measures precision (how much of
+ * the answer the source can account for). An answer that hits every point
+ * of the reference AND adds a paragraph of invented detail scores well on
+ * the first and badly on the second — and the invented detail is exactly
+ * what a self-evolving loop must not select for. The reference design's
+ * semantic-backtracking check is the same idea at a higher price (re-derive
+ * the answer from the knowledge base); this is the cheap version, and it
+ * is honest about being cheap: token support is not proof of truth, it is
+ * evidence of provenance.
+ *
+ * Reported, not composited — the weights wait for the stability data this
+ * run is now collecting.
+ */
+export function answerGroundedness(answer: string, source: string): number {
+  const answerTokens = contentTokens(answer);
+  if (!answerTokens.size) return 0;
+  const sourceTokens = contentTokens(source);
+  let supported = 0;
+  for (const token of answerTokens) if (sourceTokens.has(token)) supported += 1;
+  return supported / answerTokens.size;
+}

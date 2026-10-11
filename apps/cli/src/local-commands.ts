@@ -14,6 +14,7 @@ import {
 } from "@natalia/installer";
 import {
   answerAgreement,
+  answerGroundedness,
   assembleResult,
   beatsFloor,
   bestMember,
@@ -895,6 +896,10 @@ export async function handleLocalCommands(argv: string[]) {
           const stability = argv.includes("--stability");
           const stabilityRows: Array<{ sampleID: string; agreement: number }> =
             [];
+          const groundednessRows: Array<{
+            sampleID: string;
+            groundedness: number;
+          }> = [];
           // The visible pool is bounded by the flag (each sample costs a
           // turn per candidate); the sealed holdout runs in full — it is
           // the whole point of sealing it.
@@ -917,6 +922,14 @@ export async function handleLocalCommands(argv: string[]) {
                 `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
               );
               answers.push(answer);
+              // W2's groundedness half: precision against the sample's own
+              // recorded response — the fraction of the answer the source
+              // can account for. Correctness measures coverage; this
+              // measures how much of the answer is INVENTED.
+              groundednessRows.push({
+                sampleID: sample.id,
+                groundedness: answerGroundedness(answer, sample.output),
+              });
               if (!stability || sample.id.startsWith("holdout:")) continue;
               // The reworded run: the daemon paraphrases the task, the same
               // instruction answers it, and the agreement between the two
@@ -1279,6 +1292,18 @@ export async function handleLocalCommands(argv: string[]) {
                   },
                 }
               : {}),
+            // W2's groundedness dimension (always collected — it costs no
+            // extra turn).
+            groundedness: {
+              mean:
+                groundednessRows.length > 0
+                  ? groundednessRows.reduce(
+                      (sum, row) => sum + row.groundedness,
+                      0,
+                    ) / groundednessRows.length
+                  : undefined,
+              observations: groundednessRows,
+            },
             // W8: the ladder's rung, when there is one.
             ...(escalation.step
               ? {

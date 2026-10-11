@@ -16,6 +16,9 @@ import {
   answerAgreement,
   answerGroundedness,
   assembleResult,
+  buildJudgeRequest,
+  dimensionsFrom,
+  type FitnessDimensions,
   beatsFloor,
   buildGateRequest,
   suiteVerdictFrom,
@@ -170,6 +173,58 @@ async function askNiaForGate(input: {
         candidate: input.candidate,
         diff: input.diff,
         suiteCommand: input.suiteCommand,
+      }),
+    },
+  });
+  const deadline = Date.now() + input.timeoutSeconds * 1_000;
+  for (;;) {
+    const page = await callRuntimeRPC<{
+      data?: Array<{
+        rows?: Array<{
+          kind?: string;
+          event?: {
+            type?: string;
+            message?: { text?: string; at?: string };
+          };
+        }>;
+      }>;
+    }>({
+      url: input.url,
+      token: input.token,
+      method: "session.messages",
+    });
+    const rows = (page.data ?? []).flatMap((message) => message.rows ?? []);
+    const verdict = verdictFromMessages(rows, { afterAt: askedAt });
+    if (verdict) return verdict;
+    if (Date.now() >= deadline) return undefined;
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+}
+
+/**
+ * S9's eval judge, end to end: ask Nia to score one (task, answer) pair and
+ * wait for her verdict. Bounded like the gate — no verdict is the cheap
+ * judge's fallback, never an invented score.
+ */
+async function askNiaForJudge(input: {
+  url: string;
+  token: string;
+  task: string;
+  answer: string;
+  instruction?: string;
+  timeoutSeconds: number;
+}): Promise<ParsedVerdict | undefined> {
+  const askedAt = new Date().toISOString();
+  await callRuntimeRPC<{ messageID: string }>({
+    url: input.url,
+    token: input.token,
+    method: "collab.send",
+    params: {
+      to: "nia",
+      text: buildJudgeRequest({
+        task: input.task,
+        answer: input.answer,
+        ...(input.instruction ? { instruction: input.instruction } : {}),
       }),
     },
   });
@@ -950,6 +1005,12 @@ export async function handleLocalCommands(argv: string[]) {
           // one task share no keywords with each other), and it is new
           // data collection rather than a re-reading of old scores.
           const stability = argv.includes("--stability");
+          // S9's eval judge: ask Nia for the three dimensions instead of
+          // the keyword overlap. One collab round-trip per sample, so it
+          // is opt-in — the cheap judge stays the default.
+          const judgeNia =
+            argv.includes("--judge") && valueAfter(argv, "--judge") === "nia";
+          const judgeUnjudged = new Set<string>();
           const stabilityRows: Array<{ sampleID: string; agreement: number }> =
             [];
           const groundednessRows: Array<{
@@ -1002,10 +1063,38 @@ export async function handleLocalCommands(argv: string[]) {
                 agreement: answerAgreement(answer, variant),
               });
             }
+            // With --judge nia, each sample's dimensions come from her
+            // (one round-trip per sample); a sample she declined falls back
+            // to the cheap judge rather than zeroing the run.
+            let dimensions: (FitnessDimensions | undefined)[] | undefined;
+            if (judgeNia) {
+              if (!registration)
+                throw new Error("no_daemon: --judge nia asks her");
+              dimensions = [];
+              for (const [index, sample] of [...visible, ...sealed].entries()) {
+                const verdict = await askNiaForJudge({
+                  url: registration.url,
+                  token: (await daemonToken(store)) ?? "",
+                  task: sample.input,
+                  answer: answers[index] ?? "",
+                  instruction,
+                  timeoutSeconds: gateTimeout,
+                });
+                if (!verdict) {
+                  dimensions.push(undefined);
+                  continue;
+                }
+                const scored = dimensionsFrom(verdict);
+                for (const dimension of scored.unjudged)
+                  judgeUnjudged.add(dimension);
+                dimensions.push(scored.dimensions);
+              }
+            }
             return scoreUnderProtocol({
               outputs: answers,
               samples: [...visible, ...sealed],
               instruction,
+              ...(dimensions ? { dimensions } : {}),
               sizes: {
                 artifactSize: Buffer.byteLength(instruction, "utf8"),
                 maxSize: Number.MAX_SAFE_INTEGER,
@@ -1354,6 +1443,11 @@ export async function handleLocalCommands(argv: string[]) {
               : null,
             beatBaseline: gate.ok,
             gateReason: gate.reason,
+            // S9: the dimensions the judge could not score (reported, never
+            // invented — an absent score must be visible in the report).
+            ...(judgeUnjudged.size
+              ? { unjudgedDimensions: [...judgeUnjudged] }
+              : {}),
             // W2: the reported stability dimension (not a composite term —
             // the weights wait for this very data).
             ...(stability

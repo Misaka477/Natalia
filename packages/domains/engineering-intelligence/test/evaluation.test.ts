@@ -454,3 +454,33 @@ test("groundedness is precision where correctness is coverage — the invention 
   expect(answerGroundedness("", source)).toBe(0);
   expect(answerGroundedness("nothing shared here at all", source)).toBe(0);
 });
+
+test("the protocol takes pre-judged dimensions, and falls back per sample", () => {
+  // S9's eval judge: Nia's three scores reach the protocol through this
+  // seam. A sample she declined falls back to the cheap judge rather than
+  // zeroing the run — and a judge that never ran at all keeps the cheap
+  // path (the default).
+  const samples = [sample("train:a"), sample("train:b")];
+  const hers = scoreUnderProtocol({
+    outputs: ["answer one", "answer two"],
+    samples,
+    dimensions: [
+      { correctness: 0.9, procedureFollowing: 0.5, conciseness: 0.8 },
+      undefined,
+    ],
+  });
+  // Her scored sample is scored by HER numbers.
+  expect(hers.perExample["train:a"]).toBeCloseTo(
+    0.5 * 0.9 + 0.3 * 0.5 + 0.2 * 0.8,
+    6,
+  );
+  // The declined sample fell back (the cheap judge's number, whatever it
+  // is, is not hers).
+  expect(hers.perExample["train:b"]).not.toBeCloseTo(0.9, 6);
+  // And with no dimensions at all the cheap judge still runs (the default).
+  const cheap = scoreUnderProtocol({
+    outputs: ["answer one", "answer two"],
+    samples,
+  });
+  expect(cheap.perExample["train:a"]).not.toBeCloseTo(0.9, 6);
+});

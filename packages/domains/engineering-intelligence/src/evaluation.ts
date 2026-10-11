@@ -577,6 +577,13 @@ export function scoreUnderProtocol(input: {
   samples: readonly EvaluationSample[];
   /** The instruction the outputs were produced under (procedure's criterion). */
   instruction?: string;
+  /**
+   * Pre-computed dimensions per sample, used INSTEAD of the keyword judge
+   * (S9's eval-judge payload: Nia scored them). Absent per-sample entries
+   * fall back to the cheap judge, so a judge that declined one sample does
+   * not zero the run.
+   */
+  dimensions?: readonly (FitnessDimensions | undefined)[];
   sizes?: { artifactSize: number; maxSize: number };
 }): EvaluationResult {
   const outputs =
@@ -585,11 +592,13 @@ export function scoreUnderProtocol(input: {
       : input.outputs;
   const judged = input.samples.map((sample, index) => ({
     sampleID: sample.id,
-    dimensions: keywordOverlapJudge(
-      sample.output,
-      outputs[index] ?? "",
-      input.instruction ?? sample.instruction,
-    ).dimensions,
+    dimensions:
+      input.dimensions?.[index] ??
+      keywordOverlapJudge(
+        sample.output,
+        outputs[index] ?? "",
+        input.instruction ?? sample.instruction,
+      ).dimensions,
     sealed: sample.id.startsWith("holdout:"),
     ...(sample.feedback ? { feedback: sample.feedback } : {}),
   }));

@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { segmentTurns } from "./run-scorer";
+import { contentTokens } from "./text-tokens";
 
 /**
  * L2's dataset miner: turn a workspace's own session journal into an
@@ -109,6 +110,21 @@ export function redactSecrets(text: string): string {
 /** Bounds: a task is a question, a response is an answer. Neither is a log. */
 export const DATASET_TASK_LIMIT = 2_000;
 export const DATASET_RESPONSE_LIMIT = 4_000;
+/**
+ * An answer shorter than this carries nothing to learn from: a one-word
+ * confirmation, a "done". The reference design's information-density
+ * filter prunes the low-entropy end for exactly this reason — a training
+ * step on a trivial sample contributes no gradient, and an evaluation
+ * sample that every candidate trivially matches flattens the score's
+ * dynamic range for everybody.
+ */
+export const DATASET_MIN_INFORMATIVE_CHARS = 80;
+/**
+ * An answer whose content is this close to the task's own content is an
+ * echo, not an answer ("ok" → "ok", or the task repeated back). Kept out
+ * of the dataset for the same reason.
+ */
+export const DATASET_MAX_ECHO_OVERLAP = 0.9;
 
 export type DatasetPair = {
   sessionID: string;
@@ -136,6 +152,13 @@ export type DatasetDropCounts = {
    * prompt. Not a task anybody asked for.
    */
   internal: number;
+  /**
+   * Answers too trivial to learn from: shorter than the informative floor,
+   * or an echo of the task itself. Counted, not silently dropped — a
+   * dataset whose trivial count is most of its turns says the journal is
+   * the wrong source, which is information.
+   */
+  trivial: number;
 };
 
 export type MinedDataset = {
@@ -211,12 +234,33 @@ function feedbackForTurn(
   return undefined;
 }
 
+/**
+ * Whether an answer is too trivial to be a sample: below the informative
+ * floor, or an echo of the task's own content. Pure, so the threshold's
+ * effect is a unit test rather than a hope.
+ */
+export function isTrivialAnswer(task: string, response: string): boolean {
+  if (response.trim().length < DATASET_MIN_INFORMATIVE_CHARS) return true;
+  const taskTokens = contentTokens(task);
+  const responseTokens = contentTokens(response);
+  if (!taskTokens.size) return false;
+  const shared = [...taskTokens].filter((token) =>
+    responseTokens.has(token),
+  ).length;
+  return shared / taskTokens.size > DATASET_MAX_ECHO_OVERLAP;
+}
+
 export function mineSessionPairs(
   sessionID: string,
   events: readonly RuntimeEvent[],
 ): { pairs: DatasetPair[]; dropped: DatasetDropCounts } {
   const pairs: DatasetPair[] = [];
-  const dropped: DatasetDropCounts = { secrets: 0, empty: 0, internal: 0 };
+  const dropped: DatasetDropCounts = {
+    secrets: 0,
+    empty: 0,
+    internal: 0,
+    trivial: 0,
+  };
   const feedback = foldFeedbackIndex(events);
   for (const window of segmentTurns(events)) {
     const submitted = window.submitted;
@@ -243,9 +287,18 @@ export function mineSessionPairs(
       dropped.empty += 1;
       continue;
     }
-    // The entry filter, on BOTH sides, before anything is kept.
+    // The entry filter, on BOTH sides, before anything is kept — and
+    // before the density filter, so a secret in a short answer is counted
+    // as the secret it is rather than as noise.
     if (looksSecret(task) || looksSecret(response)) {
       dropped.secrets += 1;
+      continue;
+    }
+    if (isTrivialAnswer(task, response)) {
+      // The information-density filter's low-entropy end: a one-word
+      // confirmation or an echo of the task teaches nothing and flattens
+      // every candidate's score toward the same trivial match.
+      dropped.trivial += 1;
       continue;
     }
     pairs.push({

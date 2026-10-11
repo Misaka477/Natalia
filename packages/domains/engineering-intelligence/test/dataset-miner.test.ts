@@ -10,6 +10,7 @@ import {
   datasetDir,
   datasetSplitLines,
   findSecrets,
+  isTrivialAnswer,
   looksSecret,
   mineSessionPairs,
   readDataset,
@@ -125,7 +126,7 @@ test("mining pairs each task with its assistant text and counts what it dropped"
       "s1",
       "t1",
       "fix the flaky test",
-      "I pinned the clock and the test passed.",
+      "I pinned the clock in the retry helper so the test passed on every run of the suite.",
     ),
     ...turn("s1", "t2", "add a retry", "", { noResponse: true }),
     ...turn("s1", "t3", "internal wake", "should not be mined", {
@@ -138,15 +139,31 @@ test("mining pairs each task with its assistant text and counts what it dropped"
     sessionID: "s1",
     turnID: "t1",
     task: "fix the flaky test",
-    response: "I pinned the clock and the test passed.",
+    response:
+      "I pinned the clock in the retry helper so the test passed on every run of the suite.",
   });
-  expect(dropped).toEqual({ secrets: 0, empty: 1, internal: 1 });
+  expect(dropped).toEqual({
+    secrets: 0,
+    empty: 1,
+    internal: 1,
+    trivial: 0,
+  });
 });
 
 test("a pair whose task or response carries a secret is dropped, never kept", () => {
   const events = [
-    ...turn("s1", "t1", "why does this fail", "it does not"),
-    ...turn("s1", "t2", "use this key sk-ant-api03-abcdefghijklmnop", "sure"),
+    ...turn(
+      "s1",
+      "t1",
+      "why does this fail",
+      "the retry swallows the timeout because the clock is not pinned in the test harness",
+    ),
+    ...turn(
+      "s1",
+      "t2",
+      "use this key sk-ant-api03-abcdefghijklmnop",
+      "sure, the key is loaded into the environment for the provider runner",
+    ),
     ...turn(
       "s1",
       "t3",
@@ -284,9 +301,14 @@ test("a human rating rides its own turn's pair; a retraction takes it back", () 
       "s1",
       "turn_a",
       "why is the build red",
-      "the guard counts a new module",
+      "the guard counts a new module and the import graph has one more edge than yesterday",
     ),
-    ...turn("s1", "turn_b", "rotate the key", "done"),
+    ...turn(
+      "s1",
+      "turn_b",
+      "rotate the key",
+      "done — the key is rotated and the unit now answers with the new credential every time",
+    ),
     {
       type: "feedback.recorded",
       id: "fb_1",
@@ -330,7 +352,7 @@ test("a rating on another message never rides this turn's pair", () => {
       "s1",
       "turn_a",
       "why is the build red",
-      "the guard counts a new module",
+      "the guard counts a new module and the import graph has one more edge than yesterday",
     ),
     {
       type: "feedback.recorded",
@@ -379,4 +401,51 @@ test("the round trip keeps the feedback (a dataset read back still steers)", asy
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a trivial answer is counted, not mined — the low-entropy end of the density filter", () => {
+  // W3: the reference design's information-density filter prunes BOTH
+  // ends. The high-noise end is the response cap; the low-entropy end is
+  // here — a one-word confirmation teaches nothing, and a sample every
+  // candidate trivially matches flattens the score's dynamic range for
+  // everybody. Counted, not silently dropped: a journal whose turns are
+  // mostly trivial is the wrong source, which is information.
+  const { pairs, dropped } = mineSessionPairs("s1", [
+    ...turn(
+      "s1",
+      "t1",
+      "fix the flaky test",
+      "I pinned the clock in the retry helper so the test passed on every run of the suite.",
+    ),
+    ...turn("s1", "t2", "rotate the key", "done"),
+    ...turn("s1", "t3", "ship the packer", "ok"),
+  ]);
+  expect(pairs.map((pair) => pair.turnID)).toEqual(["t1"]);
+  expect(dropped.trivial).toBe(2);
+
+  // An echo of the task is trivial however long it is.
+  expect(
+    isTrivialAnswer(
+      "please run the full test suite now",
+      "please run the full test suite now — that is the whole task, verbatim, echoed back to you",
+    ),
+  ).toBe(true);
+  // A real answer about the same task is not.
+  expect(
+    isTrivialAnswer(
+      "please run the full test suite now",
+      "the suite ran and two tests failed inside the retry helper, both of them timing related failures",
+    ),
+  ).toBe(false);
+});
+
+test("a secret in a short answer is counted as the secret it is", () => {
+  // The density filter runs AFTER the secret filter: a key pasted into a
+  // two-word reply is still a key, and counting it as noise would hide
+  // the one fact the operator needs.
+  const { dropped } = mineSessionPairs("s1", [
+    ...turn("s1", "t1", "use this", "sk-ant-api03-abcdefghijklmnop"),
+  ]);
+  expect(dropped.secrets).toBe(1);
+  expect(dropped.trivial).toBe(0);
 });

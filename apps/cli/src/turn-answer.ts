@@ -71,3 +71,19 @@ export function assistantAnswerFromPage(
       : "the turn produced no assistant answer",
   };
 }
+
+/**
+ * Whether the daemon is mid-turn, read from the session's own projection.
+ *
+ * The last projected turn carries a `stopReason` once it settles; an
+ * unsettled one is a turn in flight — somebody's. The evolution waits for
+ * it rather than queueing behind it: a user's turn must never wait behind
+ * a mutation experiment. Pure, so the wait's condition is a unit test
+ * rather than a hope.
+ */
+export function daemonIsMidTurn(page: {
+  data?: Array<{ stopReason?: string }>;
+}): boolean {
+  const last = (page.data ?? []).at(-1);
+  return last !== undefined && last.stopReason === undefined;
+}

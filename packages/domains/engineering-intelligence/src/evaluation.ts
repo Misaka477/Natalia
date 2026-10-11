@@ -1,3 +1,4 @@
+import { contentTokens } from "./text-tokens";
 import type { DatasetPair, DatasetSplit } from "./dataset-miner";
 
 /**
@@ -508,15 +509,6 @@ export function keywordOverlapJudge(
     dimensions: { correctness, procedureFollowing, conciseness: 1 },
     unjudged,
   };
-}
-
-function contentTokens(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/u)
-      .filter((token) => token.length > 2),
-  );
 }
 
 /**

@@ -261,3 +261,28 @@ test("the proposer reads what has been tried — the amnesia fix", () => {
     expect(withHistory.prompt).toContain("[exploitation]");
   });
 });
+
+test("the controller's axis reaches the prompt as a hint, not a command", async () => {
+  // W4: the loop used to have no controller — the axis was whatever the
+  // sampler produced. The hint names which axis the loop is short of.
+  const ask = (axisHint?: "exploitation" | "exploration") =>
+    proposeReflective({
+      components: ["instruction"],
+      currentParam: "the current body",
+      result: result([failure("train:a", "missed the rollback step")]),
+      pool: [sample("train:a")],
+      axisHint,
+      sampler: async () =>
+        "```\nnew text\n```\nhypothesis: h\naxis: exploration",
+    });
+  const [hinted, plain] = await Promise.all([ask("exploration"), ask()]);
+  if (!hinted.ok || !plain.ok) throw new Error("both must propose");
+  expect(hinted.prompt).toContain("short of an exploration mutation");
+  expect(hinted.prompt).toContain("reach for a mechanism");
+  // No hint: no axis line at all.
+  expect(plain.prompt).not.toContain("short of an");
+  const [exploit] = await Promise.all([ask("exploitation")]);
+  if (!exploit.ok) throw new Error("must propose");
+  expect(exploit.prompt).toContain("short of an exploitation mutation");
+  expect(exploit.prompt).toContain("tighten what already works");
+});

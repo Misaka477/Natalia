@@ -494,3 +494,76 @@ export function bestMember(
     undefined,
   );
 }
+
+// --- the curiosity controller -------------------------------------------------
+
+/**
+ * The exploration/exploitation controller.
+ *
+ * Without it the loop's axis labels are decoration: nothing decides
+ * whether the next round should mine the neighbourhood of what worked or
+ * reach somewhere new, so the mix is whatever the sampler happened to
+ * produce. A trader does not decide on one price — the decision is a
+ * function of the recent trend, the idle capacity, and how long the
+ * current approach has been failing.
+ *
+ * The law (the user's design note): the curiosity value drifts toward the
+ * idle ratio, rises with recent gain, and falls with consecutive
+ * failures, clamped to [0, 1]. High curiosity reaches; low curiosity
+ * mines. The four weights are named so a tuning run changes a constant,
+ * not a formula.
+ */
+export const CURIOSITY_STEP = 0.5;
+export const CURIOSITY_DECAY = 0.3;
+export const CURIOSITY_GAIN_WEIGHT = 0.2;
+export const CURIOSITY_FAILURE_WEIGHT = 0.15;
+/** At or above this value the controller asks for an exploring mutation. */
+export const CURIOSITY_EXPLORE_THRESHOLD = 0.5;
+
+export type CuriosityState = {
+  /** The clamped curiosity value in [0, 1]. */
+  value: number;
+  /** Consecutive rounds without a strict improvement (the failure term). */
+  failures: number;
+};
+
+export const INITIAL_CURIOSITY: CuriosityState = { value: 0.5, failures: 0 };
+
+export function updateCuriosity(
+  state: CuriosityState,
+  input: {
+    /** How idle the machine was this round (0..1) — capacity to explore. */
+    idleRatio: number;
+    /** The round's gain: the best score's improvement (0 = none). */
+    gain: number;
+  },
+): CuriosityState {
+  const idle = clamp01(input.idleRatio);
+  const gain = Math.max(0, input.gain);
+  const raw =
+    state.value +
+    CURIOSITY_STEP * (idle - CURIOSITY_DECAY * state.value) +
+    CURIOSITY_GAIN_WEIGHT * gain -
+    CURIOSITY_FAILURE_WEIGHT * state.failures;
+  return {
+    value: clamp01(raw),
+    // A strict improvement resets the failure count; anything else adds
+    // one. The count is what pulls curiosity down when a direction stops
+    // paying.
+    failures: gain > 0 ? 0 : state.failures + 1,
+  };
+}
+
+/** The axis the controller asks for this round. */
+export function curiosityAxis(
+  state: CuriosityState,
+): "exploitation" | "exploration" {
+  return state.value >= CURIOSITY_EXPLORE_THRESHOLD
+    ? "exploration"
+    : "exploitation";
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}

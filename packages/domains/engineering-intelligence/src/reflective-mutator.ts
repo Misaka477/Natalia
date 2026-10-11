@@ -243,6 +243,13 @@ export async function proposeReflective(input: {
   template?: string;
   /** What has already been tried (the loop's memory), read by the prompt. */
   history?: readonly TriedCandidate[];
+  /**
+   * The controller's suggestion for this round's axis. A suggestion, not a
+   * command: the sampler may still answer with the other axis, and the
+   * prompt says which one the loop is short of. Without it the axis is
+   * whatever the sampler happens to produce.
+   */
+  axisHint?: "exploitation" | "exploration";
 }): Promise<
   | {
       ok: true;
@@ -286,10 +293,21 @@ export async function proposeReflective(input: {
         "",
       ]
     : [];
+  const axisLine = input.axisHint
+    ? [
+        `This round the loop is short of an ${input.axisHint} mutation: ${
+          input.axisHint === "exploration"
+            ? "reach for a mechanism the artifact does not have yet"
+            : "tighten what already works rather than adding to it"
+        }.`,
+        "",
+      ]
+    : [];
   const prompt = [
     "You are optimizing ONE component of an artifact. Obey these constraints:",
     ...MUTATOR_CONSTRAINTS.map((rule) => `- ${rule}`),
     `- ${MUTATOR_NO_FANOUT}`,
+    ...axisLine,
     "",
     "Answer with the new component inside ``` blocks, then two lines:",
     "hypothesis: <the falsifiable claim this candidate would make true>",

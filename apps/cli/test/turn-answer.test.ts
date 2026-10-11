@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { assistantAnswerFromPage } from "../src/turn-answer";
+import { assistantAnswerFromPage, daemonIsMidTurn } from "../src/turn-answer";
 
 /**
  * One daemon turn's answer, located BY TURN. Every sample of every
@@ -79,4 +79,18 @@ test("without a turn id the newest turn is the answer (the single-turn call)", (
 test("an empty or wrong-shaped page refuses instead of inventing an answer", () => {
   expect(assistantAnswerFromPage({}, "turn_a").ok).toBe(false);
   expect(assistantAnswerFromPage({ data: [] }, "turn_a").ok).toBe(false);
+});
+
+test("an unsettled last turn is a busy daemon; a settled one (or none) is idle", () => {
+  // W5: the evolution must never compete with a live session. The signal is
+  // the session's own last projection.
+  expect(daemonIsMidTurn({ data: [{ stopReason: "done" }] })).toBe(false);
+  expect(daemonIsMidTurn({ data: [{}, { stopReason: "aborted" }] })).toBe(
+    false,
+  );
+  // A turn with no stopReason is still in flight — somebody's.
+  expect(daemonIsMidTurn({ data: [{ stopReason: "done" }, {}] })).toBe(true);
+  // No turns at all (a fresh session) is idle.
+  expect(daemonIsMidTurn({ data: [] })).toBe(false);
+  expect(daemonIsMidTurn({})).toBe(false);
 });

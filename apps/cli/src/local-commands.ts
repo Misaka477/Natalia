@@ -16,6 +16,10 @@ import {
   assembleResult,
   beatsFloor,
   bestMember,
+  gateCandidate,
+  curiosityAxis,
+  INITIAL_CURIOSITY,
+  updateCuriosity,
   type Population,
   evaluateBaseline,
   evolutionStateDir,
@@ -43,7 +47,11 @@ import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
 import { evalListLines, evalRun } from "./eval-cli";
 import { skillsCli } from "./skills-cli";
-import { assistantAnswerFromPage, type TurnMessagePage } from "./turn-answer";
+import {
+  assistantAnswerFromPage,
+  daemonIsMidTurn,
+  type TurnMessagePage,
+} from "./turn-answer";
 import {
   callRuntimeRPC,
   createRecordedFetch,
@@ -494,7 +502,7 @@ export async function handleLocalCommands(argv: string[]) {
         const service = createLocalSessionService(workspaceRoot);
         const rows = await service.list();
         const pairs = [];
-        const dropped = { secrets: 0, empty: 0, internal: 0 };
+        const dropped = { secrets: 0, empty: 0, internal: 0, trivial: 0 };
         let sessions = 0;
         for (const row of rows) {
           const events = await service.events(row.id).catch(() => []);
@@ -505,6 +513,7 @@ export async function handleLocalCommands(argv: string[]) {
           dropped.secrets += mined.dropped.secrets;
           dropped.empty += mined.dropped.empty;
           dropped.internal += mined.dropped.internal;
+          dropped.trivial += mined.dropped.trivial;
         }
         const written = await writeDataset({ workspaceRoot, target, pairs });
         const report = {
@@ -523,7 +532,7 @@ export async function handleLocalCommands(argv: string[]) {
             `dataset: ${target} → ${written.dir}`,
             `sessions read: ${sessions}`,
             `pairs: ${written.train} train / ${written.val} val / ${written.holdout} holdout`,
-            `dropped: ${dropped.secrets} secret-shaped, ${dropped.empty} without a response, ${dropped.internal} without a human task`,
+            `dropped: ${dropped.secrets} secret-shaped, ${dropped.empty} without a response, ${dropped.internal} without a human task, ${dropped.trivial} too trivial to learn from`,
           ].join("\n"),
         );
         break;
@@ -587,7 +596,7 @@ export async function handleLocalCommands(argv: string[]) {
         const engine = valueAfter(argv, "--engine");
         if (engine !== "best-of-n" && engine !== "reflective") {
           console.error(
-            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--workspace <root>] [--json]",
+            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--idle-only] [--idle-timeout <seconds>] [--workspace <root>] [--json]",
           );
           process.exit(1);
         }
@@ -636,9 +645,41 @@ export async function handleLocalCommands(argv: string[]) {
         // (`{data: [{turnID, submitted, rows}]}`); the assistant's
         // confirmed text is the `content.done` row inside the turn's own
         // projection.
+        // W5: the evolution never competes with a live session. The
+        // reference design's resource rule — the trainer waits for the
+        // inference pipeline to be idle, because a user's turn must never
+        // queue behind a mutation experiment. The busy signal is the
+        // session's own last projected turn: an unsettled one (no
+        // stopReason) is a turn in flight.
+        const idleOnly = argv.includes("--idle-only");
+        const idleTimeout = positiveInt(
+          valueAfter(argv, "--idle-timeout"),
+          300,
+          "idle-timeout",
+        );
+        const waitForIdle = async (): Promise<void> => {
+          if (!idleOnly || !registration) return;
+          const deadline = Date.now() + idleTimeout * 1_000;
+          for (;;) {
+            const page = await callRuntimeRPC<{
+              data?: Array<{ stopReason?: string }>;
+            }>({
+              url: registration.url,
+              token,
+              method: "session.messages",
+            });
+            if (!daemonIsMidTurn(page)) return;
+            if (Date.now() >= deadline)
+              throw new Error(
+                `the daemon is mid-turn and did not settle within ${idleTimeout}s (--idle-only)`,
+              );
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+          }
+        };
         const sampleTurn = async (prompt: string): Promise<string> => {
           if (!registration)
             throw new Error("no_daemon: start one with `natalia daemon`");
+          await waitForIdle();
           const turn = await callRuntimeRPC<{ id?: string }>({
             url: registration.url,
             token,
@@ -737,6 +778,12 @@ export async function handleLocalCommands(argv: string[]) {
           );
           const summaryLines: string[] = [];
           const tried: TriedCandidate[] = [];
+          // W4: the curiosity controller. It owns the explore/exploit mix:
+          // the axis used to be whatever the sampler happened to produce.
+          // Idle capacity and recent gain raise curiosity, consecutive
+          // failures pull it down, and the round's axis follows.
+          let curiosity = INITIAL_CURIOSITY;
+          let previousBest = baselineResult.score;
           const provenance = `judge=keyword dataset=${target}`;
           const writeRunState = async () => {
             await mkdir(runDir, { recursive: true });
@@ -818,6 +865,9 @@ export async function handleLocalCommands(argv: string[]) {
                       // The memory: what has been tried and how it ended,
                       // so this round does not re-run a lost hypothesis.
                       history: tried,
+                      // The controller's axis for this round (a hint, not
+                      // a command — the sampler may answer otherwise).
+                      axisHint: curiosityAxis(curiosity),
                       sampler: async ({ prompt }) => await sampleTurn(prompt),
                     });
                     if (!proposal.ok)
@@ -854,6 +904,17 @@ export async function handleLocalCommands(argv: string[]) {
             }
             population = outcome.population;
             stopped = outcome.stopped;
+            // The controller learns from the round: the gain is the best
+            // score's movement, and the idle ratio is the CLI's own (a
+            // foreground command is not idle).
+            const roundBest = Math.max(
+              ...population.members.map((member) => member.score),
+            );
+            curiosity = updateCuriosity(curiosity, {
+              idleRatio: 0,
+              gain: roundBest - previousBest,
+            });
+            previousBest = roundBest;
             // The record: each added member's diff against its parent, the
             // conditions it was measured under, and its place in the
             // tried-list the next proposer reads.
@@ -903,6 +964,30 @@ export async function handleLocalCommands(argv: string[]) {
             best,
             floorScore: baselineResult.score,
           });
+          // S2/S6: the loop's output is GATED before it is reported, and
+          // the baseline is gated too (a gate the baseline fails is a
+          // pre-existing problem, not the candidate's fault). The seams the
+          // optimize path cannot honestly fill — the full suite and the
+          // benchmark — answer UNVERIFIED rather than passing: a gate that
+          // cannot check says so, and the report shows which half of the
+          // verdict was measured. Blocking on them here would make the
+          // command useless before L6 exists; they are the landing path's
+          // job (apply_generation runs the real suite).
+          const gateVerdict = (text: string) =>
+            gateCandidate({
+              target: { kind: "prompt-segment" as const, name: target },
+              baseline: baselineInstruction,
+              candidate: text,
+              suite: {
+                ok: false,
+                detail:
+                  "unverified — the optimize path does not run the suite; apply_generation does",
+              },
+            });
+          const candidateGate = best
+            ? gateVerdict(best.components.instruction ?? "")
+            : undefined;
+          const baselineGate = gateVerdict(baselineInstruction);
           const report = {
             target,
             engine: "reflective",
@@ -928,6 +1013,25 @@ export async function handleLocalCommands(argv: string[]) {
               : null,
             beatBaseline: gate.ok,
             gateReason: gate.reason,
+            // The controller's last state, so a reader sees WHY the last
+            // rounds asked for what they asked for.
+            curiosity: {
+              value: curiosity.value,
+              failures: curiosity.failures,
+              axis: curiosityAxis(curiosity),
+            },
+            // The seven gates on the reported best, and on the baseline
+            // (pre-existing problems named as such).
+            candidateGate: candidateGate && {
+              passed: candidateGate.passed,
+              gates: candidateGate.gates,
+              refusals: candidateGate.refusals,
+            },
+            baselineGate: {
+              passed: baselineGate.passed,
+              gates: baselineGate.gates,
+              refusals: baselineGate.refusals,
+            },
             population: population.members.map((member) => ({
               id: member.id,
               score: member.score,

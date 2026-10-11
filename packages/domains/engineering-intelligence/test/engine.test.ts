@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import {
+  INITIAL_CURIOSITY,
   ancestorsOf,
   beatsFloor,
   bestMember,
   commonAncestor,
+  curiosityAxis,
   isAncestorOf,
   mergeCandidates,
   parentWeight,
@@ -16,6 +18,7 @@ import {
   type Population,
   type PopulationMember,
   type Random,
+  updateCuriosity,
 } from "../src/engine";
 
 /**
@@ -461,4 +464,32 @@ test("the reported best can be a specialist the max-score pick would bury", () =
   expect(
     selectReportedBest({ members: [] }, scriptedRandom([0.5])),
   ).toBeUndefined();
+});
+
+test("the curiosity controller: idle and gain raise it, consecutive failures pull it down", () => {
+  // W4: the axis labels were decoration — nothing decided whether the next
+  // round mines the neighbourhood or reaches. The law: drift toward the
+  // idle ratio, up with gain, down with failures.
+  const busy = updateCuriosity(INITIAL_CURIOSITY, { idleRatio: 0, gain: 0 });
+  expect(busy.value).toBeLessThan(INITIAL_CURIOSITY.value);
+  expect(busy.failures).toBe(1);
+
+  const idle = updateCuriosity(INITIAL_CURIOSITY, { idleRatio: 1, gain: 0 });
+  expect(idle.value).toBeGreaterThan(INITIAL_CURIOSITY.value);
+
+  const winning = updateCuriosity(INITIAL_CURIOSITY, {
+    idleRatio: 0.5,
+    gain: 0.1,
+  });
+  expect(winning.value).toBeGreaterThan(INITIAL_CURIOSITY.value);
+  // A strict improvement resets the failure count.
+  expect(winning.failures).toBe(0);
+
+  // A long losing streak collapses curiosity toward mining, not reaching.
+  let state = INITIAL_CURIOSITY;
+  for (let round = 0; round < 12; round += 1)
+    state = updateCuriosity(state, { idleRatio: 0, gain: 0 });
+  expect(state.value).toBe(0);
+  expect(curiosityAxis(state)).toBe("exploitation");
+  expect(curiosityAxis({ value: 0.9, failures: 0 })).toBe("exploration");
 });

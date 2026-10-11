@@ -50,15 +50,26 @@ async function seed(root: string) {
         durationMs: 10,
       },
     ] as unknown as RuntimeEvent[];
+  // Realistic answer lengths: the density filter (W3) drops one-word
+  // confirmations, so a seeded journal that wants to be mined has to look
+  // like a real session.
   session.events.push(
-    ...turn("turn_a", "why is the build red", "the guard counts a new module"),
+    ...turn(
+      "turn_a",
+      "why is the build red",
+      "the guard counts a new module and the import graph has one more edge than yesterday",
+    ),
     ...turn(
       "turn_b",
       "rotate the key",
-      "use sk-ant-api03-abcdefghijklmnop1234",
+      "use sk-ant-api03-abcdefghijklmnop1234 for the provider call",
     ),
     ...turn("turn_c", "wake", "internal work", { internal: true }),
-    ...turn("turn_d", "ship it", "all seven guards pass"),
+    ...turn(
+      "turn_d",
+      "ship it",
+      "all seven guards pass and the distribution build came out green on the first try",
+    ),
   );
   await store.save(session);
   return id;
@@ -95,12 +106,22 @@ test("evolution mine writes the three splits and drops the secret pair", async (
     train: number;
     val: number;
     holdout: number;
-    dropped: { secrets: number; empty: number; internal: number };
+    dropped: {
+      secrets: number;
+      empty: number;
+      internal: number;
+      trivial: number;
+    };
   };
   // Two human turns with a response; the secret pair and the internal wake
   // are dropped, and the counts say so.
   expect(report.pairs).toBe(2);
-  expect(report.dropped).toEqual({ secrets: 1, empty: 0, internal: 1 });
+  expect(report.dropped).toEqual({
+    secrets: 1,
+    empty: 0,
+    internal: 1,
+    trivial: 0,
+  });
   expect(report.train + report.val + report.holdout).toBe(2);
   expect(report.dir).toContain(".natalia/evolution/datasets/release-skill");
 

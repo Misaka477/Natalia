@@ -131,6 +131,8 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "skillRemove",
     // S5: the landing write face (the validated boundary).
     "upsertSkill",
+    // S9: the candidate gate's channel to a sister.
+    "collabSend",
     "agentCreate",
     "agentUpdate",
     "agentDelete",

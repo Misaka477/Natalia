@@ -4139,6 +4139,17 @@ export type RuntimeClient = {
     candidate?: unknown;
     workspaceID?: string;
   }): Promise<{ created: boolean; name: string }>;
+  /**
+   * S9: the candidate gate's channel — a message to a sister, published
+   * through the collaboration service (which also returns her wake). The
+   * CLI uses it to ask Nia to gate a candidate and then waits for her
+   * `VERDICT:` reply in the journal.
+   */
+  collabSend?(input: {
+    to: "nia" | "live_chat";
+    text: string;
+    kind?: string;
+  }): Promise<{ messageID: string }>;
   workspaceFiles?(input?: {
     workspaceID?: string;
     query?: string;

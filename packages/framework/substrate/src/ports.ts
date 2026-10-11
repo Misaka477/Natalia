@@ -255,6 +255,18 @@ export type RuntimePorts = {
     exec: SessionExecutionState,
     intent?: ChatTurnIntent,
   ) => void;
+  /**
+   * S9: the candidate gate's channel — a message to a sister, published
+   * through the collaboration service. The CLI asks Nia to gate a
+   * candidate and then waits for her `VERDICT:` reply in the journal.
+   */
+  collabSend: (input: {
+    sessionID: SessionID;
+    from: CollaborationParticipant;
+    to: CollaborationParticipant;
+    kind: "chat";
+    text: string;
+  }) => Promise<{ message: { id: string } }>;
   wakeNia: (exec: SessionExecutionState) => Promise<void>;
   scheduleInternalWake: (
     exec: SessionExecutionState,

@@ -156,6 +156,10 @@ export const RPC_ROUTE_MEMBERS = {
   // autonomous write path, validated) but had no route, so a candidate
   // could be produced by the loop and written by nothing.
   "skill.upsert": "upsertSkill",
+  // S9: the candidate gate's channel. Nothing routed could reach Nia
+  // directly (mailbox.send is the main agent's intent channel), so a CLI
+  // asking her to gate a candidate had no door.
+  "collab.send": "collabSend",
   "agent.list": "agents",
   "agent.select": "selectAgent",
   "model.catalog": "modelCatalog",
@@ -429,6 +433,7 @@ export const RPC_WRITE_METHODS: ReadonlySet<string> = new Set([
   "skill.setEnabled",
   "skill.remove",
   "skill.upsert",
+  "collab.send",
   // growth.propose journals the proposal fact (proposals are records).
   "growth.propose",
   // eval.external_run journals the join fact.
@@ -3911,6 +3916,30 @@ export async function handleRPCMessage(
           ...(optionalStringParam(body.params, "workspaceID")
             ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
             : {}),
+        }),
+      };
+    }
+    if (body.method === "collab.send") {
+      optionsGuard(client, "collabSend");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("collab.send.params must be an object");
+      const to = (params as { to?: unknown }).to;
+      if (to !== "nia" && to !== "live_chat")
+        throw invalidParams("collab.send.params.to must be nia or live_chat");
+      const text = (params as { text?: unknown }).text;
+      if (typeof text !== "string" || !text.trim())
+        throw invalidParams(
+          "collab.send.params.text must be a non-empty string",
+        );
+      const kind = (params as { kind?: unknown }).kind;
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.collabSend?.({
+          to,
+          text,
+          ...(typeof kind === "string" ? { kind } : {}),
         }),
       };
     }

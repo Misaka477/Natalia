@@ -22,6 +22,8 @@ type Surface = Pick<
   | "skillRemove"
   // S5: the landing write face (the validated boundary).
   | "upsertSkill"
+  // S9: the candidate gate's channel to a sister.
+  | "collabSend"
   | "agentCreate"
   | "agentUpdate"
   | "agentDelete"
@@ -217,6 +219,22 @@ export function createSelectionSurface(
       const services = ctx.state.serviceDirectory.getOptional(skillService);
       if (!services) throw new Error("skill service is unavailable");
       return await services.removeSkill(input.name);
+    },
+    // S9: a message to a sister. The collaboration service publishes it
+    // (journaling it) and returns her wake; the CLI's candidate gate uses
+    // this to ask Nia to run the suite and then waits for her VERDICT:.
+    async collabSend(input: { to: "nia" | "live_chat"; text: string }) {
+      await ctx.ports.getReady();
+      const sessionID = ctx.ports.getSessionID();
+      if (!sessionID) throw new Error("no active session to send from");
+      const sent = await ctx.ports.collabSend({
+        sessionID,
+        from: "main_agent",
+        to: input.to,
+        kind: "chat",
+        text: input.text,
+      });
+      return { messageID: sent.message.id };
     },
     // S5: the landing path's only write. The candidate goes to the
     // boundary (name + size + rebuilt frontmatter) and the boundary's

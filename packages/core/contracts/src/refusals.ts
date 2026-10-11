@@ -190,6 +190,10 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "the boundary validates (action whitelist + name + size + rebuilt frontmatter) and throws with the reason; nothing is written on a refusal",
   },
+  collabSend: {
+    refusal: "error",
+    note: "an unknown recipient or an empty text throws; the message itself is journaled and its wake is the reply path",
+  },
 
   // --- workspace ---
   workspaceFiles: { refusal: "none", note: "pure read of the catalog" },

@@ -344,6 +344,11 @@ export async function wireFrameworkServices(
     COLLABORATION_SERVICE,
     collaborationService,
   );
+  // S9: the candidate gate's channel. The service is owner-contributed
+  // (not in the serviceDirectory), so the port is wired here, where the
+  // service is in scope — the face calls the port.
+  ctx.ports.collabSend = async (input) =>
+    await collaborationService.send(input);
   // The settlement service: adapters (the process plugin today, the
   // terminal/subagents/team next) resolve it by name and deliver their
   // boundary notices through it — the plugin sandbox cannot reach these

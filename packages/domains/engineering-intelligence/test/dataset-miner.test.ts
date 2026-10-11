@@ -1,5 +1,85 @@
 import { expect, test } from "bun:test";
 import { contentTokens as tokens } from "../src/text-tokens";
+
+/** The same closed stopword list the rubric builder uses (measured share). */
+const STOPS = new Set([
+  "the",
+  "and",
+  "for",
+  "that",
+  "with",
+  "not",
+  "but",
+  "you",
+  "your",
+  "can",
+  "are",
+  "was",
+  "were",
+  "has",
+  "have",
+  "had",
+  "this",
+  "these",
+  "those",
+  "from",
+  "into",
+  "onto",
+  "over",
+  "under",
+  "than",
+  "then",
+  "when",
+  "what",
+  "which",
+  "who",
+  "how",
+  "why",
+  "where",
+  "there",
+  "their",
+  "them",
+  "they",
+  "will",
+  "would",
+  "should",
+  "could",
+  "may",
+  "might",
+  "must",
+  "shall",
+  "about",
+  "after",
+  "before",
+  "while",
+  "because",
+  "since",
+  "also",
+  "just",
+  "only",
+  "even",
+  "still",
+  "yet",
+  "any",
+  "all",
+  "some",
+  "each",
+  "every",
+  "out",
+  "off",
+  "own",
+  "same",
+  "too",
+  "very",
+  "much",
+  "more",
+  "most",
+  "such",
+  "here",
+  "does",
+  "done",
+  "doing",
+]);
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -500,6 +580,9 @@ test("every mined pair carries the first-pass rubric", () => {
   const { pairs, dropped } = mineSessionPairs("s1", events);
   expect(pairs).toHaveLength(1);
   expect(dropped.trivial).toBe(0);
-  // The coarse rubric is the recorded answer's own content tokens.
-  expect(pairs[0]!.expected_behavior).toBe([...tokens(answer)].join(" "));
+  // The coarse rubric is the recorded answer's own content tokens MINUS
+  // the stopwords (the measured 28% that discriminate nothing).
+  expect(pairs[0]!.expected_behavior).toBe(
+    [...tokens(answer)].filter((t) => !STOPS.has(t)).join(" "),
+  );
 });

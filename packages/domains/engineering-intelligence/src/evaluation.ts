@@ -476,17 +476,111 @@ export type KeywordJudgeReport = {
 };
 
 /**
- * W2(a)'s first pass: a coarse rubric from the recorded answer's own
- * content tokens. The plan sanctions this explicitly ("first pass 可以先用
- *记录答复抽关键词当粗量规") — the rubric's SHAPE and plumbing ship now,
- * its CONTENT is refined from real failure modes later.
+ * The words every English answer contains, which therefore discriminate
+ * nothing. MEASURED, not assumed: a real mined dataset's coarse rubrics
+ * were 28% these (14 of 50 tokens across two samples), and a rubric that
+ * is a quarter noise dilutes every score it produces — a candidate can
+ * cover a third of the criterion by saying "the" and "and".
  *
- * An empty answer has no rubric to derive, and an empty rubric is not a
- * rubric: the caller falls back to the answer itself rather than scoring
- * against nothing.
+ * The list is the common English function words; it is deliberately short
+ * and closed, because a long list starts deleting content.
+ */
+const RUBRIC_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "that",
+  "with",
+  "not",
+  "but",
+  "you",
+  "your",
+  "can",
+  "are",
+  "was",
+  "were",
+  "has",
+  "have",
+  "had",
+  "this",
+  "these",
+  "those",
+  "from",
+  "into",
+  "onto",
+  "over",
+  "under",
+  "than",
+  "then",
+  "when",
+  "what",
+  "which",
+  "who",
+  "how",
+  "why",
+  "where",
+  "there",
+  "their",
+  "them",
+  "they",
+  "will",
+  "would",
+  "should",
+  "could",
+  "may",
+  "might",
+  "must",
+  "shall",
+  "about",
+  "after",
+  "before",
+  "while",
+  "because",
+  "since",
+  "also",
+  "just",
+  "only",
+  "even",
+  "still",
+  "yet",
+  "any",
+  "all",
+  "some",
+  "each",
+  "every",
+  "out",
+  "off",
+  "own",
+  "same",
+  "too",
+  "very",
+  "much",
+  "more",
+  "most",
+  "such",
+  "here",
+  "does",
+  "done",
+  "doing",
+]);
+
+/**
+ * W2(a)'s first pass: a coarse rubric from the recorded answer's own
+ * content tokens, minus the stopwords. The plan sanctions the coarse pass
+ * explicitly ("first pass 可以先用记录答复抽关键词当粗量规") — the
+ * rubric's SHAPE and plumbing ship now, its CONTENT is refined from real
+ * failure modes later. The stopword filter is the one refinement the
+ * measurement already justifies: a token every answer contains cannot be
+ * part of "what a good answer should contain".
+ *
+ * An answer that is ALL stopwords has no rubric to derive, and an empty
+ * rubric is not a rubric: the caller falls back to the answer itself
+ * rather than scoring against nothing.
  */
 export function expectedBehaviorFrom(answer: string): string {
-  return [...contentTokens(answer)].join(" ");
+  return [...contentTokens(answer)]
+    .filter((token) => !RUBRIC_STOPWORDS.has(token))
+    .join(" ");
 }
 
 export function keywordOverlapJudge(

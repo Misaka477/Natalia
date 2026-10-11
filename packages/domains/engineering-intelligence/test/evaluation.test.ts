@@ -525,10 +525,19 @@ test("the first-pass rubric is the recorded answer's own content tokens", () => 
   // The plan's sanctioned coarse rubric: the plumbing ships now, the
   // rubric's content is refined from real failure modes later.
   // The true value was PROBED, not written from imagination (the recorded
-  // lesson: a true-value assertion is computed first). "the" survives the
-  // tokenizer's length>2 filter, so it rides along.
+  // lesson: a true-value assertion is computed first).
   expect(expectedBehaviorFrom("Record the rollback step first")).toBe(
-    "record the rollback step first",
+    "record rollback step first",
   );
+  // The stopword filter is MEASURED, not assumed: a real mined dataset's
+  // coarse rubrics were 28% function words (14 of 50 tokens), and a
+  // quarter noise dilutes every score — a candidate could cover a third of
+  // the criterion by saying "the" and "and".
+  expect(
+    expectedBehaviorFrom("the answer is that you can and should verify"),
+  ).toBe("answer verify");
   expect(expectedBehaviorFrom("")).toBe("");
+  // An answer that is ALL stopwords has no rubric — the caller falls back
+  // to the answer rather than scoring against nothing.
+  expect(expectedBehaviorFrom("the and for that with")).toBe("");
 });

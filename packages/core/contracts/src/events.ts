@@ -821,6 +821,18 @@ export type NamespacedCollabMessageEventData =
   | {
       type: "nia.collab.message";
       message: CollaborationMessage;
+    }
+  | {
+      /**
+       * S9: a verdict wake was requested for this turn. The fact makes the
+       * wake idempotent (a replay or a second submission must not wake her
+       * twice for one exchange) and replayable (the journal shows what she
+       * was asked to judge).
+       */
+      type: "verdict.requested";
+      id: string;
+      turnID: string;
+      at: string;
     };
 
 /**
@@ -3104,7 +3116,14 @@ export type RuntimeReasoningEffort =
  * `undefined` reads as `user_chat` everywhere: the UI submit path never set
  * an intent, and that path is exactly the user's own conversation.
  */
-export type ChatTurnIntent = "audit" | "detour" | "collaboration" | "user_chat";
+export type ChatTurnIntent =
+  | "audit"
+  | "detour"
+  | "collaboration"
+  | "user_chat"
+  // S9: the RLHF verdict — Nia judges the last exchange (the user's
+  // follow-up as the verdict on the previous answer).
+  | "verdict";
 export type RuntimeAgentCatalogEntry = {
   name: string;
   description: string;

@@ -73,6 +73,9 @@ export const EVENT_MODES: EventModeTable = {
   // D6a: feedback is observation — emit, never flow-stopping.
   feedback: "emit",
   collab: "emit",
+  // S9: the verdict wake's fact — observation like feedback (it records
+  // what she was asked to judge; it never stops a flow).
+  verdict: "emit",
   compaction: "emit",
   completion: "emit",
   constitution: "emit",

@@ -265,6 +265,19 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
    * trigger or the restart recovery scan, and a caller that says nothing gets
    * the behavior it always had.
    */
+  /**
+   * Each intent speaks its own sentence. One audit-framed sentence for
+   * every intent is what made a collaboration message arrive as an audit;
+   * the verdict intent is the third voice, and it says what to judge.
+   */
+  function wakeTextFor(intent: ChatTurnIntent): string {
+    if (intent === "collaboration")
+      return "(internal collaboration wake: Natalia sent you a collaboration message. Read the latest collaboration context and answer it with collab_chat using its exact messageID. This is not a user message and not an audit.)";
+    if (intent === "verdict")
+      return "(internal verdict wake: the user has replied after your elder sister's last answer. Read that exchange with session_history, judge whether her answer was what the user wanted, and send your judgment through collab_chat opening with VERDICT: on its own line, then turn: <the turnID>, judgment: <good|bad|mixed>, reasons: <the concrete evidence>. The user's own words are the ground truth; your reading is the independent layer. This is not a user message and not a plan audit.)";
+    return "(internal collaboration wake: read the latest collaboration context and respond according to the Nia audit rules. This is not a user message.)";
+  }
+
   function requestNiaWake(
     exec: SessionExecutionState,
     intent: ChatTurnIntent = "audit",
@@ -293,10 +306,7 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
         // the audit rules, a collaboration wake answers the sister message.
         // One audit-framed sentence for every intent is what made a
         // collaboration message arrive as an audit.
-        text:
-          intent === "collaboration"
-            ? "(internal collaboration wake: Natalia sent you a collaboration message. Read the latest collaboration context and answer it with collab_chat using its exact messageID. This is not a user message and not an audit.)"
-            : "(internal collaboration wake: read the latest collaboration context and respond according to the Nia audit rules. This is not a user message.)",
+        text: wakeTextFor(intent),
       });
       return;
     }

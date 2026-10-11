@@ -2,12 +2,14 @@ import { expect, test } from "bun:test";
 import {
   EVALUATION_PROTOCOL,
   acceptCandidate,
+  answerAgreement,
   checkGrowth,
   compositeFitness,
   createEvaluationFace,
   evaluateBaseline,
   keywordOverlapJudge,
   lengthPenalty,
+  meanStability,
   samplesFromPairs,
   scoreUnderProtocol,
   type EvaluationSample,
@@ -390,4 +392,33 @@ test("the protocol is one score function: the same text, the same number, either
 
 test("the protocol's id is stamped so a run says which yardstick it used", () => {
   expect(EVALUATION_PROTOCOL).toBe("keyword-overlap/v1");
+});
+
+test("the stability dimension sees what keyword overlap cannot: phrasing sensitivity", () => {
+  // W2: two phrasings of one task share no keywords with each other, so
+  // the cheap judge cannot tell a candidate that answers the TASK from
+  // one that pattern-matches the PHRASING. Agreement does.
+  const grounded = answerAgreement(
+    "the retry helper pins the clock so the test passes on every run",
+    "pinning the clock in the retry helper makes the test pass every run",
+  );
+  const phrasingMatched = answerAgreement(
+    "the retry helper pins the clock so the test passes on every run",
+    "a sourdough poolish gives an open crumb and a blistered crust",
+  );
+  expect(grounded).toBeGreaterThan(0.3);
+  expect(phrasingMatched).toBe(0);
+  // Symmetric, and the degenerate cases are defined rather than NaN.
+  expect(answerAgreement("a b c", "c b a")).toBe(1);
+  expect(answerAgreement("", "")).toBe(1);
+  expect(answerAgreement("something", "")).toBe(0);
+  // The mean over a run is undefined when nothing was observed — a report
+  // must not invent a stability number.
+  expect(meanStability([])).toBeUndefined();
+  expect(
+    meanStability([
+      { sampleID: "a", agreement: 1 },
+      { sampleID: "b", agreement: 0.5 },
+    ]),
+  ).toBe(0.75);
 });

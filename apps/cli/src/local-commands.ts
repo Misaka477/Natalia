@@ -13,9 +13,11 @@ import {
   updateProgram,
 } from "@natalia/installer";
 import {
+  answerAgreement,
   assembleResult,
   beatsFloor,
   bestMember,
+  meanStability,
   synthesizeCapabilityBenchmark,
   escalationAdvice,
   plasticityIndex,
@@ -884,6 +886,15 @@ export async function handleLocalCommands(argv: string[]) {
             "merge-every",
           );
           const outOverride = valueAfter(argv, "--out");
+          // W2's stability half: each visible sample runs TWICE — once as
+          // written, once under a rewording the daemon produces — and the
+          // two answers' agreement becomes a reported dimension. This is
+          // the one signal keyword overlap cannot fake (two phrasings of
+          // one task share no keywords with each other), and it is new
+          // data collection rather than a re-reading of old scores.
+          const stability = argv.includes("--stability");
+          const stabilityRows: Array<{ sampleID: string; agreement: number }> =
+            [];
           // The visible pool is bounded by the flag (each sample costs a
           // turn per candidate); the sealed holdout runs in full — it is
           // the whole point of sealing it.
@@ -902,11 +913,25 @@ export async function handleLocalCommands(argv: string[]) {
             // the same function the BestOfN floor is measured by.
             const answers: string[] = [];
             for (const sample of [...visible, ...sealed]) {
-              answers.push(
-                await sampleTurn(
-                  `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
-                ),
+              const answer = await sampleTurn(
+                `${sample.input}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
               );
+              answers.push(answer);
+              if (!stability || sample.id.startsWith("holdout:")) continue;
+              // The reworded run: the daemon paraphrases the task, the same
+              // instruction answers it, and the agreement between the two
+              // answers is the stability observation. The holdout never
+              // runs twice — it is scored once, and that is all.
+              const reworded = await sampleTurn(
+                `Reword the following task, keeping its meaning exactly. Answer with ONLY the reworded task.\n\n${sample.input}`,
+              );
+              const variant = await sampleTurn(
+                `${reworded}\n\nFollow this instruction:\n${instruction}\n\nProduce the answer.`,
+              );
+              stabilityRows.push({
+                sampleID: sample.id,
+                agreement: answerAgreement(answer, variant),
+              });
             }
             return scoreUnderProtocol({
               outputs: answers,
@@ -1244,6 +1269,16 @@ export async function handleLocalCommands(argv: string[]) {
               : null,
             beatBaseline: gate.ok,
             gateReason: gate.reason,
+            // W2: the reported stability dimension (not a composite term —
+            // the weights wait for this very data).
+            ...(stability
+              ? {
+                  stability: {
+                    mean: meanStability(stabilityRows),
+                    observations: stabilityRows,
+                  },
+                }
+              : {}),
             // W8: the ladder's rung, when there is one.
             ...(escalation.step
               ? {

@@ -609,3 +609,55 @@ export function scoreUnderProtocol(input: {
         });
   return assembleResult({ judged, sizes: size });
 }
+
+/**
+ * W2's stability dimension: how much the answer MOVES when the task is
+ * reworded.
+ *
+ * The reference design's adversarial-consistency check — the same query
+ * under k semantic variants, and high variance means the candidate is
+ * "cognitively blurred": it is not answering the task, it is pattern-
+ * matching the phrasing. Keyword overlap cannot see this at all (two
+ * phrasings of one task share no keywords with each other), which makes
+ * it the one dimension the cheap judge genuinely cannot fake.
+ *
+ * It rides as a REPORTED dimension, not a composite term: the weights
+ * (0.5/0.3/0.2) are the reference formula's, and re-weighting them is a
+ * tuning decision that waits for a real score distribution. Reporting it
+ * now means the data exists when that decision is made.
+ */
+export type StabilityObservation = {
+  /** The sample this observation belongs to. */
+  sampleID: string;
+  /** Agreement in [0, 1] between the original and the reworded answer. */
+  agreement: number;
+};
+
+/**
+ * Two answers' agreement: the Jaccard overlap of their content tokens.
+ *
+ * Pure, so the dimension is a unit test. Identical answers agree at 1;
+ * disjoint ones at 0; and the value is symmetric, which a "same task,
+ * two phrasings" comparison needs.
+ */
+export function answerAgreement(left: string, right: string): number {
+  const leftTokens = contentTokens(left);
+  const rightTokens = contentTokens(right);
+  if (!leftTokens.size && !rightTokens.size) return 1;
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let shared = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) shared += 1;
+  const union = leftTokens.size + rightTokens.size - shared;
+  return union > 0 ? shared / union : 0;
+}
+
+/** The mean agreement over a run's observations (the report's number). */
+export function meanStability(
+  observations: readonly StabilityObservation[],
+): number | undefined {
+  if (!observations.length) return undefined;
+  return (
+    observations.reduce((sum, row) => sum + row.agreement, 0) /
+    observations.length
+  );
+}

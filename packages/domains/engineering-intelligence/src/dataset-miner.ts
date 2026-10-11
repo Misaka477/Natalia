@@ -117,6 +117,12 @@ export type DatasetPair = {
   task: string;
   /** The assistant's confirmed text for this turn (bounded). */
   response: string;
+  /**
+   * The human's rating on THIS answer, as `up`/`down` with their note —
+   * the direction signal the mutator reads. Absent when nobody rated it
+   * (the common case); a retracted rating leaves it absent too.
+   */
+  feedback?: string;
 };
 
 export type DatasetDropCounts = {
@@ -143,12 +149,75 @@ export type MinedDataset = {
  * Mine one session's journal into pairs. Pure over the event list: the
  * caller owns the read, the miner owns the fold.
  */
+/** One human rating as the reflection dataset reads it. */
+export type FeedbackIndexEntry = {
+  verdict: "up" | "down";
+  note?: string;
+};
+
+/**
+ * The session's human feedback, folded from its own events.
+ *
+ * A `feedback.recorded` event indexes its message; a `feedback.retracted`
+ * event removes the record it names (the journal is append-only, so the
+ * withdrawal is its own fact and the index follows it). The result is what
+ * a pair's `feedback` field carries: the human's own words about that
+ * answer — the direction signal the mutator reads, which until now was
+ * collected, journaled, projected, and then read by nobody.
+ */
+export function foldFeedbackIndex(
+  events: readonly RuntimeEvent[],
+): Map<string, FeedbackIndexEntry> {
+  const byMessage = new Map<string, FeedbackIndexEntry>();
+  const recordToMessage = new Map<string, string>();
+  for (const event of events) {
+    if (event.type === "feedback.recorded") {
+      const messageID = (event as { messageID?: string }).messageID;
+      if (!messageID) continue;
+      const verdict = (event as { verdict?: "up" | "down" }).verdict;
+      if (verdict !== "up" && verdict !== "down") continue;
+      const note = (event as { note?: string }).note;
+      byMessage.set(messageID, {
+        verdict,
+        ...(note ? { note } : {}),
+      });
+      recordToMessage.set((event as { id?: string }).id ?? "", messageID);
+      continue;
+    }
+    if (event.type === "feedback.retracted") {
+      const messageID = recordToMessage.get(
+        (event as { recordID?: string }).recordID ?? "",
+      );
+      if (messageID) byMessage.delete(messageID);
+    }
+  }
+  return byMessage;
+}
+
+/**
+ * The feedback that belongs to one turn: the rating on the turn's own
+ * assistant message. Message ids are `<turnID>:assistant` (the transcript's
+ * convention), so the match is the turn's own block — never another
+ * turn's, and never the session's latest.
+ */
+function feedbackForTurn(
+  index: ReadonlyMap<string, FeedbackIndexEntry>,
+  turnID: string,
+): string | undefined {
+  for (const [messageID, entry] of index) {
+    if (messageID !== turnID && !messageID.startsWith(`${turnID}:`)) continue;
+    return entry.note ? `${entry.verdict}: ${entry.note}` : entry.verdict;
+  }
+  return undefined;
+}
+
 export function mineSessionPairs(
   sessionID: string,
   events: readonly RuntimeEvent[],
 ): { pairs: DatasetPair[]; dropped: DatasetDropCounts } {
   const pairs: DatasetPair[] = [];
   const dropped: DatasetDropCounts = { secrets: 0, empty: 0, internal: 0 };
+  const feedback = foldFeedbackIndex(events);
   for (const window of segmentTurns(events)) {
     const submitted = window.submitted;
     if (!submitted) {
@@ -184,6 +253,11 @@ export function mineSessionPairs(
       turnID: window.turnID,
       task,
       response,
+      // The human's judgment on THIS answer, when they gave one: the
+      // reflection dataset's Feedback field finally has a source.
+      ...(feedbackForTurn(feedback, window.turnID)
+        ? { feedback: feedbackForTurn(feedback, window.turnID) }
+        : {}),
     });
   }
   return { pairs, dropped };
@@ -245,6 +319,7 @@ export function datasetSplitLines(pairs: readonly DatasetPair[]): string {
         turnID: pair.turnID,
         task: pair.task,
         response: pair.response,
+        ...(pair.feedback ? { feedback: pair.feedback } : {}),
       }),
     )
     .join("\n")

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   evolutionStateDir,
+  parentDiff,
   parseCandidateMetadata,
   parseFrontier,
   parseSummary,
@@ -112,4 +113,55 @@ test("the state dir refuses an escaping target before anything is written", () =
   expect(evolutionStateDir("/ws", "release-skill")).toBe(
     "/ws/.natalia/evolution/release-skill",
   );
+});
+
+test("the summary line carries what changed and under what conditions", async () => {
+  // S7: a score without its diff is a number nobody can learn from, and a
+  // history that mixes incomparable conditions manufactures false trends.
+  const line = summaryLine({
+    iteration: 2,
+    name: "iter2_exploration",
+    score: 0.6123,
+    axis: "exploration",
+    hypothesis: "fusing the two mechanisms beats either alone",
+    delta: 0.0412,
+    outcome: "accepted",
+    components: ["instruction"],
+    parentDiff: "--- parent\n+++ candidate\n@@ -1 +1 @@\n-old\n+new",
+    provenance: "round=2 judge=keyword dataset=release-skill@sha-abc",
+  });
+  const [parsed] = parseSummary(line);
+  expect(parsed.parentDiff).toContain("-old");
+  expect(parsed.parentDiff).toContain("+new");
+  expect(parsed.provenance).toContain("judge=keyword");
+  expect(parsed.provenance).toContain("dataset=release-skill@sha-abc");
+  // A line without them stays absent (not empty strings).
+  const [bare] = parseSummary(
+    summaryLine({
+      iteration: 1,
+      name: "iter1",
+      score: 0.5,
+      axis: "exploitation",
+      hypothesis: "h",
+      delta: 0,
+      outcome: "accepted",
+      components: ["instruction"],
+    }),
+  );
+  expect(bare.parentDiff).toBeUndefined();
+  expect(bare.provenance).toBeUndefined();
+});
+
+test("parentDiff produces a real patch through the maintained differ", async () => {
+  const diff = await parentDiff(
+    "Answer directly.",
+    "Answer directly, then record the rollback step.",
+  );
+  expect(diff.additions).toBeGreaterThan(0);
+  expect(diff.deletions).toBeGreaterThanOrEqual(0);
+  expect(diff.patch).toContain("record the rollback step");
+  // Identical texts produce no change.
+  const same = await parentDiff("same", "same");
+  expect(same.additions).toBe(0);
+  expect(same.deletions).toBe(0);
 });

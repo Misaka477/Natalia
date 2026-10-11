@@ -408,6 +408,7 @@ export function samplesFromPairs(
     id: `${splitOf(pair)}:${pair.sessionID}:${pair.turnID}`,
     input: pair.task,
     output: pair.response,
+    ...(pair.feedback ? { feedback: pair.feedback } : {}),
   }));
 }
 

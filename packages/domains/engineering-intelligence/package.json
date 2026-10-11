@@ -9,16 +9,17 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/diff-wasm": "workspace:*",
+    "@anthelia/platform": "workspace:*",
     "@anthelia/runtime": "workspace:*",
+    "@anthelia/runtime-services": "workspace:*",
     "@anthelia/session": "workspace:*",
     "@anthelia/session-store": "workspace:*",
     "@anthelia/substrate": "workspace:*",
     "@anthelia/workspace": "workspace:*",
     "@natalia/collab": "workspace:*",
-    "@anthelia/contracts": "workspace:*",
     "@natalia/governance-ledger": "workspace:*",
-    "@anthelia/platform": "workspace:*",
-    "@anthelia/runtime-services": "workspace:*",
     "@natalia/work-ledger": "workspace:*"
   }
 }

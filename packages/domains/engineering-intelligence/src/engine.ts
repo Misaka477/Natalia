@@ -49,6 +49,17 @@ export type PopulationMember = {
   isViable: boolean;
   /** How many children this member has already produced (novelty's input). */
   children: number;
+  /**
+   * The population's SEED — the baseline the loop was started from. The
+   * reference evolver's `exclude_untrainable` gates the POPULATION's
+   * parents; it is not a rule that the seed may not breed. A baseline whose
+   * answers already match the recorded responses (the same model on the
+   * same task makes that likely) carries no trainable failure case, and
+   * under a blanket viability gate the loop could not take its first step.
+   * The exemption is the seed's alone and is never inherited: a mutated
+   * child with nothing to learn from still may not parent.
+   */
+  seed?: boolean;
   lineage: {
     parent?: string;
     additionalParents?: string[];
@@ -90,13 +101,19 @@ export function scoreMidpoint(population: Population): number {
  * One member's parenting weight: zero when it may not parent at all
  * (unviable, or no trainable failure case), otherwise
  * `sigmoid(sharpness × (score − midpoint)) × 1/(1 + novelty × children)`.
+ *
+ * The seed is exempt from the viability gate only — it keeps the score and
+ * novelty weights like any member, so a strong population still outbreeds
+ * it. Everything else about the gate stands: a mutated member with no
+ * trainable failure case cannot parent.
  */
 export function parentWeight(
   member: PopulationMember,
   population: Population,
   options: { midpoint?: number } = {},
 ): number {
-  if (!member.isViable || member.trainableFailures === 0) return 0;
+  if (!member.seed && (!member.isViable || member.trainableFailures === 0))
+    return 0;
   const midpoint = options.midpoint ?? scoreMidpoint(population);
   const sharp =
     1 / (1 + Math.exp(-PARENT_SHARPNESS * (member.score - midpoint)));
@@ -386,7 +403,8 @@ export async function runRound(input: {
         population: opening,
         added: [],
         stopped:
-          "no member may parent (every candidate is unviable or has no trainable failure case)",
+          "no member may parent (every candidate is unviable or has no trainable failure case) — " +
+          "the dataset is too easy for the current judge: mine harder samples or switch to a stronger judge",
       };
     parents.push(parent);
   }

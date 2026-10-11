@@ -18,18 +18,24 @@ import {
   bestMember,
   type Population,
   evaluateBaseline,
+  evolutionStateDir,
   groupRunsByPrompt,
   keywordOverlapJudge,
   mineSessionPairs,
+  parentDiff,
   proposeReflective,
   readDataset,
+  renderFrontier,
+  renderTaskFile,
   runBestOfN,
   runRound,
   samplesFromPairs,
   scoreRun,
   segmentTurns,
   splitForPair,
+  summaryLine,
   writeDataset,
+  type TriedCandidate,
 } from "@natalia/engineering-intelligence";
 import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
@@ -41,6 +47,8 @@ import {
   createRecordedFetch,
   readCassette,
 } from "@natalia/transport";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join as joinPath } from "node:path";
 import {
   deleteLocalSession,
   duplicateLocalSession,
@@ -715,6 +723,63 @@ export async function handleLocalCommands(argv: string[]) {
             process.exit(1);
           }
           const results = new Map([["baseline", baselineResult]]);
+          // S7: the loop's memory. The summary accumulates one line per
+          // evaluated candidate (with its parent diff and the conditions
+          // it was measured under), the frontier carries the best and the
+          // per-example ownership, and the tried-list is what the NEXT
+          // round's proposer reads — without it the mutator is amnesiac
+          // and the cheapest way to waste an evaluation is to re-run a
+          // hypothesis that already lost.
+          const runDir = evolutionStateDir(
+            optimizeRoot,
+            `runs/${target}-${Date.now()}`,
+          );
+          const summaryLines: string[] = [];
+          const tried: TriedCandidate[] = [];
+          const provenance = `judge=keyword dataset=${target}`;
+          const writeRunState = async () => {
+            await mkdir(runDir, { recursive: true });
+            await writeFile(
+              joinPath(runDir, "task.md"),
+              renderTaskFile({
+                objective: `evolve the instruction for ${target}`,
+                background:
+                  "reflective engine: parent selection -> reflection -> a real run per sample -> atomic join",
+                evaluationModel:
+                  "keyword overlap against the recorded responses; procedure and conciseness UNJUDGED",
+              }),
+            );
+            await writeFile(
+              joinPath(runDir, "evolution_summary.jsonl"),
+              summaryLines.join("\n").concat(summaryLines.length ? "\n" : ""),
+            );
+            await writeFile(
+              joinPath(runDir, "frontier.json"),
+              renderFrontier({
+                best: bestMember(population)
+                  ? {
+                      name: bestMember(population)!.id,
+                      score: bestMember(population)!.score,
+                    }
+                  : null,
+                perExample: Object.fromEntries(
+                  bestMember(population)
+                    ? Object.entries(bestMember(population)!.perExample).map(
+                        ([sampleID, score]) => [
+                          sampleID,
+                          { name: bestMember(population)!.id, score },
+                        ],
+                      )
+                    : [],
+                ),
+              }),
+            );
+            for (const member of population.members)
+              await writeFile(
+                joinPath(runDir, "agents", `${member.id}.txt`),
+                member.components.instruction ?? "",
+              );
+          };
           let population: Population = {
             members: [
               {
@@ -725,6 +790,11 @@ export async function handleLocalCommands(argv: string[]) {
                 trainableFailures: baselineResult.trainableFailureCases.length,
                 isViable: baselineResult.isViable,
                 children: 0,
+                // The seed: exempt from the viability gate so a baseline
+                // that already matches the recorded answers (no trainable
+                // failure case) can still take the loop's first step. The
+                // exemption is never inherited.
+                seed: true,
                 lineage: {},
               },
             ],
@@ -744,6 +814,9 @@ export async function handleLocalCommands(argv: string[]) {
                       currentParam: parent.components.instruction!,
                       result: parentResult,
                       pool: visible,
+                      // The memory: what has been tried and how it ended,
+                      // so this round does not re-run a lost hypothesis.
+                      history: tried,
                       sampler: async ({ prompt }) => await sampleTurn(prompt),
                     });
                     if (!proposal.ok)
@@ -780,6 +853,43 @@ export async function handleLocalCommands(argv: string[]) {
             }
             population = outcome.population;
             stopped = outcome.stopped;
+            // The record: each added member's diff against its parent, the
+            // conditions it was measured under, and its place in the
+            // tried-list the next proposer reads.
+            for (const member of outcome.added) {
+              const parent = population.members.find(
+                (candidate) => candidate.id === member.lineage.parent,
+              );
+              const diff = parent
+                ? await parentDiff(
+                    parent.components.instruction ?? "",
+                    member.components.instruction ?? "",
+                  )
+                : undefined;
+              summaryLines.push(
+                summaryLine({
+                  iteration: round,
+                  name: member.id,
+                  score: member.score,
+                  axis: member.axis ?? "exploitation",
+                  hypothesis: member.hypothesis ?? "(unstated)",
+                  delta: parent ? member.score - parent.score : 0,
+                  outcome:
+                    member.score > (parent?.score ?? 0)
+                      ? "accepted"
+                      : "rejected",
+                  components: Object.keys(member.components),
+                  ...(diff ? { parentDiff: diff.patch } : {}),
+                  provenance,
+                }),
+              );
+              tried.push({
+                hypothesis: member.hypothesis ?? "(unstated)",
+                outcome: member.learningLog?.observedOutcome ?? "(unobserved)",
+                ...(member.axis ? { axis: member.axis } : {}),
+              });
+            }
+            await writeRunState();
           }
           const best = bestMember(population);
           const gate = beatsFloor({
@@ -792,6 +902,9 @@ export async function handleLocalCommands(argv: string[]) {
             rounds,
             samples: visible.length,
             holdoutSamples: sealed.length,
+            // Where the loop's memory lives: the summary, the frontier and
+            // every candidate's body, readable after the run.
+            runDir,
             baseline: {
               instruction: baselineInstruction,
               score: baselineResult.score,
@@ -824,6 +937,7 @@ export async function handleLocalCommands(argv: string[]) {
               ? JSON.stringify(report, null, 2)
               : [
                   `reflective on ${target}: ${rounds} round(s) × ${visible.length} sample(s) (+${sealed.length} sealed)`,
+                  `memory: ${runDir}`,
                   `baseline: ${baselineResult.score.toFixed(4)} (${baselineResult.trainableFailureCases.length} trainable failures)`,
                   ...population.members.map(
                     (member) =>

@@ -209,6 +209,20 @@ export type ReflectionSampler = (input: {
 }) => Promise<string>;
 
 /**
+ * What the loop has already tried, as the proposer reads it. Without this
+ * the mutator is amnesiac: it sees the parent and the failures, not the
+ * graveyard of hypotheses that already scored worse — and the cheapest
+ * way to waste an evaluation is to re-run one. The reference harness's
+ * evolution summary exists for exactly this reader.
+ */
+export type TriedCandidate = {
+  hypothesis: string;
+  /** The observed outcome, in the learning log's words. */
+  outcome: string;
+  axis?: CandidateAxis;
+};
+
+/**
  * Propose one reflective candidate for ONE component.
  *
  * The round structure is the reference engine's: the proposer produces
@@ -227,6 +241,8 @@ export async function proposeReflective(input: {
   pool: readonly EvaluationSample[];
   sampler: ReflectionSampler;
   template?: string;
+  /** What has already been tried (the loop's memory), read by the prompt. */
+  history?: readonly TriedCandidate[];
 }): Promise<
   | {
       ok: true;
@@ -255,6 +271,21 @@ export async function proposeReflective(input: {
   // later validator loses to a deadline. The no-delegation rule is here
   // too: constraints get lost when they are summarized for a subagent, so
   // the mutator does the work itself.
+  // The memory, rendered into the prompt: what has been tried and how it
+  // turned out. This is the reader that makes the run's record a record
+  // rather than a log — a field nobody reads is a field that never
+  // influenced a decision.
+  const triedBlock = (input.history ?? []).length
+    ? [
+        "What has already been tried on this artifact (do not repeat a",
+        "hypothesis that already lost; build on what won):",
+        ...(input.history ?? []).map(
+          (entry) =>
+            `- [${entry.axis ?? "unlabeled"}] ${entry.hypothesis} — ${entry.outcome}`,
+        ),
+        "",
+      ]
+    : [];
   const prompt = [
     "You are optimizing ONE component of an artifact. Obey these constraints:",
     ...MUTATOR_CONSTRAINTS.map((rule) => `- ${rule}`),
@@ -264,6 +295,7 @@ export async function proposeReflective(input: {
     "hypothesis: <the falsifiable claim this candidate would make true>",
     "axis: <exploitation|exploration>",
     "",
+    ...triedBlock,
     renderReflectionPrompt({
       ...(input.template ? { template: input.template } : {}),
       currentParam: input.currentParam,

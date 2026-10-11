@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
+import { samplesFromPairs } from "../src/evaluation";
 import {
   DATASET_RESPONSE_LIMIT,
   DATASET_TASK_LIMIT,
@@ -11,6 +12,7 @@ import {
   findSecrets,
   looksSecret,
   mineSessionPairs,
+  readDataset,
   readDatasetSplit,
   redactSecrets,
   splitDataset,
@@ -267,6 +269,113 @@ test("an empty dataset still writes its three files (an empty holdout is a fact)
       expect(await readFile(join(written.dir, `${split}.jsonl`), "utf8")).toBe(
         "",
       );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a human rating rides its own turn's pair; a retraction takes it back", () => {
+  // S1: the feedback entry's left half (events, fold, UI, vault) and right
+  // half (the reflection dataset's Feedback field) both existed; the join
+  // was the missing wire. The human's words about THIS answer are what the
+  // mutator reads for direction.
+  const events = [
+    ...turn(
+      "s1",
+      "turn_a",
+      "why is the build red",
+      "the guard counts a new module",
+    ),
+    ...turn("s1", "turn_b", "rotate the key", "done"),
+    {
+      type: "feedback.recorded",
+      id: "fb_1",
+      at: "2026-10-12T00:00:00.000Z",
+      scope: "message",
+      messageID: "turn_a:assistant",
+      verdict: "down",
+      note: "you skipped the rollback step",
+    } as unknown as RuntimeEvent,
+  ];
+  const { pairs } = mineSessionPairs("s1", events);
+  expect(pairs.find((pair) => pair.turnID === "turn_a")!.feedback).toBe(
+    "down: you skipped the rollback step",
+  );
+  // An unrated turn stays absent (the common case).
+  expect(
+    pairs.find((pair) => pair.turnID === "turn_b")!.feedback,
+  ).toBeUndefined();
+
+  // A retraction removes it — the index follows the journal, not the UI.
+  const withdrawn = mineSessionPairs("s1", [
+    ...events,
+    {
+      type: "feedback.retracted",
+      id: "fbr_1",
+      at: "2026-10-12T00:01:00.000Z",
+      recordID: "fb_1",
+      scope: "message",
+      messageID: "turn_a:assistant",
+      verdict: "down",
+    } as unknown as RuntimeEvent,
+  ]);
+  expect(
+    withdrawn.pairs.find((pair) => pair.turnID === "turn_a")!.feedback,
+  ).toBeUndefined();
+});
+
+test("a rating on another message never rides this turn's pair", () => {
+  const { pairs } = mineSessionPairs("s1", [
+    ...turn(
+      "s1",
+      "turn_a",
+      "why is the build red",
+      "the guard counts a new module",
+    ),
+    {
+      type: "feedback.recorded",
+      id: "fb_1",
+      at: "2026-10-12T00:00:00.000Z",
+      scope: "session",
+      verdict: "up",
+      note: "session was fine",
+    } as unknown as RuntimeEvent,
+  ]);
+  expect(pairs[0]!.feedback).toBeUndefined();
+});
+
+test("the round trip keeps the feedback (a dataset read back still steers)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-dataset-feedback-"));
+  try {
+    await writeDataset({
+      workspaceRoot: root,
+      target: "feedback-rt",
+      pairs: [
+        {
+          // turn_2 hashes to the train split (the split is identity-keyed,
+          // so the round trip reads back from the split it landed in).
+          sessionID: "s1",
+          turnID: "turn_2",
+          task: "t",
+          response: "r",
+          feedback: "down: skipped the rollback",
+        },
+      ],
+    });
+    // The split is hash-decided, so read the one that holds it.
+    const split = splitForPair({
+      sessionID: "s1",
+      turnID: "turn_2",
+      task: "t",
+      response: "r",
+    });
+    const back = await readDatasetSplit(root, "feedback-rt", split);
+    const all = await readDataset(root, "feedback-rt");
+    expect(back[0]!.feedback).toBe("down: skipped the rollback");
+    expect(all!.visible[0]!.feedback).toBe("down: skipped the rollback");
+    // And it reaches the sample the mutator reads.
+    const [sample] = samplesFromPairs(all!.visible, () => "train" as const);
+    expect(sample!.feedback).toBe("down: skipped the rollback");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

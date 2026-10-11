@@ -37,6 +37,7 @@ const member = (
     trainableFailures?: number;
     isViable?: boolean;
     children?: number;
+    seed?: boolean;
     parent?: string;
     additionalParents?: string[];
     components?: Record<string, string>;
@@ -49,6 +50,7 @@ const member = (
   trainableFailures: input.trainableFailures ?? 1,
   isViable: input.isViable ?? true,
   children: input.children ?? 0,
+  ...(input.seed ? { seed: true } : {}),
   lineage: {
     ...(input.parent ? { parent: input.parent } : {}),
     ...(input.additionalParents
@@ -341,4 +343,86 @@ test("the phase gate: a generation must strictly beat the BestOfN floor", () => 
       members: [member("low", { score: 0.2 }), member("high", { score: 0.9 })],
     })!.id,
   ).toBe("high");
+});
+
+test("the seed breeds even with nothing to learn from; its children do not inherit that", () => {
+  // W11: the reference evolver's exclude_untrainable gates the POPULATION's
+  // parents — it is not a rule that the seed may not breed. A baseline
+  // whose answers already match the recorded ones (the same model on the
+  // same task makes that likely) carries no trainable failure case, and a
+  // blanket viability gate stops the loop before its first round.
+  const barrenBaseline = member("baseline", {
+    score: 0.9,
+    trainableFailures: 0,
+    isViable: false,
+    seed: true,
+  });
+  expect(
+    parentWeight(barrenBaseline, { members: [barrenBaseline] }),
+  ).toBeGreaterThan(0);
+  expect(
+    selectParent({ members: [barrenBaseline] }, scriptedRandom([0.5]))?.id,
+  ).toBe("baseline");
+
+  // The exemption is the seed's alone: a mutated child that also came back
+  // empty still may not parent, so the loop still terminates honestly.
+  const barrenChild = member("child", {
+    trainableFailures: 0,
+    isViable: false,
+  });
+  expect(
+    selectParent(
+      { members: [barrenBaseline, barrenChild] },
+      scriptedRandom([0.99]),
+    )?.id,
+  ).toBe("baseline");
+  expect(
+    selectParent({ members: [barrenChild] }, scriptedRandom([0.5])),
+  ).toBeUndefined();
+});
+
+test("a round started from a barren seed still runs, and the stop reason is actionable", async () => {
+  const barrenSeed = member("baseline", {
+    score: 0.9,
+    trainableFailures: 0,
+    isViable: false,
+    seed: true,
+  });
+  const result = await runRound({
+    population: { members: [barrenSeed] },
+    random: scriptedRandom([0.5]),
+    hooks: {
+      propose: async (parent) => ({
+        id: "child-1",
+        components: { body: "a real mutation" },
+      }),
+      evaluate: async () => ({
+        score: 0.91,
+        perExample: {},
+        trainableFailures: 1,
+        isViable: true,
+      }),
+    },
+  });
+  expect(result.added).toHaveLength(1);
+  expect(result.added[0]!.id).toBe("child-1");
+  // The child is NOT a seed: the exemption died with the generation.
+  expect(result.population.members[1]!.seed).toBeUndefined();
+
+  // A population with no seed and nothing trainable stops with the
+  // actionable reason, not a bare fact.
+  const stopped = await runRound({
+    population: { members: [member("barren", { trainableFailures: 0 })] },
+    random: scriptedRandom([0.5]),
+    hooks: {
+      propose: async () => ({ id: "never", components: {} }),
+      evaluate: async () => ({
+        score: 1,
+        perExample: {},
+        trainableFailures: 0,
+        isViable: false,
+      }),
+    },
+  });
+  expect(stopped.stopped).toContain("too easy for the current judge");
 });

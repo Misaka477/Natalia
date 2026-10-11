@@ -44,6 +44,19 @@ export type EvolutionSummaryEntry = {
   delta: number;
   outcome: "accepted" | "rejected";
   components: string[];
+  /**
+   * The unified diff against this candidate's PARENT — "what actually
+   * changed", readable without re-deriving it from two artifacts. A score
+   * without its diff is a number nobody can learn from.
+   */
+  parentDiff?: string;
+  /**
+   * The conditions this score was measured under: the round, the judge,
+   * the dataset. Two scores measured under different conditions are not
+   * comparable, and a history that quietly mixes them is worse than no
+   * history — it manufactures false trends.
+   */
+  provenance?: string;
 };
 
 export function renderTaskFile(task: EvolutionTask): string {
@@ -70,6 +83,8 @@ export function summaryLine(entry: EvolutionSummaryEntry): string {
     delta: entry.delta,
     outcome: entry.outcome,
     components: entry.components,
+    ...(entry.parentDiff === undefined ? {} : { parentDiff: entry.parentDiff }),
+    ...(entry.provenance === undefined ? {} : { provenance: entry.provenance }),
   });
 }
 
@@ -143,4 +158,23 @@ export function evolutionStateDir(
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(target))
     throw new Error(`invalid evolution target: ${target}`);
   return `${workspaceRoot}/.natalia/evolution/${target}`;
+}
+
+/**
+ * The diff against the parent, through the maintained differ (never a
+ * hand-rolled one): the summary line's "what changed" field. Returns the
+ * patch plus the line counts, so a reader sees the size of the change
+ * before opening it.
+ */
+export async function parentDiff(
+  parentText: string,
+  candidateText: string,
+): Promise<{ patch: string; additions: number; deletions: number }> {
+  const { diffWasm } = await import("@anthelia/diff-wasm");
+  const result = await diffWasm(parentText, candidateText);
+  return {
+    patch: result.patch ?? "",
+    additions: result.additions,
+    deletions: result.deletions,
+  };
 }

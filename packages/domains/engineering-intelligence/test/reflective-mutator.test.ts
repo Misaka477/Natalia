@@ -218,3 +218,46 @@ test("the constraints ride the prompt the mutator actually sends", () => {
   for (const rule of MUTATOR_CONSTRAINTS) expect(composed).toContain(rule);
   expect(composed).toContain("do NOT delegate");
 });
+
+test("the proposer reads what has been tried — the amnesia fix", () => {
+  // S7: without the history the mutator sees the parent and the failures
+  // but not the graveyard of hypotheses that already lost — and the
+  // cheapest way to waste an evaluation is to re-run one.
+  const build = (
+    history?: Parameters<typeof proposeReflective>[0]["history"],
+  ) =>
+    proposeReflective({
+      components: ["instruction"],
+      currentParam: "the current body",
+      result: result([failure("train:a", "missed the rollback step")]),
+      pool: [sample("train:a")],
+      history,
+      sampler: async () =>
+        "```\nnew text\n```\nhypothesis: h\naxis: exploration",
+    });
+  return Promise.all([
+    build(undefined),
+    build([
+      {
+        hypothesis:
+          "naming the rollback step prevents the forgotten-verify failure",
+        outcome: "scored 0.4000 against parent baseline at 0.5000",
+        axis: "exploitation",
+      },
+    ]),
+  ]).then(([without, withHistory]) => {
+    if (!without.ok || !withHistory.ok) throw new Error("both must propose");
+    // No history: no tried block.
+    expect(without.prompt).not.toContain("already been tried");
+    // With history: the graveyard is in the prompt the mutator reads, with
+    // its outcome attached.
+    expect(withHistory.prompt).toContain("already been tried");
+    expect(withHistory.prompt).toContain(
+      "naming the rollback step prevents the forgotten-verify failure",
+    );
+    expect(withHistory.prompt).toContain(
+      "scored 0.4000 against parent baseline",
+    );
+    expect(withHistory.prompt).toContain("[exploitation]");
+  });
+});

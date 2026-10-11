@@ -16,6 +16,7 @@ import {
   answerAgreement,
   answerGroundedness,
   assembleResult,
+  EVOLUTION_CONCURRENCY,
   buildJudgeRequest,
   dimensionsFrom,
   type FitnessDimensions,
@@ -881,7 +882,7 @@ export async function handleLocalCommands(argv: string[]) {
         const engine = valueAfter(argv, "--engine");
         if (engine !== "best-of-n" && engine !== "reflective") {
           console.error(
-            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--merge-every <K>] [--out <dir>] [--idle-only] [--idle-timeout <seconds>] [--workspace <root>] [--json]",
+            "usage: natalia evolution optimize --target <name> --engine best-of-n|reflective --n <count> [--rounds <count>] [--samples <count>] [--seed <n>] [--merge-every <K>] [--out <dir>] [--concurrency <N>] [--idle-only] [--idle-timeout <seconds>] [--workspace <root>] [--json]",
           );
           process.exit(1);
         }
@@ -893,6 +894,14 @@ export async function handleLocalCommands(argv: string[]) {
           );
           process.exit(1);
         }
+        // The budget's SHAPE is validated here, beside --n: a caller error
+        // must be answered with the caller error, not with a complaint
+        // about a dataset that was never the problem.
+        const concurrency = positiveInt(
+          valueAfter(argv, "--concurrency"),
+          EVOLUTION_CONCURRENCY,
+          "concurrency",
+        );
         const optimizeRoot = valueAfter(argv, "--workspace") ?? process.cwd();
         const dataset = await readDataset(optimizeRoot, target);
         if (!dataset || !dataset.train.length) {
@@ -936,6 +945,12 @@ export async function handleLocalCommands(argv: string[]) {
         // queue behind a mutation experiment. The busy signal is the
         // session's own last projected turn: an unsettled one (no
         // stopReason) is a turn in flight.
+        // W5 repositioned: the reference design's resource lock existed
+        // because training competes with inference for VRAM. We call APIs,
+        // so the scarce thing is concurrent model calls — the budget below.
+        // `--idle-only` is no longer a trigger condition (nothing gates on
+        // it); it is ONE OPTION of the budget: wait for the daemon to
+        // settle before spending a call.
         const idleOnly = argv.includes("--idle-only");
         const idleTimeout = positiveInt(
           valueAfter(argv, "--idle-timeout"),

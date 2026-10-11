@@ -410,3 +410,36 @@ test("evolution benchmark --generate refuses without --generate, and the domain 
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+test("--concurrency is the budget and --idle-only is its option, not a trigger", () => {
+  base = mkdtempSync(join(tmpdir(), "evolution-budget-"));
+  try {
+    // W5 repositioned: the reference design's resource lock was for VRAM;
+    // we call APIs, so the scarce thing is concurrent model calls. The
+    // budget is declared, and --idle-only is one option of it.
+    const bad = run(
+      [
+        "evolution",
+        "optimize",
+        "--target",
+        "x",
+        "--engine",
+        "reflective",
+        "--n",
+        "1",
+        "--concurrency",
+        "0",
+        "--workspace",
+        base,
+      ],
+      base,
+    );
+    expect(bad.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(bad.stderr)).toContain("concurrency");
+    // And the usage names it.
+    const usage = run(["evolution", "optimize", "--target", "x"], base);
+    expect(new TextDecoder().decode(usage.stderr)).toContain("--concurrency");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

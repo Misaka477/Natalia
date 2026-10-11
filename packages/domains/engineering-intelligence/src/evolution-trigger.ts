@@ -25,6 +25,8 @@
  * signal is just spending.
  */
 
+import { holdoutDeltaFromRuns } from "./trigger-facts";
+
 /** A ranked trigger below this potential is noise, not a target. */
 export const TRIGGER_POTENTIAL_FLOOR = 0.1;
 /** A holdout decline at least this large is the signal (2%, the reference's regression threshold). */
@@ -61,5 +63,57 @@ export function evolutionTrigger(input: {
   return {
     run: true,
     reason: `a trigger at ${input.topPotential.toFixed(3)} with the holdout down ${Math.abs(input.holdoutDelta).toFixed(4)} — run a round`,
+  };
+}
+
+/**
+ * The trigger's fact: what gets journaled when the gates pass.
+ *
+ * The runtime's turn boundary calls this with the three facts it already
+ * holds; the answer is either a durable fact (the system noticed, on the
+ * record, that a round is due — with the reason, so a reader can see WHY)
+ * or nothing. The dedupe key is the top trigger's capability: the same gap
+ * being announced once per turn is noise, and noise is how a journal
+ * teaches people to stop reading it.
+ *
+ * Pure, so the wiring is a one-liner that cannot get the law wrong.
+ */
+export function triggerFactFrom(input: {
+  triggers: readonly { capability: string; score: number }[];
+  runs: readonly { holdout?: number }[];
+  activeEvolutions: number;
+  /** The capabilities already announced (from the journal's own facts). */
+  alreadyTriggered: readonly string[];
+}):
+  | {
+      fact: {
+        capability: string;
+        potential: number;
+        holdoutDelta: number;
+        reason: string;
+        at: string;
+      };
+    }
+  | { none: true; reason: string } {
+  const top = input.triggers[0];
+  const decision = evolutionTrigger({
+    topPotential: top?.score ?? 0,
+    holdoutDelta: holdoutDeltaFromRuns(input.runs),
+    activeEvolutions: input.activeEvolutions,
+  });
+  if (!decision.run || !top) return { none: true, reason: decision.reason };
+  if (input.alreadyTriggered.includes(top.capability))
+    return {
+      none: true,
+      reason: `${top.capability} is already announced — the same gap once per turn is noise`,
+    };
+  return {
+    fact: {
+      capability: top.capability,
+      potential: top.score,
+      holdoutDelta: holdoutDeltaFromRuns(input.runs),
+      reason: decision.reason,
+      at: new Date().toISOString(),
+    },
   };
 }

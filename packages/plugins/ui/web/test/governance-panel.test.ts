@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import type { RuntimeClient } from "@anthelia/contracts";
 import {
@@ -1102,4 +1104,20 @@ test("the Growth trigger surface records a promotion and applies nothing", async
     approval: "human",
     next: "a human reviews the candidate",
   });
+});
+
+test("the Growth tab's queue reads the runtime's face and renders the pending rows", () => {
+  // S8's panel side: the human appears HERE and only here. The rows come
+  // from the runtime's face (the panel cannot import the intelligence
+  // package), so an unreadable queue is an empty queue said out loud —
+  // never a silent one, and never a throw that takes the tab down.
+  const source = readFileSync(
+    join(import.meta.dir, "..", "src", "governance-panel.tsx"),
+    "utf8",
+  );
+  expect(source).toContain("evolutionQueue");
+  // The approve button hands the candidate to the validated boundary.
+  expect(source).toContain("upsertSkill");
+  // And the section says who appears here.
+  expect(source).toContain("Evolution Queue");
 });

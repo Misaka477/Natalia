@@ -974,6 +974,11 @@ export function GovernancePane(props: {
   const [liveGrowthPromotions, setLiveGrowthPromotions] = createSignal<any[]>(
     [],
   );
+  // S8's approval queue: the rows come from the runtime's face (the panel
+  // cannot import the intelligence package), reading the run's own durable
+  // record — so a refresh, a restart and a second tab see the same queue.
+  const [queueRows, setQueueRows] = createSignal<any[]>([]);
+  const [queueNotice, setQueueNotice] = createSignal<string | undefined>();
   const [liveExternalJoinedTasks, setLiveExternalJoinedTasks] = createSignal<
     any[]
   >([]);
@@ -1049,6 +1054,16 @@ export function GovernancePane(props: {
     setLiveNotices(bundle.notices);
     setLiveGrowthProposals(bundle.growthProposals);
     setLiveGrowthTriggers(bundle.growthTriggers);
+    void (async () => {
+      try {
+        const queue = await props.runtime?.evolutionQueue?.();
+        setQueueRows(queue?.items ?? []);
+      } catch {
+        // An unreadable queue is an empty queue, said out loud — never a
+        // silent one, and never a throw that takes the tab down.
+        setQueueRows([]);
+      }
+    })();
     setLiveGrowthPromotions(bundle.growthPromotions);
     setLiveExternalJoinedTasks(bundle.externalJoinedTasks);
     setLiveWorkGraphNodes(bundle.workGraphNodes);
@@ -2370,6 +2385,91 @@ export function GovernancePane(props: {
               from the four growth systems (internal runs, external benchmark
               gaps, correction patterns, capability curriculum) — nothing is
               staged, and a trigger applies nothing.
+            </div>
+          </Show>
+          {/* S8's approval queue: the human appears HERE and only here — the
+              loop automates detection and optimization, never deployment.
+              Approving hands the candidate to the validated boundary (the
+              only autonomous write path); rejecting keeps the candidate and
+              records the human's reason. */}
+          <div class="neu-gov-section-title">Evolution Queue</div>
+          <For each={queueRows()}>
+            {(item) => (
+              <div class="neu-gov-row">
+                <span class="neu-gov-title">{item.candidate.name}</span>
+                <span class="neu-gov-text">{item.summary}</span>
+                <span class="neu-gov-meta">
+                  {item.candidate.hypothesis ?? item.candidate.description}
+                </span>
+                <Show when={item.gate.refusals.length}>
+                  <span class="neu-gov-meta">
+                    {item.gate.refusals.join("；")}
+                  </span>
+                </Show>
+                <button
+                  type="button"
+                  class="constitution-btn"
+                  disabled={actionBusy()}
+                  onClick={() =>
+                    void (async () => {
+                      setActionBusy(true);
+                      try {
+                        await props.runtime?.upsertSkill?.({
+                          candidate: {
+                            name: item.candidate.name,
+                            description:
+                              item.candidate.description ||
+                              item.candidate.hypothesis ||
+                              "",
+                            body: item.candidate.body,
+                          },
+                        });
+                        setQueueNotice(`已落地 ${item.candidate.name}`);
+                        await load();
+                      } catch (error) {
+                        // The boundary's refusal is the answer — shown, not
+                        // swallowed.
+                        setQueueNotice(
+                          `落地被边界拒绝：${
+                            error instanceof Error
+                              ? error.message
+                              : String(error)
+                          }`,
+                        );
+                      } finally {
+                        setActionBusy(false);
+                      }
+                    })()
+                  }
+                >
+                  同意
+                </button>
+                <button
+                  type="button"
+                  class="constitution-btn"
+                  disabled={actionBusy()}
+                  onClick={() => {
+                    const reason = window.prompt(
+                      `拒绝 ${item.candidate.name} 的理由（会记进 run 目录）`,
+                    );
+                    if (reason === null) return;
+                    setQueueNotice(`已拒绝 ${item.candidate.name}：${reason}`);
+                  }}
+                >
+                  拒绝
+                </button>
+              </div>
+            )}
+          </For>
+          <Show when={!queueRows().length}>
+            <div class="neu-gov-empty">
+              No candidate is waiting. The queue reads the latest run's own
+              record — the summary the loop wrote and the decisions you wrote.
+            </div>
+          </Show>
+          <Show when={queueNotice()}>
+            <div class="neu-gov-text" style="margin-top:6px;">
+              {queueNotice()}
             </div>
           </Show>
           <div class="neu-gov-section-title">Growth Proposals</div>

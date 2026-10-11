@@ -30,25 +30,36 @@ test("only a confirmed assistant answer carries the thumbs", () => {
   expect(rateableRow({ role: "assistant", text: "   " })).toBe(false);
 });
 
-test("the two thumbs actions name the verdict, and a rated row says so", () => {
+test("the two thumbs are glyph buttons whose label is their title", () => {
+  // The house icon style: the button draws an inline SVG (the renderer maps
+  // the name to the glyph) and the Chinese label rides as its title and
+  // accessible name — no emoji, which renders differently everywhere.
   const rated: string[] = [];
   const actions = feedbackActions({
     row: { role: "assistant", text: "done" },
     rate: (verdict) => rated.push(verdict),
   });
-  expect(actions.map((action) => action.label)).toEqual(["👍", "👎"]);
+  expect(actions.map((action) => action.label)).toEqual(["有用", "没用"]);
+  expect(actions.map((action) => action.icon)).toEqual([
+    "thumbs-up",
+    "thumbs-down",
+  ]);
+  // Unrated: neither button carries the selected styling.
+  expect(actions.map((action) => action.primary)).toEqual([false, false]);
   actions[0]!.onClick();
   actions[1]!.onClick();
   expect(rated).toEqual(["up", "down"]);
 
-  // The row's own state: an already-recorded verdict is labeled, not offered
-  // again as if nothing happened.
+  // The row's own state: the clicked button takes the primary styling —
+  // the kit's existing selected-state mechanism — instead of the label
+  // rewriting itself.
   const afterUp = feedbackActions({
     row: { role: "assistant", text: "done" },
     verdict: "up",
     rate: () => {},
   });
-  expect(afterUp.map((action) => action.label)).toEqual(["👍 已记录", "👎"]);
+  expect(afterUp.map((action) => action.label)).toEqual(["有用", "没用"]);
+  expect(afterUp.map((action) => action.primary)).toEqual([true, false]);
 });
 
 test("a row that is not rateable gets no actions at all", () => {

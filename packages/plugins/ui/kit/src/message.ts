@@ -196,6 +196,12 @@ export interface MessageAction {
   label: string;
   primary?: boolean;
   onClick: () => void;
+  /**
+   * An icon to draw INSTEAD of the label (the label stays the button's
+   * title and accessible name). The name is one of the kit's glyphs (see
+   * `icons.tsx`); a plain-text action leaves it absent.
+   */
+  icon?: "thumbs-up" | "thumbs-down";
 }
 
 export interface Attachment {

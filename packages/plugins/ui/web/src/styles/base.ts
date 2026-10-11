@@ -1149,6 +1149,8 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-action-btn { padding: 5px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); box-shadow: 4px 4px 8px var(--neu-shadow-dark), -4px -4px 8px var(--neu-shadow-light); font-size: 12px; cursor: pointer; }
 .neu-pane .natalia-action-btn:active { box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light); }
 .neu-pane .natalia-action-btn-primary { background: var(--neu-accent); color: var(--neu-on-accent); box-shadow: 4px 4px 8px var(--neu-accent-shadow), -4px -4px 8px var(--neu-shadow-light); }
+/* An icon-only action (the label rides as its title): square-ish, the glyph centered. */
+.neu-pane .natalia-action-btn[data-icon] { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
 .neu-pane .natalia-message-group {
   display: flex;
   flex-direction: column;

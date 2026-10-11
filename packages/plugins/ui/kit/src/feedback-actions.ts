@@ -2,7 +2,7 @@ import type { Message, MessageAction } from "./message";
 
 /**
  * L2's feedback entry, as pure decisions (D6a): which transcript rows
- * carry the thumbs, and what the two buttons say.
+ * carry the thumbs, and what the two buttons are.
  *
  * The row-level rules exist because the rating is about an ANSWER: a
  * streaming tail has no final answer yet, a thinking row is not an answer
@@ -11,6 +11,10 @@ import type { Message, MessageAction } from "./message";
  * `feedback.recorded` and structurally never reaches the model — design
  * law 3, "signals about the output, never input to it". Nothing here
  * touches the model's context; the buttons only name the verdict.
+ *
+ * The decisions are DOM-free on purpose (the transcript's tests run
+ * without a document): an action names its icon, and the renderer maps the
+ * name to the glyph. The glyphs live in `icons.tsx` next to the renderer.
  */
 export type MessageVerdict = "up" | "down";
 
@@ -36,9 +40,14 @@ export function rateableRow(row: RateableRow): boolean {
 }
 
 /**
- * The two actions for a rateable row. A row that was already rated says so
- * ("已记录") instead of offering the same choice twice — and the label is
- * the ONLY local state: the verdict itself lives in the journal, not here.
+ * The two actions for a rateable row. The glyph is the button (its name
+ * rides the action; the renderer draws it); the label is the button's
+ * title — hover text and accessible name.
+ *
+ * A row that was already rated says so through the PRIMARY styling on the
+ * button that was clicked — the kit's existing selected-state mechanism —
+ * rather than by rewriting its own label. The verdict itself lives in the
+ * journal, not here.
  */
 export function feedbackActions(input: {
   row: RateableRow;
@@ -49,11 +58,15 @@ export function feedbackActions(input: {
   if (!rateableRow(input.row)) return [];
   return [
     {
-      label: input.verdict === "up" ? "👍 已记录" : "👍",
+      label: "有用",
+      primary: input.verdict === "up",
+      icon: "thumbs-up",
       onClick: () => input.rate("up"),
     },
     {
-      label: input.verdict === "down" ? "👎 已记录" : "👎",
+      label: "没用",
+      primary: input.verdict === "down",
+      icon: "thumbs-down",
       onClick: () => input.rate("down"),
     },
   ];

@@ -17,6 +17,7 @@ import {
   type ToolCall,
   type ToolCard,
 } from "./message";
+import { ThumbsDownIcon, ThumbsUpIcon } from "./icons";
 import {
   CHAT_OUTPUT_MAX_LINES,
   SINGLE_LINE_MAX_CHARS,
@@ -1884,9 +1885,26 @@ export function MessageRow(props: MessageRowProps) {
                   "natalia-action-btn-primary": action.primary,
                   "natalia-action-btn-secondary": !action.primary,
                 }}
+                // The label is always the accessible name and the hover
+                // text; an icon button keeps it as the title.
+                title={action.label}
+                aria-label={action.label}
+                data-icon={action.icon ? "" : undefined}
                 onClick={() => action.onClick()}
               >
-                {action.label}
+                <Show
+                  when={action.icon === "thumbs-up"}
+                  fallback={
+                    <Show
+                      when={action.icon === "thumbs-down"}
+                      fallback={action.label}
+                    >
+                      <ThumbsDownIcon />
+                    </Show>
+                  }
+                >
+                  <ThumbsUpIcon />
+                </Show>
               </button>
             )}
           </For>

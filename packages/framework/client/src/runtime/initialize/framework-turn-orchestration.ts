@@ -14,7 +14,10 @@ import {
 } from "@anthelia/turn-orchestration";
 import { providerModelController } from "@anthelia/provider-model";
 import { sessionStoreController } from "@anthelia/session-store";
-import { triggerFactFrom } from "@natalia/engineering-intelligence";
+import {
+  createIntelligenceSurface,
+  triggerFactFrom,
+} from "@natalia/engineering-intelligence";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionID } from "@anthelia/contracts";
@@ -62,6 +65,11 @@ export function wireTurnOrchestration(
     scope: "workspace",
     grants: ["services"],
   });
+  // S8: the intelligence face is created ONCE per orchestration. The
+  // alternative — building a whole nested runtime client at every turn
+  // boundary — would spend an entire runtime to read one ranking, in the
+  // one place that must stay cheap.
+  const intelligence = createIntelligenceSurface(ctx, {});
   const controller = createTurnController({
     session: ctx.ports.getSession,
     activeAbort: () => ctx.ports.getActiveExec()?.activeAbort,
@@ -186,9 +194,8 @@ export function wireTurnOrchestration(
                     .get(input.sessionID as SessionID);
                   if (!exec) return;
                   const ranked =
-                    (await deps
-                      .createRealRuntimeClient({})
-                      .growthTriggers?.(input.sessionID)) ?? [];
+                    (await intelligence.growthTriggers?.(input.sessionID)) ??
+                    [];
                   // The ranking's own score rides in its evidence — read
                   // through the same accessor the trigger's law uses, so
                   // there is one reading of "how much potential".

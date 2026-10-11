@@ -44,7 +44,12 @@ export {
   type MessageVerdict,
   type RateableRow,
 } from "./feedback-actions";
-export { ThumbsDownIcon, ThumbsUpIcon } from "./icons";
+export {
+  ThumbsDownFill,
+  ThumbsDownOutline,
+  ThumbsUpFill,
+  ThumbsUpOutline,
+} from "./icons";
 export {
   CHAT_OUTPUT_MAX_LINES,
   SINGLE_LINE_MAX_CHARS,

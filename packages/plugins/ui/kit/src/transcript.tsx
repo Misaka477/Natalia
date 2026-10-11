@@ -14,10 +14,16 @@ import {
   toolRowLabel,
   type Attachment,
   type Message,
+  type MessageAction,
   type ToolCall,
   type ToolCard,
 } from "./message";
-import { ThumbsDownIcon, ThumbsUpIcon } from "./icons";
+import {
+  ThumbsDownFill,
+  ThumbsDownOutline,
+  ThumbsUpFill,
+  ThumbsUpOutline,
+} from "./icons";
 import {
   CHAT_OUTPUT_MAX_LINES,
   SINGLE_LINE_MAX_CHARS,
@@ -987,6 +993,30 @@ function MessageGroup(props: {
             </svg>
             <span>复制</span>
           </button>
+          {/* The message's own actions (the transcript's rating pair) ride
+              the same row as copy/fork/rollback — the reference harness puts
+              its like/dislike pair between copy and branch, and one hover
+              row per message is one place to look. An icon-only button:
+              the label is the title and the accessible name, the recorded
+              state is the solid glyph plus aria-pressed. */}
+          <For each={props.message.actions}>
+            {(action) => (
+              <button
+                type="button"
+                class="natalia-message-icon-btn"
+                title={action.label}
+                aria-label={action.label}
+                aria-pressed={action.primary === true}
+                data-active={action.primary === true ? "" : undefined}
+                onClick={() => action.onClick()}
+              >
+                <ActionGlyph
+                  icon={action.icon}
+                  filled={action.primary === true}
+                />
+              </button>
+            )}
+          </For>
           <Show when={props.onFork && sessionTurnID(props.message.id)}>
             <button
               type="button"
@@ -1063,6 +1093,15 @@ function MessageGroup(props: {
     </div>
   );
 }
+/** An action's glyph: the solid drawing once its state is recorded. */
+function ActionGlyph(props: { icon?: MessageAction["icon"]; filled: boolean }) {
+  if (props.icon === "thumbs-up")
+    return props.filled ? <ThumbsUpFill /> : <ThumbsUpOutline />;
+  if (props.icon === "thumbs-down")
+    return props.filled ? <ThumbsDownFill /> : <ThumbsDownOutline />;
+  return null;
+}
+
 export interface MessageRowProps {
   message: Message;
   assistantName?: string;
@@ -1870,43 +1909,6 @@ export function MessageRow(props: MessageRowProps) {
         <div class="natalia-tool-calls">
           <For each={props.message.toolCalls}>
             {(toolCall) => <ToolCallCard toolCall={toolCall} />}
-          </For>
-        </div>
-      </Show>
-
-      <Show when={props.message.actions && props.message.actions.length > 0}>
-        <div class="natalia-message-actions">
-          <For each={props.message.actions}>
-            {(action) => (
-              <button
-                type="button"
-                class="natalia-action-btn"
-                classList={{
-                  "natalia-action-btn-primary": action.primary,
-                  "natalia-action-btn-secondary": !action.primary,
-                }}
-                // The label is always the accessible name and the hover
-                // text; an icon button keeps it as the title.
-                title={action.label}
-                aria-label={action.label}
-                data-icon={action.icon ? "" : undefined}
-                onClick={() => action.onClick()}
-              >
-                <Show
-                  when={action.icon === "thumbs-up"}
-                  fallback={
-                    <Show
-                      when={action.icon === "thumbs-down"}
-                      fallback={action.label}
-                    >
-                      <ThumbsDownIcon />
-                    </Show>
-                  }
-                >
-                  <ThumbsUpIcon />
-                </Show>
-              </button>
-            )}
           </For>
         </div>
       </Show>

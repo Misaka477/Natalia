@@ -24,6 +24,13 @@ export function buildJudgeRequest(input: {
   answer: string;
   /** The instruction the answer was produced under (procedure's criterion). */
   instruction?: string;
+  /**
+   * W2(a): the RUBRIC — what a good answer to this task should contain or
+   * do. Without it the judge scores against her own impression of "right";
+   * with it she scores against a stated criterion, which is the whole
+   * difference between judging and grading.
+   */
+  expected_behavior?: string;
 }): string {
   return [
     "VERDICT REQUEST — eval judge (not a plan audit, not a candidate gate).",
@@ -33,6 +40,9 @@ export function buildJudgeRequest(input: {
     "conciseness: is it free of padding without omitting what matters?",
     "",
     `Task: ${input.task}`,
+    ...(input.expected_behavior?.trim()
+      ? ["A good answer to this task should:", input.expected_behavior]
+      : []),
     ...(input.instruction
       ? ["Instruction the answer followed:", input.instruction]
       : ["(no instruction was in play — score procedure as n/a)"]),

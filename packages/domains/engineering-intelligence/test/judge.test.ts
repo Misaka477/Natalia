@@ -62,3 +62,30 @@ test("a dimension she declines stays UNJUDGED, never invented", () => {
   // No verdict at all is the same, not a pass.
   expect(dimensionsFrom(undefined).dimensions.correctness).toBe(0);
 });
+
+test("the judge request carries the rubric — she grades a criterion, not an impression", () => {
+  // W2(a)'s judge-model half: without the rubric the request asks her to
+  // score "did it do the task right" against her own reading; with it she
+  // scores against a stated criterion. That is the difference between
+  // judging and grading.
+  const withRubric = buildJudgeRequest({
+    task: "how should I handle a flaky test?",
+    answer: "Re-run it in isolation.",
+    expected_behavior: "re-runs in isolation, then pins the nondeterminism",
+  });
+  expect(withRubric).toContain("A good answer to this task should:");
+  expect(withRubric).toContain(
+    "re-runs in isolation, then pins the nondeterminism",
+  );
+  // And the rubric rides ABOVE the answer: a judge who reads the criterion
+  // first is not anchored by the attempt.
+  expect(withRubric.indexOf("A good answer")).toBeLessThan(
+    withRubric.indexOf("Answer under judgment"),
+  );
+  // Absent, the request says nothing about a criterion (no invented one).
+  const without = buildJudgeRequest({
+    task: "how should I handle a flaky test?",
+    answer: "Re-run it in isolation.",
+  });
+  expect(without).not.toContain("A good answer");
+});

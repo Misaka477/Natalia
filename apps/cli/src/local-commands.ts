@@ -213,6 +213,8 @@ async function askNiaForJudge(input: {
   task: string;
   answer: string;
   instruction?: string;
+  /** W2(a): the rubric, so she grades against a stated criterion. */
+  expected_behavior?: string;
   timeoutSeconds: number;
 }): Promise<ParsedVerdict | undefined> {
   const askedAt = new Date().toISOString();
@@ -226,6 +228,9 @@ async function askNiaForJudge(input: {
         task: input.task,
         answer: input.answer,
         ...(input.instruction ? { instruction: input.instruction } : {}),
+        ...(input.expected_behavior
+          ? { expected_behavior: input.expected_behavior }
+          : {}),
       }),
     },
   });
@@ -1093,6 +1098,11 @@ export async function handleLocalCommands(argv: string[]) {
                   task: sample.input,
                   answer: answers[index] ?? "",
                   instruction,
+                  // W2(a): the sample's rubric rides, so her correctness
+                  // score is against the criterion and not her impression.
+                  ...(sample.expected_behavior
+                    ? { expected_behavior: sample.expected_behavior }
+                    : {}),
                   timeoutSeconds: gateTimeout,
                 });
                 if (!verdict) {

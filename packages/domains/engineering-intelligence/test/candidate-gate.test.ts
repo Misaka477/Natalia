@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { buildGateRequest, suiteVerdictFrom } from "../src/candidate-gate";
+import {
+  buildGateRequest,
+  suiteVerdictFrom,
+  verdictFromMessages,
+} from "../src/candidate-gate";
 import { parseVerdict } from "../src/verdict";
 
 /**
@@ -67,4 +71,48 @@ test("no verdict is an unverified seam, never a passing one", () => {
         : undefined,
     ).ok,
   ).toBe(false);
+});
+
+test("the poll finds her verdict and refuses to read a stale one", () => {
+  // The CLI asks her to gate a candidate and waits for the answer in the
+  // journal. `afterAt` is the bound: a verdict that predates the request
+  // is an answer to something else.
+  const row = (text: string, at: string) => ({
+    kind: "assistant",
+    event: { type: "nia.collab.message", message: { text, at } },
+  });
+  const messages = [
+    row(
+      [
+        "VERDICT:",
+        "judgment: pass",
+        "reasons: an earlier candidate, green",
+      ].join("\n"),
+      "2026-10-13T10:00:00.000Z",
+    ),
+    row(
+      [
+        "VERDICT:",
+        "judgment: fail",
+        "reasons: 2 failures in engine.test.ts",
+      ].join("\n"),
+      "2026-10-13T11:00:00.000Z",
+    ),
+  ];
+  const fresh = verdictFromMessages(messages, {
+    afterAt: "2026-10-13T10:30:00.000Z",
+  });
+  expect(fresh?.judgment).toBe("fail");
+  expect(fresh?.reasons).toContain("2 failures");
+  // A request after both answers finds nothing — the gate is unverified,
+  // never a stale pass.
+  expect(
+    verdictFromMessages(messages, { afterAt: "2026-10-13T12:00:00.000Z" }),
+  ).toBeUndefined();
+  // And chatter in the same channel is never read as a verdict.
+  expect(
+    verdictFromMessages([row("姐姐辛苦啦", "2026-10-13T11:30:00.000Z")], {
+      afterAt: "2026-10-13T10:30:00.000Z",
+    }),
+  ).toBeUndefined();
 });

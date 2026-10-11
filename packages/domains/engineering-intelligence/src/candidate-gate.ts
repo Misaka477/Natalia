@@ -13,7 +13,7 @@
  * `SuiteVerdict` the gate matrix consumes.
  */
 
-import type { ParsedVerdict } from "./verdict";
+import { parseVerdict, type ParsedVerdict } from "./verdict";
 
 /** What the gate asks her to check. */
 export function buildGateRequest(input: {
@@ -64,4 +64,33 @@ export function suiteVerdictFrom(verdict: ParsedVerdict | undefined): {
       ? `Nia ran the suite: ${verdict.reasons || "passed"}`
       : `Nia ran the suite and it failed: ${verdict.reasons || verdict.judgment}`,
   };
+}
+
+/**
+ * The polling half: find Nia's verdict among the session's messages.
+ *
+ * The CLI asks her to gate a candidate and then waits for her answer in
+ * the journal — her verdicts travel as `nia.collab.message` rows, the same
+ * channel the RLHF verdict uses. `afterAt` bounds the wait: a verdict that
+ * predates the request is an answer to something else, and reading it as
+ * this candidate's verdict would gate on a stale judgment.
+ */
+export function verdictFromMessages(
+  messages: readonly {
+    kind?: string;
+    event?: { type?: string; message?: { text?: string; at?: string } };
+  }[],
+  input: { afterAt: string },
+): ParsedVerdict | undefined {
+  const floor = Date.parse(input.afterAt);
+  for (const row of messages) {
+    if (row.kind !== "assistant") continue;
+    const message = row.event?.message;
+    if (!message?.text) continue;
+    if (Number.isFinite(floor) && Date.parse(message.at ?? "") < floor)
+      continue;
+    const parsed = parseVerdict(message.text);
+    if (parsed) return parsed;
+  }
+  return undefined;
 }

@@ -84,8 +84,12 @@ export function verdictFromMessages(
 ): ParsedVerdict | undefined {
   const floor = Date.parse(input.afterAt);
   for (const row of messages) {
-    if (row.kind !== "assistant") continue;
-    const message = row.event?.message;
+    // The verdict rides a COLLAB row, not a content row: the projector
+    // kinds a `nia.collab.message` as "system" (it is not model content),
+    // so matching on the EVENT is the precise test — and the only one that
+    // finds her.
+    if (row.event?.type !== "nia.collab.message") continue;
+    const message = row.event.message;
     if (!message?.text) continue;
     if (Number.isFinite(floor) && Date.parse(message.at ?? "") < floor)
       continue;

@@ -77,8 +77,10 @@ test("the poll finds her verdict and refuses to read a stale one", () => {
   // The CLI asks her to gate a candidate and waits for the answer in the
   // journal. `afterAt` is the bound: a verdict that predates the request
   // is an answer to something else.
+  // The projector kinds a collab row "system" (it is not model content) —
+  // matching on the event type is what finds her.
   const row = (text: string, at: string) => ({
-    kind: "assistant",
+    kind: "system",
     event: { type: "nia.collab.message", message: { text, at } },
   });
   const messages = [
@@ -115,4 +117,10 @@ test("the poll finds her verdict and refuses to read a stale one", () => {
       afterAt: "2026-10-13T10:30:00.000Z",
     }),
   ).toBeUndefined();
+  // A CONTENT row (the main agent quoting her verdict in her own answer) is
+  // not her verdict either — but note WHY this passes: only collab rows
+  // carry a `message` field at all, so the message-field check excludes
+  // content rows before the event-type check runs. The event-type check is
+  // naming (it says which channel we read), not the guard; the guard is the
+  // marker (MP-S9v) plus the message field.
 });

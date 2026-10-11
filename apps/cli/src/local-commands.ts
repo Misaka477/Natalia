@@ -17,6 +17,10 @@ import {
   answerGroundedness,
   assembleResult,
   beatsFloor,
+  buildGateRequest,
+  suiteVerdictFrom,
+  verdictFromMessages,
+  type ParsedVerdict,
   bestMember,
   meanStability,
   synthesizeCapabilityBenchmark,
@@ -140,6 +144,58 @@ function seededRandom(seed: number): () => number {
     state = (state * 16807) % 2147483647;
     return (state - 1) / 2147483646;
   };
+}
+
+/**
+ * S9's candidate gate, end to end: ask Nia to run the suite, then wait for
+ * her `VERDICT:` in the journal. Bounded — a verdict that never arrives is
+ * an unverified seam, never a hang.
+ */
+async function askNiaForGate(input: {
+  url: string;
+  token: string;
+  candidate: string;
+  diff: string;
+  suiteCommand: string;
+  timeoutSeconds: number;
+}): Promise<ParsedVerdict | undefined> {
+  const askedAt = new Date().toISOString();
+  await callRuntimeRPC<{ messageID: string }>({
+    url: input.url,
+    token: input.token,
+    method: "collab.send",
+    params: {
+      to: "nia",
+      text: buildGateRequest({
+        candidate: input.candidate,
+        diff: input.diff,
+        suiteCommand: input.suiteCommand,
+      }),
+    },
+  });
+  const deadline = Date.now() + input.timeoutSeconds * 1_000;
+  for (;;) {
+    const page = await callRuntimeRPC<{
+      data?: Array<{
+        rows?: Array<{
+          kind?: string;
+          event?: {
+            type?: string;
+            message?: { text?: string; at?: string };
+          };
+        }>;
+      }>;
+    }>({
+      url: input.url,
+      token: input.token,
+      method: "session.messages",
+    });
+    const rows = (page.data ?? []).flatMap((message) => message.rows ?? []);
+    const verdict = verdictFromMessages(rows, { afterAt: askedAt });
+    if (verdict) return verdict;
+    if (Date.now() >= deadline) return undefined;
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
 }
 
 export async function handleLocalCommands(argv: string[]) {
@@ -993,17 +1049,33 @@ export async function handleLocalCommands(argv: string[]) {
           const runDir = outOverride
             ? resolve(optimizeRoot, outOverride)
             : evolutionStateDir(optimizeRoot, `runs/${target}-${Date.now()}`);
-          const gateVerdict = (text: string) =>
-            gateCandidate({
+          // S9's candidate gate: the G1 seam used to answer a static
+          // "unverified" forever. Now it asks Nia to run the suite and
+          // waits for her verdict in the journal (her verdicts travel as
+          // `nia.collab.message` rows). No verdict within the wait is an
+          // unverified seam — never a passing one.
+          const gateTimeout = positiveInt(
+            valueAfter(argv, "--gate-timeout"),
+            180,
+            "gate-timeout",
+          );
+          const gateVerdict = async (text: string) => {
+            if (!registration) throw new Error("no_daemon: the gate asks Nia");
+            const verdict = await askNiaForGate({
+              url: registration.url,
+              token: (await daemonToken(store)) ?? "",
+              candidate: `${target}-evolved`,
+              diff: (await parentDiff(baselineInstruction, text)).patch,
+              suiteCommand: "bun run typecheck",
+              timeoutSeconds: gateTimeout,
+            });
+            return gateCandidate({
               target: { kind: "prompt-segment" as const, name: target },
               baseline: baselineInstruction,
               candidate: text,
-              suite: {
-                ok: false,
-                detail:
-                  "unverified — the optimize path does not run the suite; apply_generation does",
-              },
+              suite: suiteVerdictFrom(verdict),
             });
+          };
           const summaryLines: string[] = [];
           const tried: TriedCandidate[] = [];
           // W4: the curiosity controller. It owns the explore/exploit mix:
@@ -1160,7 +1232,7 @@ export async function handleLocalCommands(argv: string[]) {
                     member.components.instruction ?? "",
                   )
                 : undefined;
-              const memberGate = gateVerdict(
+              const memberGate = await gateVerdict(
                 member.components.instruction ?? "",
               );
               summaryLines.push(
@@ -1234,9 +1306,9 @@ export async function handleLocalCommands(argv: string[]) {
           // baseline (a gate the baseline fails is pre-existing, not the
           // candidate's fault).
           const candidateGate = best
-            ? gateVerdict(best.components.instruction ?? "")
+            ? await gateVerdict(best.components.instruction ?? "")
             : undefined;
-          const baselineGate = gateVerdict(baselineInstruction);
+          const baselineGate = await gateVerdict(baselineInstruction);
           // S2/S6: the loop's output is GATED before it is reported, and
           // the baseline is gated too (a gate the baseline fails is a
           // pre-existing problem, not the candidate's fault). The seams the

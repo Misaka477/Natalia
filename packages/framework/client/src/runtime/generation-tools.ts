@@ -16,6 +16,7 @@
  *   undo (study: 回退永不被候选禁止).
  */
 import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
 import {
@@ -23,7 +24,7 @@ import {
   replaceProjectConfig,
   updateConfigAtScope,
 } from "@anthelia/config";
-import type { ConfigV3, RuntimeEvent } from "@anthelia/contracts";
+import type { ConfigV3, Generation, RuntimeEvent } from "@anthelia/contracts";
 import { sandboxService } from "@anthelia/runtime-services";
 import { waitForDrain } from "./session-execution/drain";
 import { nextContextInstructionsRevision } from "@anthelia/session";
@@ -335,26 +336,7 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         // source-carrying generation is the `code-switch-unavailable`
         // refusal above, never a silent success.
         codeSwitch: async () => {
-          const source = candidate.source;
-          if (!source) return;
-          const { selectExecutor } = await import("@anthelia/shell");
-          const executor = selectExecutor();
-          const workspace = workspaceRoot(ctx);
-          const command =
-            source.kind === "git-ref"
-              ? ["git", "checkout", source.ref]
-              : ["git", "apply", "-"];
-          const result = await executor.run({
-            command: command[0]!,
-            args: command.slice(1),
-            cwd: workspace,
-            timeoutMs: 120_000,
-            ...(source.kind === "patch" ? { stdin: source.patch } : {}),
-          });
-          if (result.exitCode !== 0)
-            throw new Error(
-              `landing the generation's source failed (${source.kind}): ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
-            );
+          await landGenerationSource(ctx, candidate.source);
         },
         healthCheck: async () => {
           await ctx.ports.getReady();
@@ -629,4 +611,37 @@ async function generationPluginDelta(
     // summary still names the switch itself.
     return [];
   }
+}
+
+/**
+ * Lands a generation's SOURCE in the workspace's repository: the ref is
+ * checked out, or the patch is applied. A direct git spawn, not the shell
+ * service: this runs once per approved code switch, at deployment time,
+ * and the kernel must not take a dependency on the shell package for it
+ * (the dependency guard names that direction). git's own exit code and
+ * stderr are the verdict — a landing that fails says so with git's words,
+ * never a generic "could not start".
+ */
+async function landGenerationSource(
+  ctx: RuntimeContext,
+  source: NonNullable<Generation["source"]> | undefined,
+): Promise<void> {
+  if (!source) return;
+  const workspace = workspaceRoot(ctx);
+  const git = spawnSync(
+    "git",
+    source.kind === "git-ref" ? ["checkout", source.ref] : ["apply", "-"],
+    {
+      cwd: workspace,
+      encoding: "utf8",
+      timeout: 120_000,
+      ...(source.kind === "patch" ? { input: source.patch } : {}),
+    },
+  );
+  if (git.error)
+    throw new Error(`landing the source failed: ${git.error.message}`);
+  if (git.status !== 0)
+    throw new Error(
+      `landing the generation's source failed (${source.kind}): ${(git.stderr || git.stdout || `exit ${git.status}`).trim()}`,
+    );
 }

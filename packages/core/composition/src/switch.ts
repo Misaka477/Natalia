@@ -41,7 +41,10 @@ export type SwitchStage =
   | "apply-failed"
   | "rolled-back"
   | "applied"
-  | "deferred";
+  | "deferred"
+  // L3: the candidate carries code and the caller provided no path to take
+  // code live — a refusal, never a silent degrade to the reload path.
+  | "code-switch-unavailable";
 
 export type SwitchResult = {
   switched: boolean;
@@ -81,6 +84,22 @@ export interface SwitchGenerationInput {
   applyConfig(config: ConfigV3): Promise<void>;
   /** Take the applied config live — required for `when: "now"`. */
   reloadRuntime?: () => Promise<void>;
+  /**
+   * Land the candidate's CODE live — required for `when: "now"` when the
+   * generation carries a `source` (L3). A config reload cannot take new
+   * code live: the running process is the old code. The caller owns the
+   * path (drain, land, restart — the installer's probe+swap+restartUnit),
+   * and its ABSENCE is a refusal, not a silent degrade: a code switch
+   * that quietly ran the reload path would report success while the old
+   * code kept running (洞 5).
+   */
+  codeSwitch?: () => Promise<void>;
+  /**
+   * Wait until no live turn is running — the drain a code switch must
+   * pass before the process underneath it is replaced. Absent skips the
+   * drain, which only a caller with no live sessions can honestly do.
+   */
+  drain?: () => Promise<void>;
   /** Post-switch health of the live runtime — required for `when: "now"`. */
   healthCheck?: () => Promise<{ ok: boolean; detail?: string }>;
   publish(event: RuntimeEvent): void;
@@ -145,6 +164,25 @@ export async function switchGeneration(
     throw new Error(
       'when: "now" requires reloadRuntime and healthCheck seams — an immediate switch without a health check would have no path back',
     );
+
+  // L3 routing (洞 5): a generation that carries CODE cannot be taken live
+  // by a config reload — the running process is the old code. The switch
+  // drains the live turns first (a restart would drop them), lands the
+  // code through the caller's path, and only then reloads the surface. No
+  // path is a REFUSAL with a named stage: the alternative is a switch that
+  // reports success while the old code keeps running.
+  if (input.candidate.source) {
+    if (!input.codeSwitch)
+      return {
+        switched: false,
+        stage: "code-switch-unavailable",
+        verdict,
+        detail:
+          "this generation carries source code, so taking it live needs the drain+land+restart path (codeSwitch) — a config reload cannot load new code",
+      };
+    await input.drain?.();
+    await input.codeSwitch();
+  }
 
   await input.reloadRuntime();
   input.publish({

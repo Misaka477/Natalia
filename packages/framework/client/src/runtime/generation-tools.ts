@@ -25,6 +25,7 @@ import {
 } from "@anthelia/config";
 import type { ConfigV3, RuntimeEvent } from "@anthelia/contracts";
 import { sandboxService } from "@anthelia/runtime-services";
+import { waitForDrain } from "./session-execution/drain";
 import {
   buildGeneration,
   deriveCompositionPointer,
@@ -317,6 +318,42 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         },
         reloadRuntime: async () => {
           await ctx.ports.reloadConfigFromDisk();
+        },
+        // 洞 5: a source-carrying generation's live switch drains first.
+        // The drain is the shared wait (the same one the lifecycle surface
+        // and the daemon's flip path use) — one answer to "is it quiet".
+        drain: async () => {
+          await waitForDrain(ctx.ports, { timeoutMs: 120_000 });
+        },
+        // Land the candidate's CODE: the workspace's repository checks the
+        // ref out (or applies the patch). The process restart that makes
+        // the new code RUN is the deployment's job — the daemon's own
+        // drain/flip/restart path — and the switch's health check is what
+        // proves the landing did not break the surface. What this seam
+        // refuses to do is pretend: a reload-only switch over a
+        // source-carrying generation is the `code-switch-unavailable`
+        // refusal above, never a silent success.
+        codeSwitch: async () => {
+          const source = candidate.source;
+          if (!source) return;
+          const { selectExecutor } = await import("@anthelia/shell");
+          const executor = selectExecutor();
+          const workspace = workspaceRoot(ctx);
+          const command =
+            source.kind === "git-ref"
+              ? ["git", "checkout", source.ref]
+              : ["git", "apply", "-"];
+          const result = await executor.run({
+            command: command[0]!,
+            args: command.slice(1),
+            cwd: workspace,
+            timeoutMs: 120_000,
+            ...(source.kind === "patch" ? { stdin: source.patch } : {}),
+          });
+          if (result.exitCode !== 0)
+            throw new Error(
+              `landing the generation's source failed (${source.kind}): ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
+            );
         },
         healthCheck: async () => {
           await ctx.ports.getReady();

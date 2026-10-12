@@ -21,6 +21,7 @@ import {
   type GenerationAdapterRef,
   type GenerationPluginRef,
   type GenerationPrompts,
+  type GenerationSource,
 } from "@anthelia/contracts";
 
 /**
@@ -116,6 +117,12 @@ export function buildGeneration(input: {
   rowCaps?: Readonly<
     Record<string, Readonly<Record<string, boolean | string | number>>>
   >;
+  /**
+   * The code this generation carries (L3), when it changed any. Absent
+   * for a surface-only generation; the apply path reads the presence as
+   * its routing fact (in-process reload vs drain+restart).
+   */
+  source?: GenerationSource;
 }): Generation {
   const plugins: GenerationPluginRef[] = input.catalog
     .map(({ id, enabled, fingerprint }) => ({ id, enabled, fingerprint }))
@@ -152,6 +159,7 @@ export function buildGeneration(input: {
     policyRows,
     prompts: input.prompts,
     adapters,
+    ...(input.source ? { source: input.source } : {}),
   };
 }
 

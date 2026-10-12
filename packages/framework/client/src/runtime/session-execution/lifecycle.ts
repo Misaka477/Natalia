@@ -1,4 +1,5 @@
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
+import { waitForDrain } from "./drain";
 import { sessionStoreController } from "@anthelia/session-store";
 import { checkpointFactory } from "@anthelia/checkpoint";
 import {
@@ -97,26 +98,7 @@ export function createLifecycleSurface(
     async drainForUpdate(input?: { timeoutMs?: number }): Promise<{
       waitedMs: number;
     }> {
-      const timeoutMs = Math.max(
-        200,
-        Math.min(Math.round(input?.timeoutMs ?? 120_000), 600_000),
-      );
-      const started = Date.now();
-      const deadline = started + timeoutMs;
-      for (;;) {
-        let active = 0;
-        for (const exec of ctx.ports.getExecutionBySession().values())
-          if (exec.activeTurnID) active += 1;
-        if (active === 0) return { waitedMs: Date.now() - started };
-        if (Date.now() >= deadline)
-          throw new Error(
-            `drainForUpdate: ${active} turn(s) still active after ${Date.now() - started}ms — a restart would drop them; retry when quiet`,
-          );
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, 50);
-          timer.unref?.();
-        });
-      }
+      return await waitForDrain(ctx.ports, input);
     },
     async dispose() {
       const flushStart = Date.now();

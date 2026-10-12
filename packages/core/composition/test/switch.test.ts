@@ -175,3 +175,85 @@ test("an immediate switch without a health check is refused loudly", async () =>
     /requires reloadRuntime and healthCheck/u,
   );
 });
+
+/**
+ * 洞 5: a generation that carries CODE cannot be taken live by a config
+ * reload — the running process is the old code. The switch drains the
+ * live turns, lands the code through the caller's path, and refuses with
+ * a named stage when that path is absent rather than degrading to the
+ * reload and reporting a switch that did not happen.
+ */
+
+function sourceCandidate(
+  overrides: Partial<SwitchGenerationInput> = {},
+): ReturnType<typeof harness> {
+  return harness({
+    candidate: buildGeneration({
+      config: CONFIG_B,
+      catalog: [],
+      policyRows: [RULE],
+      prompts: { perRoleStatic: {}, docs: [] },
+      source: { kind: "git-ref", ref: "candidate-branch" },
+    }),
+    when: "now",
+    ...overrides,
+  });
+}
+
+test("a source-carrying switch without the code path refuses with a named stage", async () => {
+  // The alternative to the refusal is a switch that reports success while
+  // the old code keeps running — the exact failure 洞 5 exists to stop.
+  const { input, calls } = sourceCandidate();
+  const result = await switchGeneration(input);
+  expect(result.switched).toBe(false);
+  expect(result.stage).toBe("code-switch-unavailable");
+  expect(result.detail).toContain("drain+land+restart");
+  // Nothing was taken live and no health check ran.
+  expect(calls.reload).toBe(0);
+  expect(calls.health).toBe(0);
+});
+
+test("a source-carrying switch drains BEFORE the code lands, then reloads the surface", async () => {
+  const order: string[] = [];
+  const { input, calls, events } = sourceCandidate({
+    drain: async () => {
+      order.push("drain");
+    },
+    codeSwitch: async () => {
+      order.push("code");
+    },
+    reloadRuntime: async () => {
+      order.push("reload");
+      calls.reload += 1;
+    },
+  });
+  const result = await switchGeneration(input);
+  expect(result.switched).toBe(true);
+  expect(result.stage).toBe("applied");
+  // The drain is the gate the restart trusts: quiet first, then the code,
+  // then the surface reload over the new process.
+  expect(order).toEqual(["drain", "code", "reload"]);
+  expect(calls.health).toBe(1);
+  expect(switchedEvents(events)).toHaveLength(1);
+});
+
+test("a surface-only switch takes the plain reload path — no drain, no code", async () => {
+  const order: string[] = [];
+  const { input } = harness({
+    when: "now",
+    drain: async () => {
+      order.push("drain");
+    },
+    codeSwitch: async () => {
+      order.push("code");
+    },
+    reloadRuntime: async () => {
+      order.push("reload");
+    },
+  });
+  const result = await switchGeneration(input);
+  expect(result.stage).toBe("applied");
+  // A config/plugin/prompt generation has no code to land: the reload IS
+  // the whole live path, and a drain around it would be theatre.
+  expect(order).toEqual(["reload"]);
+});

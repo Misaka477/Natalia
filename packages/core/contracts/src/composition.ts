@@ -68,10 +68,48 @@ export type GenerationAdapterRef = {
   caps?: Readonly<Record<string, boolean | string | number>>;
 };
 
+/**
+ * The SOURCE a generation may carry — the L3 lane's payload (洞 3).
+ *
+ * Config, plugins, prompts, policy rows and adapters compose a generation
+ * of the runtime's SURFACE; `source` addresses the CODE underneath it, so
+ * a candidate that changed `packages/**` fits in a generation at all. Two
+ * spellings, both content-addressed by the generation's own hash: a git
+ * ref (a branch or commit in the workspace's repository — the worktree
+ * sandbox's promotion is exactly this) or a patch (a unified diff against
+ * a named base).
+ *
+ * The field's PRESENCE is the switch's routing fact: a surface-only
+ * generation switches in-process (a config reload), a source-carrying one
+ * must drain the live turns, land the code, and restart — the installer's
+ * probeVersion+swap+restartUnit path, not `reloadConfigFromDisk` (洞 5).
+ */
+export type GenerationSource =
+  | {
+      kind: "git-ref";
+      /** The ref (branch name or commit sha) the candidate's code sits at. */
+      ref: string;
+      /** The ref it was cut from, for the diff a reviewer reads. */
+      base?: string;
+    }
+  | {
+      kind: "patch";
+      /** The unified diff, as text. */
+      patch: string;
+      /** What it applies to (a ref), for the same reason. */
+      base?: string;
+    };
+
 export type Generation = {
   schema: typeof GENERATION_SCHEMA;
   /** The resolved runtime config this generation was composed with. */
   config: ConfigV3;
+  /**
+   * The code this generation carries, when it changed any (L3). Absent
+   * for a surface-only generation — and absent is what routes the switch
+   * to the cheap in-process reload.
+   */
+  source?: GenerationSource;
   /** The desired plugin catalog, by identity and content fingerprint. */
   plugins: GenerationPluginRef[];
   /**

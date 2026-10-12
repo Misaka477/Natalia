@@ -987,6 +987,20 @@ export function GovernancePane(props: {
     "no-run" | "all-decided" | "damaged" | "unknown"
   >("unknown");
   const [queueSkipped, setQueueSkipped] = createSignal(0);
+  /**
+   * Whether the Growth tab has ANYTHING to show. Four sections that each
+   * say "nothing here" is a screen of prose, not an interface — a person
+   * who opens this page needs one answer ("is there anything for me?"),
+   * and five paragraphs cannot give it. When everything is empty the page
+   * says ONE thing; a section appears when it has something in it.
+   */
+  const growthHasAnything = () =>
+    liveGrowthTriggers().length > 0 ||
+    queueRows().length > 0 ||
+    (props.state.growthProposals ?? []).length > 0 ||
+    liveGrowthProposals().length > 0 ||
+    (props.state.growthPromotions ?? []).length > 0 ||
+    liveGrowthPromotions().length > 0;
   const [liveExternalJoinedTasks, setLiveExternalJoinedTasks] = createSignal<
     any[]
   >([]);
@@ -2345,336 +2359,376 @@ export function GovernancePane(props: {
           </Show>
         </Show>
         <Show when={tab() === "growth"}>
-          <div class="neu-gov-section-title">Growth Triggers</div>
-          {/* S4: the order is the triage's (frequency × potential, stable
+          {/* 全空时这个页面只说一件事。四段平铺的「什么都没有」是一屏散
+              文——需要行动的人打开它，得到的是一次阅读作业。哪一段有东
+              西，哪一段才出现。 */}
+          <Show
+            when={growthHasAnything()}
+            fallback={
+              <div class="neu-gov-empty">
+                进化数据还是空的：没有触发器、没有待审批候选、没有提案、没
+                有晋升记录。
+                <br />
+                触发器是暗发布的——在配置里把 backgroundReview.evolutionTrigger
+                打开，跑完几轮之后这里才 会有东西。
+              </div>
+            }
+          >
+            <div class="neu-gov-section-title">Growth Triggers</div>
+            {/* S4: the order is the triage's (frequency × potential, stable
               tie-break), not the sources' own — the rank used to be
               computed and read by nobody, so the operator re-derived the
               priority by eye. The subtitle says which yardstick the order
               is, so a reader never mistakes it for a chronology. */}
-          <div class="neu-gov-text" style="margin-bottom:6px;">
-            按潜在收益 × 出现频率排序（平局按能力名）· 点「晋升为提案」只记录
-            事实，不触发变异
-          </div>
-          <For each={liveGrowthTriggers()}>
-            {(trigger) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">{trigger.capability}</span>
-                <span class="neu-gov-text">{trigger.reason}</span>
-                <span class="neu-gov-meta">
-                  {trigger.rule} · {trigger.class} ·{" "}
-                  {Object.entries(trigger.evidence ?? {})
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(" ")}
-                </span>
-                {/* L7: the trigger surface. One click records the promotion
+            <div class="neu-gov-text" style="margin-bottom:6px;">
+              按潜在收益 × 出现频率排序（平局按能力名）· 点「晋升为提案」只记录
+              事实，不触发变异
+            </div>
+            <For each={liveGrowthTriggers()}>
+              {(trigger) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">{trigger.capability}</span>
+                  <span class="neu-gov-text">{trigger.reason}</span>
+                  <span class="neu-gov-meta">
+                    {trigger.rule} · {trigger.class} ·{" "}
+                    {Object.entries(trigger.evidence ?? {})
+                      .map(([key, value]) => `${key}=${value}`)
+                      .join(" ")}
+                  </span>
+                  {/* L7: the trigger surface. One click records the promotion
                     fact (destination + required approval) and reloads — it
                     does NOT run a mutation. The human hands the ranked
                     trigger onward; the loop never takes itself from here. */}
-                <button
-                  type="button"
-                  class="constitution-btn"
-                  disabled={actionBusy()}
-                  onClick={() =>
-                    void (async () => {
-                      const result = await promoteGrowthTriggerViaRpc(
-                        props.runtime,
-                        props.sessionID,
-                        trigger.capability,
-                      );
-                      setActionNotice(
-                        result?.promoted
-                          ? `已记录晋升：${trigger.capability} → ${result.destination}（${result.approval}）· ${result.next}`
-                          : `晋升未记录：${result?.reason ?? "未知原因"}`,
-                      );
-                      await load();
-                    })()
-                  }
-                >
-                  晋升为提案
-                </button>
+                  <button
+                    type="button"
+                    class="constitution-btn"
+                    disabled={actionBusy()}
+                    onClick={() =>
+                      void (async () => {
+                        const result = await promoteGrowthTriggerViaRpc(
+                          props.runtime,
+                          props.sessionID,
+                          trigger.capability,
+                        );
+                        setActionNotice(
+                          result?.promoted
+                            ? `已记录晋升：${trigger.capability} → ${result.destination}（${result.approval}）· ${result.next}`
+                            : `晋升未记录：${result?.reason ?? "未知原因"}`,
+                        );
+                        await load();
+                      })()
+                    }
+                  >
+                    晋升为提案
+                  </button>
+                </div>
+              )}
+            </For>
+            <Show when={!liveGrowthTriggers().length}>
+              <div class="neu-gov-empty">
+                No growth trigger right now. A trigger is derived on each read
+                from the four growth systems (internal runs, external benchmark
+                gaps, correction patterns, capability curriculum) — nothing is
+                staged, and a trigger applies nothing.
               </div>
-            )}
-          </For>
-          <Show when={!liveGrowthTriggers().length}>
-            <div class="neu-gov-empty">
-              No growth trigger right now. A trigger is derived on each read
-              from the four growth systems (internal runs, external benchmark
-              gaps, correction patterns, capability curriculum) — nothing is
-              staged, and a trigger applies nothing.
-            </div>
-          </Show>
-          {/* S8's approval queue: the human appears HERE and only here — the
+            </Show>
+            {/* S8's approval queue: the human appears HERE and only here — the
               loop automates detection and optimization, never deployment.
               Approving hands the candidate to the validated boundary (the
               only autonomous write path); rejecting keeps the candidate and
               records the human's reason. */}
-          {/* 空队列只占一行。这一屏本来就已经是五段「什么都没有」，
+            {/* 空队列只占一行。这一屏本来就已经是五段「什么都没有」，
               再让它用标题+副标题+空态框三行去说什么都没有，是错的。 */}
-          <Show
-            when={queueRows().length > 0}
-            fallback={
+            <Show
+              when={queueRows().length > 0}
+              fallback={
+                <div class="neu-gov-text" style="margin-bottom:6px;">
+                  进化队列：没有待审批的候选
+                  {queueEmptyReason() === "no-run"
+                    ? "（还没有任何一轮进化跑完过）"
+                    : queueEmptyReason() === "all-decided"
+                      ? "（这一轮的你都决定过了）"
+                      : `（本轮摘要有 ${queueSkipped()} 行读不出来）`}
+                  。
+                </div>
+              }
+            >
+              <div class="neu-gov-section-title">进化队列（待你审批）</div>
               <div class="neu-gov-text" style="margin-bottom:6px;">
-                进化队列：没有待审批的候选
-                {queueEmptyReason() === "no-run"
-                  ? "（还没有任何一轮进化跑完过）"
-                  : queueEmptyReason() === "all-decided"
-                    ? "（这一轮的你都决定过了）"
-                    : `（本轮摘要有 ${queueSkipped()} 行读不出来）`}
-                。
+                同意 = 装进技能目录；拒绝 = 留下理由，不装。
               </div>
-            }
-          >
-            <div class="neu-gov-section-title">进化队列（待你审批）</div>
-            <div class="neu-gov-text" style="margin-bottom:6px;">
-              同意 = 装进技能目录；拒绝 = 留下理由，不装。
-            </div>
-          </Show>
-          <For each={queueRows()}>
-            {(item) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">{item.candidate.name}</span>
-                {/* The decision fields, in the order a reviewer asks for
+            </Show>
+            <For each={queueRows()}>
+              {(item) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">{item.candidate.name}</span>
+                  {/* The decision fields, in the order a reviewer asks for
                     them: which split moved, what it cost, what the seven
                     gates each said, and what actually changed. A row that
                     shows only a blended score asks the human to approve on
                     faith — which is the thing this queue exists to end. */}
-                <span class="neu-gov-text">{item.summary}</span>
-                {/* 三个划分各自的分数。混合分会把封存集的倒退藏在训练集的
+                  <span class="neu-gov-text">{item.summary}</span>
+                  {/* 三个划分各自的分数。混合分会把封存集的倒退藏在训练集的
                     进步后面——那正是封存面要防的泄漏，所以分榜必须各自出现。 */}
-                <Show when={item.candidate.splits}>
-                  <span class="neu-gov-meta">
-                    {[
-                      ...(item.candidate.splits.train === undefined
-                        ? []
-                        : [`训练集 ${item.candidate.splits.train.toFixed(4)}`]),
-                      ...(item.candidate.splits.val === undefined
-                        ? []
-                        : [`验证集 ${item.candidate.splits.val.toFixed(4)}`]),
-                      ...(item.candidate.splits.holdout === undefined
-                        ? []
-                        : [
-                            `封存集 ${item.candidate.splits.holdout.toFixed(4)}`,
-                          ]),
-                    ].join(" · ")}
-                  </span>
-                </Show>
-                <Show when={item.candidate.sampleCount !== undefined}>
-                  <span class="neu-gov-meta">
-                    本轮花费：{item.candidate.sampleCount} 次模型调用
-                  </span>
-                </Show>
-                <Show when={(item.candidate.gateResults ?? []).length > 0}>
-                  <span class="neu-gov-meta">
-                    七门逐门：
-                    {(item.candidate.gateResults ?? [])
-                      .map(
-                        (gate: { gate: string; ok: boolean; detail: string }) =>
-                          `${gate.gate} ${gate.ok ? "过" : "拒"}（${gate.detail}）`,
-                      )
-                      .join("；")}
-                  </span>
-                </Show>
-                <Show when={item.candidate.diff}>
-                  <span class="neu-gov-meta">
-                    基线（现在的）：{item.candidate.diff.baseline}
-                  </span>
-                  <span class="neu-gov-meta">
-                    候选（要换上的）：{item.candidate.diff.candidate}
-                  </span>
-                </Show>
-                <span class="neu-gov-meta">
-                  假设：
-                  {item.candidate.hypothesis ?? item.candidate.description}
-                </span>
-                <Show when={item.gate.refusals.length}>
-                  <span class="neu-gov-meta">
-                    {item.gate.refusals.join("；")}
-                  </span>
-                </Show>
-                <button
-                  type="button"
-                  class="constitution-btn"
-                  disabled={actionBusy()}
-                  onClick={() =>
-                    void (async () => {
-                      setActionBusy(true);
-                      try {
-                        await props.runtime?.upsertSkill?.({
-                          candidate: {
-                            name: item.candidate.name,
-                            description:
-                              item.candidate.description ||
-                              item.candidate.hypothesis ||
-                              "",
-                            body: item.candidate.body,
-                          },
-                        });
-                        setQueueNotice(`已落地 ${item.candidate.name}`);
-                        await load();
-                      } catch (error) {
-                        // The boundary's refusal is the answer — shown, not
-                        // swallowed.
-                        setQueueNotice(
-                          `落地被边界拒绝：${
-                            error instanceof Error
-                              ? error.message
-                              : String(error)
-                          }`,
-                        );
-                      } finally {
-                        setActionBusy(false);
-                      }
-                    })()
-                  }
-                >
-                  同意
-                </button>
-                <button
-                  type="button"
-                  class="constitution-btn"
-                  disabled={actionBusy()}
-                  onClick={() => {
-                    const reason = window.prompt(
-                      `拒绝 ${item.candidate.name} 的理由（会记进 run 目录）`,
-                    );
-                    if (reason === null) return;
-                    setQueueNotice(`已拒绝 ${item.candidate.name}：${reason}`);
-                  }}
-                >
-                  拒绝
-                </button>
-              </div>
-            )}
-          </For>
-
-          <Show when={queueNotice()}>
-            <div class="neu-gov-text" style="margin-top:6px;">
-              {queueNotice()}
-            </div>
-          </Show>
-          <div class="neu-gov-section-title">Growth Proposals</div>
-          <For
-            each={
-              liveGrowthProposals().length
-                ? liveGrowthProposals()
-                : (props.state.growthProposals ?? [])
-            }
-          >
-            {(proposal) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">{proposal.at}</span>
-                <For each={proposal.suggestions ?? []}>
-                  {(suggestion) => (
-                    <span class="neu-gov-text">
-                      [{suggestion.kind}] {suggestion.capability} —{" "}
-                      {suggestion.reason} ({suggestion.observations}{" "}
-                      observations)
+                  <Show when={item.candidate.splits}>
+                    <span class="neu-gov-meta">
+                      {[
+                        ...(item.candidate.splits.train === undefined
+                          ? []
+                          : [
+                              `训练集 ${item.candidate.splits.train.toFixed(4)}`,
+                            ]),
+                        ...(item.candidate.splits.val === undefined
+                          ? []
+                          : [`验证集 ${item.candidate.splits.val.toFixed(4)}`]),
+                        ...(item.candidate.splits.holdout === undefined
+                          ? []
+                          : [
+                              `封存集 ${item.candidate.splits.holdout.toFixed(4)}`,
+                            ]),
+                      ].join(" · ")}
                     </span>
-                  )}
-                </For>
-                <span class="neu-gov-meta">
-                  considered {proposal.considered?.tasks ?? 0} tasks ·{" "}
-                  {proposal.considered?.gaps ?? 0} gaps
-                </span>
+                  </Show>
+                  <Show when={item.candidate.sampleCount !== undefined}>
+                    <span class="neu-gov-meta">
+                      本轮花费：{item.candidate.sampleCount} 次模型调用
+                    </span>
+                  </Show>
+                  <Show when={(item.candidate.gateResults ?? []).length > 0}>
+                    <span class="neu-gov-meta">
+                      七门逐门：
+                      {(item.candidate.gateResults ?? [])
+                        .map(
+                          (gate: {
+                            gate: string;
+                            ok: boolean;
+                            detail: string;
+                          }) =>
+                            `${gate.gate} ${gate.ok ? "过" : "拒"}（${gate.detail}）`,
+                        )
+                        .join("；")}
+                    </span>
+                  </Show>
+                  <Show when={item.candidate.diff}>
+                    <span class="neu-gov-meta">
+                      基线（现在的）：{item.candidate.diff.baseline}
+                    </span>
+                    <span class="neu-gov-meta">
+                      候选（要换上的）：{item.candidate.diff.candidate}
+                    </span>
+                  </Show>
+                  <span class="neu-gov-meta">
+                    假设：
+                    {item.candidate.hypothesis ?? item.candidate.description}
+                  </span>
+                  <Show when={item.gate.refusals.length}>
+                    <span class="neu-gov-meta">
+                      {item.gate.refusals.join("；")}
+                    </span>
+                  </Show>
+                  <button
+                    type="button"
+                    class="constitution-btn"
+                    disabled={actionBusy()}
+                    onClick={() =>
+                      void (async () => {
+                        setActionBusy(true);
+                        try {
+                          await props.runtime?.upsertSkill?.({
+                            candidate: {
+                              name: item.candidate.name,
+                              description:
+                                item.candidate.description ||
+                                item.candidate.hypothesis ||
+                                "",
+                              body: item.candidate.body,
+                            },
+                          });
+                          setQueueNotice(`已落地 ${item.candidate.name}`);
+                          await load();
+                        } catch (error) {
+                          // The boundary's refusal is the answer — shown, not
+                          // swallowed.
+                          setQueueNotice(
+                            `落地被边界拒绝：${
+                              error instanceof Error
+                                ? error.message
+                                : String(error)
+                            }`,
+                          );
+                        } finally {
+                          setActionBusy(false);
+                        }
+                      })()
+                    }
+                  >
+                    同意
+                  </button>
+                  <button
+                    type="button"
+                    class="constitution-btn"
+                    disabled={actionBusy()}
+                    onClick={() => {
+                      const reason = window.prompt(
+                        `拒绝 ${item.candidate.name} 的理由（会记进 run 目录）`,
+                      );
+                      if (reason === null) return;
+                      setQueueNotice(
+                        `已拒绝 ${item.candidate.name}：${reason}`,
+                      );
+                    }}
+                  >
+                    拒绝
+                  </button>
+                </div>
+              )}
+            </For>
+
+            <Show when={queueNotice()}>
+              <div class="neu-gov-text" style="margin-top:6px;">
+                {queueNotice()}
               </div>
-            )}
-          </For>
-          <Show
-            when={
-              !liveGrowthProposals().length &&
-              !(props.state.growthProposals ?? []).length
-            }
-          >
-            <div class="neu-gov-empty">
-              No growth proposal yet. A proposal is a FACT — recording one
-              applies nothing; the destination's approval policy decides.
-            </div>
-          </Show>
-          <div class="neu-gov-section-title">Growth Promotions</div>
-          <For
-            each={
-              liveGrowthPromotions().length
-                ? liveGrowthPromotions()
-                : (props.state.growthPromotions ?? [])
-            }
-          >
-            {(promotion) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">
-                  {promotion.trigger?.capability ?? promotion.promotionID}
-                </span>
-                <span class="neu-gov-text">
-                  → {promotion.destination} ({promotion.approval}) ·{" "}
-                  {promotion.next}
-                </span>
-                <span class="neu-gov-meta">{promotion.at}</span>
+            </Show>
+            <div class="neu-gov-section-title">Growth Proposals</div>
+            <For
+              each={
+                liveGrowthProposals().length
+                  ? liveGrowthProposals()
+                  : (props.state.growthProposals ?? [])
+              }
+            >
+              {(proposal) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">{proposal.at}</span>
+                  <For each={proposal.suggestions ?? []}>
+                    {(suggestion) => (
+                      <span class="neu-gov-text">
+                        [{suggestion.kind}] {suggestion.capability} —{" "}
+                        {suggestion.reason} ({suggestion.observations}{" "}
+                        observations)
+                      </span>
+                    )}
+                  </For>
+                  <span class="neu-gov-meta">
+                    considered {proposal.considered?.tasks ?? 0} tasks ·{" "}
+                    {proposal.considered?.gaps ?? 0} gaps
+                  </span>
+                </div>
+              )}
+            </For>
+            <Show
+              when={
+                !liveGrowthProposals().length &&
+                !(props.state.growthProposals ?? []).length
+              }
+            >
+              <div class="neu-gov-empty">
+                No growth proposal yet. A proposal is a FACT — recording one
+                applies nothing; the destination's approval policy decides.
               </div>
-            )}
-          </For>
-          <Show
-            when={
-              !liveGrowthPromotions().length &&
-              !(props.state.growthPromotions ?? []).length
-            }
-          >
-            <div class="neu-gov-empty">
-              No promotion yet. Promoting a trigger records where it lands and
-              what approval it needs — it applies nothing by itself.
-            </div>
+            </Show>
+            <div class="neu-gov-section-title">Growth Promotions</div>
+            <For
+              each={
+                liveGrowthPromotions().length
+                  ? liveGrowthPromotions()
+                  : (props.state.growthPromotions ?? [])
+              }
+            >
+              {(promotion) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">
+                    {promotion.trigger?.capability ?? promotion.promotionID}
+                  </span>
+                  <span class="neu-gov-text">
+                    → {promotion.destination} ({promotion.approval}) ·{" "}
+                    {promotion.next}
+                  </span>
+                  <span class="neu-gov-meta">{promotion.at}</span>
+                </div>
+              )}
+            </For>
+            <Show
+              when={
+                !liveGrowthPromotions().length &&
+                !(props.state.growthPromotions ?? []).length
+              }
+            >
+              <div class="neu-gov-empty">
+                No promotion yet. Promoting a trigger records where it lands and
+                what approval it needs — it applies nothing by itself.
+              </div>
+            </Show>
           </Show>
         </Show>
         <Show when={tab() === "eval"}>
-          <div class="neu-gov-section-title">
-            External Benchmark — Per-Task Comparison
-          </div>
-          <For each={liveExternalJoinedTasks()}>
-            {(task) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">{task.externalTaskID}</span>
-                <span class="neu-gov-text">
-                  baseline {Math.round((task.baselineSuccessRate ?? 0) * 100)}%
-                  · ours {Math.round((task.ourSuccessRate ?? 0) * 100)}% over{" "}
-                  {task.ourRuns} run{task.ourRuns === 1 ? "" : "s"}
-                </span>
-                <span class="neu-gov-meta">
-                  {task.ourRuns > 0 &&
-                  (task.ourSuccessRate ?? 0) > (task.baselineSuccessRate ?? 0)
-                    ? "above baseline"
-                    : task.ourRuns > 0
-                      ? "at or below baseline"
-                      : "no runs yet"}
-                </span>
+          {/* 同一个病：两段「什么都没有」。有数据才展开。 */}
+          <Show
+            when={
+              liveExternalJoinedTasks().length > 0 ||
+              (props.state.externalRuns ?? []).length > 0
+            }
+            fallback={
+              <div class="neu-gov-empty">
+                没有对比数据。跑 `natalia eval` 接入外部基准、或本会话有记录
+                的运行之后，这里才会有东西。
               </div>
-            )}
-          </For>
-          <Show when={!liveExternalJoinedTasks().length}>
-            <div class="neu-gov-empty">
-              No external benchmark runs joined yet. `natalia eval` records one
-              join per task; the comparison reads the benchmark's own baseline
-              against our recorded runs.
+            }
+          >
+            <div class="neu-gov-section-title">
+              External Benchmark — Per-Task Comparison
             </div>
-          </Show>
-          <div class="neu-gov-section-title">This Session's Recorded Runs</div>
-          <For each={props.state.externalRuns ?? []}>
-            {(run) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title">{run.externalTaskID}</span>
-                <span class="neu-gov-text">
-                  {run.success === undefined
-                    ? "unscored"
-                    : run.success
-                      ? "success"
-                      : "failure"}{" "}
-                  · {run.benchmark}
-                </span>
-                <span class="neu-gov-meta">{run.at}</span>
+            <For each={liveExternalJoinedTasks()}>
+              {(task) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">{task.externalTaskID}</span>
+                  <span class="neu-gov-text">
+                    baseline {Math.round((task.baselineSuccessRate ?? 0) * 100)}
+                    % · ours {Math.round((task.ourSuccessRate ?? 0) * 100)}%
+                    over {task.ourRuns} run{task.ourRuns === 1 ? "" : "s"}
+                  </span>
+                  <span class="neu-gov-meta">
+                    {task.ourRuns > 0 &&
+                    (task.ourSuccessRate ?? 0) > (task.baselineSuccessRate ?? 0)
+                      ? "above baseline"
+                      : task.ourRuns > 0
+                        ? "at or below baseline"
+                        : "no runs yet"}
+                  </span>
+                </div>
+              )}
+            </For>
+            <Show when={!liveExternalJoinedTasks().length}>
+              <div class="neu-gov-empty">
+                No external benchmark runs joined yet. `natalia eval` records
+                one join per task; the comparison reads the benchmark's own
+                baseline against our recorded runs.
               </div>
-            )}
-          </For>
-          <Show when={!(props.state.externalRuns ?? []).length}>
-            <div class="neu-gov-empty">
-              No external run recorded in this session yet.
+            </Show>
+            <div class="neu-gov-section-title">
+              This Session's Recorded Runs
             </div>
+            <For each={props.state.externalRuns ?? []}>
+              {(run) => (
+                <div class="neu-gov-row">
+                  <span class="neu-gov-title">{run.externalTaskID}</span>
+                  <span class="neu-gov-text">
+                    {run.success === undefined
+                      ? "unscored"
+                      : run.success
+                        ? "success"
+                        : "failure"}{" "}
+                    · {run.benchmark}
+                  </span>
+                  <span class="neu-gov-meta">{run.at}</span>
+                </div>
+              )}
+            </For>
+            <Show when={!(props.state.externalRuns ?? []).length}>
+              <div class="neu-gov-empty">
+                No external run recorded in this session yet.
+              </div>
+            </Show>
           </Show>
         </Show>
       </div>

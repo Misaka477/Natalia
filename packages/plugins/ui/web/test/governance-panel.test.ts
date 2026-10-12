@@ -1118,6 +1118,13 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
   expect(source).toContain("evolutionQueue");
   // The approve button hands the candidate to the validated boundary.
   expect(source).toContain("upsertSkill");
+  // And a tab whose EVERY section is empty says ONE thing, not five
+  // paragraphs: four sections that each say "nothing here" is a screen of
+  // prose, and a person who opens it needs one answer ("is there anything
+  // for me?"), which five paragraphs cannot give.
+  expect(source).toContain("growthHasAnything");
+  expect(source).toContain("进化数据还是空的");
+  expect(source).toContain("没有对比数据");
   // And an EMPTY queue costs one line, not three: the screen is already a
   // wall of empty sections, and this one adding a title + subtitle + an
   // empty-state box to say nothing was the wrong call.

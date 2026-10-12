@@ -67,23 +67,12 @@ test("the transcript's rating buttons have a web route", () => {
 test("the approval queue's faces are routed — a missing row makes the button dead", () => {
   // The Proxy synthesizes methods only for tabled faces, so an untabled
   // face is `undefined` at the call site and the click does nothing (the
-  // failure the feedback button had). The queue's approve routes through
-  // the landing boundary; the gate button routes through collab.send.
+  // failure the feedback button had). The gate button routes through
+  // collab.send.
   const routes = readFileSync(
     join(import.meta.dir, "..", "src", "runtime-rpc.ts"),
     "utf8",
   );
   expect(routes).toContain('upsertSkill: "skill.upsert"');
   expect(routes).toContain('collabSend: "collab.send"');
-});
-
-test("the approval queue's reader is routed on both surfaces", () => {
-  // The panel cannot import the intelligence package (the tsconfig
-  // boundary), so the queue's rows come through a face — and a face that
-  // is not routed is `undefined` at the call site, which is a dead button.
-  const routes = readFileSync(
-    join(import.meta.dir, "..", "src", "runtime-rpc.ts"),
-    "utf8",
-  );
-  expect(routes).toContain('evolutionQueue: "evolution.queue"');
 });

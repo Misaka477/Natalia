@@ -341,8 +341,10 @@ export function wireTurnOrchestration(
                     name: `${target}-evolved`,
                     suite: { ok: true, detail: "not run by the scheduler" },
                   });
-                  // The round's own record is the queue's input: the summary
-                  // line lands where `evolutionQueue` reads it.
+                  // The round's own durable record: the summary line lands
+                  // in the run's directory. (The approval-queue surface
+                  // that used to read it is deleted — the human is asked in
+                  // the chat; the record stays as the run's audit trail.)
                   if (round.ok) {
                     const runDir = join(
                       ctx.ports.getWorkspaceRoot(),

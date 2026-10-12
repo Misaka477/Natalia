@@ -202,10 +202,6 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "an unknown recipient or an empty text throws; the message itself is journaled and its wake is the reply path",
   },
-  evolutionQueue: {
-    refusal: "none",
-    note: "no run directory yet is an empty queue, said out loud — never a silent one; a corrupt line is counted, not dropped",
-  },
 
   // --- workspace ---
   workspaceFiles: { refusal: "none", note: "pure read of the catalog" },

@@ -56,8 +56,6 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   upsertSkill: "skill.upsert",
   // S9: the candidate gate's channel to Nia (the panel's gate button).
   collabSend: "collab.send",
-  // S8: the approval queue's reader.
-  evolutionQueue: "evolution.queue",
   // The human-feedback entry (the transcript's rating buttons). The route
   // and the server-side face existed; this row is what made the button
   // reach the daemon at all — without it the Proxy answered `undefined`

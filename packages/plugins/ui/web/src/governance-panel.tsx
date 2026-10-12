@@ -974,19 +974,6 @@ export function GovernancePane(props: {
   const [liveGrowthPromotions, setLiveGrowthPromotions] = createSignal<any[]>(
     [],
   );
-  // S8's approval queue: the rows come from the runtime's face (the panel
-  // cannot import the intelligence package), reading the run's own durable
-  // record — so a refresh, a restart and a second tab see the same queue.
-  const [queueRows, setQueueRows] = createSignal<any[]>([]);
-  const [queueNotice, setQueueNotice] = createSignal<string | undefined>();
-  // Why the queue is empty — three different facts, not one. A queue with no
-  // run directory has never been reached; one whose items are all decided has
-  // done its job; one with skipped lines is telling you its record is damaged.
-  // Collapsing them into "nothing here" hides which one it is.
-  const [queueEmptyReason, setQueueEmptyReason] = createSignal<
-    "no-run" | "all-decided" | "damaged" | "unknown"
-  >("unknown");
-  const [queueSkipped, setQueueSkipped] = createSignal(0);
   /**
    * Whether the Growth tab has ANYTHING to show. Four sections that each
    * say "nothing here" is a screen of prose, not an interface — a person
@@ -996,7 +983,6 @@ export function GovernancePane(props: {
    */
   const growthHasAnything = () =>
     liveGrowthTriggers().length > 0 ||
-    queueRows().length > 0 ||
     (props.state.growthProposals ?? []).length > 0 ||
     liveGrowthProposals().length > 0 ||
     (props.state.growthPromotions ?? []).length > 0 ||
@@ -1076,24 +1062,6 @@ export function GovernancePane(props: {
     setLiveNotices(bundle.notices);
     setLiveGrowthProposals(bundle.growthProposals);
     setLiveGrowthTriggers(bundle.growthTriggers);
-    void (async () => {
-      try {
-        const queue = await props.runtime?.evolutionQueue?.();
-        setQueueRows(queue?.items ?? []);
-        setQueueSkipped(queue?.skipped ?? 0);
-        setQueueEmptyReason(
-          queue?.runDir === undefined
-            ? "no-run"
-            : (queue?.skipped ?? 0) > 0
-              ? "damaged"
-              : "all-decided",
-        );
-      } catch {
-        // An unreadable queue is an empty queue, said out loud — never a
-        // silent one, and never a throw that takes the tab down.
-        setQueueRows([]);
-      }
-    })();
     setLiveGrowthPromotions(bundle.growthPromotions);
     setLiveExternalJoinedTasks(bundle.externalJoinedTasks);
     setLiveWorkGraphNodes(bundle.workGraphNodes);
@@ -2372,8 +2340,7 @@ export function GovernancePane(props: {
             when={growthHasAnything()}
             fallback={
               <div class="neu-gov-empty">
-                进化数据还是空的：没有触发器、没有待审批候选、没有提案、没
-                有晋升记录。
+                进化数据还是空的：没有触发器、没有提案、没有晋升记录。
                 <br />
                 触发器是暗发布的——在配置里把 backgroundReview.evolutionTrigger
                 打开，跑完几轮之后这里才 会有东西。
@@ -2436,163 +2403,6 @@ export function GovernancePane(props: {
                 from the four growth systems (internal runs, external benchmark
                 gaps, correction patterns, capability curriculum) — nothing is
                 staged, and a trigger applies nothing.
-              </div>
-            </Show>
-            {/* S8's approval queue: the human appears HERE and only here — the
-              loop automates detection and optimization, never deployment.
-              Approving hands the candidate to the validated boundary (the
-              only autonomous write path); rejecting keeps the candidate and
-              records the human's reason. */}
-            {/* 空队列只占一行。这一屏本来就已经是五段「什么都没有」，
-              再让它用标题+副标题+空态框三行去说什么都没有，是错的。 */}
-            <Show
-              when={queueRows().length > 0}
-              fallback={
-                <div class="neu-gov-text" style="margin-bottom:6px;">
-                  进化队列：没有待审批的候选
-                  {queueEmptyReason() === "no-run"
-                    ? "（还没有任何一轮进化跑完过）"
-                    : queueEmptyReason() === "all-decided"
-                      ? "（这一轮的你都决定过了）"
-                      : `（本轮摘要有 ${queueSkipped()} 行读不出来）`}
-                  。
-                </div>
-              }
-            >
-              <div class="neu-gov-section-title">进化队列（待你审批）</div>
-              <div class="neu-gov-text" style="margin-bottom:6px;">
-                同意 = 装进技能目录；拒绝 = 留下理由，不装。
-              </div>
-            </Show>
-            <For each={queueRows()}>
-              {(item) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">{item.candidate.name}</span>
-                  {/* The decision fields, in the order a reviewer asks for
-                    them: which split moved, what it cost, what the seven
-                    gates each said, and what actually changed. A row that
-                    shows only a blended score asks the human to approve on
-                    faith — which is the thing this queue exists to end. */}
-                  <span class="neu-gov-text">{item.summary}</span>
-                  {/* 三个划分各自的分数。混合分会把封存集的倒退藏在训练集的
-                    进步后面——那正是封存面要防的泄漏，所以分榜必须各自出现。 */}
-                  <Show when={item.candidate.splits}>
-                    <span class="neu-gov-meta">
-                      {[
-                        ...(item.candidate.splits.train === undefined
-                          ? []
-                          : [
-                              `训练集 ${item.candidate.splits.train.toFixed(4)}`,
-                            ]),
-                        ...(item.candidate.splits.val === undefined
-                          ? []
-                          : [`验证集 ${item.candidate.splits.val.toFixed(4)}`]),
-                        ...(item.candidate.splits.holdout === undefined
-                          ? []
-                          : [
-                              `封存集 ${item.candidate.splits.holdout.toFixed(4)}`,
-                            ]),
-                      ].join(" · ")}
-                    </span>
-                  </Show>
-                  <Show when={item.candidate.sampleCount !== undefined}>
-                    <span class="neu-gov-meta">
-                      本轮花费：{item.candidate.sampleCount} 次模型调用
-                    </span>
-                  </Show>
-                  <Show when={(item.candidate.gateResults ?? []).length > 0}>
-                    <span class="neu-gov-meta">
-                      七门逐门：
-                      {(item.candidate.gateResults ?? [])
-                        .map(
-                          (gate: {
-                            gate: string;
-                            ok: boolean;
-                            detail: string;
-                          }) =>
-                            `${gate.gate} ${gate.ok ? "过" : "拒"}（${gate.detail}）`,
-                        )
-                        .join("；")}
-                    </span>
-                  </Show>
-                  <Show when={item.candidate.diff}>
-                    <span class="neu-gov-meta">
-                      基线（现在的）：{item.candidate.diff.baseline}
-                    </span>
-                    <span class="neu-gov-meta">
-                      候选（要换上的）：{item.candidate.diff.candidate}
-                    </span>
-                  </Show>
-                  <span class="neu-gov-meta">
-                    假设：
-                    {item.candidate.hypothesis ?? item.candidate.description}
-                  </span>
-                  <Show when={item.gate.refusals.length}>
-                    <span class="neu-gov-meta">
-                      {item.gate.refusals.join("；")}
-                    </span>
-                  </Show>
-                  <button
-                    type="button"
-                    class="constitution-btn"
-                    disabled={actionBusy()}
-                    onClick={() =>
-                      void (async () => {
-                        setActionBusy(true);
-                        try {
-                          await props.runtime?.upsertSkill?.({
-                            candidate: {
-                              name: item.candidate.name,
-                              description:
-                                item.candidate.description ||
-                                item.candidate.hypothesis ||
-                                "",
-                              body: item.candidate.body,
-                            },
-                          });
-                          setQueueNotice(`已落地 ${item.candidate.name}`);
-                          await load();
-                        } catch (error) {
-                          // The boundary's refusal is the answer — shown, not
-                          // swallowed.
-                          setQueueNotice(
-                            `落地被边界拒绝：${
-                              error instanceof Error
-                                ? error.message
-                                : String(error)
-                            }`,
-                          );
-                        } finally {
-                          setActionBusy(false);
-                        }
-                      })()
-                    }
-                  >
-                    同意
-                  </button>
-                  <button
-                    type="button"
-                    class="constitution-btn"
-                    disabled={actionBusy()}
-                    onClick={() => {
-                      const reason = window.prompt(
-                        `拒绝 ${item.candidate.name} 的理由（会记进 run 目录）`,
-                      );
-                      if (reason === null) return;
-                      setQueueNotice(
-                        `已拒绝 ${item.candidate.name}：${reason}`,
-                      );
-                    }}
-                  >
-                    拒绝
-                  </button>
-                </div>
-              )}
-            </For>
-
-            <Show when={queueNotice()}>
-              <div class="neu-gov-text" style="margin-top:6px;">
-                {queueNotice()}
               </div>
             </Show>
             <div class="neu-gov-section-title">Growth Proposals</div>

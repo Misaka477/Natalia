@@ -282,9 +282,6 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "growthTriggers",
     "promoteGrowthTrigger",
     "growthPromotions",
-    // S8: the approval queue's reader (the runtime owns the read; the panel
-    // cannot import the intelligence package).
-    "evolutionQueue",
 
     "externalJoinedTasks",
     "constitutionOverrides",

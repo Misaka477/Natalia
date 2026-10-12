@@ -167,7 +167,6 @@ export const RPC_ROUTE_MEMBERS = {
   // asking her to gate a candidate had no door.
   "collab.send": "collabSend",
   // S8: the approval queue's reader.
-  "evolution.queue": "evolutionQueue",
   "agent.list": "agents",
   "agent.select": "selectAgent",
   "model.catalog": "modelCatalog",
@@ -3926,14 +3925,6 @@ export async function handleRPCMessage(
             ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
             : {}),
         }),
-      };
-    }
-    if (body.method === "evolution.queue") {
-      optionsGuard(client, "evolutionQueue");
-      return {
-        jsonrpc: "2.0",
-        id: body.id ?? null,
-        result: await client.evolutionQueue?.(),
       };
     }
     if (body.method === "collab.send") {

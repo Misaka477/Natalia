@@ -1106,22 +1106,16 @@ test("the Growth trigger surface records a promotion and applies nothing", async
   });
 });
 
-test("the Growth tab's queue reads the runtime's face and renders the pending rows", () => {
-  // S8's panel side: the human appears HERE and only here. The rows come
-  // from the runtime's face (the panel cannot import the intelligence
-  // package), so an unreadable queue is an empty queue said out loud —
-  // never a silent one, and never a throw that takes the tab down.
+test("the Growth tab says ONE thing when everything is empty, and the delete dialog says what actually happens", () => {
+  // A tab whose EVERY section is empty says one thing, not five paragraphs:
+  // a person who opens it needs one answer ("is there anything for me?"),
+  // which five paragraphs cannot give. (The approval queue that used to
+  // share this tab is gone — the human is asked in the chat, per the
+  // zero-new-components ruling.)
   const source = readFileSync(
     join(import.meta.dir, "..", "src", "governance-panel.tsx"),
     "utf8",
   );
-  expect(source).toContain("evolutionQueue");
-  // The approve button hands the candidate to the validated boundary.
-  expect(source).toContain("upsertSkill");
-  // And a tab whose EVERY section is empty says ONE thing, not five
-  // paragraphs: four sections that each say "nothing here" is a screen of
-  // prose, and a person who opens it needs one answer ("is there anything
-  // for me?"), which five paragraphs cannot give.
   expect(source).toContain("growthHasAnything");
   expect(source).toContain("进化数据还是空的");
   expect(source).toContain("没有对比数据");
@@ -1139,22 +1133,4 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
     "？规则立刻永久失效。journal 会留一条删除记录（不可擦除）。",
   );
   expect(source).not.toContain("记录进 journal（墓碑），历史保留。");
-  // And an EMPTY queue costs one line, not three: the screen is already a
-  // wall of empty sections, and this one adding a title + subtitle + an
-  // empty-state box to say nothing was the wrong call.
-  expect(source).toContain("fallback={");
-  expect(source).toContain("进化队列：没有待审批的候选");
-  // And the labels a reader needs are in the language the panel is read in
-  // (the panel's interactive layer is Chinese; English labels here were
-  // unreadable). The guard reads the TEMPLATE LITERALS, not bare words —
-  // a bare-word check passes on the Chinese comment that explains them,
-  // which is a guard with no teeth.
-  expect(source).toContain("`训练集 ${");
-  expect(source).toContain("`验证集 ${");
-  expect(source).toContain("`封存集 ${");
-  expect(source).toContain("七门逐门：");
-  expect(source).toContain("基线（现在的）：");
-  expect(source).toContain("本轮花费：");
-  // And the section says who appears here.
-  expect(source).toContain("进化队列（待你审批）");
 });

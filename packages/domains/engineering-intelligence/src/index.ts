@@ -20,7 +20,6 @@ export * from "./candidate-gate";
 export * from "./judge";
 export * from "./evolution-trigger";
 export * from "./trigger-facts";
-export * from "./approval-queue";
 export * from "./supersession";
 export * from "./evolution-round";
 export * from "./evolution-state";

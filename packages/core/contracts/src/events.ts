@@ -5237,28 +5237,6 @@ export type RuntimeClient = {
    * Block ②'s reader: the journaled promotions, each naming its
    * destination, approval and next step (the audit trail).
    */
-  /**
-   * S8's approval queue: the pending rows read from the latest run's
-   * durable record. The runtime owns this read (the panel cannot import
-   * the intelligence package), and the queue is ONE record rather than a
-   * copy that could drift from what the loop wrote.
-   */
-  evolutionQueue?(sessionID?: string): Promise<{
-    items: Array<{
-      candidate: {
-        name: string;
-        description: string;
-        body: string;
-        hypothesis?: string;
-        axis?: "exploitation" | "exploration";
-        score: number;
-      };
-      gate: { passed: boolean; refusals: string[] };
-      summary: string;
-    }>;
-    skipped: number;
-    runDir?: string;
-  }>;
   growthPromotions?(sessionID?: string): Promise<
     Array<{
       promotionID: string;
@@ -5300,28 +5278,6 @@ export type RuntimeClient = {
    * Block ②'s reader: the journaled promotions, each naming its
    * destination, approval and next step (the audit trail).
    */
-  /**
-   * S8's approval queue: the pending rows read from the latest run's
-   * durable record. The runtime owns this read (the panel cannot import
-   * the intelligence package), and the queue is ONE record rather than a
-   * copy that could drift from what the loop wrote.
-   */
-  evolutionQueue?(sessionID?: string): Promise<{
-    items: Array<{
-      candidate: {
-        name: string;
-        description: string;
-        body: string;
-        hypothesis?: string;
-        axis?: "exploitation" | "exploration";
-        score: number;
-      };
-      gate: { passed: boolean; refusals: string[] };
-      summary: string;
-    }>;
-    skipped: number;
-    runDir?: string;
-  }>;
   growthPromotions?(sessionID?: string): Promise<
     Array<{
       promotionID: string;
@@ -5363,28 +5319,6 @@ export type RuntimeClient = {
    * Block ②'s reader: the journaled promotions, each naming its
    * destination, approval and next step (the audit trail).
    */
-  /**
-   * S8's approval queue: the pending rows read from the latest run's
-   * durable record. The runtime owns this read (the panel cannot import
-   * the intelligence package), and the queue is ONE record rather than a
-   * copy that could drift from what the loop wrote.
-   */
-  evolutionQueue?(sessionID?: string): Promise<{
-    items: Array<{
-      candidate: {
-        name: string;
-        description: string;
-        body: string;
-        hypothesis?: string;
-        axis?: "exploitation" | "exploration";
-        score: number;
-      };
-      gate: { passed: boolean; refusals: string[] };
-      summary: string;
-    }>;
-    skipped: number;
-    runDir?: string;
-  }>;
   growthPromotions?(sessionID?: string): Promise<
     Array<{
       promotionID: string;

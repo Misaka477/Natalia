@@ -5,7 +5,6 @@ import { workLedgerController } from "@natalia/work-ledger";
 import { type ConstitutionDocRule } from "@anthelia/runtime-services";
 import { governanceLedgerController } from "@natalia/governance-ledger";
 import { loadProjectDocuments } from "./project-docs";
-import { queueItemsFromSummary } from "./approval-queue";
 import { applyConstitutionDocEdit } from "./constitution-doc";
 import { writeWorkspaceFile } from "@anthelia/workspace";
 import type { SessionFactState } from "@anthelia/session";
@@ -50,7 +49,7 @@ import { triageGrowth } from "./triage";
 import { deriveGrowthPromotion } from "./growth-promotion";
 import { isHardProtectedConstitutionRule } from "@anthelia/contracts";
 import type { EpisodeID } from "@anthelia/contracts";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   appendInstanceEvent,
@@ -127,9 +126,6 @@ type Surface = Pick<
   | "removeConstitutionRule"
   | "createConstitutionRule"
   | "constitutionDocRules"
-  // S8: the approval queue's reader (the runtime owns the read; the panel
-  // cannot import this package).
-  | "evolutionQueue"
   | "promoteConstitutionDocRule"
   | "updateConstitutionDocRule"
   | "planTaskStates"
@@ -1804,68 +1800,6 @@ export function createIntelligenceSurface(
      * (prose → warn, `<!-- enforcement -->` → hard with appliesTo). These are
      * the soft rules the governance panel can promote into journal rules.
      */
-    /**
-     * S8's approval queue: the pending rows, read from the LATEST run's own
-     * durable record (the summary the loop wrote and the decisions the human
-     * wrote). The runtime owns this read because the panel cannot import
-     * this package — and because the queue must be ONE record, not a copy.
-     */
-    async evolutionQueue(_sessionID?: string): Promise<{
-      items: Array<{
-        candidate: {
-          name: string;
-          description: string;
-          body: string;
-          hypothesis?: string;
-          axis?: "exploitation" | "exploration";
-          score: number;
-        };
-        gate: { passed: boolean; refusals: string[] };
-        summary: string;
-      }>;
-      skipped: number;
-      runDir?: string;
-    }> {
-      await ctx.ports.getReady();
-      const runsRoot = join(
-        ctx.ports.getWorkspaceRoot(),
-        ".natalia",
-        "evolution",
-        "runs",
-      );
-      let entries: string[];
-      try {
-        entries = await readdir(runsRoot);
-      } catch {
-        // No run directory yet: an empty queue, said out loud.
-        return { items: [], skipped: 0 };
-      }
-      // The run names carry their timestamp (`<target>-<epoch_ms>`), so the
-      // lexicographically largest is the newest.
-      const latest = entries.sort().at(-1);
-      if (!latest) return { items: [], skipped: 0 };
-      const runDir = join(runsRoot, latest);
-      const read = async (name: string): Promise<string> => {
-        try {
-          return await readFile(join(runDir, name), "utf8");
-        } catch {
-          return "";
-        }
-      };
-      const built = queueItemsFromSummary({
-        summary: await read("evolution_summary.jsonl"),
-        decisions: await read("decisions.jsonl"),
-      });
-      return {
-        items: built.items.map((item) => ({
-          candidate: item.candidate,
-          gate: item.gate,
-          summary: item.summary,
-        })),
-        skipped: built.skipped,
-        runDir,
-      };
-    },
     async constitutionDocRules(
       _sessionID?: string,
     ): Promise<ConstitutionDocRule[]> {

@@ -148,6 +148,20 @@ export type SessionExecutionState = {
    * has read it so a later plain wake does not inherit a stale intent.
    */
   niaWakeIntent?: import("@anthelia/contracts").ChatTurnIntent;
+  /**
+   * 洞 2's four-rung ladder: the session's confinement rung, when the human
+   * widened it mid-session (an escalation granted "for session" rather than
+   * per-call). The policy home's resolve reads it as the session override —
+   * it beats the deployment default and loses to a call's explicit grant.
+   *
+   * It lives on the exec because it is per-session and it dies with the
+   * session: a restart starts at the deployment's rung again, and the
+   * journal's `context.instructions {kind: "sandbox_rung"}` record is the
+   * durable half that says the switch happened. A narrower session (the
+   * human tightening) is the same field with a narrower mode — the ladder
+   * moves in both directions.
+   */
+  sandboxModeOverride?: import("@anthelia/confinement").ConfinementMode;
 };
 
 /** Seeds {@link SessionExecutionState.announcedTurnIDs} from the loaded journal. */

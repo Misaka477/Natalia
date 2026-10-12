@@ -9,7 +9,8 @@
  */
 import type { ProviderToolCall } from "@anthelia/runtime";
 import { compositionProfile } from "@anthelia/composition";
-import { resolveDeploymentMode } from "../sandbox-policy";
+import { resolveSandboxPolicy } from "../sandbox-policy";
+import { sandboxEscalationID } from "../sandbox-rung";
 import {
   CONFINEMENT_COMPOSITION_ROW_ID,
   CONFINEMENT_MODES,
@@ -96,10 +97,20 @@ export function buildToolExecutionContext(input: BuildContextInput) {
   // truth rides down to runShell (sandbox study: policy rides the call).
   // Captured once so the escalation's audit fact can name the mode the
   // call escalates FROM.
-  const effectiveMode = resolveDeploymentMode({
+  // 洞 2's ladder: the session's rung override (the human widening the
+  // sandbox mid-session) beats the deployment default here — the policy
+  // home's own precedence, read through the same resolve. The root is this
+  // call's own (a sub-agent's worktree when the fan-out scoped it), so it
+  // rides as the session root with the configured root as its fallback.
+  const effectiveMode = resolveSandboxPolicy({
     profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
     configMode: getTsRuntimeConfig()?.confinement?.mode,
-  });
+    sessionRoot: workspaceRoot,
+    deploymentRoot: workspaceRoot,
+    ...(exec?.sandboxModeOverride
+      ? { sessionMode: exec.sandboxModeOverride }
+      : {}),
+  }).mode;
   return {
     workspaceRoot,
     signal,
@@ -120,7 +131,7 @@ export function buildToolExecutionContext(input: BuildContextInput) {
         const interactive = getInteractive();
         if (!interactive) return "unavailable";
         const refusal = await interactive.requireApproval(
-          `${toolID}:sandbox`,
+          sandboxEscalationID(toolID, requestedMode),
           tool,
           call,
           turnID,

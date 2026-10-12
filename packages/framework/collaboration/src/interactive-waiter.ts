@@ -531,6 +531,12 @@ export function createInteractiveWaiter(
     pendingApprovalRequests.delete(response.requestID);
     approvalSessionByID.delete(response.requestID);
     approvalWaiters.get(response.requestID)?.(response);
+    // 洞 2's ladder: a session-scoped grant that changes POLICY (a sandbox
+    // rung) is applied by the runtime, which owns the state the waiter
+    // cannot see. The family grant above is this waiter's own half; the
+    // hook is the other half, and it runs after the journaling so a
+    // consumer reads one consistent record.
+    deps.onApprovalResponse?.(response, responseSession);
     return { accepted: true };
   }
 

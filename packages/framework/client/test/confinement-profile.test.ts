@@ -221,3 +221,79 @@ test("an approved escalation journals the entry; a refusal and a missing seam do
   ).toBe("unavailable");
   expect(published).toEqual([]);
 });
+
+/**
+ * 洞 2's four-rung ladder, wired: the session's rung override (the human
+ * widening the sandbox mid-session) is what the tool context resolves, and
+ * the escalation's approval id carries the rung it asked for so the
+ * response's grant can be applied.
+ */
+test("the session's rung override is the mode the tool context resolves", async () => {
+  const { buildToolExecutionContext } = await import(
+    "../src/runtime/tool-execution/execute-context"
+  );
+  const approvals: string[] = [];
+  const build = (input: {
+    sessionMode?: "read-only" | "workspace-write" | "danger-full-access";
+    configMode?: "read-only" | "workspace-write" | "danger-full-access";
+  }) => {
+    const ctx = {
+      state: { serviceDirectory: { getOptional: () => undefined } },
+      ports: {
+        getTsRuntimeConfig: () => ({
+          confinement: { mode: input.configMode },
+          runtime: {},
+        }),
+        getInteractive: () => ({
+          requireApproval: async (id: string) => {
+            approvals.push(id);
+            return undefined;
+          },
+        }),
+        getCapabilityRegistry: () => ({ service: () => undefined }),
+        authorizeWorkspaceRead: async () => undefined,
+        authorizeSandboxMerge: async () => undefined,
+        toolSettings: () => ({}),
+        scheduleRuntimeStatusSnapshot: () => undefined,
+      },
+    } as never;
+    return buildToolExecutionContext({
+      ctx,
+      exec: {
+        session: { id: "ses_rung" },
+        ...(input.sessionMode
+          ? { sandboxModeOverride: input.sessionMode }
+          : {}),
+      } as never,
+      publish: () => undefined,
+      toolID: "run_shell",
+      tool: { name: "run_shell" } as never,
+      call: { id: "call_1" } as never,
+      turnID: "turn_1",
+      sessionID: "ses_rung" as never,
+      workspaceRoot: "/tmp",
+      signal: new AbortController().signal,
+      parsed: {},
+    });
+  };
+
+  // The deployment asks read-only; the session's rung says otherwise. The
+  // session override wins — that is the whole point of the human's switch.
+  const widened = build({
+    configMode: "read-only",
+    sessionMode: "danger-full-access",
+  });
+  expect(widened.confinement).toBe("danger-full-access");
+  // Without an override, the deployment default stands.
+  expect(build({ configMode: "read-only" }).confinement).toBe("read-only");
+  expect(build({}).confinement).toBe("workspace-write");
+
+  // The escalation's approval id carries the rung it asked for, so the
+  // response's session grant can be applied to the ladder.
+  approvals.length = 0;
+  await widened.sandboxApprover.request({
+    requestedMode: "read-only",
+    justification: "tightening for the install",
+  });
+  expect(approvals).toEqual(["run_shell:sandbox:read-only"]);
+});

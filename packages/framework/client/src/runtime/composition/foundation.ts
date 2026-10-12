@@ -13,6 +13,7 @@ import {
   terminalController,
 } from "@anthelia/runtime-services";
 import { workLedgerController } from "@natalia/work-ledger";
+import { applySandboxRungGrant, rungGrantFromResponse } from "../sandbox-rung";
 import { statusSnapshotController } from "@anthelia/runtime-status";
 import { createPluginsController } from "@anthelia/substrate";
 import type { RuntimeContext } from "@anthelia/substrate";
@@ -97,6 +98,16 @@ export function wireFoundation(ctx: ProductRuntimeContext) {
       return exec.factStateComplete === true && exec.factState
         ? exec.factState.collaborationEvents
         : exec.session.events;
+    },
+    // 洞 2's ladder: a session-scoped grant on a sandbox escalation moves
+    // the session's rung (the policy home's session override) and tells the
+    // model. The family grant the waiter records is the prompt floor; this
+    // is the POLICY half, and it lives here because the state it writes —
+    // the execution — belongs to the client, not the waiter.
+    onApprovalResponse: (response, sessionID) => {
+      const mode = rungGrantFromResponse(response);
+      if (!mode) return;
+      applySandboxRungGrant(ctx, sessionID, mode);
     },
   };
 

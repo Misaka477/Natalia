@@ -1654,6 +1654,11 @@ type RuntimeEventData =
         // other — the model must be TOLD it moved, with the delta, or it
         // reports the old version's work as the new one's.
         | "generation_switch"
+        // 洞 2's four-rung ladder: the human switching the session's rung
+        // is an instruction change for the same reason — a model that just
+        // got a wider sandbox must KNOW it, or it keeps apologising for
+        // writes it is now allowed to make.
+        | "sandbox_rung"
         | "notice";
       at: string;
       /** Monotonic per session: the highest revision is the current state. */
@@ -3574,6 +3579,7 @@ export type RuntimeProjectedNotice = {
     | "agent_switch"
     | "plan_handoff"
     | "generation_switch"
+    | "sandbox_rung"
     | "notice";
   revision: number;
   at: string;

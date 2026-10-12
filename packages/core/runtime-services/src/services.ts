@@ -359,6 +359,14 @@ export type InteractiveWaiterDeps = {
    * when it is — the same accessor the snapshot path uses.
    */
   sessionEvents?(sessionID: SessionID): readonly RuntimeEvent[] | undefined;
+  /**
+   * 洞 2's ladder: called after a response is journaled, so the runtime can
+   * apply a session-scoped grant to state the waiter itself cannot reach (a
+   * sandbox rung override lives on the execution state, which belongs to the
+   * client). The waiter records the family grant; this hook is where a
+   * grant that changes POLICY rather than just the prompt floor is applied.
+   */
+  onApprovalResponse?(response: ApprovalResponse, sessionID: SessionID): void;
 };
 
 export type ProviderRunnerInput = {

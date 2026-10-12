@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  defaultConfigV3,
+  defaultConfigV4,
   migrateProjectModelConfigToGlobal,
   saveConfigFile,
 } from "@anthelia/config";
@@ -393,7 +393,7 @@ test("CLI session helpers expose safe metadata and local mutations", async () =>
 
 test("CLI doctor reports safe config/model/session availability", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-doctor-"));
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.local = {
     name: "local",
     driver: "openai",
@@ -445,7 +445,7 @@ test("CLI doctor reports safe config/model/session availability", async () => {
 test("CLI doctor states that shell and terminal egress is not bounded here", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-doctor-egress-"));
   const path = join(root, "config.json");
-  await saveConfigFile(defaultConfigV3(), path);
+  await saveConfigFile(defaultConfigV4(), path);
   const child = Bun.spawnSync(
     [
       process.execPath,

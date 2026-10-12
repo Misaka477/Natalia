@@ -39,7 +39,7 @@ import type {
   RuntimeEvent,
   SessionID,
   SubmittedTurn,
-  ConfigV3,
+  ConfigV4,
   LocalAttachment,
 } from "@anthelia/contracts";
 import type { SessionRecord } from "@anthelia/session";
@@ -176,7 +176,7 @@ export type RuntimeState = {
   sessionPersistence: Promise<void>;
   sessionPersistenceBySession: Map<SessionID, Promise<void>>;
   nativeRuntimeID: string;
-  tsRuntimeConfig?: ConfigV3;
+  tsRuntimeConfig?: ConfigV4;
   frameworkServices?: FrameworkServices;
   contextWindowResolver: ContextWindowResolver;
   runtimeContextConfig: RuntimeContextStatusConfig;

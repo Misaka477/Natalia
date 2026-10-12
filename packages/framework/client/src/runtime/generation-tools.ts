@@ -24,7 +24,7 @@ import {
   replaceProjectConfig,
   updateConfigAtScope,
 } from "@anthelia/config";
-import type { ConfigV3, Generation, RuntimeEvent } from "@anthelia/contracts";
+import type { ConfigV4, Generation, RuntimeEvent } from "@anthelia/contracts";
 import { sandboxService } from "@anthelia/runtime-services";
 import { waitForDrain } from "./session-execution/drain";
 import { nextContextInstructionsRevision } from "@anthelia/session";
@@ -186,7 +186,7 @@ export function createProposeGenerationTool(ctx: RuntimeContext): RuntimeTool {
       if (!live) return "no running config to propose a change against";
       const merged = (
         args.configPatch ? mergeConfig(live, args.configPatch) : live
-      ) as ConfigV3;
+      ) as ConfigV4;
       const catalog = ctx.ports
         .getPluginsController()
         .catalog()

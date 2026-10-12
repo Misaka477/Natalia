@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { modelSelectionStatus, evaluatePolicy } from "../src/policy";
 import { replaceProjectConfig, resolveConfig } from "../src/service";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 
 test("provider policy defaults to the caller fallback", () => {
   expect(evaluatePolicy([], "provider.use", "anthropic", "allow")).toBe(
@@ -13,8 +13,8 @@ test("provider policy defaults to the caller fallback", () => {
 });
 
 test("model selection distinguishes configured, usable, policy allowed and selected", () => {
-  const config = configV3Schema.parse({
-    version: 3,
+  const config = configV4Schema.parse({
+    version: 4,
     providers: {
       company: {
         name: "Company",
@@ -108,7 +108,7 @@ test("a rejected configuration file reports why, not just that it failed", async
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         unattended: {
           approval: "not-a-mode",
@@ -142,12 +142,12 @@ test("replaceProjectConfig removes the keys a full config does not mention", asy
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, checkpoint: { maxFiles: 12345 } }),
+    JSON.stringify({ version: 4, checkpoint: { maxFiles: 12345 } }),
   );
   const before = await resolveConfig({ workspaceRoot: root, globalPath });
   expect(before.config.checkpoint.maxFiles).toBe(12345);
 
-  await replaceProjectConfig(root, configV3Schema.parse({ version: 3 }), {
+  await replaceProjectConfig(root, configV4Schema.parse({ version: 4 }), {
     globalPath,
   });
   const after = await resolveConfig({ workspaceRoot: root, globalPath });
@@ -157,7 +157,7 @@ test("replaceProjectConfig removes the keys a full config does not mention", asy
   // And a value the new config DOES set still lands.
   await replaceProjectConfig(
     root,
-    configV3Schema.parse({ version: 3, checkpoint: { maxFiles: 42 } }),
+    configV4Schema.parse({ version: 4, checkpoint: { maxFiles: 42 } }),
     { globalPath },
   );
   const set = await resolveConfig({ workspaceRoot: root, globalPath });

@@ -25,7 +25,7 @@ import {
 import { deriveModelRefKey } from "../model-ref-key";
 import { modelCatalogInWorker } from "@anthelia/substrate";
 import type { AgentDefinition } from "@anthelia/agent";
-import type { ConfigV3, ModelCapabilities } from "@anthelia/contracts";
+import type { ConfigV4, ModelCapabilities } from "@anthelia/contracts";
 import type { ContextWindowResolver } from "@anthelia/runtime";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import type { RuntimeContext } from "@anthelia/substrate";
@@ -65,7 +65,7 @@ export function defaultContextStatusConfig(): RuntimeContextStatusConfig {
 }
 
 async function resolveContextStatusConfig(
-  config: ConfigV3,
+  config: ConfigV4,
   provider: StreamingProvider | undefined,
   resolver: ContextWindowResolver,
   selectedRef?: string,

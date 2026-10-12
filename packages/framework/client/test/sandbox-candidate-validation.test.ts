@@ -41,7 +41,7 @@ async function bootWorkspace(
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, ...config }),
+    JSON.stringify({ version: 4, ...config }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];

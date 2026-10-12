@@ -15,7 +15,7 @@ import type {
   ProviderStreamChunk,
   ProviderStreamRequest,
 } from "../src/provider";
-import { defaultConfigV3 } from "@anthelia/config";
+import { defaultConfigV4 } from "@anthelia/config";
 import { ContextWindowResolver } from "../src/modelmeta";
 
 test("raw XML-like tool protocol becomes structured calls while preserving prose", async () => {
@@ -391,7 +391,7 @@ test("provider adapters map tool choice and omit tools when disabled", async () 
 });
 
 test("configured provider resolution preserves the adapter provider identity", () => {
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.internal_gateway = {
     name: "Internal Gateway",
     driver: "anthropic-compatible",
@@ -433,7 +433,7 @@ test("configured provider resolution preserves the adapter provider identity", (
 });
 
 test("providerForModel applies the gateway's interleaved reasoning default", async () => {
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.deepseek_gateway = {
     name: "Gateway",
     driver: "openai-compatible",
@@ -506,7 +506,7 @@ test("providerForModel applies the gateway's interleaved reasoning default", asy
 });
 
 test("providerForModel honors an explicit interleaved reasoning field", async () => {
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.interleaved_gateway = {
     name: "Interleaved Gateway",
     driver: "openai-compatible",
@@ -2655,7 +2655,7 @@ test("Anthropic explicit thinking budget overrides reasoning effort", async () =
 });
 
 test("providerForModel forwards Anthropic thinking settings", async () => {
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.internal_gateway = {
     name: "Internal Gateway",
     driver: "anthropic-compatible",

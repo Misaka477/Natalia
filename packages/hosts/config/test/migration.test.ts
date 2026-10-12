@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import {
   mkdir,
   mkdtemp,
@@ -11,15 +11,15 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadConfigFile, saveConfigFile } from "../src/file";
-import { defaultConfigV3, migrateConfig } from "../src/migration";
+import { defaultConfigV4, migrateConfig } from "../src/migration";
 import { VersionedMigrationRegistry } from "../src/registry";
 import { loadOrCreateConfigFile } from "../src/file";
 import { resolveConfig } from "../src/service";
 import { createSetupSnapshot } from "../src/setup";
 
 function configuredConfig() {
-  return configV3Schema.parse({
-    ...defaultConfigV3(),
+  return configV4Schema.parse({
+    ...defaultConfigV4(),
     providers: {
       openai: {
         name: "OpenAI",
@@ -54,14 +54,14 @@ test("setup snapshot exposes detection source and manual override", () => {
   expect(snapshot.secretFields).toContain("providers.*.connection.apiKey");
 });
 
-test("config v3 save/load roundtrip preserves an omitted output limit", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "natalia-config-v3-"));
+test("config v4 save/load roundtrip preserves an omitted output limit", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "natalia-config-v4-"));
   try {
     const path = join(dir, "config.json");
     const config = configuredConfig();
     await saveConfigFile(config, path);
     const loaded = await loadConfigFile(path);
-    expect(loaded.config.version).toBe(3);
+    expect(loaded.config.version).toBe(4);
     expect(
       loaded.config.catalog.providers.openai?.models["test-model"]?.limits
         .maxOutputTokens,
@@ -79,7 +79,7 @@ test("config save atomically replaces the target without leaving temporary files
     await writeFile(path, '{"old":true}\n');
     await saveConfigFile(configuredConfig(), path);
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
-      version: 3,
+      version: 4,
     });
     expect(
       (await readdir(dir)).filter((name) => name.includes(".tmp-")).length,
@@ -128,11 +128,11 @@ test("TS config settings store creates a schema-valid config when absent", async
   const dir = await mkdtemp(join(tmpdir(), "natalia-config-create-"));
   try {
     const result = await loadOrCreateConfigFile(join(dir, "config.json"));
-    expect(result.config.version).toBe(3);
+    expect(result.config.version).toBe(4);
     expect(result.config.defaultModel).toBeNull();
-    expect(result.summary.changed).toContain("created default TS config");
+    expect(result.summary.changed).toContain("created default config");
     expect(await readFile(join(dir, "config.json"), "utf8")).toContain(
-      '"version": 3',
+      '"version": 4',
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -148,7 +148,7 @@ test("layered config reads model settings only from the global scope", async () 
     await writeFile(
       globalPath,
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           openai: {
             name: "OpenAI",
@@ -171,7 +171,7 @@ test("layered config reads model settings only from the global scope", async () 
     await writeFile(
       projectPath,
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           openai: {
             name: "OpenAI Project",
@@ -224,7 +224,7 @@ test("layered config isolates an invalid source and retains valid sources", asyn
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         context: { compactionThresholdPercent: 91 },
       }),
     );
@@ -241,4 +241,74 @@ test("layered config isolates an invalid source and retains valid sources", asyn
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * 洞 4's acceptance: the version contract. A newer config is REFUSED with
+ * both numbers (never silently misread), the window and the deadline are
+ * named, and the v3→v4 conversion records what it dropped and why.
+ */
+
+test("a v4 config parses as-is with an empty summary", () => {
+  const result = migrateConfig(configuredConfig());
+  expect(result.summary.fromVersion).toBe(4);
+  expect(result.summary.changed).toEqual([]);
+  expect(result.config.version).toBe(4);
+});
+
+test("a v3 config converts, naming the field the deleted mechanism left behind", () => {
+  const legacy = {
+    ...configuredConfig(),
+    version: 3,
+    backgroundReview: { evolutionTrigger: true },
+  };
+  const result = migrateConfig(legacy);
+  expect(result.config.version).toBe(4);
+  expect(result.summary.fromVersion).toBe(3);
+  expect(result.summary.changed).toEqual(["version 3 -> v4"]);
+  // The dropped switch is NAMED with its reason — a converter that
+  // silently stripped it would leave a config claiming a setting nothing
+  // reads.
+  expect(result.summary.warnings).toEqual([
+    expect.stringContaining("dropped backgroundReview.evolutionTrigger"),
+  ]);
+  expect(
+    (result.config.backgroundReview as { evolutionTrigger?: boolean })
+      .evolutionTrigger,
+  ).toBeUndefined();
+});
+
+test("a NEWER config is refused with both numbers — never silently misread", () => {
+  // The acceptance's core: a v5 file read by this v4 runtime must not
+  // parse as v4 (every field v5 added would vanish and the load would
+  // report success on a config nobody read).
+  expect(() => migrateConfig({ ...configuredConfig(), version: 5 })).toThrow(
+    /this config is v5; this runtime reads up to v4/,
+  );
+});
+
+test("a version below the read window is refused by name", () => {
+  expect(() => migrateConfig({ ...configuredConfig(), version: 2 })).toThrow(
+    /below the read window/,
+  );
+});
+
+test("past the deadline the oldest readable version is refused with the date", () => {
+  const afterDeadline = new Date("2028-01-01T00:00:00Z");
+  expect(() =>
+    migrateConfig({ ...configuredConfig(), version: 3 }, afterDeadline),
+  ).toThrow(/read window closed on/);
+  // And before it, the same file converts.
+  const beforeDeadline = new Date("2026-10-14T00:00:00Z");
+  expect(
+    migrateConfig({ ...configuredConfig(), version: 3 }, beforeDeadline).config
+      .version,
+  ).toBe(4);
+});
+
+test("a config with no integer version is refused with what it got", () => {
+  expect(() => migrateConfig({ providers: {} })).toThrow(
+    /carries no integer version/,
+  );
+  expect(() => migrateConfig("not a config")).toThrow(/carries no version/);
 });

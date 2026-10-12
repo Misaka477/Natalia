@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configV3Schema, modelRefKey } from "@anthelia/contracts";
+import { configV4Schema, modelRefKey } from "@anthelia/contracts";
 import {
   buildModelCatalog,
   configureProviderModels,
@@ -47,7 +47,7 @@ test("discovers models from configured provider URL and imports them in batch", 
     ]);
 
     const configured = configureProviderModels(
-      configV3Schema.parse({ version: 3 }),
+      configV4Schema.parse({ version: 4 }),
       {
         providerID: "private-provider",
         providerName: "Private Gateway",
@@ -189,7 +189,7 @@ test("discovery rejects unknown drivers and does not expose upstream response bo
 
 test("rejects a discovery import without credentials or model IDs", () => {
   expect(() =>
-    configureProviderModels(configV3Schema.parse({ version: 3 }), {
+    configureProviderModels(configV4Schema.parse({ version: 4 }), {
       providerID: "private-provider",
       driver: "openai-compatible",
       source: "discovery",
@@ -197,7 +197,7 @@ test("rejects a discovery import without credentials or model IDs", () => {
     }),
   ).toThrow("Provider API key is required for discovery");
   expect(() =>
-    configureProviderModels(configV3Schema.parse({ version: 3 }), {
+    configureProviderModels(configV4Schema.parse({ version: 4 }), {
       providerID: "private-provider",
       driver: "openai-compatible",
       source: "manual",
@@ -207,8 +207,8 @@ test("rejects a discovery import without credentials or model IDs", () => {
 });
 
 test("manual import preserves existing overrides and an existing default model", () => {
-  const base = configV3Schema.parse({
-    version: 3,
+  const base = configV4Schema.parse({
+    version: 4,
     providers: {
       local: {
         name: "Local",
@@ -260,8 +260,8 @@ test("manual import preserves existing overrides and an existing default model",
 });
 
 test("resolveEffectiveModel merges catalog facts, override and provider defaults", () => {
-  const config = configV3Schema.parse({
-    version: 3,
+  const config = configV4Schema.parse({
+    version: 4,
     providers: {
       local: {
         name: "Local",
@@ -314,7 +314,7 @@ test("resolveEffectiveModel merges catalog facts, override and provider defaults
 });
 
 test("resolveEffectiveModel is undefined for an unknown provider or model", () => {
-  const config = configV3Schema.parse({ version: 3 });
+  const config = configV4Schema.parse({ version: 4 });
   expect(
     resolveEffectiveModel(config, { provider: "missing", model: "m" }),
   ).toBeUndefined();
@@ -406,8 +406,8 @@ test("persists different context windows for individual provider models", async 
   );
   const globalPath = join(workspaceRoot, "global.json");
   try {
-    const base = configV3Schema.parse({
-      version: 3,
+    const base = configV4Schema.parse({
+      version: 4,
       providers: {
         local: { name: "Local", driver: "openai-compatible" },
       },
@@ -465,8 +465,8 @@ test("persists different context windows for individual provider models", async 
 });
 
 test("config patches preserve complete changed records and delete removed records", () => {
-  const base = configV3Schema.parse({
-    version: 3,
+  const base = configV4Schema.parse({
+    version: 4,
     providers: {
       retained: {
         name: "Retained",
@@ -480,7 +480,7 @@ test("config patches preserve complete changed records and delete removed record
       },
     },
   });
-  const next = configV3Schema.parse({
+  const next = configV4Schema.parse({
     ...base,
     providers: {
       retained: {
@@ -508,8 +508,8 @@ test("config patches preserve complete changed records and delete removed record
 });
 
 test("config patches delete removed plugin package records", () => {
-  const base = configV3Schema.parse({
-    version: 3,
+  const base = configV4Schema.parse({
+    version: 4,
     plugins: {
       packages: {
         "fixture.plugin": {
@@ -520,7 +520,7 @@ test("config patches delete removed plugin package records", () => {
       },
     },
   });
-  const next = configV3Schema.parse({
+  const next = configV4Schema.parse({
     ...base,
     plugins: { ...base.plugins, packages: {} },
   });
@@ -538,7 +538,7 @@ test("settings arrays and browser fields persist as a minimal selected-scope pat
   process.env.HOME = home;
   try {
     const base = (await resolveConfig({ workspaceRoot })).config;
-    const next = configV3Schema.parse({
+    const next = configV4Schema.parse({
       ...base,
       instructions: {
         ...base.instructions,
@@ -714,8 +714,8 @@ test("settings arrays and browser fields persist as a minimal selected-scope pat
 });
 
 test("catalog excludes providers denied by the configured policy", () => {
-  const config = configV3Schema.parse({
-    version: 3,
+  const config = configV4Schema.parse({
+    version: 4,
     providers: {
       approved: {
         name: "Approved",
@@ -769,8 +769,8 @@ test("catalog excludes providers denied by the configured policy", () => {
 });
 
 test("catalog filters disabled and policy-denied models while preserving capabilities", () => {
-  const config = configV3Schema.parse({
-    version: 3,
+  const config = configV4Schema.parse({
+    version: 4,
     providers: {
       local: {
         name: "Local",

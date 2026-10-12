@@ -1,4 +1,4 @@
-import type { ConfigV3, ModelRef } from "@anthelia/contracts";
+import type { ConfigV4, ModelRef } from "@anthelia/contracts";
 import { modelRefKey, parseModelRef } from "@anthelia/contracts";
 import { resolveEffectiveModel } from "./catalog";
 
@@ -27,7 +27,7 @@ export type SetupSnapshot = {
 };
 
 export function createSetupSnapshot(
-  config: ConfigV3,
+  config: ConfigV4,
   ref: ModelRef | string,
   resolution: SetupContextWindowResolution,
 ): SetupSnapshot {

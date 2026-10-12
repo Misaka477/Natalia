@@ -27,7 +27,7 @@ import { buildGeneration, storeGeneration } from "@anthelia/composition";
 import { generationAdapterRows, generationPrompts } from "./generation-inputs";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
-import type { ConfigV3, ConstitutionRule } from "@anthelia/contracts";
+import type { ConfigV4, ConstitutionRule } from "@anthelia/contracts";
 import { resolve } from "node:path";
 import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";
 import {

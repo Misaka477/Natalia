@@ -156,7 +156,7 @@ const beta = { mode: "subagent", description: "Beta reviewer" } as const;
 test("a failed config reload restores the agent_spawn description to the prior config", async () => {
   const h = await harness();
   try {
-    await updateConfig(h.root, { version: 3, agents: { alpha } });
+    await updateConfig(h.root, { version: 4, agents: { alpha } });
     const first = await h.reload.applyConfigFromDisk();
     expect(first.applied).toBe(true);
     expect(h.agentSpawn.description).toContain("alpha");
@@ -180,7 +180,7 @@ test("a failed config reload restores the agent_spawn description to the prior c
 test("a failed reload re-publishes the tool catalog so the projection matches the rollback", async () => {
   const h = await harness();
   try {
-    await updateConfig(h.root, { version: 3, agents: { alpha } });
+    await updateConfig(h.root, { version: 4, agents: { alpha } });
     expect((await h.reload.applyConfigFromDisk()).applied).toBe(true);
 
     // Config B enables an extra plugin tool; fail the reload only after the new
@@ -217,7 +217,7 @@ test("a failed reload restores the previous config's provider adapter modules", 
     // and publishes a diagnostic (registers nothing).
     await updateConfig(
       h.root,
-      { version: 3, providers: { p: adapterProvider("fa", "a.ts") } },
+      { version: 4, providers: { p: adapterProvider("fa", "a.ts") } },
       { globalPath: h.globalConfigPath },
     );
     expect((await h.reload.applyConfigFromDisk()).applied).toBe(true);
@@ -228,7 +228,7 @@ test("a failed reload restores the previous config's provider adapter modules", 
     h.resetRecorded();
     await updateConfig(
       h.root,
-      { version: 3, providers: { p: adapterProvider("fb", "b.ts") } },
+      { version: 4, providers: { p: adapterProvider("fb", "b.ts") } },
       { globalPath: h.globalConfigPath },
     );
     h.setFailContextConfig(true);
@@ -247,7 +247,7 @@ test("a failed reload restores the previous config's provider adapter modules", 
 test("a successful reload records the candidate then commits it", async () => {
   const h = await harness();
   try {
-    await updateConfig(h.root, { version: 3, agents: { alpha } });
+    await updateConfig(h.root, { version: 4, agents: { alpha } });
     h.published.length = 0;
     const applied = await h.reload.applyConfigFromDisk();
     expect(applied.applied).toBe(true);

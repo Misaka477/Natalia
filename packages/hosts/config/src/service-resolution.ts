@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { configV3Schema, parseModelRef } from "@anthelia/contracts";
+import { configV4Schema, parseModelRef } from "@anthelia/contracts";
+import { defaultConfigV4 } from "./migration";
 import { statePath, resolveStatePath } from "@anthelia/platform";
 import { globalConfigHome } from "@anthelia/platform";
 import { parseConfigText } from "./file";
@@ -58,7 +59,7 @@ export async function resolveConfig(input: {
     ? { path: input.globalPath, legacy: false }
     : resolveGlobalConfigPath({ env: input.environment });
   const globalPath = global.path;
-  let config = configV3Schema.parse({ version: 3 });
+  let config = defaultConfigV4();
   const sources: ConfigSource[] = [{ scope: "defaults", applied: true }];
   for (const [scope, path] of [
     ["global", globalPath],
@@ -106,7 +107,7 @@ export async function resolveConfig(input: {
   }
   const model = (input.environment ?? process.env).NATALIA_MODEL;
   if (model) {
-    config = configV3Schema.parse({
+    config = configV4Schema.parse({
       ...config,
       defaultModel: parseModelRef(model),
     });

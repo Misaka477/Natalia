@@ -5,7 +5,7 @@ export type SecondaryWorkerRequest =
   | {
       id: number;
       op: "configClone";
-      config: import("@anthelia/contracts").ConfigV3;
+      config: import("@anthelia/contracts").ConfigV4;
     }
   | {
       id: number;

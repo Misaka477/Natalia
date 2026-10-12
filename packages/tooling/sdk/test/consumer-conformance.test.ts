@@ -979,7 +979,7 @@ export default definePlugin({
   await writeFile(
     join(root, "global.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { paths: [join(root, ".natalia", "plugins")] },
     }),
   );

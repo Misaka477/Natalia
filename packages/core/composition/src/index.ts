@@ -5,7 +5,7 @@ export * from "./switch";
 export * from "./verification";
 import { ObjectStore } from "@anthelia/object-store";
 import type {
-  ConfigV3,
+  ConfigV4,
   ConstitutionRule,
   RuntimeEvent,
 } from "@anthelia/contracts";
@@ -82,7 +82,7 @@ export async function loadGeneration(
 
 /** Builds a generation from the live config, catalog, policy, prompts and seams. */
 export function buildGeneration(input: {
-  config: ConfigV3;
+  config: ConfigV4;
   catalog: ReadonlyArray<{
     id: string;
     enabled: boolean;

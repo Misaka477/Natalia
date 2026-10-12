@@ -120,7 +120,7 @@ async function makeClient(
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         runtime: { maxStepsPerTurn: options.maxStepsPerTurn },
       }),
     );
@@ -429,7 +429,7 @@ test("Nia normal profile selects its configured model and reasoning for submit a
   });
   const root = await officialPluginWorkspace("three-stream-profiles");
   const config = {
-    version: 3,
+    version: 4,
     providers: {
       grok: {
         name: "Grok",

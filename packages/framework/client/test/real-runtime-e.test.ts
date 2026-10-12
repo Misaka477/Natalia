@@ -95,7 +95,7 @@ test("agent and provider management persist, validate references and survive app
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -972,7 +972,7 @@ test("chat reserves its configured final step and preserves XML-like text", asyn
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, runtime: { maxStepsPerTurn: 2 } }),
+    JSON.stringify({ version: 4, runtime: { maxStepsPerTurn: 2 } }),
   );
   const requests: ProviderStreamRequest[] = [];
   const client = createRealRuntimeClient({
@@ -1040,7 +1040,7 @@ test("chat ignores structured calls on its final step and emits fallback text", 
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, runtime: { maxStepsPerTurn: 1 } }),
+    JSON.stringify({ version: 4, runtime: { maxStepsPerTurn: 1 } }),
   );
   const events: RuntimeEvent[] = [];
   const client = createRealRuntimeClient({
@@ -1123,7 +1123,7 @@ test("chat answers with live main context while the main turn is still running",
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: { providerConcurrency: { test: 1 } },
     }),
   );
@@ -2353,7 +2353,7 @@ test("a subagent keeps retrying transient failures without respawn", async () =>
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: {
         retry: {
           initialBackoffMs: 1,
@@ -2455,7 +2455,7 @@ test("a model with image input can attach its own screenshot and see it", async 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         "scripted-image": { name: "Scripted image", driver: "openai" },
       },
@@ -2544,7 +2544,7 @@ test("/team has no product behavior when the team plugin is disabled", async () 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { [TEAM_PLUGIN_ID]: false } },
     }),
   );
@@ -3510,7 +3510,7 @@ test("runtime.maxAttemptsPerStep caps the retry policy the runtime uses", async 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: {
         maxAttemptsPerStep: 2,
         retry: { initialBackoffMs: 1, maxBackoffMs: 1, jitterMs: 0 },

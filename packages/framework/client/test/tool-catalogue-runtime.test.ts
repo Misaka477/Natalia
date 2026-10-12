@@ -36,7 +36,7 @@ test("the advertised tool names are the names the real runtime registers", async
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
 
   const events: RuntimeEvent[] = [];

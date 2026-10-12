@@ -95,7 +95,7 @@ test("evidence summary is secret-safe", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: {
         promoteCommand: 'printf "token=fakefaketoken\\n"; true',
       },
@@ -1141,7 +1141,7 @@ test("subagent compaction uses its active provider and stays in the child lifecy
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       context: {
         compactionThresholdPercent: 85,
         preservedRecentMessages: 0,
@@ -1388,7 +1388,7 @@ test("subagent honors configured step limits above twenty", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "long_running",
       agents: { long_running: { description: "Long running", maxSteps: 21 } },
     }),
@@ -1717,7 +1717,7 @@ test("the repeated call guard blocks loops but not waiting reads", async () => {
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, runtime: { maxStepsPerTurn: 6 } }),
+      JSON.stringify({ version: 4, runtime: { maxStepsPerTurn: 6 } }),
     );
     const events: RuntimeEvent[] = [];
     const client = createRealRuntimeClient({
@@ -2176,7 +2176,7 @@ test("parallel sessions retain their configured provider across tool steps", asy
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "local",
@@ -2638,7 +2638,7 @@ test("permission management: save validates, delete refuses the default, both pe
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -2691,7 +2691,7 @@ test("mcp server management persists config and survives failed connections", as
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   const client = createRealRuntimeClient({
     workspaceRoot: root,

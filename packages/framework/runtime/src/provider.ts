@@ -14,7 +14,7 @@ import {
 import { modelSelectionStatus, resolveEffectiveModel } from "@anthelia/config";
 import {
   parseModelRef,
-  type ConfigV3,
+  type ConfigV4,
   type LocalAttachment,
   type ModelCapabilities,
   type ModelRef,
@@ -2010,7 +2010,7 @@ function interleavedReasoningFieldForModel(
  * name is accepted for call compatibility but never applied.
  */
 export function providerForModel(
-  config: ConfigV3,
+  config: ConfigV4,
   ref: ModelRef | string | null | undefined,
   _variantName?: string,
   requestOverride?: {

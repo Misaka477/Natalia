@@ -6,10 +6,10 @@
  * the derivation separate from the hook-layer construction makes the
  * agent/mode/profile precedence rules testable without the policy service.
  */
-import type { ConfigV3, PermissionProfile } from "@anthelia/contracts";
+import type { ConfigV4, PermissionProfile } from "@anthelia/contracts";
 import type { AgentDefinition } from "@anthelia/agent";
 
-type RuntimeMode = ConfigV3["agentModes"][string];
+type RuntimeMode = ConfigV4["agentModes"][string];
 
 export function deriveAgentToolPolicy(input: {
   agent: AgentDefinition | undefined;

@@ -5,10 +5,10 @@ test("runtime config service is exposed by its kernel name", () => {
   expect(RUNTIME_CONFIG_SERVICE).toBe("runtime.config");
 });
 
-test("the config value contract is the resolved ConfigV3", () => {
+test("the config value contract is the resolved ConfigV4", () => {
   const config = {
-    version: 3,
+    version: 4,
     defaultAgentMode: "ask",
   } as RuntimeConfigService;
-  expect(config.version).toBe(3);
+  expect(config.version).toBe(4);
 });

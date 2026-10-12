@@ -278,7 +278,7 @@ test("two sessions provider/model and reasoning selections remain isolated", asy
   );
   await mkdir(join(workspaceRoot, ".natalia"), { recursive: true });
   const modelConfig = {
-    version: 3,
+    version: 4,
     providers: {
       local: {
         name: "Local",
@@ -367,7 +367,7 @@ test("fifty sessions run concurrently through a real OpenAI-compatible HTTP prov
   try {
     await mkdir(join(workspaceRoot, ".natalia"), { recursive: true });
     const modelConfig = {
-      version: 3,
+      version: 4,
       providers: {
         local: {
           name: "local",

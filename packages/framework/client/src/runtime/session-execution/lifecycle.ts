@@ -266,7 +266,7 @@ export function createLifecycleSurface(
 
 function normalizeProviderRenamePatch(
   patch: Record<string, unknown>,
-  currentConfig: import("@anthelia/contracts").ConfigV3 | undefined,
+  currentConfig: import("@anthelia/contracts").ConfigV4 | undefined,
   log: OperationLog,
 ): Record<string, unknown> {
   const providersPatch = patch.providers as Record<string, unknown> | undefined;

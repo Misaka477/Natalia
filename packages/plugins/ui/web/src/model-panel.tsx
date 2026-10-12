@@ -8,7 +8,7 @@ import {
   Index,
 } from "solid-js";
 import type {
-  ConfigV3,
+  ConfigV4,
   RuntimeModelCatalogEntry,
   RuntimeModelSelection,
 } from "@anthelia/contracts";
@@ -71,8 +71,8 @@ export function ModelPanel(props: {
   onClose: () => void;
   catalog?: RuntimeModelCatalogEntry[];
   selection?: RuntimeModelSelection;
-  providers?: ConfigV3["providers"];
-  config?: ConfigV3;
+  providers?: ConfigV4["providers"];
+  config?: ConfigV4;
   onSetDefault?: (modelID: string) => unknown;
   onAddProvider?: (input: {
     name: string;

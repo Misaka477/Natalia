@@ -9,7 +9,7 @@ import { createSessionRecord } from "@anthelia/session";
 import { sessionStoreController } from "@anthelia/session-store";
 import { attachmentService as attachmentServiceToken } from "@anthelia/attachments";
 import { createAttachmentService } from "@anthelia/attachments";
-import { defaultConfigV3 } from "@anthelia/config";
+import { defaultConfigV4 } from "@anthelia/config";
 import {
   ContextLedger,
   TokenMeter,
@@ -70,7 +70,7 @@ type Harness = {
 
 async function makeHarness(): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "natalia-chat-tool-history-"));
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.local = {
     name: "Local",
     driver: "openai",

@@ -387,7 +387,7 @@ test("config reload applies changed permission profiles to the same worker clien
     writeFile(
       configPath,
       JSON.stringify({
-        version: 3,
+        version: 4,
         defaultAgentMode: "active",
         agentModes: { active: { approval } },
         agents,

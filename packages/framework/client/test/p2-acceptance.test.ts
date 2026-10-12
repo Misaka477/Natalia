@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
 import { replaceProjectConfig, resolveConfig } from "@anthelia/config";
 import {
-  configV3Schema,
+  configV4Schema,
   type ConstitutionRule,
   type RuntimeEvent,
 } from "@anthelia/contracts";
@@ -89,7 +89,7 @@ async function acceptance(
   // Build: two content-addressed generations — the current one and the
   // candidate (differing by an observable, type-safe config field).
   const store = new ObjectStore(join(root, ".acceptance-objects"));
-  const currentConfig = configV3Schema.parse({ version: 3 });
+  const currentConfig = configV4Schema.parse({ version: 4 });
   const currentID = await storeGeneration(
     store,
     buildGeneration({
@@ -104,8 +104,8 @@ async function acceptance(
     // would route part of the write to ~/.natalia/config.json, which this
     // harness's read-only home refuses — and the product rule is that the
     // workspace's own file is where a workspace-scoped switch lands.
-    config: configV3Schema.parse({
-      version: 3,
+    config: configV4Schema.parse({
+      version: 4,
       checkpoint: { maxFiles: 12345 },
     }),
     catalog: [],

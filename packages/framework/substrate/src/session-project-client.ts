@@ -38,7 +38,7 @@ type SessionProjectTask =
     }
   | {
       op: "modelCatalog";
-      config: import("@anthelia/contracts").ConfigV3;
+      config: import("@anthelia/contracts").ConfigV4;
     }
   | {
       op: "projection";
@@ -154,7 +154,7 @@ export function subagentHistoryInWorker(
 }
 
 export function modelCatalogInWorker(
-  config: import("@anthelia/contracts").ConfigV3,
+  config: import("@anthelia/contracts").ConfigV4,
 ): Promise<ReturnType<typeof import("@anthelia/config").buildModelCatalog>> {
   return run<ReturnType<typeof import("@anthelia/config").buildModelCatalog>>({
     op: "modelCatalog",

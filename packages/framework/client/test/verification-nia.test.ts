@@ -4,7 +4,7 @@ import type {
   RuntimeEvent,
   SessionID,
 } from "@anthelia/contracts";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import { buildGeneration } from "@anthelia/composition";
 import {
   officialPluginWorkspace,
@@ -26,8 +26,8 @@ useWorkspaceCleanup();
  * reading Nia does.
  */
 
-const CONFIG = configV3Schema.parse({
-  version: 3,
+const CONFIG = configV4Schema.parse({
+  version: 4,
   providers: {
     nia: {
       name: "Nia",

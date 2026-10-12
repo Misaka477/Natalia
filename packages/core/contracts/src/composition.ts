@@ -1,5 +1,5 @@
 import type { ConstitutionRule } from "./schema-types";
-import type { ConfigV3 } from "./schema-types";
+import type { ConfigV4 } from "./schema-types";
 
 /**
  * Composition generations (master plan P2, NGM study G1).
@@ -103,7 +103,7 @@ export type GenerationSource =
 export type Generation = {
   schema: typeof GENERATION_SCHEMA;
   /** The resolved runtime config this generation was composed with. */
-  config: ConfigV3;
+  config: ConfigV4;
   /**
    * The code this generation carries, when it changed any (L3). Absent
    * for a surface-only generation — and absent is what routes the switch

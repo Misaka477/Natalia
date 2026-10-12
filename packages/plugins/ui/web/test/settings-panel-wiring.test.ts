@@ -58,7 +58,7 @@ test("the panel reads the runtime's config itself instead of trusting the app's 
   // The effective view must PREFER the panel's own read, or the snapshot's
   // undefined wins and the panel is inert exactly as before.
   expect(source).toMatch(
-    /const effectiveConfig = \(\)[^=]*=>\s*\n?\s*\(ownConfig\(\) as ConfigV3 \| undefined\) \?\? props\.config/u,
+    /const effectiveConfig = \(\)[^=]*=>\s*\n?\s*\(ownConfig\(\) as ConfigV4 \| undefined\) \?\? props\.config/u,
   );
   // And the rows must read it, not the prop.
   expect(source).not.toMatch(/const config = props\.config;/u);

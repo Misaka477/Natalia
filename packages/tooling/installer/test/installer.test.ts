@@ -692,7 +692,7 @@ test("custom global config participates in maintenance reads and writes", async 
   await writeFile(
     globalPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { [pluginID]: false } },
     }),
   );

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type {
-  ConfigV3,
+  ConfigV4,
   ConstitutionRule,
   RuntimeEvent,
 } from "@anthelia/contracts";
@@ -41,7 +41,7 @@ const SCOPED: ConstitutionRule = {
   evidenceRefs: [],
 };
 
-const CONFIG = { version: 3 } as unknown as ConfigV3;
+const CONFIG = { version: 4 } as unknown as ConfigV4;
 
 function candidate(policyRows: ConstitutionRule[]) {
   return buildGeneration({

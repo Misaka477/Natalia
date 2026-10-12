@@ -12,7 +12,7 @@ import {
 } from "../tool-policy-derivation";
 import { derivePermissionSettings } from "../permission-settings";
 import type { AgentDefinition } from "@anthelia/agent";
-import type { ConfigV3 } from "@anthelia/contracts";
+import type { ConfigV4 } from "@anthelia/contracts";
 import type { PermissionProfileCommandRules } from "@anthelia/tools";
 import type { ToolPolicyHookLayer } from "@anthelia/runtime-services";
 import { toolPolicy } from "@natalia/tool-policy";
@@ -134,7 +134,7 @@ export function createPermissions(
    * A requested profile (options.permissionProfile) that vanished from disk
    * keeps the current selection; the caller decides whether that is fatal.
    */
-  function reloadPermissionSettings(config: ConfigV3) {
+  function reloadPermissionSettings(config: ConfigV4) {
     const {
       getPermissionMode,
       setSelectedPermissionProfile,

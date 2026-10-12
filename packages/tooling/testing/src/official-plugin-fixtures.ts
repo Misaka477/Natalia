@@ -270,7 +270,7 @@ export async function officialPluginWorkspace(
   await mkdir(join(workspaceRoot, ".natalia"), { recursive: true });
   await writeFile(
     join(workspaceRoot, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   return { workspaceRoot, pluginStoreRoot };
 }

@@ -2168,7 +2168,7 @@ test("promoting framework sources emits restart_required", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "true" },
     }),
   );
@@ -2202,7 +2202,7 @@ test("promote records evidence when validation passes", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "true" },
     }),
   );
@@ -2253,7 +2253,7 @@ test("a high-risk promotion requires a multi-stage user confirmation (E5 R3/R4)"
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];
@@ -2296,7 +2296,7 @@ test("a rejected high-risk promotion leaves the host unchanged and records faile
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];
@@ -2363,7 +2363,7 @@ test("a low-risk promotion skips the multi-stage confirmation (E5)", async () =>
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];
@@ -2401,7 +2401,7 @@ test("failed validation records failed evidence and does not promote", async () 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "exit 1" },
     }),
   );

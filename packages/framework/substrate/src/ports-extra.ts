@@ -5,7 +5,7 @@
  * `RuntimeContext.ports` type through an intersection in `context.ts`.
  */
 import type { AgentRegistry } from "@anthelia/agent";
-import type { ConfigV3, RuntimeEvent, SessionID } from "@anthelia/contracts";
+import type { ConfigV4, RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type {
   ContextWindowResolver,
   ProviderConcurrencyLimiter,
@@ -100,7 +100,7 @@ export type RuntimePortsExtra = {
   ) => Promise<{ text: string }>;
   wakeNavi: (exec: SessionExecutionState) => Promise<void>;
   wakeNia: (exec: SessionExecutionState) => Promise<void>;
-  setTsRuntimeConfig: (config: ConfigV3 | undefined) => void;
+  setTsRuntimeConfig: (config: ConfigV4 | undefined) => void;
   setMaxSteps: (steps: number | undefined) => void;
   setRetryPolicy: (
     policy: import("@anthelia/runtime").RetryRunnerOptions["policy"],
@@ -114,9 +114,9 @@ export type RuntimePortsExtra = {
     selectedSkills?: Map<SessionID, string>,
   ) => Promise<void>;
   publishToolCatalogChanges: (before: Set<string>) => void;
-  reloadPermissionSettings: (config: ConfigV3) => void;
+  reloadPermissionSettings: (config: ConfigV4) => void;
   resolveContextStatusConfig: (
-    config: ConfigV3,
+    config: ConfigV4,
     provider: StreamingProvider | undefined,
     resolver: ContextWindowResolver,
     selectedRef?: string,

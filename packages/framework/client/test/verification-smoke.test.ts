@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { configV3Schema, type ConstitutionRule } from "@anthelia/contracts";
+import { configV4Schema, type ConstitutionRule } from "@anthelia/contracts";
 import { buildGeneration } from "@anthelia/composition";
 import { smokeFace } from "../src/runtime/verification-faces";
 
@@ -10,8 +10,8 @@ import { smokeFace } from "../src/runtime/verification-faces";
  * smoked nothing at all.
  */
 
-const VALID_CONFIG = configV3Schema.parse({
-  version: 3,
+const VALID_CONFIG = configV4Schema.parse({
+  version: 4,
   providers: {
     smoke: {
       name: "Smoke",
@@ -40,13 +40,14 @@ test("a valid candidate boots, answers a turn, and reports healthy", async () =>
 }, 40_000);
 
 test("a candidate whose config violates the schema is refused by name", async () => {
-  // A foreign config version: loadGeneration does not deep-validate a
-  // stored generation's config and the runtime swallows config errors by
-  // design, so without the smoke's own strict parse this forged candidate
-  // would boot on defaults and "pass" — verifying nothing. (A bogus
-  // provider driver would NOT do: driver names are open strings under the
-  // caps-declaration model, and resolve at use time.)
-  const broken = { ...VALID_CONFIG, version: 4 };
+  // A foreign config version — a v5 candidate carried by a v4 runtime:
+  // loadGeneration does not deep-validate a stored generation's config and
+  // the runtime swallows config errors by design, so without the smoke's
+  // own strict parse this forged candidate would boot on defaults and
+  // "pass" — verifying nothing. (A bogus provider driver would NOT do:
+  // driver names are open strings under the caps-declaration model, and
+  // resolve at use time.)
+  const broken = { ...VALID_CONFIG, version: 5 };
   const check = await smokeFace({ timeoutMs: 30_000 })(candidate(broken));
   expect(check.ok).toBe(false);
   expect(check.detail).toContain("candidate config invalid");

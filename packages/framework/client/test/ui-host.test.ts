@@ -96,7 +96,7 @@ async function discoveredUiWorkspace(config: Record<string, unknown> = {}) {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { paths: ["ui-plugins"] },
       ...config,
     }),
@@ -166,7 +166,7 @@ async function installedUiWorkspace() {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: {
         packages: {
           "fixture.ui": {
@@ -316,7 +316,7 @@ test("only adapter-capable process plugins are loaded into the host registry", a
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { paths: ["ui-plugins"] },
     }),
   );
@@ -364,7 +364,7 @@ test("extra desired entries share the same generic host path", async () => {
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   const fixture = runtimeFixture();
   let mounts = 0;

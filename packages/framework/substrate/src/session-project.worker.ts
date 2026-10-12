@@ -51,7 +51,7 @@ export type SessionProjectWorkerRequest =
   | {
       id: number;
       op: "modelCatalog";
-      config: import("@anthelia/contracts").ConfigV3;
+      config: import("@anthelia/contracts").ConfigV4;
     }
   | {
       id: number;

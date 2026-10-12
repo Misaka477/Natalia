@@ -32,7 +32,7 @@ beforeAll(() => {
   writeFileSync(
     join(home, "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         p: {
           name: "P",
@@ -68,7 +68,7 @@ beforeAll(() => {
   });
   writeFileSync(
     join(workspace, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, runtime: { checkpoint: { maxFiles: 9 } } }),
+    JSON.stringify({ version: 4, runtime: { checkpoint: { maxFiles: 9 } } }),
   );
   writeFileSync(
     join(workspace, ".natalia", "sessions", "ses_one", "events.jsonl"),

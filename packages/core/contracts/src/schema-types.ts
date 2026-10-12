@@ -10,6 +10,8 @@ export type SandboxBackend = z.infer<
 /** The goal completion check, straight from the config schema. */
 export type GoalConfig = z.infer<typeof foundation.goalConfigSchema>;
 
+export type ConfigV4 = z.infer<typeof config.configV4Schema>;
+/** The legacy read type: a v3 file on disk, before the converter runs. */
 export type ConfigV3 = z.infer<typeof config.configV3Schema>;
 /** The file-effect mode a subprocess runs under (see foundation.schema). */
 export type ConfinementMode = z.infer<

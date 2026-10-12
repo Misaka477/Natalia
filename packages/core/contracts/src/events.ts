@@ -6,7 +6,7 @@ import type {
 import type {
   AgentConfig,
   AgentPermissionRules,
-  ConfigV3,
+  ConfigV4,
   MCPServerConfig,
   PermissionProfile,
 } from "./schemas";
@@ -4077,7 +4077,7 @@ export type RuntimeClient = {
     scope?: "project" | "global";
   }): Promise<{ applied: boolean; reason?: string }>;
   /** Reads the fully resolved product configuration through the runtime. */
-  configGet?(): Promise<ConfigV3>;
+  configGet?(): Promise<ConfigV4>;
   /**
    * The interface-preference settings (`tui.json`). The TUI used to own this
    * file privately; the runtime now serves it so any consumer reads and

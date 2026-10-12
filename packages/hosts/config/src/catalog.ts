@@ -1,8 +1,8 @@
 import {
-  configV3Schema,
+  configV4Schema,
   modelRefKey,
   parseModelRef,
-  type ConfigV3,
+  type ConfigV4,
   type ModelCapabilities,
   type ModelLimits,
   type ModelOverride,
@@ -37,7 +37,7 @@ export interface CatalogProvider {
   models: CatalogProviderModel[];
 }
 
-export function buildModelCatalog(config: ConfigV3): CatalogProvider[] {
+export function buildModelCatalog(config: ConfigV4): CatalogProvider[] {
   return Object.entries(config.providers ?? {})
     .filter(
       ([id, provider]) =>
@@ -59,7 +59,7 @@ export function buildModelCatalog(config: ConfigV3): CatalogProvider[] {
 }
 
 function catalogModelsForProvider(
-  config: ConfigV3,
+  config: ConfigV4,
   providerID: string,
 ): CatalogProviderModel[] {
   const catalogModels = config.catalog?.providers?.[providerID]?.models ?? {};
@@ -217,7 +217,7 @@ export async function discoverProviderModels(
  * first imported model; an existing default is preserved.
  */
 export function configureProviderModels(
-  config: ConfigV3,
+  config: ConfigV4,
   input: {
     providerID: string;
     providerName?: string;
@@ -229,7 +229,7 @@ export function configureProviderModels(
     source: "discovery" | "manual";
     modelIDs: string[];
   },
-): ConfigV3 {
+): ConfigV4 {
   const providerID = input.providerID.trim();
   if (!providerID) throw new Error("Provider ID is required");
   if (!input.driver.trim()) throw new Error("Provider driver is required");
@@ -244,7 +244,7 @@ export function configureProviderModels(
   const existing = config.providers[providerID];
   const existingModels = config.catalog?.providers?.[providerID]?.models ?? {};
 
-  return configV3Schema.parse({
+  return configV4Schema.parse({
     ...config,
     providers: {
       ...config.providers,
@@ -335,7 +335,7 @@ export type EffectiveModel = {
  * provider is unknown.
  */
 export function resolveEffectiveModel(
-  config: ConfigV3,
+  config: ConfigV4,
   ref: ModelRef | string,
 ): EffectiveModel | undefined {
   const modelRef = typeof ref === "string" ? parseModelRef(ref) : ref;

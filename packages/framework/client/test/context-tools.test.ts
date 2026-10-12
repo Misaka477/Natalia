@@ -366,7 +366,7 @@ test("a recorded validation reaches the context faces through the real runtime (
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3 }),
+    JSON.stringify({ version: 4 }),
   );
   const sessionID = "ses_ctx_rina_write" as SessionID;
   const results: string[] = [];

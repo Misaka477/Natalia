@@ -10,7 +10,7 @@ import type { CapabilityRegistryHost } from "@anthelia/capability";
 import type {
   ChatTurnIntent,
   CollaborationParticipant,
-  ConfigV3,
+  ConfigV4,
   RuntimeEvent,
   SessionID,
 } from "@anthelia/contracts";
@@ -226,7 +226,7 @@ export type RuntimePorts = {
   applyAgentProvider: (exec?: SessionExecutionState) => void;
   refreshExecutionContextConfig: (exec: SessionExecutionState) => Promise<void>;
   getCapabilityRegistry: () => CapabilityRegistryHost;
-  getTsRuntimeConfig: () => ConfigV3 | undefined;
+  getTsRuntimeConfig: () => ConfigV4 | undefined;
   nextChatSequence: () => number;
   nextPlanSequence: () => number;
   nextSettlementSequence: () => number;

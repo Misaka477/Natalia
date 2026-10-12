@@ -636,7 +636,7 @@ test("a sandbox merge records only successfully landed paths", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "true" },
     }),
   );

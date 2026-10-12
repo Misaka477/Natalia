@@ -1,6 +1,6 @@
 import type {
   CheckpointResourcePolicy,
-  ConfigV3,
+  ConfigV4,
   RuntimeEvent,
   SessionID,
 } from "@anthelia/contracts";
@@ -17,8 +17,8 @@ export function createCheckpointController(input: {
   sessionID(): SessionID;
   workspaceRoot: string;
   storeDir?: string;
-  checkpoint(): ConfigV3["checkpoint"] | undefined;
-  workspace(): ConfigV3["workspace"] | undefined;
+  checkpoint(): ConfigV4["checkpoint"] | undefined;
+  workspace(): ConfigV4["workspace"] | undefined;
   publish(event: RuntimeEvent): void;
   context(): import("@anthelia/runtime").ContextLedger;
   subagents(): CheckpointSubagents | undefined;

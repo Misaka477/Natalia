@@ -203,14 +203,14 @@ function makeHarness(
       options?.preservedRecentMessages === undefined
         ? undefined
         : ({
-            version: 3,
+            version: 4,
             instructions: { enabled: true },
             defaultAgentMode: "",
             agentModes: {},
             context: {
               preservedRecentMessages: options.preservedRecentMessages,
             },
-          } as unknown as import("@anthelia/contracts").ConfigV3),
+          } as unknown as import("@anthelia/contracts").ConfigV4),
     runtimeContextConfig: () => {
       // The budget is the canonical source (plan §2.3) and is derived from the
       // ts config, so the harness option that models

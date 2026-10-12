@@ -157,6 +157,24 @@ export const securityConfigSchema = z.object({
   envAllowlist: z.array(z.string()).default([]),
   redactToolOutput: z.boolean().default(true),
 });
+/**
+ * The config's version contract (洞 4): the version this schema family
+ * CURRENTLY writes, how many versions back a read still accepts, and the
+ * date the oldest accepted version stops being read. The three numbers
+ * live beside the schema so a reader and a writer cannot disagree about
+ * what "current" means.
+ */
+export const CONFIG_VERSION = 4;
+/** Versions CURRENT-1..CURRENT are readable; older is below the window. */
+export const CONFIG_READ_WINDOW = 1;
+/**
+ * When the oldest readable version's window closes. A v3 file still
+ * parses before this date (through the converter) and is refused with the
+ * date named after it — an unbounded read window is a promise nobody
+ * calendared.
+ */
+export const CONFIG_READ_DEADLINE = "2027-04-14";
+
 export const configV3Schema = z.object({
   version: z.literal(3),
   runtime: runtimeConfigSchema.default({}),
@@ -202,4 +220,17 @@ export const configV3Schema = z.object({
   dataSources: z.record(dataSourceConfigSchema).default({}),
   alertChannels: z.record(alertChannelConfigSchema).default({}),
   experimental: experimentalConfigSchema.default({}),
+});
+
+/**
+ * The CURRENT config schema. Same shape as v3 with the version literal
+ * bumped: the v3→v4 change is not a field move, it is the version
+ * contract arriving (洞 4) — the read window, the deadline, and the
+ * converter that strips the fields the deleted mechanisms left behind
+ * (`backgroundReview.evolutionTrigger`, the trigger law's switch). A
+ * shape-only diff would have made the converter a no-op and the contract
+ * a comment.
+ */
+export const configV4Schema = configV3Schema.extend({
+  version: z.literal(CONFIG_VERSION),
 });

@@ -6,7 +6,7 @@ import type {
   RuntimeProjectedMessage,
   RuntimeSessionSummary,
   ChatModelProfile,
-  ConfigV3,
+  ConfigV4,
   SessionID,
   WorkspaceSummary,
 } from "@anthelia/contracts";
@@ -1056,7 +1056,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [modelSelectionSignal, setModelSelectionSignal] = createSignal<
     { modelID?: string; variant?: string } | undefined
   >(undefined);
-  const [config, setConfig] = createSignal<ConfigV3 | undefined>(undefined);
+  const [config, setConfig] = createSignal<ConfigV4 | undefined>(undefined);
   const [reasoningEffort, setReasoningEffortSignal] =
     createSignal<string>("medium");
   const [chatProfile, setChatProfile] = createSignal<ChatModelProfile>({});
@@ -4688,7 +4688,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         // that snapshot, so the re-read keeps the value cell honest.
         onConfig={(next) => {
           perfLog("[settings] onConfig ->", JSON.stringify(next));
-          setConfig(next as unknown as ConfigV3);
+          setConfig(next as unknown as ConfigV4);
         }}
       />
       {dialog}

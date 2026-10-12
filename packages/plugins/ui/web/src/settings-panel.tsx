@@ -10,7 +10,7 @@ import {
 import type { AppState } from "@natalia/view-store";
 import {
   describeRuntimeCapabilities,
-  type ConfigV3,
+  type ConfigV4,
   type RuntimeClient,
   type UiPanelRequirement,
 } from "@anthelia/contracts";
@@ -362,7 +362,7 @@ export function SettingsPanel(props: {
    */
   onQuit?: () => void;
   state?: AppState;
-  config?: ConfigV3;
+  config?: ConfigV4;
   preferences?: {
     get<T>(key: string): T | undefined;
     set<T>(key: string, value: T): void;
@@ -394,8 +394,8 @@ export function SettingsPanel(props: {
   const [ownConfig, setOwnConfig] = createSignal<
     Record<string, unknown> | undefined
   >();
-  const effectiveConfig = (): ConfigV3 | undefined =>
-    (ownConfig() as ConfigV3 | undefined) ?? props.config;
+  const effectiveConfig = (): ConfigV4 | undefined =>
+    (ownConfig() as ConfigV4 | undefined) ?? props.config;
   // The config writer. The app mounts this panel without one (it passes only
   // the runtime), which left EVERY row that writes config — compaction, the
   // threshold, the terminal mode, max steps, max retry — rendering as a plain
@@ -574,7 +574,7 @@ export function SettingsPanel(props: {
     };
   };
 
-  function modelLabel(config: ConfigV3): string {
+  function modelLabel(config: ConfigV4): string {
     const model = config.defaultModel;
     if (!model) return "未设置";
     if (typeof model === "string") return model;
@@ -825,7 +825,7 @@ export function SettingsPanel(props: {
   );
 
   function runtimeValue(label: string): string | undefined {
-    const config = effectiveConfig() as ConfigV3 | undefined;
+    const config = effectiveConfig() as ConfigV4 | undefined;
     if (!config) return undefined;
     switch (label) {
       case "Default Model":

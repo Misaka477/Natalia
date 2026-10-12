@@ -26,7 +26,7 @@ function testStore(): { root: string; store: ObjectStore } {
 import { mkdtempSync } from "node:fs";
 
 const CONFIG = {
-  version: 3,
+  version: 4,
   runtime: { terminal: { backend: "pty" as const } },
 } as unknown as Generation["config"];
 

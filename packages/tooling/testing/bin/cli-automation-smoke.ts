@@ -16,7 +16,7 @@ await mkdir(join(workspaceRoot, ".natalia"), { recursive: true });
 await writeFile(
   join(workspaceRoot, ".natalia", "config.json"),
   JSON.stringify({
-    version: 3,
+    version: 4,
     permissionProfiles: {
       unattended_read: {
         approval: "auto",

@@ -1,4 +1,4 @@
-import type { ConfigV3 } from "@anthelia/contracts";
+import type { ConfigV4 } from "@anthelia/contracts";
 
 export type ConfigScope =
   | "defaults"
@@ -10,11 +10,11 @@ export type ConfigScope =
 export type ConfigWriteScope = "global" | "project";
 
 export type ConfigPatch = {
-  [Key in keyof ConfigV3]?: ConfigV3[Key] extends Array<unknown>
-    ? ConfigV3[Key]
-    : ConfigV3[Key] extends Record<string, unknown>
-      ? ConfigPatchValue<ConfigV3[Key]>
-      : ConfigV3[Key];
+  [Key in keyof ConfigV4]?: ConfigV4[Key] extends Array<unknown>
+    ? ConfigV4[Key]
+    : ConfigV4[Key] extends Record<string, unknown>
+      ? ConfigPatchValue<ConfigV4[Key]>
+      : ConfigV4[Key];
 };
 
 type ConfigPatchValue<Value extends Record<string, unknown>> = {
@@ -33,7 +33,7 @@ export type ConfigSource = {
 };
 
 export type ResolvedConfig = {
-  config: ConfigV3;
+  config: ConfigV4;
   sources: ConfigSource[];
   projectConfigPath: string;
 };

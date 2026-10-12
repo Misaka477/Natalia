@@ -166,7 +166,7 @@ test("provider-model subsystem ignores plugins.enabled and always provides the c
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-provider-model": false } },
     }),
   );
@@ -203,7 +203,7 @@ test("turn orchestration subsystem is present even when plugins.enabled disables
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-turn-orchestration": false } },
     }),
   );
@@ -401,7 +401,7 @@ test("runtime status reflects the configured auto approval profile", async () =>
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgentMode: "trusted",
       agentModes: {
         trusted: { approval: "auto", description: "Trusted workspace" },
@@ -427,7 +427,7 @@ test("tools.paths loads out-of-tree families through the kernel", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       tools: { paths: ["extra-tools"] },
     }),
   );
@@ -483,7 +483,7 @@ test("the family watcher hot-reloads a promoted change automatically", async () 
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, tools: { paths: ["extra-tools"] } }),
+    JSON.stringify({ version: 4, tools: { paths: ["extra-tools"] } }),
   );
   await mkdir(join(root, "extra-tools", "extra.family"), { recursive: true });
   await writeFile(
@@ -537,7 +537,7 @@ test("toolFamilyReload hot-swaps an out-of-tree family after promotion", async (
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, tools: { paths: ["extra-tools"] } }),
+    JSON.stringify({ version: 4, tools: { paths: ["extra-tools"] } }),
   );
   await mkdir(join(root, "extra-tools", "extra.family"), { recursive: true });
   await writeFile(
@@ -725,7 +725,7 @@ test("the runtime config is a kernel service refreshed on reload", async () => {
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, defaultAgentMode: "ask" }),
+    JSON.stringify({ version: 4, defaultAgentMode: "ask" }),
   );
   const kernel = new CapabilityRegistry();
   const client = createRealRuntimeClient({
@@ -758,7 +758,7 @@ test("the runtime config is a kernel service refreshed on reload", async () => {
   const unsubscribe = kernel.onServiceUpdate((update) => updates.push(update));
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, defaultAgentMode: "auto" }),
+    JSON.stringify({ version: 4, defaultAgentMode: "auto" }),
   );
   // Reload applies on demand through plugin dispose/setup.
   await client.reloadConfig?.();
@@ -812,7 +812,7 @@ test("failed config reload restores runtime config and plugin settings", async (
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgentMode: "ask",
       plugins: {
         paths: [".natalia/plugins"],
@@ -835,7 +835,7 @@ test("failed config reload restores runtime config and plugin settings", async (
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgentMode: "auto",
       plugins: {
         paths: [".natalia/plugins"],
@@ -883,7 +883,7 @@ test("user plugin config reload reconciles its lifecycle", async () => {
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { paths: [".natalia/plugins"] },
     }),
   );
@@ -905,7 +905,7 @@ test("user plugin config reload reconciles its lifecycle", async () => {
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: {
         paths: [".natalia/plugins"],
         enabled: { "reload.plugin": false },
@@ -929,7 +929,7 @@ test("workspace framework services are always present and stable across reloads"
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-workspace": false } },
     }),
   );
@@ -958,7 +958,7 @@ test("workspace framework services are always present and stable across reloads"
   const firstMutations = kernel.service<object>(workspaceMutations.id);
   const firstFiles = kernel.service<object>(workspaceFiles.id);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   // Framework services survive reload: same instances, no teardown/recreate.
   expect(kernel.service<object>(workspaceWriteLock.id)).toBe(firstWriteLock);
@@ -976,7 +976,7 @@ test("provider-model framework service is always present and stable across reloa
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-provider-model": false } },
     }),
   );
@@ -1000,7 +1000,7 @@ test("provider-model framework service is always present and stable across reloa
   );
   expect(firstController).toBeDefined();
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   // Framework services survive reload: same instance, no teardown/recreate.
   expect(
@@ -1018,7 +1018,7 @@ test("compaction framework service is always present and stable across reloads",
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-compaction": false } },
     }),
   );
@@ -1045,7 +1045,7 @@ test("compaction framework service is always present and stable across reloads",
   );
   expect(firstController).toBeDefined();
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.service<object>(compactionService.id)).toBe(firstService);
   expect(
@@ -1061,7 +1061,7 @@ test("checkpoint config reload reconciles its lifecycle", async () => {
   await mkdir(join(root, ".natalia"), { recursive: true });
   const configPath = join(root, ".natalia", "config.json");
   const disabledConfig = {
-    version: 3,
+    version: 4,
     checkpoint: { enabled: false },
   };
   await writeFile(configPath, JSON.stringify(disabledConfig));
@@ -1082,7 +1082,7 @@ test("checkpoint config reload reconciles its lifecycle", async () => {
   );
   expect(await client.checkpointList?.()).toEqual([]);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   await client.submitAndWait!("with checkpoint");
   expect(events.some((event) => event.type === "checkpoint.created")).toBe(
@@ -1099,7 +1099,7 @@ test("checkpoint config reload reconciles its lifecycle", async () => {
     events.filter((event) => event.type === "checkpoint.created"),
   ).toHaveLength(checkpointCount);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   await client.submitAndWait!("enabled again");
   expect(
@@ -1150,12 +1150,12 @@ lines.on("line", (line) => {
     },
   };
   const disabledConfig = {
-    version: 3,
+    version: 4,
     mcpServers,
     plugins: { enabled: { [MCP_PLUGIN_ID]: false } },
   };
   const enabledConfig = {
-    version: 3,
+    version: 4,
     mcpServers,
     defaultAgentMode: "mcp",
     agentModes: {
@@ -1238,7 +1238,7 @@ lines.on("line", (line) => {
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       mcpServers,
       defaultAgentMode: "without-mcp",
       agentModes: {
@@ -1260,7 +1260,7 @@ test("sandbox subsystem composes directly and releases on dispose", async () => 
   const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-config-reload-"));
   await mkdir(join(root, ".natalia"), { recursive: true });
   const configPath = join(root, ".natalia", "config.json");
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   const kernel = new CapabilityRegistry();
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -1293,7 +1293,7 @@ test("sandbox subsystem composes directly and releases on dispose", async () => 
     ),
   ).toHaveLength(2);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.service<SandboxService>(sandboxService.id)).toBe(first);
   expect(kernel.has(TEAM_PLUGIN_ID)).toBe(true);
@@ -1310,7 +1310,7 @@ test("built-in tool plugin config reload reconciles its lifecycle", async () => 
   const root = await mkdtemp(join(tmpdir(), "natalia-tool-config-reload-"));
   await mkdir(join(root, ".natalia"), { recursive: true });
   const configPath = join(root, ".natalia", "config.json");
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   const kernel = new CapabilityRegistry();
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -1325,7 +1325,7 @@ test("built-in tool plugin config reload reconciles its lifecycle", async () => 
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { [TODO_PLUGIN_ID]: false } },
     }),
   );
@@ -1350,7 +1350,7 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
   await writeFile(join(skillRoot, "note.txt"), "skill resource");
   const configPath = join(root, ".natalia", "config.json");
   const disabledConfig = {
-    version: 3,
+    version: 4,
     plugins: { enabled: { [SKILLS_PLUGIN_ID]: false } },
   };
   await writeFile(configPath, JSON.stringify(disabledConfig));
@@ -1372,7 +1372,7 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
     ),
   ).toBe(false);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has(SKILLS_PLUGIN_ID)).toBe(true);
   // The project skill plus the official documents the skills plugin ships
@@ -1414,7 +1414,7 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
       ),
   ).toBe(false);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has(SKILLS_PLUGIN_ID)).toBe(true);
   expect(
@@ -1430,7 +1430,7 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgentMode: "without-skills",
       agentModes: {
         "without-skills": {
@@ -1452,7 +1452,7 @@ test("team plugin config reload reconciles its lifecycle", async () => {
   await mkdir(join(root, ".natalia"), { recursive: true });
   const configPath = join(root, ".natalia", "config.json");
   const disabledConfig = {
-    version: 3,
+    version: 4,
     plugins: { enabled: { [TEAM_PLUGIN_ID]: false } },
   };
   await writeFile(configPath, JSON.stringify(disabledConfig));
@@ -1474,7 +1474,7 @@ test("team plugin config reload reconciles its lifecycle", async () => {
     ),
   ).toBe(false);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has(TEAM_PLUGIN_ID)).toBe(true);
   await waitForAsync(
@@ -1500,7 +1500,7 @@ test("team plugin config reload reconciles its lifecycle", async () => {
     ),
   ).toBe(false);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has(TEAM_PLUGIN_ID)).toBe(true);
   expect(
@@ -1515,7 +1515,7 @@ test("local tool paths reconcile plugin lifecycle on config reload", async () =>
   const root = await mkdtemp(join(tmpdir(), "natalia-local-tools-config-"));
   await mkdir(join(root, ".natalia"), { recursive: true });
   const configPath = join(root, ".natalia", "config.json");
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await mkdir(join(root, "extra-tools", "extra.family"), { recursive: true });
   await writeFile(
     join(root, "extra-tools", "extra.family", "natalia.tool.json"),
@@ -1541,7 +1541,7 @@ async execute() { return "ok"; } }] };`,
 
   await writeFile(
     configPath,
-    JSON.stringify({ version: 3, tools: { paths: ["extra-tools"] } }),
+    JSON.stringify({ version: 4, tools: { paths: ["extra-tools"] } }),
   );
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has("natalia-local-tools")).toBe(true);
@@ -1561,7 +1561,7 @@ async execute() { return "ok"; } }] };`,
   await writeFile(
     configPath,
     JSON.stringify({
-      version: 3,
+      version: 4,
       tools: { paths: ["extra-tools"] },
       plugins: { enabled: { "natalia-local-tools": false } },
     }),
@@ -1576,12 +1576,12 @@ async execute() { return "ok"; } }] };`,
 
   await writeFile(
     configPath,
-    JSON.stringify({ version: 3, tools: { paths: ["extra-tools"] } }),
+    JSON.stringify({ version: 4, tools: { paths: ["extra-tools"] } }),
   );
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has("natalia-local-tools")).toBe(true);
 
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await expect(client.reloadConfig?.()).resolves.toEqual({ applied: true });
   expect(kernel.has("natalia-local-tools")).toBe(false);
   expect(kernel.service("localTools.reload")).toBeUndefined();
@@ -1603,7 +1603,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1635,7 +1635,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1667,7 +1667,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1708,7 +1708,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1743,7 +1743,7 @@ test("disabling only the fs read plugin keeps the write tools", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { enabled: { "natalia-tool-fs-read": false } },
     }),
   );
@@ -1779,7 +1779,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1812,7 +1812,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1847,7 +1847,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1882,7 +1882,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1920,7 +1920,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1955,7 +1955,7 @@ for (const [label, config] of [
     await mkdir(join(root, ".natalia"), { recursive: true });
     await writeFile(
       join(root, ".natalia", "config.json"),
-      JSON.stringify({ version: 3, ...config }),
+      JSON.stringify({ version: 4, ...config }),
     );
     const events: RuntimeEvent[] = [];
     const kernel = new CapabilityRegistry();
@@ -1985,7 +1985,7 @@ test("read-only profile rejects side-effecting tools without an approval request
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgentMode: "safe",
       agentModes: {
         safe: { approval: "read_only", description: "Read-only workspace" },
@@ -2052,7 +2052,7 @@ test("selected permission profile denies tools outside its allow list before app
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         unattended_read: {
           approval: "auto",
@@ -2148,7 +2148,7 @@ test("selected permission profile applies file rules to allowed tools", async ()
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         unattended_read: {
           approval: "auto",
@@ -2237,7 +2237,7 @@ test("runtime status reflects committed agent and model selections", async () =>
   await writeFile(
     join(agentRoot, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         alpha: {
           name: "Alpha",
@@ -2286,7 +2286,7 @@ test("runtime status reflects committed agent and model selections", async () =>
   await writeFile(
     join(modelRoot, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         alpha: {
           name: "Alpha",
@@ -2332,7 +2332,7 @@ test("runtime agent catalog exposes configured selectable metadata", async () =>
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {
@@ -2418,7 +2418,7 @@ test("TS config applies retry/context/checkpoint policy to an explicit provider"
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: {
         maxStepsPerTurn: 4,
         retry: {
@@ -2481,7 +2481,7 @@ test("context budget follows the executing model instead of a mismatched configu
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       context: { compactionThresholdPercent: 91 },
       defaultModel: { provider: "configured", model: "configured-model" },
       catalog: {
@@ -2589,7 +2589,7 @@ test("configured agent selection supplies the provider system prompt and tool po
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         reviewer: {
           description: "Review changes",
@@ -2713,7 +2713,7 @@ test("runtime discovers configured remote skills through the local cache", async
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         skills: { urls: [`${server.url}skills/`] },
       }),
     );
@@ -2938,7 +2938,7 @@ test("permission profile extension rules do not gate desired plugins", async () 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         unattended: {
           approval: "auto",

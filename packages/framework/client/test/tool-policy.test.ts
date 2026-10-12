@@ -690,7 +690,7 @@ test("mode permission profile overrides default runtime approval mode", async ()
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         ask: { approval: "ask", description: "Ask" },
         safe: { approval: "read_only", description: "Safe mode" },
@@ -717,7 +717,7 @@ test("permission profile command rules deny before execution and audit the decis
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         guarded: {
           approval: "auto",
@@ -783,7 +783,7 @@ test("explicit toolPolicy cannot bypass agent file permissions", async () => {
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {
@@ -831,7 +831,7 @@ test("agent command rules block sandbox execution before approval", async () => 
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {
@@ -869,7 +869,7 @@ test("sandbox merge preflight rejects every denied manifest path atomically", as
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "true" },
       defaultAgent: "review",
       agents: {
@@ -934,7 +934,7 @@ test("sandbox merge preflight permits a manifest when every path is allowed", as
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       sandbox: { promoteCommand: "true" },
     }),
   );
@@ -1028,7 +1028,7 @@ test("agent read paths block glob and grep before exposing protected files", asy
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {
@@ -1098,7 +1098,7 @@ test("runtime persists safe policy decisions without tool arguments", async () =
   await Bun.write(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {

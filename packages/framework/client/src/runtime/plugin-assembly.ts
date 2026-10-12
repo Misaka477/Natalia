@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { logOf } from "@anthelia/operation-log";
 import { verifyTrust } from "@anthelia/config";
 import { toolFamilyCapabilityID } from "../capabilities/tool-family-capabilities";
-import type { ConfigV3, SessionID } from "@anthelia/contracts";
+import type { ConfigV4, SessionID } from "@anthelia/contracts";
 import type {
   RuntimeContext,
   SessionExecutionState,
@@ -23,7 +23,7 @@ export function createPluginAssembly(
   ctx: RuntimeContext,
   options: RealRuntimeClientOptions,
 ) {
-  const pluginEnabled = (config: ConfigV3, id: string) =>
+  const pluginEnabled = (config: ConfigV4, id: string) =>
     config.plugins.enabled[id] !== false;
   return {
     skillsPluginInput,
@@ -32,7 +32,7 @@ export function createPluginAssembly(
     localToolsPluginInput,
   };
 
-  function skillsPluginInput(config: ConfigV3) {
+  function skillsPluginInput(config: ConfigV4) {
     const {
       getWorkspaceRoot,
       getUserSkillRoot,
@@ -244,7 +244,7 @@ export function createPluginAssembly(
     };
   }
 
-  function mcpPluginInput(config: ConfigV3) {
+  function mcpPluginInput(config: ConfigV4) {
     const { getTsRuntimeConfig, extensionEnabled, publish } = ctx.ports;
     if (!pluginEnabled(config, "natalia-mcp") || !extensionEnabled("mcp"))
       return undefined;
@@ -269,7 +269,7 @@ export function createPluginAssembly(
     };
   }
 
-  function localToolsPluginInput(config: ConfigV3) {
+  function localToolsPluginInput(config: ConfigV4) {
     const { getWorkspaceRoot, publish, hotReloadToolFamily } = ctx.ports;
     const workspaceRoot = getWorkspaceRoot();
     if (

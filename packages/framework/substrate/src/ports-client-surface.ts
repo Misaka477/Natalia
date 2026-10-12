@@ -1,5 +1,5 @@
 import type { AgentDefinition } from "@anthelia/agent";
-import type { ConfigV3, RuntimeEvent, SessionID } from "@anthelia/contracts";
+import type { ConfigV4, RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type { SessionRecord } from "@anthelia/session";
 import type { SessionExecutionState } from "./session-execution-state";
 
@@ -17,7 +17,7 @@ export type RuntimeClientSurfacePorts = {
   setPauseWaiters: (waiters: Array<() => void>) => void;
   getReady: () => Promise<void> | undefined;
   getSessionID: () => SessionID;
-  getTsRuntimeConfig: () => ConfigV3 | undefined;
+  getTsRuntimeConfig: () => ConfigV4 | undefined;
   getSelectedAgent: () => AgentDefinition | undefined;
   setSelectedAgent: (agent: AgentDefinition | undefined) => void;
   setPendingAgent: (agent: AgentDefinition | undefined) => void;

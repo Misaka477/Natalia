@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { configV3Schema, type ConfigV3 } from "@anthelia/contracts";
+import { configV4Schema, type ConfigV4 } from "@anthelia/contracts";
+import { defaultConfigV4 } from "./migration";
 import { parseConfigText, saveConfigOverlayFile } from "./file";
 import { mergeConfig, mergeOverlay } from "./service-merge";
 import {
@@ -17,7 +18,7 @@ export async function updateConfig(
   workspaceRoot: string,
   patch: ConfigPatch,
   options: { globalPath?: string } = {},
-): Promise<ConfigV3> {
+): Promise<ConfigV4> {
   return await updateConfigAtScope(workspaceRoot, patch, "project", options);
 }
 
@@ -46,10 +47,7 @@ export async function updateGlobalConfig(
 ) {
   const path = globalPath ?? defaultGlobalConfigPath();
   const persisted = await loadOverlay(path);
-  const base = mergeConfig(
-    configV3Schema.parse({ version: 3 }),
-    persisted as ConfigPatch,
-  );
+  const base = mergeConfig(defaultConfigV4(), persisted as ConfigPatch);
   const next = mergeConfig(base, patch);
   await saveConfigOverlayFile(
     path,
@@ -61,7 +59,7 @@ export async function updateGlobalConfig(
 export async function migrateProjectModelConfigToGlobal(
   workspaceRoot: string,
   options: { globalPath?: string } = {},
-): Promise<{ migrated: GlobalModelConfigKey[]; config: ConfigV3 }> {
+): Promise<{ migrated: GlobalModelConfigKey[]; config: ConfigV4 }> {
   const projectConfigPath = resolve(workspaceRoot, ".natalia", "config.json");
   const project = await loadOverlay(projectConfigPath);
   const migrated = presentGlobalModelConfigKeys(project);
@@ -74,7 +72,7 @@ export async function migrateProjectModelConfigToGlobal(
     };
   const globalPath = options.globalPath ?? defaultGlobalConfigPath();
   const globalBase = mergeConfig(
-    configV3Schema.parse({ version: 3 }),
+    defaultConfigV4(),
     (await loadOverlay(globalPath)) as ConfigPatch,
   );
   const effective = mergeConfig(
@@ -123,7 +121,7 @@ async function loadOverlay(path: string): Promise<Record<string, unknown>> {
  */
 export async function replaceProjectConfig(
   workspaceRoot: string,
-  config: ConfigV3,
+  config: ConfigV4,
   options: { globalPath?: string } = {},
 ) {
   const globalPatch = onlyGlobalModelConfig(config as unknown as ConfigPatch);

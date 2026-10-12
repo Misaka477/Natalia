@@ -12,7 +12,7 @@ import type {
   RuntimeWorkspaceMatch,
   RuntimeWorkspaceListPage,
   RuntimeWorkspaceContent,
-  ConfigV3,
+  ConfigV4,
   WorkspaceSummary,
   WorkspacePermissionSettings,
   WorkspaceToolSettings,
@@ -971,7 +971,7 @@ export function createWebRuntimeClient(
       return (await call("workspace.delete", { ...input })) as never;
     },
     async configGet() {
-      return (await call<ConfigV3>("config.get")) as never;
+      return (await call<ConfigV4>("config.get")) as never;
     },
     async updateConfig(input) {
       return (await call("config.update", { ...input })) as never;

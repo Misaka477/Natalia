@@ -8,7 +8,7 @@
  * applied). Keeping it separate makes the load/reload path testable without the
  * runtime state it writes.
  */
-import type { ConfigV3, PermissionProfile } from "@anthelia/contracts";
+import type { ConfigV4, PermissionProfile } from "@anthelia/contracts";
 
 export type PermissionMode = PermissionProfile["approval"];
 
@@ -23,7 +23,7 @@ export type DerivedPermissionSettings =
     };
 
 function permissionsFromMode(
-  mode: ConfigV3["agentModes"][string],
+  mode: ConfigV4["agentModes"][string],
 ): PermissionProfile["permissions"] {
   const allow = mode?.permissions?.tools?.allow ?? mode?.allowedTools ?? [];
   const exclude =
@@ -39,7 +39,7 @@ function permissionsFromMode(
   return permissions;
 }
 
-function extensionsFromMode(mode: ConfigV3["agentModes"][string]): {
+function extensionsFromMode(mode: ConfigV4["agentModes"][string]): {
   skills: boolean;
   mcp: boolean;
 } {
@@ -50,7 +50,7 @@ function extensionsFromMode(mode: ConfigV3["agentModes"][string]): {
 }
 
 export function derivePermissionSettings(input: {
-  config: ConfigV3;
+  config: ConfigV4;
   requestedProfile: string | undefined;
   optionMode: PermissionMode | undefined;
   permissionMode: PermissionMode;

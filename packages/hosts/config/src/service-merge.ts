@@ -1,7 +1,11 @@
-import { configV3Schema, type ConfigV3 } from "@anthelia/contracts";
+import {
+  CONFIG_VERSION,
+  configV4Schema,
+  type ConfigV4,
+} from "@anthelia/contracts";
 import type { ConfigPatch } from "./service-types";
 
-export function configPatch(base: ConfigV3, next: ConfigV3): ConfigPatch {
+export function configPatch(base: ConfigV4, next: ConfigV4): ConfigPatch {
   const patch = diffValue(base, next) as ConfigPatch;
   const records = {
     providers: recordPatch(base.providers, next.providers),
@@ -73,9 +77,9 @@ function diffValue(base: unknown, next: unknown): unknown {
   return result;
 }
 
-export function mergeConfig(base: ConfigV3, overlay: ConfigPatch): ConfigV3 {
-  return configV3Schema.parse({
-    version: 3,
+export function mergeConfig(base: ConfigV4, overlay: ConfigPatch): ConfigV4 {
+  return configV4Schema.parse({
+    version: CONFIG_VERSION,
     runtime: deepMergeObject(base.runtime, overlay.runtime),
     sandbox: { ...base.sandbox, ...overlay.sandbox },
     team: { ...base.team, ...overlay.team },

@@ -1,7 +1,7 @@
 import {
   modelRefKey,
   parseModelRef,
-  type ConfigV3,
+  type ConfigV4,
   type ModelRef,
   type PolicyStatement,
 } from "@anthelia/contracts";
@@ -37,7 +37,7 @@ export type ModelSelectionStatus = {
 };
 
 export function modelSelectionStatus(
-  config: ConfigV3,
+  config: ConfigV4,
   ref: ModelRef | string,
 ): ModelSelectionStatus {
   const modelRef = typeof ref === "string" ? parseModelRef(ref) : ref;

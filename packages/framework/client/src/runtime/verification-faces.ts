@@ -8,7 +8,7 @@ import type {
 } from "@anthelia/composition";
 import type { StreamingProvider } from "@anthelia/runtime";
 import {
-  configV3Schema,
+  configV4Schema,
   credentialSafeText,
   redactCredentials,
 } from "@anthelia/contracts";
@@ -85,7 +85,7 @@ export function smokeFace(
       // (a config error must never kill a running session) — so neither the
       // store nor the boot would ever say the candidate's config is invalid.
       try {
-        configV3Schema.parse(generation.config);
+        configV4Schema.parse(generation.config);
       } catch (error) {
         return {
           check: "smoke",

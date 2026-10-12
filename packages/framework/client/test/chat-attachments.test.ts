@@ -6,7 +6,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent, LocalAttachment } from "@anthelia/contracts";
-import { defaultConfigV3 } from "@anthelia/config";
+import { defaultConfigV4 } from "@anthelia/config";
 import {
   ContextLedger,
   TokenMeter,
@@ -38,7 +38,7 @@ function pngBytes(width = 1, height = 1): Buffer {
 
 type Harness = {
   root: string;
-  config: ReturnType<typeof defaultConfigV3>;
+  config: ReturnType<typeof defaultConfigV4>;
   events: RuntimeEvent[];
   requests: ProviderStreamRequest[];
   exec: SessionExecutionState;
@@ -56,7 +56,7 @@ async function makeHarness(
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "natalia-chat-attachment-"));
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   config.providers.local = {
     name: "Local",
     driver: "openai",

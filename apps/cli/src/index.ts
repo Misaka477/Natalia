@@ -10,7 +10,7 @@ import {
 import { layerCensus } from "./layer-census";
 import { configuredBashPath, resolveBashExecutable } from "@anthelia/platform";
 import {
-  defaultConfigV3,
+  defaultConfigV4,
   defaultGlobalConfigPath,
   loadConfigFile,
   loadOrCreateConfigFile,
@@ -207,7 +207,7 @@ export async function doctorReport(input: {
       } catch (globalError) {
         if ((globalError as NodeJS.ErrnoException).code !== "ENOENT")
           throw globalError;
-        return migrateConfig(defaultConfigV3());
+        return migrateConfig(defaultConfigV4());
       }
     },
   );

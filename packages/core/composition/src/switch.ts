@@ -1,5 +1,5 @@
 import type {
-  ConfigV3,
+  ConfigV4,
   ConstitutionRule,
   Generation,
   RuntimeEvent,
@@ -71,7 +71,7 @@ export interface SwitchGenerationInput {
   /** The running generation this switch would leave — the rollback handle. */
   currentGenerationID?: string;
   /** The config currently in force — what a rollback restores verbatim. */
-  currentConfig: ConfigV3;
+  currentConfig: ConfigV4;
   /**
    * The approval channel (composition changes default to human
    * confirmation; production wires the interactive approval seam).
@@ -81,7 +81,7 @@ export interface SwitchGenerationInput {
     candidateID: string;
   }): Promise<ApprovalOutcome>;
   /** Durably apply the config source (production: write the config file). */
-  applyConfig(config: ConfigV3): Promise<void>;
+  applyConfig(config: ConfigV4): Promise<void>;
   /** Take the applied config live — required for `when: "now"`. */
   reloadRuntime?: () => Promise<void>;
   /**

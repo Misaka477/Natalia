@@ -192,7 +192,7 @@ export async function officialPluginWorkspace(prefix: string) {
   });
   const configPath = join(workspaceRoot, ".natalia", "config.json");
   await mkdir(join(workspaceRoot, ".natalia"), { recursive: true });
-  await writeFile(configPath, JSON.stringify({ version: 3 }));
+  await writeFile(configPath, JSON.stringify({ version: 4 }));
   await writeFile(
     join(workspaceRoot, ".natalia", officialPluginConfigFixture),
     await readFile(configPath),

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import type {
-  ConfigV3,
+  ConfigV4,
   ConstitutionRule,
   RuntimeEvent,
 } from "@anthelia/contracts";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import {
   buildGeneration,
   switchGeneration,
@@ -18,9 +18,9 @@ import {
  * a failed health check, incident in the journal.
  */
 
-const CONFIG_A = configV3Schema.parse({ version: 3 });
-const CONFIG_B = configV3Schema.parse({
-  version: 3,
+const CONFIG_A = configV4Schema.parse({ version: 4 });
+const CONFIG_B = configV4Schema.parse({
+  version: 4,
   runtime: { permissions: { mode: "read_only" } },
 } as never);
 
@@ -46,7 +46,7 @@ function faces(overrides: Partial<SwitchGenerationInput["faces"]> = {}) {
 
 function harness(overrides: Partial<SwitchGenerationInput> = {}) {
   const events: RuntimeEvent[] = [];
-  const applied: ConfigV3[] = [];
+  const applied: ConfigV4[] = [];
   const calls = { approval: 0, reload: 0, health: 0 };
   const input: SwitchGenerationInput = {
     candidateID: "gen-candidate",

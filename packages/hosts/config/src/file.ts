@@ -9,13 +9,17 @@ import {
   rm,
 } from "node:fs/promises";
 import { dirname } from "node:path";
-import { configV3Schema, type ConfigV3 } from "@anthelia/contracts";
+import {
+  CONFIG_VERSION,
+  configV4Schema,
+  type ConfigV4,
+} from "@anthelia/contracts";
 import {
   migrateConfig,
   migrationSummaryText,
   type MigrationResult,
 } from "./migration";
-import { defaultConfigV3 } from "./migration";
+import { defaultConfigV4 } from "./migration";
 
 export async function loadConfigFile(path: string): Promise<MigrationResult> {
   const raw = await readFile(path, "utf8");
@@ -28,22 +32,22 @@ export async function loadOrCreateConfigFile(path: string) {
     return await loadConfigFile(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const config = defaultConfigV3();
+    const config = defaultConfigV4();
     await saveConfigFile(config, path);
     return {
       config,
       summary: {
-        fromVersion: 3 as const,
-        toVersion: 3 as const,
-        changed: ["created default TS config"],
+        fromVersion: CONFIG_VERSION,
+        toVersion: CONFIG_VERSION,
+        changed: ["created default config"],
         warnings: [],
       },
     };
   }
 }
 
-export async function saveConfigFile(config: ConfigV3, path: string) {
-  const parsed = configV3Schema.parse(config);
+export async function saveConfigFile(config: ConfigV4, path: string) {
+  const parsed = configV4Schema.parse(config);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${randomUUID()}`;
   try {

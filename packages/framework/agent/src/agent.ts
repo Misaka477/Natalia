@@ -1,4 +1,4 @@
-import type { AgentConfig, ConfigV3 } from "@anthelia/contracts";
+import type { AgentConfig, ConfigV4 } from "@anthelia/contracts";
 
 export type AgentDefinition = AgentConfig & {
   name: string;
@@ -83,7 +83,7 @@ export class AgentRegistry {
   }
 }
 
-export function agentsFromConfig(config: ConfigV3) {
+export function agentsFromConfig(config: ConfigV4) {
   return new AgentRegistry({
     agents: config.agents,
     defaultAgent: config.defaultAgent,

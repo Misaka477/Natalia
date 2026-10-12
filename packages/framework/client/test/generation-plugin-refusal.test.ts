@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import { createProposeGenerationTool } from "../src/runtime/generation-tools";
 import type { RuntimeContext } from "@anthelia/substrate";
 
@@ -15,8 +15,8 @@ import type { RuntimeContext } from "@anthelia/substrate";
  * the model nothing to work with.
  */
 
-const LIVE = configV3Schema.parse({
-  version: 3,
+const LIVE = configV4Schema.parse({
+  version: 4,
   providers: {},
   catalog: { providers: {} },
   plugins: { enabled: { "natalia-task-module": true } },

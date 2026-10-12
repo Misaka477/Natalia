@@ -4,7 +4,7 @@ import type {
   ApprovalResponse,
   ChatModelProfile,
   CheckpointResourcePolicy,
-  ConfigV3,
+  ConfigV4,
   ConfirmedWorkspaceChange,
   GoalSnapshot,
   InteractiveResponseOutcome,
@@ -405,7 +405,7 @@ export type ProviderRunnerInput = {
   refreshContextConfig?(): Promise<void>;
   permissionMode(): "ask" | "auto" | "read_only";
   workspaceRoot(): string;
-  tsRuntimeConfig(): ConfigV3 | undefined;
+  tsRuntimeConfig(): ConfigV4 | undefined;
   runtimeContextConfig(): import("@anthelia/runtime").ContextBudget;
   activeSkill(): SkillMetadata | undefined;
   skillsList(): SkillMetadata[];

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import {
   buildModelCatalog,
   resolveConfig,
@@ -17,8 +17,8 @@ import type {
 async function harness() {
   const root = await mkdtemp(join(tmpdir(), "natalia-provider-management-"));
   const globalPath = join(root, "global.json");
-  let config = configV3Schema.parse({
-    version: 3,
+  let config = configV4Schema.parse({
+    version: 4,
     providers: {
       target: {
         name: "Target",
@@ -139,8 +139,8 @@ test.each(["default", "agent", "mode", "session", "navi", "nia"])(
       if (reference === "default")
         config.defaultModel = { provider: "target", model: "model" };
       if (reference === "agent")
-        config.agents = configV3Schema.parse({
-          version: 3,
+        config.agents = configV4Schema.parse({
+          version: 4,
           agents: { reviewer: { model: "target/model" } },
         }).agents;
       if (reference === "mode") config.agentModes.ask!.model = "target/model";

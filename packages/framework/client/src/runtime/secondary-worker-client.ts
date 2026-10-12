@@ -1,4 +1,4 @@
-import type { ConfigV3 } from "@anthelia/contracts";
+import type { ConfigV4 } from "@anthelia/contracts";
 import type {
   SecondaryWorkerRequest,
   SecondaryWorkerResponse,
@@ -43,7 +43,7 @@ const pool = createRuntimeWorkerPool(() => {
 }, defaultRuntimeWorkerPoolSize());
 
 type SecondaryWorkerTask =
-  | { op: "configClone"; config: ConfigV3 }
+  | { op: "configClone"; config: ConfigV4 }
   | { op: "pluginList"; plugins: unknown[] }
   | {
       op: "subagentList";
@@ -62,8 +62,8 @@ async function run<T>(request: SecondaryWorkerTask): Promise<T> {
   });
 }
 
-export function cloneConfigInWorker(config: ConfigV3): Promise<ConfigV3> {
-  return run<ConfigV3>({ op: "configClone", config });
+export function cloneConfigInWorker(config: ConfigV4): Promise<ConfigV4> {
+  return run<ConfigV4>({ op: "configClone", config });
 }
 
 export function projectPluginsInWorker(plugins: unknown[]): Promise<

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
 import { resolveConfig } from "@anthelia/config";
-import { configV3Schema } from "@anthelia/contracts";
+import { configV4Schema } from "@anthelia/contracts";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import {
   buildGeneration,
@@ -468,8 +468,8 @@ test("a candidate that drops a forbidden rule fails the gate at the tool", async
       const id = await storeGeneration(
         store,
         buildGeneration({
-          config: configV3Schema.parse({
-            version: 3,
+          config: configV4Schema.parse({
+            version: 4,
             checkpoint: { maxFiles: 1111 },
           }),
           catalog: [],

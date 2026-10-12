@@ -97,7 +97,7 @@ test("permission profile denies injected MCP tools before execution", async () =
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agentModes: {
         unattended: {
           approval: "auto",
@@ -201,7 +201,7 @@ test("workspace plugin trust does not alter an approval declaration", async () =
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       plugins: { readOnly: { "trusted.plugin": true } },
     }),
   );
@@ -319,7 +319,7 @@ test("grep retains workspace read path authorization", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       defaultAgent: "review",
       agents: {
         review: {
@@ -522,7 +522,7 @@ test("runtime reports malformed provider tool calls without rendering an empty t
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, runtime: { maxStepsPerTurn: 3 } }),
+    JSON.stringify({ version: 4, runtime: { maxStepsPerTurn: 3 } }),
   );
   const events: RuntimeEvent[] = [];
   const provider: StreamingProvider = {
@@ -566,7 +566,7 @@ test("agent permissions block configured file and command execution at tool boun
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         locked: {
           description: "Locked",
@@ -636,7 +636,7 @@ test("terminal input cannot bypass the command policy after opening a shell", as
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         locked: {
           description: "Locked",
@@ -924,7 +924,7 @@ test("security.redactToolOutput drives redaction when no agent overrides it", as
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         ...(redact === undefined
           ? {}
           : { security: { redactToolOutput: redact } }),
@@ -980,7 +980,7 @@ test("agent permissions apply network, environment, and output redaction boundar
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         guarded: {
           description: "Guarded",
@@ -1054,7 +1054,7 @@ test("runtime agent selection applies only at the next provider turn boundary", 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         first: { description: "First", systemPrompt: "first system" },
         second: { description: "Second", systemPrompt: "second system" },
@@ -1114,7 +1114,7 @@ test("committed agent selection restores when a session runtime is reopened", as
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: {
         first: { description: "First", systemPrompt: "first system" },
         second: { description: "Second", systemPrompt: "second system" },
@@ -1168,7 +1168,7 @@ test("agent model overrides apply when the next provider turn starts", async () 
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "local",
@@ -1243,7 +1243,7 @@ test("runtime model selections persist across reopen and expose safe catalogs", 
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "local",
@@ -1679,7 +1679,7 @@ test("model slash commands share catalog and durable selection behavior", async 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         local: {
           name: "Local",
@@ -1724,7 +1724,7 @@ test("configured provider policy denies a selected model without starting a prov
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       providers: {
         local: {
           name: "Local",
@@ -1779,7 +1779,7 @@ test("model capability disables provider-visible tools", async () => {
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "Local",
@@ -1839,7 +1839,7 @@ test("workspace image attachment is stored privately and lowered for OpenAI-comp
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "Local",
@@ -2010,7 +2010,7 @@ test("unsupported video attachments degrade to text instead of failing the turn"
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "Local",
@@ -2117,7 +2117,7 @@ test("runtime injects a UTF-8 text attachment into the active provider turn", as
     await writeFile(
       join(root, ".natalia", "config.json"),
       JSON.stringify({
-        version: 3,
+        version: 4,
         providers: {
           local: {
             name: "Local",
@@ -2176,7 +2176,7 @@ test("agent MCP server scope limits provider-visible MCP tools", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: { scoped: { description: "Scoped", mcpServers: ["one"] } },
       defaultAgent: "scoped",
     }),
@@ -2225,7 +2225,7 @@ test("agent MCP scope includes only its server prompt and resource tools", async
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: { scoped: { description: "Scoped", mcpServers: ["one"] } },
       defaultAgent: "scoped",
     }),
@@ -2278,7 +2278,7 @@ test("runtime persists and lowers structured agent resource mentions", async () 
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       agents: { review: { description: "Review" } },
     }),
   );
@@ -2436,7 +2436,7 @@ test("real runtime reserves the configured final step for a text response", asyn
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, runtime: { maxStepsPerTurn: 10 } }),
+    JSON.stringify({ version: 4, runtime: { maxStepsPerTurn: 10 } }),
   );
   const requests: ProviderStreamRequest[] = [];
   const provider: StreamingProvider = {

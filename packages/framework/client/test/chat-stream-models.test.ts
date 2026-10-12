@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
-import { defaultConfigV3 } from "@anthelia/config";
+import { defaultConfigV4 } from "@anthelia/config";
 import { ContextLedger, TokenMeter } from "@anthelia/runtime";
 import type { ProviderMessage } from "@anthelia/runtime";
 import { compactionService } from "@anthelia/compaction";
@@ -19,7 +19,7 @@ import { createCollaborationWake } from "@natalia/collab";
 import type { ProviderChatTurnInput } from "@anthelia/provider-model";
 
 test("Nia normal and Navi expert resolve independent adapters, models and thinking on submit and wake", async () => {
-  const config = defaultConfigV3();
+  const config = defaultConfigV4();
   for (const [id, driver, model] of [
     ["qifengstep", "anthropic-compatible", "step-3.7-flash"],
     ["grok", "openai-compatible", "grok-4.6"],

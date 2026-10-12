@@ -130,7 +130,7 @@ test("dev official terminal plugin shim loads and starts a PTY", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: { terminal: { windowMode: "windowless" } },
     }),
   );

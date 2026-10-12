@@ -65,7 +65,7 @@ test("a turn sediments a skill through the side-channel review", async () => {
   );
   writeFileSync(
     join(scratch, ".natalia", "config.json"),
-    JSON.stringify({ version: 3, plugins: { paths: [pluginFixture] } }),
+    JSON.stringify({ version: 4, plugins: { paths: [pluginFixture] } }),
   );
   // A seeded skill mirrors the canonical-tool fixture: the skills fiber
   // discovers the project root, and its tool registers with the turn's

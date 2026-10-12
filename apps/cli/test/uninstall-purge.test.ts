@@ -55,7 +55,7 @@ function fixtureHome(name: string): string {
   writeFileSync(join(home, "stores", "ws-one", "objects", "o1"), "blob-data");
   mkdirSync(join(home, "logs"), { recursive: true });
   writeFileSync(join(home, "logs", "run.log"), "log-line\n");
-  writeFileSync(join(home, "config.json"), JSON.stringify({ version: 3 }));
+  writeFileSync(join(home, "config.json"), JSON.stringify({ version: 4 }));
   return home;
 }
 

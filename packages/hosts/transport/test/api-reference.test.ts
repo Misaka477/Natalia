@@ -1075,7 +1075,7 @@ function valueRefusalDictionary(): Array<{
 
 /**
  * The config shape dictionary, parsed from the zod schema export graph rooted
- * at `packages/core/contracts/src/schemas.ts` (`configV3Schema` validates
+ * at `packages/core/contracts/src/schemas.ts` (`configV4Schema` validates
  * `.natalia/config.json`). One row per schema field, dotted paths for nested
  * objects, `?` for optional fields and the default value where the schema
  * declares one. `z.record(X)` keys are arbitrary; the element type's own
@@ -1093,7 +1093,12 @@ function zodSchemaDictionary(): Array<{
   );
   const schemas = new Map<string, string>();
   for (const match of text.matchAll(
-    /export const ([A-Za-z][A-Za-z0-9]*) = ([\s\S]*?)(?=\nexport )/gu,
+    // The lookahead accepts end-of-input as a boundary: the CURRENT config
+    // schema is declared last in its file (v4 extends v3 at the bottom), and
+    // a lookahead that only knows `\nexport ` silently dropped it — the
+    // config dictionary came back empty and every documented field vanished
+    // from the reference.
+    /export const ([A-Za-z][A-Za-z0-9]*) = ([\s\S]*?)(?=\nexport |$)/gu,
   )) {
     const name = match[1] ?? "";
     if (name.endsWith("Schema") || name === "configV3Schema")
@@ -1138,6 +1143,10 @@ function zodSchemaDictionary(): Array<{
     }
     for (const reference of zodReferences(rhs)) visit(reference);
   };
+  // The root is the v3 DECLARATION: the field shapes live in its z.object
+  // body (v4 extends it with the version literal alone), so the dictionary
+  // documents every field from there. Visiting the v4 alias directly would
+  // find an `.extend(...)` with no object body and return nothing.
   visit("configV3Schema");
   return rows;
 }

@@ -37,7 +37,7 @@ test("partial terminal overlay keeps the default pty backend", async () => {
   await writeFile(
     join(root, ".natalia", "config.json"),
     JSON.stringify({
-      version: 3,
+      version: 4,
       runtime: { terminal: { windowMode: "window" } },
     }),
   );

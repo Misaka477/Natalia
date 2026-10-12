@@ -1,6 +1,6 @@
 import type { AgentDefinition, AgentRegistry } from "@anthelia/agent";
 import type { CapabilityRegistryHost } from "@anthelia/capability";
-import type { ConfigV3, RuntimeEvent, SessionID } from "@anthelia/contracts";
+import type { ConfigV4, RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type {
   ContextEntry,
   ProviderToolCall,
@@ -38,15 +38,15 @@ type ResolvedConfig = Awaited<
 >;
 export type InitializeDependencies = {
   resolveConfig: typeof import("@anthelia/config").resolveConfig;
-  reloadPermissionSettings: (config: ConfigV3) => void;
+  reloadPermissionSettings: (config: ConfigV4) => void;
   skillsPluginInput: (
-    config: ConfigV3,
+    config: ConfigV4,
   ) => import("@anthelia/runtime-services").SkillsInput | undefined;
   localToolsPluginInput: (
-    config: ConfigV3,
+    config: ConfigV4,
   ) => import("@anthelia/runtime-services").LocalToolsInput | undefined;
   mcpPluginInput: (
-    config: ConfigV3,
+    config: ConfigV4,
   ) => import("@anthelia/runtime-services").McpInput | undefined;
   providerModelPluginInput: () => import("@anthelia/provider-model").ProviderModelControllerInput;
   wireFrameworkServices: (
@@ -84,7 +84,7 @@ export type InitializeDependencies = {
     source?: string,
   ) => Promise<{ allowed: boolean; diagnostics: string[] }>;
   ensureBashCommandParser: () => Promise<unknown>;
-  agentsFromConfig: (config: ConfigV3) => AgentRegistry;
+  agentsFromConfig: (config: ConfigV4) => AgentRegistry;
   providerForModel: typeof import("@anthelia/runtime").providerForModel;
   sessionSeed: (workspaceRoot: string) => string;
   createHash: typeof import("node:crypto").createHash;
@@ -116,7 +116,7 @@ export type InitializeDependencies = {
 };
 
 export type InitializeCatalogResult = {
-  runtimeConfig: ConfigV3;
+  runtimeConfig: ConfigV4;
   tsConfig: ResolvedConfig;
 };
 

@@ -1129,8 +1129,16 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
   // promise with no reader — the tombstone is journaled and the fold
   // excludes the rule, but no surface ever shows it, so the copy claimed a
   // benefit the user never receives.
+  //
+  // The guard reads the MESSAGE STRING, not the whole file: the comment that
+  // explains why the phrase was removed contains the phrase itself, so a
+  // file-wide `not.toContain` reads the comment and fails on the very thing
+  // it is guarding. A guard must read the exact bytes it guards.
   expect(source).toContain("规则立刻永久失效");
-  expect(source).not.toContain("历史保留");
+  expect(source).toContain(
+    "？规则立刻永久失效。journal 会留一条删除记录（不可擦除）。",
+  );
+  expect(source).not.toContain("记录进 journal（墓碑），历史保留。");
   // And an EMPTY queue costs one line, not three: the screen is already a
   // wall of empty sections, and this one adding a title + subtitle + an
   // empty-state box to say nothing was the wrong call.

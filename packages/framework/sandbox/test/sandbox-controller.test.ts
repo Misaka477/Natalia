@@ -91,6 +91,35 @@ test("sandbox.backend=snapshot still forces the git-free backend in a repo", asy
   expect(await controller.referencedObjectIDs()).toBeInstanceOf(Set);
 });
 
+test("the enforcement fact names the backend's promises", async () => {
+  // The sandbox study's rule made a fact: a candidate verified under the
+  // snapshot backend may not be read as "verified rollbackable", because
+  // that backend's promotion is copy-and-hope. The fact is read off the
+  // controller so a consumer refuses the stronger claim instead of
+  // inferring it.
+  const gitRoot = await mkdtemp(join(tmpdir(), "natalia-sandbox-enforce-"));
+  await mkdir(join(gitRoot, ".git"), { recursive: true });
+  const worktree = createSandboxController({ workspaceRoot: gitRoot });
+  // Before init: no backend has promised anything yet.
+  expect(worktree.enforcement()).toBe("partial");
+  await worktree.init();
+  expect(worktree.enforcement()).toBe("full");
+
+  const plainRoot = await mkdtemp(join(tmpdir(), "natalia-sandbox-enforce-2-"));
+  const snapshot = createSandboxController({ workspaceRoot: plainRoot });
+  await snapshot.init();
+  expect(snapshot.enforcement()).toBe("partial");
+
+  // And a forced snapshot backend in a git repo is partial too — the
+  // caller asked for the git-free path.
+  const forced = createSandboxController({
+    workspaceRoot: gitRoot,
+    backend: () => "snapshot",
+  });
+  await forced.init();
+  expect(forced.enforcement()).toBe("partial");
+});
+
 test("the controller passes the resolved confinement mode to its manager", async () => {
   // The production path: the client resolves the effective mode (composition
   // default, config fallback, schema default, then the platform gate) and

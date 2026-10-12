@@ -24,6 +24,7 @@ import {
   updateConfigAtScope,
 } from "@anthelia/config";
 import type { ConfigV3, RuntimeEvent } from "@anthelia/contracts";
+import { sandboxService } from "@anthelia/runtime-services";
 import {
   buildGeneration,
   deriveCompositionPointer,
@@ -287,7 +288,13 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         activeRules: activeConstitutionRows(ctx),
         faces: {
           guards: guardsFaceFor(ctx),
-          smoke: smokeFace(),
+          smoke: smokeFace({
+            // The workspace's own backend fact, read off its controller:
+            // a candidate applied HERE inherits THAT backend's promises.
+            enforcement: ctx.state.serviceDirectory
+              .getOptional(sandboxService)
+              ?.enforcement?.(),
+          }),
           nia: niaFace(niaSurfaces(ctx), {
             sessionID: activeExec(ctx)?.session?.id,
           }),

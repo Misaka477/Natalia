@@ -9,6 +9,7 @@
     "./ui": "./src/ui/plugin.tsx"
   },
   "dependencies": {
+    "@anthelia/confinement": "workspace:*",
     "@anthelia/contracts": "workspace:*",
     "@anthelia/platform": "workspace:*",
     "@anthelia/plugin": "workspace:*",

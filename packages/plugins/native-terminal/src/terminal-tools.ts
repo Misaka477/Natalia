@@ -258,6 +258,18 @@ function interactiveStartTool(): RuntimeTool {
         command: requireString(args.command, "command"),
         cwd: context.workspaceRoot,
         id: optionalString(args.id),
+        // The pane's file-effect mode rides the start: a pane is a REAL
+        // shell, so the spawn itself is confined to the same mode the
+        // one-shot shell tool carries. Without this, one approval bought
+        // an unlimited live shell — the worst of the sandbox holes.
+        ...(context.confinement
+          ? {
+              confinement: {
+                mode: context.confinement,
+                workspaceRoot: context.workspaceRoot,
+              },
+            }
+          : {}),
         // I1/I3: the pane belongs to the turn's session. When that session is
         // not the attached one, the registry opens no window and steals no
         // focus — the human's Open terminal brings it up later.

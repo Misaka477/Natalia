@@ -54,8 +54,15 @@ async function waitForSignal(
   throw new Error(`${label} did not arrive within ${timeoutMs}ms`);
 }
 
-export function smokeFace(options: { timeoutMs?: number } = {}) {
+export function smokeFace(
+  options: { timeoutMs?: number; enforcement?: "full" | "partial" } = {},
+) {
   const timeoutMs = options.timeoutMs ?? 60_000;
+  // The backend this smoke's throwaway workspace runs under, reported as
+  // the fact it is. A temp dir is not a git repository, so the snapshot
+  // backend serves it and the honest answer is `partial` — unless the
+  // caller's own workspace says otherwise.
+  const enforcement = options.enforcement ?? "partial";
   const face: VerificationFace = async (generation: Generation) => {
     const base = await mkdtemp(join(tmpdir(), "composition-smoke-"));
     const workspaceRoot = join(base, "workspace");
@@ -129,11 +136,15 @@ export function smokeFace(options: { timeoutMs?: number } = {}) {
           detail: "runtime exposes no submitAndWait — cannot prove a turn",
         };
       await client.submitAndWait("smoke: reply with a short ok.");
-      return { check: "smoke", ok: true };
+      // The candidate booted and answered — under the backend named beside
+      // it. A `partial` answer is an honest pass of the SMOKE and an
+      // explicit refusal of the stronger "verified rollbackable" claim.
+      return { check: "smoke", ok: true, enforcement };
     } catch (error) {
       return {
         check: "smoke",
         ok: false,
+        enforcement,
         detail: error instanceof Error ? error.message : String(error),
       } satisfies VerificationCheck;
     } finally {

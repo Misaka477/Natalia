@@ -24,6 +24,15 @@ export type VerificationCheck = {
   check: string;
   ok: boolean;
   detail?: string;
+  /**
+   * The enforcement fact of the backend this check ran under, when the
+   * check has one: `full` (a real branch, a real promotion, a real
+   * rollback) or `partial` (copy-and-hope). A candidate verified under a
+   * partial backend may not be read as "verified rollbackable" — the fact
+   * rides the check so the consumer refuses the stronger claim instead of
+   * inferring it (the sandbox study's rule).
+   */
+  enforcement?: "full" | "partial";
 };
 
 export type VerificationFace = (

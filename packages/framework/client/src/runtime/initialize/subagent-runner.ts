@@ -22,8 +22,11 @@ import {
 } from "./subagent-settled-notice";
 import { activePlanForExec } from "@natalia/collab";
 import { sandboxService, subagentsService } from "@anthelia/runtime-services";
+import { pathWithinDomains } from "../sandbox-policy";
+
 import { sandboxSelfDiffTool } from "@anthelia/sandbox";
 import { uniqueProviderToolCallIds } from "@anthelia/runtime";
+
 import type { RuntimeContextLedger } from "@natalia/context-ledger";
 
 /**
@@ -229,17 +232,22 @@ export async function installSubagents(
     const writePaths = record.writePaths;
     const writeAuthorize = writePaths?.length
       ? async ({ toolName, path }: { toolName: string; path: string }) => {
-          const relative = path.startsWith(sandboxRoot + "/")
-            ? path.slice(sandboxRoot.length + 1)
-            : path;
-          const inDomain = writePaths.some(
-            (domain) =>
-              relative === domain ||
-              relative.startsWith(domain.endsWith("/") ? domain : `${domain}/`),
-          );
+          // canonicalize-then-contain (the sandbox study's judgement, our own
+          // spelling): the path is REALPATHED before it is compared, so a
+          // lexical `allowed/../../../etc/x` — which a prefix match waves
+          // through and the kernel then resolves outside the worktree —
+          // is judged on where it actually lands. The re-normalisation
+          // resolves the deepest EXISTING ancestor, so a path whose tail
+          // does not exist yet (the write about to create it) still gets a
+          // truthful answer about its directory.
+          const inDomain = pathWithinDomains({
+            path,
+            root: sandboxRoot,
+            domains: writePaths,
+          });
           if (!inDomain)
             throw new Error(
-              `subagent write outside file domain (${toolName}): ${relative}`,
+              `subagent write outside file domain (${toolName}): ${path}`,
             );
         }
       : undefined;

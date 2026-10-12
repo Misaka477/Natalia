@@ -33,6 +33,10 @@ import {
   nativeTerminalPaneSpawn,
 } from "./pane-command";
 import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
+import {
+  wrapConfinedCommand,
+  type ConfinementMode,
+} from "@anthelia/confinement";
 
 /**
  * The spawn geometry for a terminal nobody sized yet.
@@ -91,6 +95,13 @@ export type PtySpawnOptions = {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /**
+   * The pane's file-effect mode. The controller wraps the spawn (file/args)
+   * through the confinement binary before any backend sees it, so the pane's
+   * shell — and everything typed into it — runs at that mode. Absent means
+   * `danger-full-access` (a human's own pane).
+   */
+  confinement?: { mode: ConfinementMode; workspaceRoot?: string };
   /**
    * The command text as it was requested, before the shell argv was derived.
    * The WezTerm adapter passes it to the host's own start (which applies the
@@ -1268,6 +1279,12 @@ export function createPtyTerminalController(
     id?: string;
     sessionID?: string;
     agentID?: string;
+    confinement?: {
+      mode: ConfinementMode;
+      workspaceRoot?: string;
+      /** The caller's own backend, when it names one (the test seam). */
+      binaryPath?: string;
+    };
     /**
      * The grid to spawn at. Absent means the default; a human pane resizes the
      * running terminal the moment it opens, so this matters for headless
@@ -1346,9 +1363,32 @@ export function createPtyTerminalController(
       disposers: [],
     };
     const started = performance.now();
+    // The pane is a real shell with the host's full authority, so the
+    // spawn itself is confined: the same mode the one-shot shell tool
+    // carries, applied at exec. A mode that needs a backend with no
+    // backend present FAILS CLOSED — an unconfined pane is the exact hole
+    // this closes (one approval used to buy an unlimited live shell).
+    let spawnFile = file;
+    let spawnArgs = args;
+    const confinement = startInput.confinement;
+    if (confinement && confinement.mode !== "danger-full-access") {
+      const wrapped = wrapConfinedCommand({
+        mode: confinement.mode,
+        workspaceRoot: confinement.workspaceRoot ?? startInput.cwd,
+        command: file,
+        args: [...args],
+        binaryPath: confinement.binaryPath,
+      });
+      if (!wrapped)
+        throw new Error(
+          `terminal start refused: confinement mode ${confinement.mode} has no usable backend on this host — an unconfined pane is not an option`,
+        );
+      spawnFile = wrapped.command;
+      spawnArgs = wrapped.args;
+    }
     const pty = spawnPty({
-      file,
-      args,
+      file: spawnFile,
+      args: spawnArgs,
       cwd: startInput.cwd,
       cols,
       rows,

@@ -580,6 +580,16 @@ export interface SandboxService extends SandboxToolService {
   close(): Promise<void>;
   referencedObjectIDs(): Promise<Set<string> | undefined>;
   runningResourceCount(): number;
+  /**
+   * How strongly this backend keeps its promises: `full` (a real branch, a
+   * real promotion, a real rollback — the worktree backend) or `partial`
+   * (copy-and-hope — the snapshot backend). A consumer that needs the
+   * absolute "verified rollbackable" claim must read this and refuse the
+   * partial answer rather than treating the backends as the same thing.
+   * Optional so a port implementation predating the fact still satisfies
+   * the interface; the controller always answers.
+   */
+  enforcement?(): "full" | "partial";
 }
 export interface TerminalController {
   init(): Promise<void>;
@@ -633,6 +643,20 @@ export interface TerminalController {
     /** The grid to spawn at; absent means the controller's default. */
     rows?: number;
     cols?: number;
+    /**
+     * The pane's file-effect mode. The pane is a REAL shell: whatever is
+     * typed into it runs with the host's full authority unless the spawn
+     * itself is confined, so the mode rides the start (the same policy the
+     * shell tool's one-shot commands already carry) and the pane's process
+     * is wrapped at spawn. Absent means `danger-full-access` — a human's
+     * own pane, which no model call started.
+     */
+    confinement?: {
+      mode: import("@anthelia/contracts").ConfinementMode;
+      workspaceRoot?: string;
+      /** The caller's own backend, when it names one (the test seam). */
+      binaryPath?: string;
+    };
   }): Promise<RuntimeNativeTerminalSession>;
   write(
     id: string,

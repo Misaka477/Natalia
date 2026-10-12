@@ -29,11 +29,25 @@ import { WorkspaceSandboxManager } from "./workspace-manager";
  * Multi-session shape (plan §41.9): today the controller owns one manager.
  * When sessions become per-session maps, only this module's delegation changes.
  */
+/**
+ * How strongly this controller's backend keeps its promises.
+ *
+ * `full` — the worktree backend: a candidate is a REAL branch, promotion
+ * is a real merge, rollback is a real reset. `partial` — the snapshot
+ * backend: promotion is copy-and-hope, so "verified rollbackable" is a
+ * claim the backend cannot underwrite. A consumer that needs the absolute
+ * claim must read this fact and refuse the partial answer rather than
+ * treating the two as the same thing (the sandbox study's rule, our spelling).
+ */
+export type SandboxEnforcement = "full" | "partial";
+
 export type SandboxController = SandboxToolService & {
   init(): Promise<void>;
   close(): Promise<void>;
   referencedObjectIDs(): Promise<Set<string> | undefined>;
   runningResourceCount(): number;
+  /** The backend's enforcement fact; "partial" until a backend is chosen. */
+  enforcement(): SandboxEnforcement;
   /**
    * Bring a candidate up to date with the host's newer commits (T6-2), and
    * clear a conflict it reports (T6-3). Both exist only on the worktree
@@ -73,6 +87,9 @@ export function createSandboxController(input: {
   confinementBinaryPath?: string;
 }): SandboxController {
   let manager: WorkspaceSandboxManager | undefined;
+  // "partial" until a backend is chosen: a controller that has not
+  // initialized has promised nothing yet.
+  let enforcementFact: SandboxEnforcement = "partial";
   let initializing: Promise<void> | undefined;
   let closed = false;
 
@@ -104,13 +121,19 @@ export function createSandboxController(input: {
             : {}),
         };
         const requested = input.backend?.();
-        const next =
-          requested !== "snapshot" && isGitRepo
-            ? new WorktreeSandboxManager(input.workspaceRoot, options)
-            : new SnapshotSandboxManager(input.workspaceRoot, options);
+        const worktree = requested !== "snapshot" && isGitRepo;
+        const next = worktree
+          ? new WorktreeSandboxManager(input.workspaceRoot, options)
+          : new SnapshotSandboxManager(input.workspaceRoot, options);
         await next.initialize();
         if (closed) await next.close();
-        else manager = next;
+        else {
+          manager = next;
+          // The enforcement fact is fixed by the backend, so it is read
+          // off the same choice — not re-derived per call, where it could
+          // drift from the manager actually in use.
+          enforcementFact = worktree ? "full" : "partial";
+        }
       })();
     try {
       await initializing;
@@ -127,6 +150,7 @@ export function createSandboxController(input: {
 
   return {
     init,
+    enforcement: () => enforcementFact,
     create: async (id) => await requireManager().create(id),
     list: async () => await requireManager().list(),
     collectIdle: async (collectInput) =>

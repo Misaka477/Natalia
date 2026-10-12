@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdtempSync } from "node:fs";
+import { governanceViews } from "../src/views";
 import {
   appendInstanceEvent,
   loadInstanceGovernance,
@@ -115,4 +117,49 @@ test("a stale override from another test file cannot answer for this workspace",
     if (previous === undefined) delete process.env.NATALIA_TEST_GOVERNANCE_ROOT;
     else process.env.NATALIA_TEST_GOVERNANCE_ROOT = previous;
   }
+});
+
+test("a tombstone written to the instance store survives the restart that resurrected the rule", () => {
+  // The bug: a rule's ADD was mirrored to the instance store (or every later
+  // session would be blind to it — T-21) while its REMOVE was not, so a
+  // restart rebuilt the rule from the instance store and the deletion
+  // silently undid itself. The user saw "删也删不掉，重启又回来了".
+  //
+  // This is the resurrection test: add, remove (mirrored), reload as a fresh
+  // process would, and assert the rule is GONE.
+  const workspace = mkdtempSync(join(tmpdir(), "gov-resurrect-"));
+  const root = resolveGovernanceRoot(workspace);
+  const ruleID = "P-AGENT-resurrect";
+  const at = () => new Date().toISOString();
+  // The event's real shape (what `buildProposedConstitutionRule` emits):
+  // `constitution.rule_added` with the fields flattened, not a `proposal`
+  // sub-object. Getting this wrong made the test pass for the wrong reason
+  // — the fold never saw a rule at all, so there was nothing to resurrect.
+  appendInstanceEvent(root, "constitution.jsonl", {
+    type: "constitution.rule_added",
+    id: `constitution:rule:${ruleID}`,
+    at: at(),
+    ruleID,
+    statement: "sandbox_merge must be gated by explicit human approval",
+    scope: "project",
+    priority: "high",
+    source: "agent_proposed",
+    enforcement: "approval",
+    overridePolicy: "user_explicit",
+    proposedBy: "agent",
+  } as never);
+  // Before the fix the removal never reached this file, so the reload below
+  // put the rule back.
+  appendInstanceEvent(root, "constitution.jsonl", {
+    type: "constitution.rule_removed",
+    id: `constitution:removed:${ruleID}`,
+    at: at(),
+    ruleID,
+    removedAt: at(),
+    removedBy: "user",
+  } as never);
+  // A restart reads the INSTANCE store through the same views the panel
+  // reads — that is the path that resurrected the rule.
+  const reloaded = governanceViews(workspace);
+  expect(reloaded.rules.some((rule) => rule.ruleID === ruleID)).toBe(false);
 });

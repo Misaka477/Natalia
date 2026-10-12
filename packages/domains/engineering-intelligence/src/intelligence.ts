@@ -1668,17 +1668,23 @@ export function createIntelligenceSurface(
           updated: false as const,
           reason: `${enforcement} requires a non-empty appliesTo anchor`,
         };
-      ctx.ports.publishForSession(
-        exec,
-        governanceLedger.buildConstitutionRuleUpdate({
-          id: `constitution:update:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
-          ruleID: input.ruleID,
-          ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-          ...(input.statement ? { statement: input.statement } : {}),
-          ...(enforcement ? { enforcement } : {}),
-          ...(input.priority ? { priority: input.priority } : {}),
-          ...(anchor ? { appliesTo: anchor } : {}),
-        }),
+      const updated = governanceLedger.buildConstitutionRuleUpdate({
+        id: `constitution:update:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
+        ruleID: input.ruleID,
+        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+        ...(input.statement ? { statement: input.statement } : {}),
+        ...(enforcement ? { enforcement } : {}),
+        ...(input.priority ? { priority: input.priority } : {}),
+        ...(anchor ? { appliesTo: anchor } : {}),
+      });
+      ctx.ports.publishForSession(exec, updated);
+      // Same mirror the remove path was missing: a disable that is not
+      // mirrored re-enables itself on the next restart, and the user sees
+      // a switch that does not hold.
+      appendInstanceEvent(
+        resolveGovernanceRoot(ctx.ports.getWorkspaceRoot()),
+        "constitution.jsonl",
+        updated,
       );
       return { updated: true as const };
     },
@@ -1700,13 +1706,23 @@ export function createIntelligenceSurface(
       if (isHardProtectedRule(input.ruleID)) return { removed: false as const };
       const governanceLedger = requireGovernanceLedger();
       if (!governanceLedger) return { removed: false as const };
-      ctx.ports.publishForSession(
-        exec,
-        governanceLedger.buildConstitutionRuleRemoved({
-          id: `constitution:removed:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
-          ruleID: input.ruleID,
-          removedAt: new Date().toISOString(),
-        }),
+      const removed = governanceLedger.buildConstitutionRuleRemoved({
+        id: `constitution:removed:${Date.now().toString(36)}:${ctx.ports.nextDecisionSequence()}`,
+        ruleID: input.ruleID,
+        removedAt: new Date().toISOString(),
+      });
+      ctx.ports.publishForSession(exec, removed);
+      // The ADD path writes BOTH the session journal and the durable
+      // instance store (plan-contract-tools does exactly this, or an
+      // approved rule is invisible to every later session — T-21). The
+      // remove path wrote only the session journal, so a restart rebuilt
+      // the rule from the instance store and the deletion silently
+      // undid itself. A write that is not mirrored is a write that
+      // survives its own deletion.
+      appendInstanceEvent(
+        resolveGovernanceRoot(ctx.ports.getWorkspaceRoot()),
+        "constitution.jsonl",
+        removed,
       );
       return { removed: true as const };
     },
@@ -1758,17 +1774,23 @@ export function createIntelligenceSurface(
           reason: "governance ledger unavailable",
         };
       const ruleID = `P-USER-${Date.now().toString(36).toUpperCase()}`;
-      ctx.ports.publishForSession(
-        exec,
-        governanceLedger.buildUserConstitutionRule({
-          id: `constitution:created:${ruleID}:${ctx.ports.nextDecisionSequence()}`,
-          ruleID,
-          statement: input.statement,
-          enforcement: input.enforcement,
-          ...(input.scope ? { scope: input.scope } : {}),
-          ...(anchor ? { appliesTo: anchor } : {}),
-          ...(input.priority ? { priority: input.priority } : {}),
-        }),
+      const created = governanceLedger.buildUserConstitutionRule({
+        id: `constitution:created:${ruleID}:${ctx.ports.nextDecisionSequence()}`,
+        ruleID,
+        statement: input.statement,
+        enforcement: input.enforcement,
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(anchor ? { appliesTo: anchor } : {}),
+        ...(input.priority ? { priority: input.priority } : {}),
+      });
+      ctx.ports.publishForSession(exec, created);
+      // Mirrored like every other constitution write: a rule that exists
+      // only in this session's journal disappears on restart, and a rule
+      // whose deletion is not mirrored comes back.
+      appendInstanceEvent(
+        resolveGovernanceRoot(ctx.ports.getWorkspaceRoot()),
+        "constitution.jsonl",
+        created,
       );
       return { created: true as const, ruleID };
     },

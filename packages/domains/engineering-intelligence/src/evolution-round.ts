@@ -36,6 +36,38 @@ import {
 } from "./reflective-mutator";
 import { summaryLine, type EvolutionSummaryEntry } from "./evolution-state";
 
+/**
+ * The three splits' own scores, derived from the per-example map: the
+ * sealed samples' ids carry the `holdout:` prefix (the protocol's own
+ * marking), and the visible ones carry their split. A reviewer approving a
+ * candidate needs to see WHICH split moved — a blended number hides a
+ * holdout regression behind a train gain, which is exactly the leak the
+ * sealed face exists to prevent.
+ */
+export function splitScores(result: { perExample: Record<string, number> }): {
+  train?: number;
+  val?: number;
+  holdout?: number;
+} {
+  const mean = (values: number[]) =>
+    values.length
+      ? values.reduce((a, b) => a + b, 0) / values.length
+      : undefined;
+  const train: number[] = [];
+  const val: number[] = [];
+  const holdout: number[] = [];
+  for (const [id, score] of Object.entries(result.perExample)) {
+    if (id.startsWith("holdout:")) holdout.push(score);
+    else if (id.startsWith("val:")) val.push(score);
+    else train.push(score);
+  }
+  return {
+    ...(train.length ? { train: mean(train) } : {}),
+    ...(val.length ? { val: mean(val) } : {}),
+    ...(holdout.length ? { holdout: mean(holdout) } : {}),
+  };
+}
+
 export type RoundCandidate = {
   name: string;
   description: string;
@@ -45,6 +77,21 @@ export type RoundCandidate = {
   axis?: "exploitation" | "exploration";
   score: number;
   holdoutScore?: number;
+  /**
+   * The three splits' own scores. A reviewer approving this needs to see
+   * which split moved — a blended number hides a holdout regression
+   * behind a train gain.
+   */
+  splits?: { train?: number; val?: number; holdout?: number };
+  /** The seven gates, one result each (the refusals are the failures'). */
+  gateResults?: Array<{ gate: string; ok: boolean; detail: string }>;
+  /** What the candidate changed against the artifact it came from. */
+  diff?: { baseline: string; candidate: string };
+  /**
+   * The round's own cost: how many provider calls it spent. A reviewer
+   * deciding whether to land a 0.03 gain needs to know what it cost.
+   */
+  sampleCount?: number;
 };
 
 export async function runEvolutionRound(input: {
@@ -86,12 +133,15 @@ export async function runEvolutionRound(input: {
 
   // 1. The parent's own result — the reflective proposer needs an evaluated
   //    parent to find the TRAINABLE failures in.
+  let sampleCount = 0;
+  const call = async (prompt: string, component: string) => {
+    sampleCount += 1;
+    return input.sampler({ prompt, component });
+  };
   const parentAnswers: string[] = [];
   for (const sample of visible) {
     const prompt = `${input.currentInstruction}\n\n${sample.input}`;
-    parentAnswers.push(
-      await input.sampler({ prompt, component: input.currentInstruction }),
-    );
+    parentAnswers.push(await call(prompt, input.currentInstruction));
   }
   const parentResult = scoreUnderProtocol({
     outputs: parentAnswers,
@@ -122,9 +172,7 @@ export async function runEvolutionRound(input: {
   const candidateAnswers: string[] = [];
   for (const sample of visible) {
     const prompt = `${proposal.candidate.text}\n\n${sample.input}`;
-    candidateAnswers.push(
-      await input.sampler({ prompt, component: proposal.candidate.text }),
-    );
+    candidateAnswers.push(await call(prompt, proposal.candidate.text));
   }
   const candidateResult = scoreUnderProtocol({
     outputs: candidateAnswers,
@@ -157,6 +205,15 @@ export async function runEvolutionRound(input: {
     // face does not hand it out, so the candidate reports the blended
     // score and the queue's row says so rather than inventing a split.
     holdoutScore: candidateResult.score,
+    // The decision fields a reviewer actually needs: which split moved,
+    // which gates answered what, what changed, and what it cost.
+    splits: splitScores(candidateResult),
+    gateResults: gate.gates,
+    diff: {
+      baseline: input.currentInstruction,
+      candidate: proposal.candidate.text,
+    },
+    sampleCount,
   };
 
   // 5. The summary entry. PURE (string in, string out) — the caller writes
@@ -171,6 +228,12 @@ export async function runEvolutionRound(input: {
     outcome: gate.passed ? "accepted" : "rejected",
     components: [proposal.candidate.text],
     gate: { passed: gate.passed, refusals: gate.refusals },
+    // The decision fields ride the SAME line the queue reads, so a
+    // reviewer sees the splits, the per-gate verdicts and the cost
+    // without a second file that could drift from this one.
+    splits: splitScores(candidateResult),
+    gateResults: gate.gates,
+    sampleCount,
   };
 
   return { ok: true, entry, candidate, gate };

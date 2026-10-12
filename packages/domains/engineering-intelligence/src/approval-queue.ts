@@ -27,6 +27,18 @@ export type ApprovalCandidate = {
   score: number;
   /** The score on the sealed holdout — the number that is not optimized. */
   holdoutScore?: number;
+  /**
+   * The three splits' own scores. A reviewer approving this needs to see
+   * WHICH split moved — a blended number hides a holdout regression
+   * behind a train gain (the exact leak the sealed face prevents).
+   */
+  splits?: { train?: number; val?: number; holdout?: number };
+  /** The seven gates, one result each — which answered what. */
+  gateResults?: Array<{ gate: string; ok: boolean; detail: string }>;
+  /** What changed against the artifact the candidate came from. */
+  diff?: { baseline: string; candidate: string };
+  /** The round's own cost (provider calls spent). */
+  sampleCount?: number;
 };
 
 /** The gate's verdict on the candidate, as the item carries it. */
@@ -50,12 +62,21 @@ export function approvalItemFrom(input: {
   gate: ApprovalGate;
 }): ApprovalItem {
   const { candidate, gate } = input;
+  // The summary names the SPLITS, not just the blend: a reviewer's first
+  // question is "did the holdout move", and a blended number cannot answer
+  // it.
+  const split = candidate.splits;
   const parts = [
     `${candidate.name} scored ${candidate.score.toFixed(4)}`,
-    ...(candidate.holdoutScore === undefined
+    ...(split?.train === undefined ? [] : [`train ${split.train.toFixed(4)}`]),
+    ...(split?.val === undefined ? [] : [`val ${split.val.toFixed(4)}`]),
+    ...(split?.holdout === undefined
       ? []
-      : [`holdout ${candidate.holdoutScore.toFixed(4)}`]),
+      : [`holdout ${split.holdout.toFixed(4)}`]),
     ...(candidate.axis ? [candidate.axis] : []),
+    ...(candidate.sampleCount === undefined
+      ? []
+      : [`${candidate.sampleCount} calls`]),
   ];
   return {
     candidate,
@@ -163,6 +184,9 @@ export function queueItemsFromSummary(input: {
       axis?: unknown;
       hypothesis?: unknown;
       gate?: { passed?: unknown; refusals?: unknown };
+      splits?: unknown;
+      gateResults?: unknown;
+      sampleCount?: unknown;
     };
     try {
       row = JSON.parse(line) as typeof row;
@@ -197,6 +221,25 @@ export function queueItemsFromSummary(input: {
             ? { axis: row.axis }
             : {}),
           score: row.score,
+          // The decision fields ride the summary line when the run wrote
+          // them (S8's round-runner does), so the panel can show what a
+          // reviewer needs without a second file to drift.
+          ...(isSplits(row.splits) ? { splits: row.splits } : {}),
+          ...(Array.isArray(row.gateResults)
+            ? {
+                gateResults: row.gateResults.filter(
+                  (
+                    entry,
+                  ): entry is { gate: string; ok: boolean; detail: string } =>
+                    typeof entry?.gate === "string" &&
+                    typeof entry?.ok === "boolean" &&
+                    typeof entry?.detail === "string",
+                ),
+              }
+            : {}),
+          ...(typeof row.sampleCount === "number"
+            ? { sampleCount: row.sampleCount }
+            : {}),
         },
         gate: {
           passed: row.gate?.passed === true,
@@ -208,6 +251,18 @@ export function queueItemsFromSummary(input: {
   // The decisions fold in, so the caller gets the PENDING rows directly.
   const decided = parseDecisions(input.decisions);
   return { items: pendingItems({ items, decisions: decided }), skipped };
+}
+
+function isSplits(
+  value: unknown,
+): value is { train?: number; val?: number; holdout?: number } {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  for (const key of ["train", "val", "holdout"] as const) {
+    const entry = row[key];
+    if (entry !== undefined && typeof entry !== "number") return false;
+  }
+  return true;
 }
 
 /** The decisions file's lines (one JSON object per decision). */

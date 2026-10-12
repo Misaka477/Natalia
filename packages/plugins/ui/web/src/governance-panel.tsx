@@ -2397,7 +2397,47 @@ export function GovernancePane(props: {
             {(item) => (
               <div class="neu-gov-row">
                 <span class="neu-gov-title">{item.candidate.name}</span>
+                {/* The decision fields, in the order a reviewer asks for
+                    them: which split moved, what it cost, what the seven
+                    gates each said, and what actually changed. A row that
+                    shows only a blended score asks the human to approve on
+                    faith — which is the thing this queue exists to end. */}
                 <span class="neu-gov-text">{item.summary}</span>
+                <Show when={item.candidate.splits}>
+                  <span class="neu-gov-meta">
+                    {[
+                      ...(item.candidate.splits.train === undefined
+                        ? []
+                        : [`train ${item.candidate.splits.train.toFixed(4)}`]),
+                      ...(item.candidate.splits.val === undefined
+                        ? []
+                        : [`val ${item.candidate.splits.val.toFixed(4)}`]),
+                      ...(item.candidate.splits.holdout === undefined
+                        ? []
+                        : [
+                            `holdout ${item.candidate.splits.holdout.toFixed(4)}`,
+                          ]),
+                    ].join(" · ")}
+                  </span>
+                </Show>
+                <Show when={(item.candidate.gateResults ?? []).length > 0}>
+                  <span class="neu-gov-meta">
+                    {(item.candidate.gateResults ?? [])
+                      .map(
+                        (gate: { gate: string; ok: boolean; detail: string }) =>
+                          `${gate.gate} ${gate.ok ? "过" : "拒"} — ${gate.detail}`,
+                      )
+                      .join(" · ")}
+                  </span>
+                </Show>
+                <Show when={item.candidate.diff}>
+                  <span class="neu-gov-meta">
+                    基线：{item.candidate.diff.baseline}
+                  </span>
+                  <span class="neu-gov-meta">
+                    候选：{item.candidate.diff.candidate}
+                  </span>
+                </Show>
                 <span class="neu-gov-meta">
                   {item.candidate.hypothesis ?? item.candidate.description}
                 </span>

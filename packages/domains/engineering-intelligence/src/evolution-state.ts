@@ -65,6 +65,24 @@ export type EvolutionSummaryEntry = {
    * rather than living in a separate file nobody opens.
    */
   gate?: { passed: boolean; refusals: string[] };
+  /**
+   * S8: the three splits' own scores. A reviewer approving this candidate
+   * needs to see WHICH split moved — a blended number hides a holdout
+   * regression behind a train gain (the exact leak the sealed face
+   * prevents), so the splits ride the line the queue reads.
+   */
+  splits?: { train?: number; val?: number; holdout?: number };
+  /**
+   * S8: the seven gates' per-gate results (not only the refusals). "Which
+   * gate said no" is a different question from "what did it say", and the
+   * second is unanswerable from the first when several fail.
+   */
+  gateResults?: Array<{ gate: string; ok: boolean; detail: string }>;
+  /**
+   * S8: the round's own cost — how many provider calls it spent. A human
+   * deciding whether to land a 0.03 gain needs to know what it cost.
+   */
+  sampleCount?: number;
 };
 
 export function renderTaskFile(task: EvolutionTask): string {
@@ -94,6 +112,13 @@ export function summaryLine(entry: EvolutionSummaryEntry): string {
     ...(entry.parentDiff === undefined ? {} : { parentDiff: entry.parentDiff }),
     ...(entry.provenance === undefined ? {} : { provenance: entry.provenance }),
     ...(entry.gate === undefined ? {} : { gate: entry.gate }),
+    ...(entry.splits === undefined ? {} : { splits: entry.splits }),
+    ...(entry.gateResults === undefined
+      ? {}
+      : { gateResults: entry.gateResults }),
+    ...(entry.sampleCount === undefined
+      ? {}
+      : { sampleCount: entry.sampleCount }),
   });
 }
 

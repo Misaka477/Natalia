@@ -57,6 +57,21 @@ test("skills remove without a name is refused before the daemon is asked", () =>
   }
 });
 
+test("skills pin without a name is refused before the daemon is asked", () => {
+  base = mkdtempSync(join(tmpdir(), "skills-cli-pin-noname-"));
+  try {
+    for (const action of ["pin", "unpin"]) {
+      const child = run(["skills", action]);
+      expect(child.exitCode).not.toBe(0);
+      expect(new TextDecoder().decode(child.stderr)).toContain(
+        "requires a skill name",
+      );
+    }
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("evolution land refuses a missing card path and a malformed card before touching the daemon", () => {
   base = mkdtempSync(join(tmpdir(), "evolution-land-gate-"));
   try {

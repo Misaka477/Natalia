@@ -76,6 +76,13 @@ export function wireExecution(
     events: (sessionID) =>
       ctx.ports.getExecutionBySession().get(sessionID as SessionID)?.session
         .events ?? [],
+    // The write lane's interval gate (hermes' interval_hours): how long
+    // after a skill write another review must wait before it may sediment
+    // again. Read from config so a workspace can tune it; the schema's
+    // default is a week.
+    skillWriteIntervalHours: () =>
+      ctx.ports.getTsRuntimeConfig?.()?.backgroundReview
+        ?.skillWriteIntervalHours ?? 168,
     disposed: () => ctx.ports.isDisposed(),
     skills: async () => {
       const existing = ctx.state.serviceDirectory.getOptional(skillService);

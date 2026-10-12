@@ -337,6 +337,15 @@ export const backgroundReviewConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
     /**
+     * The skill write lane's interval gate (hermes' curator
+     * `interval_hours`): a review that would sediment skills is skipped
+     * with `self_review.skipped{reason:"too_soon"}` when the workspace's
+     * owned skills were written less than this many hours ago. The gate
+     * is on TIMING, not content — it does not guess whether a proposal is
+     * good, it refuses to ask again too soon. Default 168 (hermes' week).
+     */
+    skillWriteIntervalHours: z.number().int().min(0).default(168),
+    /**
      * S9: the RLHF verdict wake — every human turn after a finished answer
      * wakes Nia to judge that answer. It costs one extra model turn per
      * exchange, so it ships DARK: off until it has been seen running in a

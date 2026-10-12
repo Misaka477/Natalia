@@ -152,6 +152,12 @@ export const RPC_ROUTE_MEMBERS = {
   "settings.set": "settingsSet",
   "skill.setEnabled": "skillSetEnabled",
   "skill.remove": "skillRemove",
+  // The user's protected set (hermes' pinned bypass): a pinned skill is
+  // never evictable whatever its lifecycle score.
+  "skill.setPinned": "skillSetPinned",
+  // Discovery D4's lifecycle dry run: what a gc WOULD take, folded from
+  // the journal's skill.activated facts. Applies nothing.
+  "skills.gc": "skillsGc",
   // S5: the landing path's write face. The boundary existed (the ONLY
   // autonomous write path, validated) but had no route, so a candidate
   // could be produced by the loop and written by nothing.
@@ -434,6 +440,7 @@ export const RPC_WRITE_METHODS: ReadonlySet<string> = new Set([
   // it is a write for a read-only credential.
   "skill.setEnabled",
   "skill.remove",
+  "skill.setPinned",
   "skill.upsert",
   "collab.send",
   // growth.propose journals the proposal fact (proposals are records).
@@ -3984,6 +3991,37 @@ export async function handleRPCMessage(
             ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
             : {}),
         }),
+      };
+    }
+    if (body.method === "skill.setPinned") {
+      optionsGuard(client, "skillSetPinned");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("skill.setPinned.params must be an object");
+      const name = (params as { name?: unknown }).name;
+      const pinned = (params as { pinned?: unknown }).pinned;
+      if (typeof name !== "string" || !name)
+        throw invalidParams("skill.setPinned.params.name must be a string");
+      if (typeof pinned !== "boolean")
+        throw invalidParams("skill.setPinned.params.pinned must be a boolean");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.skillSetPinned?.({
+          name,
+          pinned,
+          ...(optionalStringParam(body.params, "workspaceID")
+            ? { workspaceID: optionalStringParam(body.params, "workspaceID") }
+            : {}),
+        }),
+      };
+    }
+    if (body.method === "skills.gc") {
+      optionsGuard(client, "skillsGc");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.skillsGc?.(),
       };
     }
     if (body.method === "settings.set") {

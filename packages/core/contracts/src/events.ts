@@ -2571,6 +2571,31 @@ type RuntimeEventData =
       sessionID?: SessionID;
     }
   | {
+      /**
+       * Discovery D4's usage fact: a skill was ACTIVATED — loaded into a
+       * session's context by the skill-load tool or the command session's
+       * activate. This is the root the skill lifecycle's garbage collector
+       * was built waiting for: activation used to be runtime state only
+       * (the GC's own header said its usage inputs arrive "from the
+       * caller (today: nowhere)"), so a gc that cannot see usage refused
+       * to evict on zeros. The event names the skill and the turn that
+       * loaded it; the turn's own `turn.finished` (stopReason "done") is
+       * what makes the use a success, folded by the reader the same way
+       * D5's run-scorer reads outcomes. A runtime fact, not model input:
+       * it carries no skill body and no prose.
+       */
+      type: "skill.activated";
+      at: string;
+      sessionID?: SessionID;
+      workspaceID?: string;
+      /** The skill's catalog name — the key every reader folds on. */
+      name: string;
+      /** The skill's source, so a reader can tell owned from shipped. */
+      source: "project" | "user" | "remote" | "plugin";
+      /** The turn that loaded it, when the activation happened inside one. */
+      turnID?: string;
+    }
+  | {
       type: "self_review.completed";
       /**
        * Discovery D4: a side-channel self-review finished (hermes'
@@ -2622,6 +2647,9 @@ type RuntimeEventData =
         | "no_provider"
         | "no_skills"
         | "no_input"
+        // The interval gate (hermes' curator): the workspace's skills were
+        // written too recently for another review to sediment against them.
+        | "too_soon"
         | "error";
     }
   | {
@@ -4140,11 +4168,37 @@ export type RuntimeClient = {
     enabled: boolean;
     workspaceID?: string;
   }): Promise<{ name: string }>;
-  /** Deletes a workspace-owned skill (project/user); other sources refuse. */
+  /**
+   * Removes a workspace-owned skill (project/user) by ARCHIVING it under
+   * .natalia/skills-archive/ — recoverable, never gone (hermes'
+   * never-delete rule). Other sources refuse.
+   */
   skillRemove?(input: {
     name: string;
     workspaceID?: string;
-  }): Promise<{ removed: string }>;
+  }): Promise<{ removed: string; archivedTo: string }>;
+  /**
+   * The user's protected set: a pinned skill is never evictable whatever
+   * its lifecycle score (hermes' pinned bypass). Orthogonal to the
+   * off-switch.
+   */
+  skillSetPinned?(input: {
+    name: string;
+    pinned: boolean;
+    workspaceID?: string;
+  }): Promise<{ name: string }>;
+  /**
+   * Discovery D4's lifecycle dry run: what a garbage collector WOULD take,
+   * worst first, with the protected set and the cold-start window
+   * honored. The usage facts are folded from the journal's
+   * `skill.activated` events (a use whose turn finished done is a
+   * success); the eviction itself stays a human act. It APPLIES NOTHING.
+   */
+  skillsGc?(input?: { workspaceID?: string }): Promise<{
+    evict: Array<{ name: string; score: number; reason: string }>;
+    keep: Array<{ name: string; reason: string }>;
+    reclaimableBytes: number;
+  }>;
   /**
    * S5: the landing path's ONLY write. A candidate goes to the validated
    * boundary (action whitelist + name + size + rebuilt frontmatter); the

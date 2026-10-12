@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, utimesSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import {
@@ -468,9 +468,14 @@ test("removing a skill deletes it, and refuses a source it does not own", async 
   const registry = new SkillRegistry();
   await registry.reload({ workspaceRoot: root });
 
-  await registry.removeSkill("mine");
+  const removal = await registry.removeSkill("mine");
   expect(registry.list().map((skill) => skill.name)).not.toContain("mine");
   expect(existsSync(join(root, ".natalia", "skills", "mine"))).toBe(false);
+  // hermes' never-delete rule: the removal IS an archive. The directory
+  // moved under .natalia/skills-archive/ — recoverable by moving it back —
+  // and the answer names where it went.
+  expect(removal.archivedTo).toContain(join(".natalia", "skills-archive"));
+  expect(existsSync(join(removal.archivedTo, "SKILL.md"))).toBe(true);
 
   // A plugin's skill ships with the plugin: removing it would be undone by the
   // next reload (or would corrupt the install), so it is refused with the
@@ -576,4 +581,70 @@ test("the catalog version moves when the listed set changes, and says what (P2-2
     await tool.execute({ name: "review" }, { workspaceRoot: root }),
   );
   expect(output).toContain("[skill catalog version 1]");
+});
+
+test("the protected set is durable and orthogonal to the off-switch", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-skill-pinned-"));
+  await mkdir(join(root, ".natalia", "skills", "mine"), { recursive: true });
+  await writeFile(
+    join(root, ".natalia", "skills", "mine", "SKILL.md"),
+    '---\nname: mine\ndescription: "M"\n---\n\nbody\n',
+  );
+  const registry = new SkillRegistry();
+  await registry.reload({ workspaceRoot: root });
+  expect(registry.pinned()).toEqual([]);
+
+  await registry.setPinned("mine", true);
+  expect(registry.pinned()).toEqual(["mine"]);
+
+  // Durable: a fresh registry (a restart) reads the same protection.
+  const reopened = new SkillRegistry();
+  await reopened.reload({ workspaceRoot: root });
+  expect(reopened.pinned()).toEqual(["mine"]);
+
+  // Orthogonal: a pinned skill can still be disabled, and the pin survives it.
+  await reopened.setSkillEnabled("mine", false);
+  expect(reopened.list().find((skill) => skill.name === "mine")!.enabled).toBe(
+    false,
+  );
+  expect(reopened.pinned()).toEqual(["mine"]);
+
+  // And back off.
+  await reopened.setPinned("mine", false);
+  expect(reopened.pinned()).toEqual([]);
+  await expect(reopened.setPinned("ghost", true)).rejects.toThrow(
+    /skill not found/,
+  );
+});
+
+test("lastWriteAt reads the newest owned write, ignores shipped skills, and is 0 with none", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-skill-lwa-"));
+  // No skills at all: the gate's "never written" case.
+  const empty = new SkillRegistry();
+  await empty.reload({ workspaceRoot: root });
+  expect(empty.lastWriteAt()).toBe(0);
+
+  const old = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+  const owned = join(root, ".natalia", "skills", "mine", "SKILL.md");
+  await mkdir(dirname(owned), { recursive: true });
+  await writeFile(owned, '---\nname: mine\ndescription: "M"\n---\n\nbody\n');
+  utimesSync(owned, old, old);
+  const pluginDir = join(root, "plugin-skills");
+  await mkdir(join(pluginDir, "shipped"), { recursive: true });
+  await writeFile(
+    join(pluginDir, "shipped", "SKILL.md"),
+    '---\nname: shipped\ndescription: "S"\n---\n\nbody\n',
+  );
+  const registry = new SkillRegistry();
+  await registry.reload({ workspaceRoot: root, pluginDirs: [pluginDir] });
+
+  // The owned skill's backdated mtime is the write clock; the shipped
+  // plugin's skill — written a moment ago — is NOT (the workspace never
+  // wrote it, so it must not gate the workspace's review).
+  expect(registry.lastWriteAt()).toBe(old.getTime());
+
+  // A newer owned write moves the clock.
+  const newer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  utimesSync(owned, newer, newer);
+  expect(registry.lastWriteAt()).toBe(newer.getTime());
 });

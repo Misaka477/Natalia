@@ -104,11 +104,16 @@ export function skillGcReport(
     entry,
     score: skillScore(entry, now, { maxBytes }),
   }));
-  // The dynamic threshold: the mean, so a catalog that is uniformly good
-  // evicts nothing and one that is uniformly dead empties.
-  const mean =
-    scored.reduce((sum, row) => sum + row.score, 0) /
-    Math.max(1, scored.length);
+  // The dynamic threshold: the mean of the MEASURED entries, so a catalog
+  // that is uniformly good evicts nothing and one that is uniformly dead
+  // empties. Unmeasured entries (uses === 0) are kept by the rule below and
+  // contribute no score to the threshold — the same law as the rule itself:
+  // absence of evidence is not evidence. Counting their near-zero scores
+  // would drag the mean under any real skill's and freeze the collector.
+  const measured = scored.filter((row) => row.entry.uses > 0);
+  const mean = measured.length
+    ? measured.reduce((sum, row) => sum + row.score, 0) / measured.length
+    : 0;
   const threshold = options.threshold ?? mean;
   const evict: SkillEvictionRow[] = [];
   const keep: Array<{ name: string; reason: string }> = [];

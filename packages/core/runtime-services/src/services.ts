@@ -159,11 +159,32 @@ export interface SkillService {
    */
   setSkillEnabled(name: string, enabled: boolean): Promise<{ name: string }>;
   /**
-   * Deletes the skill's directory. Only a workspace-owned skill (project or
-   * user source) can be removed: a plugin's skill ships with the plugin and a
-   * remote one is pulled, so removing either is refused with the reason.
+   * The user's protected set: a pinned skill is never evictable whatever
+   * its lifecycle score (hermes' pinned bypass). Durable per workspace,
+   * orthogonal to the off-switch — a pinned skill can still be disabled.
    */
-  removeSkill(name: string): Promise<{ removed: string }>;
+  setPinned(name: string, pinned: boolean): Promise<{ name: string }>;
+  /** The protected set's current members. */
+  pinned(): readonly string[];
+  /**
+   * When the workspace's OWNED skills were last written (epoch ms) — the
+   * interval gate's clock for the background review's write lane. The
+   * write is the file write, so the newest owned SKILL.md's mtime IS the
+   * fact: durable across restarts with no extra state, and a human's edit
+   * counts too (the library just changed; sedimenting against a moving
+   * target is what the gate exists to prevent). 0 when nothing is owned.
+   */
+  lastWriteAt(): number;
+  /**
+   * Removes the skill by ARCHIVING it: the directory moves under
+   * `.natalia/skills-archive/<name>-<timestamp>/`, recoverable by moving
+   * it back (hermes' never-delete rule — an eviction path that cannot be
+   * undone is a path nobody dares use). Only a workspace-owned skill
+   * (project or user source) can be removed: a plugin's skill ships with
+   * the plugin and a remote one is pulled, so removing either is refused
+   * with the reason.
+   */
+  removeSkill(name: string): Promise<{ removed: string; archivedTo: string }>;
   authorizeTool(
     skill: SkillMetadata,
     tool: string,

@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -70,10 +71,18 @@ test("a turn sediments a skill through the side-channel review", async () => {
   // discovers the project root, and its tool registers with the turn's
   // catalog (discovery-driven mount — an empty root registers nothing).
   mkdirSync(join(scratch, ".natalia", "skills", "seed"), { recursive: true });
+  const seedFile = join(scratch, ".natalia", "skills", "seed", "SKILL.md");
   writeFileSync(
-    join(scratch, ".natalia", "skills", "seed", "SKILL.md"),
+    seedFile,
     "---\nname: seed\ndescription: Seed skill\n---\nSeed guidance.",
   );
+  // The seed is a FIXTURE standing in for a skill that has been there a
+  // while, so its mtime says so: the interval gate (hermes' curator) reads
+  // the last write to the workspace's owned skills, and a seed written
+  // milliseconds ago is exactly the "too soon" the gate exists for. The
+  // review this test observes must not be gated by its own fixture.
+  const seededAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  utimesSync(seedFile, seededAt, seededAt);
   const calls: Array<{ messages: unknown[] }> = [];
   const events: RuntimeEvent[] = [];
   const client = createRealRuntimeClient({

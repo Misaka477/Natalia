@@ -80,7 +80,7 @@ function fakeProvider(text: string): StreamingProvider {
   } as unknown as StreamingProvider;
 }
 
-function fakeSkills(upsert?: SkillService["upsertSkill"]) {
+function fakeSkills(upsert?: SkillService["upsertSkill"], lastWriteAt = 0) {
   const listed = [{ name: "existing", description: "d" }] as SkillMetadata[];
   return {
     resolve: () => listed[0]!,
@@ -94,6 +94,7 @@ function fakeSkills(upsert?: SkillService["upsertSkill"]) {
         const c = candidate as { kind: string; name: string };
         return { created: c.kind === "create", name: c.name };
       }),
+    lastWriteAt: () => lastWriteAt,
   } as unknown as SkillService;
 }
 
@@ -478,4 +479,92 @@ test("the loop reports WHY a candidate was dropped, not just how many", async ()
     expect.stringContaining("existing"),
     expect.stringContaining("thin"),
   ]);
+});
+
+/**
+ * The interval gate (hermes' curator): the write lane is throttled by
+ * TIME, not content. A workspace whose skills were written too recently
+ * does not get asked again — the catalog moved, and sedimenting against a
+ * moving target is the flood this prevents.
+ */
+
+const HOUR = 60 * 60 * 1000;
+
+test("a workspace written to within the interval is skipped as too_soon — and the provider is never called", async () => {
+  let providerCalls = 0;
+  const { deps, published } = collectDeps({
+    provider: () =>
+      ({
+        provider: "counting",
+        model: "counting",
+        stream: async function* () {
+          providerCalls++;
+          yield { type: "content" as const, text: "{}" };
+          yield { type: "done" as const };
+        },
+      }) as unknown as StreamingProvider,
+    skills: () => fakeSkills(undefined, Date.now() - HOUR),
+  });
+  const handle = createSelfReview(deps);
+  await handle.review("ses_d4", new AbortController());
+  expect(published).toHaveLength(1);
+  expect((published[0] as Record<string, unknown>).type).toBe(
+    "self_review.skipped",
+  );
+  expect((published[0] as Record<string, unknown>).reason).toBe("too_soon");
+  // The gate fires BEFORE the model call: a gated review costs nothing.
+  expect(providerCalls).toBe(0);
+});
+
+test("a workspace last written before the interval runs the review", async () => {
+  const { deps, published } = collectDeps({
+    skills: () => fakeSkills(undefined, Date.now() - 200 * HOUR),
+  });
+  const handle = createSelfReview(deps);
+  await handle.review("ses_d4", new AbortController());
+  expect(
+    published.some(
+      (event) => (event as { type: string }).type === "self_review.completed",
+    ),
+  ).toBe(true);
+});
+
+test("a workspace that never wrote a skill is not too_soon — the first observation always runs", async () => {
+  const { deps, published } = collectDeps({
+    skills: () => fakeSkills(undefined, 0),
+  });
+  const handle = createSelfReview(deps);
+  await handle.review("ses_d4", new AbortController());
+  expect(
+    published.some(
+      (event) => (event as { type: string }).type === "self_review.completed",
+    ),
+  ).toBe(true);
+});
+
+test("the interval is configurable, and a broken read fails to the default", async () => {
+  const recent = collectDeps({
+    skills: () => fakeSkills(undefined, Date.now() - 2 * HOUR),
+    // A 1-hour interval: a 2-hour-old write is outside it, so the review runs.
+    skillWriteIntervalHours: () => 1,
+  });
+  await createSelfReview(recent.deps).review("ses_d4", new AbortController());
+  expect(
+    recent.published.some(
+      (event) => (event as { type: string }).type === "self_review.completed",
+    ),
+  ).toBe(true);
+
+  const throwing = collectDeps({
+    skills: () => fakeSkills(undefined, Date.now() - 2 * HOUR),
+    skillWriteIntervalHours: () => {
+      throw new Error("config unreadable");
+    },
+  });
+  // Fail to the default (a week): a 2-hour-old write is inside it, so the
+  // gate holds — a broken config read must never silently open the gate.
+  await createSelfReview(throwing.deps).review("ses_d4", new AbortController());
+  expect((throwing.published[0] as Record<string, unknown>).reason).toBe(
+    "too_soon",
+  );
 });

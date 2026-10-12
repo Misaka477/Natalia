@@ -1,5 +1,4 @@
 import { callRuntimeRPC } from "@natalia/transport";
-import { skillGcReport } from "@natalia/engineering-intelligence";
 import {
   createRuntimeDaemonStore,
   daemonToken,
@@ -30,6 +29,8 @@ const USAGE =
   "       natalia skills remove <name>\n" +
   "       natalia skills disable <name>\n" +
   "       natalia skills enable <name>\n" +
+  "       natalia skills pin <name>\n" +
+  "       natalia skills unpin <name>\n" +
   "       natalia skills gc [--json]   (dry run: lists, never deletes)";
 
 /** The daemon's URL and token, or undefined when none is running. */
@@ -47,6 +48,10 @@ export async function skillsCli(argv: string[]): Promise<void> {
     action !== "remove" &&
     action !== "disable" &&
     action !== "enable" &&
+    // The user's protected set (hermes' pinned bypass): a pinned skill is
+    // never evictable whatever its lifecycle score.
+    action !== "pin" &&
+    action !== "unpin" &&
     // W6: the lifecycle dry run. It LISTS what a gc would take; the
     // eviction itself is a human act (G6), same as the landing path.
     action !== "gc"
@@ -79,38 +84,54 @@ export async function skillsCli(argv: string[]): Promise<void> {
   }
 
   if (action === "gc") {
-    const rows = (await callRuntimeRPC<Array<{ name: string; source: string }>>(
-      {
-        url: connection.url,
-        token: connection.token,
-        method: "skills.list",
-        params: {},
-      },
-    )) as Array<{ name: string; source: string }>;
-    // The honest caveat, in the output: this system journals no skill-usage
-    // fact (activation is runtime state, command executions are not
-    // journaled), so uses/successes/lastUsedAt have no source yet. A gc
-    // that cannot see usage refuses to guess rather than deleting on
-    // zeros — an eviction policy running on invented numbers would delete
-    // the skills nobody measured.
-    const report = skillGcReport(
-      rows.map((row) => ({
-        name: row.name,
-        uses: 0,
-        successes: 0,
-        bytes: 0,
-        createdAt: Date.now(),
-      })),
-      Date.now(),
-    );
+    // The usage facts come from the journal: the runtime folds every
+    // session's `skill.activated` events (a use whose turn finished done is
+    // a success) and merges them with the catalog's file facts and the
+    // user's protected set, then hands the entries to the lifecycle law.
+    // This face APPLIES NOTHING — the eviction stays a human act.
+    const report = (await callRuntimeRPC<{
+      evict: Array<{ name: string; score: number; reason: string }>;
+      keep: Array<{ name: string; reason: string }>;
+      reclaimableBytes: number;
+    }>({
+      url: connection.url,
+      token: connection.token,
+      method: "skills.gc",
+      params: {},
+    })) as {
+      evict: Array<{ name: string; score: number; reason: string }>;
+      keep: Array<{ name: string; reason: string }>;
+      reclaimableBytes: number;
+    };
     console.log(
       argv.includes("--json")
         ? JSON.stringify(report, null, 2)
         : [
             `skill gc (dry run): ${report.evict.length} evictable, ${report.keep.length} kept`,
+            ...report.evict.map(
+              (row) =>
+                `  evict ${row.name} — score ${row.score.toFixed(3)}: ${row.reason}`,
+            ),
             ...report.keep.map((row) => `  keep ${row.name} — ${row.reason}`),
-            "no usage facts are journaled yet, so nothing is evictable — this is the guard working, not a bug",
+            report.evict.length > 0
+              ? `reclaimable: ${report.reclaimableBytes} bytes (remove is a human act: natalia skills remove <name> archives it, recoverable)`
+              : "nothing is evictable",
           ].join("\n"),
+    );
+    return;
+  }
+  if (action === "pin" || action === "unpin") {
+    // The protected set's switch. Orthogonal to enable/disable: a pinned
+    // skill can still be switched off, and a disabled one can still be
+    // pinned — pin says "never evict", disable says "never load".
+    const result = (await callRuntimeRPC<{ name: string }>({
+      url: connection.url,
+      token: connection.token,
+      method: "skill.setPinned",
+      params: { name, pinned: action === "pin" },
+    })) as { name: string };
+    console.log(
+      `${result.name} ${action === "pin" ? "pinned — never evictable" : "unpinned"}`,
     );
     return;
   }

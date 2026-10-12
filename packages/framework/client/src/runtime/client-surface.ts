@@ -15,6 +15,7 @@ import { createSubagentRuntime } from "./subagent-runtime";
 import { createMcpRuntime } from "./mcp-runtime";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import { createSelectionSurface } from "./provider-selection/selection";
+import { createSkillsLifecycleSurface } from "./skills-lifecycle";
 import { createSandboxRuntime } from "./sandbox-runtime";
 import { createTeamRuntime } from "./team-runtime";
 import { createCoreSurface } from "./session-execution/core";
@@ -42,6 +43,7 @@ export function createClientSurface(
     ...createLifecycleSurface(ctx, options),
     ...createSettingsSurface(ctx, options),
     ...createSelectionSurface(ctx, options),
+    ...createSkillsLifecycleSurface(ctx, options),
     ...createWorkspaceRuntime(ctx),
     ...createPluginRuntime(ctx),
     ...createNativeTerminalSurface(ctx, options),

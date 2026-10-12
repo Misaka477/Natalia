@@ -58,6 +58,9 @@ export const EVENT_MODES: EventModeTable = {
   invariant: "emit",
   // D4: a background review is observation — emit, never flow-stopping.
   self_review: "emit",
+  // A skill activation is a runtime fact for the lifecycle's reader — emit,
+  // never flow-stopping: nothing in a turn waits on it.
+  skill: "emit",
   // The settlement spine's notices are observation — emit, never
   // flow-stopping: a notice is an input the model reads when it chooses,
   // and a failed delivery degrades without touching the thing that

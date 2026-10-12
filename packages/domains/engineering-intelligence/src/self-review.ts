@@ -239,6 +239,11 @@ export type SelfReviewDeps = {
   ) => AsyncIterable<{ type: string; text?: string }>;
   events(sessionID: string): readonly RuntimeEvent[];
   /**
+   * The write lane's interval, in hours (hermes' `interval_hours`).
+   * Defaults to a week when the wiring does not read one.
+   */
+  skillWriteIntervalHours?(): number;
+  /**
    * The write surface, ASYNC: plugin fibers activate lazily (a tool
    * dispatch spawns them; a text-only turn never touches them), so the
    * wiring's accessor ENSURES the skills fiber is mounted before the
@@ -298,6 +303,11 @@ export type SelfReviewDeps = {
  * `rejected` bucket the boundary's whitelist rejection lands in, so the
  * completed event says how many candidates were dropped and why.
  */
+/**
+ * The write lane's interval gate default (hermes' curator interval_hours:
+ * a week). Config-overridable per workspace.
+ */
+const SKILL_WRITE_INTERVAL_HOURS_DEFAULT = 168;
 const MIN_SKILL_BODY_CHARS = 200;
 const DUPLICATE_OVERLAP = 0.6;
 
@@ -395,6 +405,18 @@ export function createSelfReview(deps: SelfReviewDeps) {
     const events = deps.events(sessionID);
     const digest = buildSelfReviewDigest(events);
     if (!digest) return skip("no_input");
+    // The interval gate (hermes' curator): the write lane is throttled by
+    // TIME, not content. A review that just sedimented a skill does not get
+    // to ask again until the interval passes — the catalog moved, and
+    // sedimenting against a moving target is the flood this prevents. The
+    // clock is the last write to the workspace's owned skills (the write IS
+    // the file write, so its mtime is the fact). A review with nothing
+    // written yet (lastWriteAt 0) always runs: the first observation is not
+    // "too soon", it is the only one there has been.
+    const intervalMs = skillWriteIntervalHours() * 60 * 60 * 1000;
+    const lastWriteAt = skillService.lastWriteAt?.() ?? 0;
+    if (lastWriteAt > 0 && Date.now() - lastWriteAt < intervalMs)
+      return skip("too_soon");
     // The violations this session tripped (D1/D2's live facts): the
     // retrospection's hardest evidence. Without them the review can only
     // guess from the transcript; with them a structural violation is the
@@ -505,6 +527,18 @@ export function createSelfReview(deps: SelfReviewDeps) {
       deficiencies: answer.deficiencies.length,
       aspirations: answer.aspirations.length,
     });
+  }
+
+  function skillWriteIntervalHours(): number {
+    try {
+      return (
+        deps.skillWriteIntervalHours?.() ?? SKILL_WRITE_INTERVAL_HOURS_DEFAULT
+      );
+    } catch {
+      // A broken config read must never silently open the gate: fail to the
+      // default, the same discipline isEnabled() follows.
+      return SKILL_WRITE_INTERVAL_HOURS_DEFAULT;
+    }
   }
 
   function isEnabled(): boolean {

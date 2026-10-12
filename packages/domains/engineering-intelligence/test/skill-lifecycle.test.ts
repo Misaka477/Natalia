@@ -77,6 +77,32 @@ test("with no usage facts nothing is evictable — absence of evidence is not ev
   ).toBe(true);
 });
 
+test("unmeasured entries do not drag the threshold under a real skill", () => {
+  // The mixed catalog the real world has: skills with usage facts beside
+  // plugin-shipped ones that were never loaded. The mean is over the
+  // MEASURED entries only — counting the unmeasured ones' near-zero scores
+  // would drag the threshold under any real skill and freeze the gc.
+  const report = skillGcReport(
+    [
+      entry({
+        name: "worker",
+        uses: 10,
+        successes: 10,
+        lastUsedAt: NOW - 1000,
+      }),
+      entry({ name: "dead", uses: 4, successes: 0, lastUsedAt: NOW - 1000 }),
+      entry({ name: "shipped-a", uses: 0, bytes: 100 }),
+      entry({ name: "shipped-b", uses: 0, bytes: 100 }),
+      entry({ name: "shipped-c", uses: 0, bytes: 100 }),
+    ],
+    NOW,
+  );
+  expect(report.evict.map((row) => row.name)).toEqual(["dead"]);
+  expect(report.keep.find((row) => row.name === "shipped-a")!.reason).toContain(
+    "no usage facts",
+  );
+});
+
 test("the score rewards success and recency and charges for size", () => {
   const good = skillScore(
     entry({ uses: 10, successes: 10, lastUsedAt: NOW, bytes: 100 }),

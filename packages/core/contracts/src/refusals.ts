@@ -186,6 +186,14 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "a name that is not a skill, or a plugin/remote source the workspace does not own, throws with the reason",
   },
+  skillSetPinned: {
+    refusal: "error",
+    note: "a name that is not a skill, or a registry without a workspace origin, throws with the reason; the protection is durable, so a failed write changes nothing",
+  },
+  skillsGc: {
+    refusal: "none",
+    note: "pure read — the dry run applies nothing; an unavailable skills service throws naming the surface",
+  },
   upsertSkill: {
     refusal: "error",
     note: "the boundary validates (action whitelist + name + size + rebuilt frontmatter) and throws with the reason; nothing is written on a refusal",

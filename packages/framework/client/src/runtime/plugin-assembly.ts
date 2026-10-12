@@ -10,7 +10,10 @@ import { logOf } from "@anthelia/operation-log";
 import { verifyTrust } from "@anthelia/config";
 import { toolFamilyCapabilityID } from "../capabilities/tool-family-capabilities";
 import type { ConfigV3, SessionID } from "@anthelia/contracts";
-import type { RuntimeContext } from "@anthelia/substrate";
+import type {
+  RuntimeContext,
+  SessionExecutionState,
+} from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import type { SkillMetadata } from "@anthelia/runtime-services";
 import { expireSessionConsults } from "@natalia/collaboration";
@@ -37,6 +40,7 @@ export function createPluginAssembly(
       getActiveExec,
       setActiveSkill,
       extensionEnabled,
+      publishForSession,
     } = ctx.ports;
     const workspaceRoot = getWorkspaceRoot();
     if (!pluginEnabled(config, "natalia-skills") || !extensionEnabled("skills"))
@@ -63,6 +67,7 @@ export function createPluginAssembly(
             role: "system",
             content: `Active skill ${skill.name}: ${skill.description}\n${skill.body}`,
           });
+          publishActivation(owner, skill);
         },
       },
       // P2-21: a catalog change mid-session is announced, not silently
@@ -105,8 +110,30 @@ export function createPluginAssembly(
           role: "system",
           content: output,
         });
+        publishActivation(owner, skill);
       },
     };
+  }
+
+  /**
+   * The activation as a durable fact (Discovery D4's usage root). The
+   * skill lifecycle's garbage collector folds these into per-skill
+   * usage; before this existed activation was runtime state only and the
+   * gc had nothing to read, so it evicted nothing. The turn that loaded
+   * the skill rides along when there is one — the turn's own
+   * `turn.finished` is what turns the use into a success.
+   */
+  function publishActivation(
+    owner: SessionExecutionState,
+    skill: SkillMetadata,
+  ) {
+    ctx.ports.publishForSession(owner, {
+      type: "skill.activated",
+      at: new Date().toISOString(),
+      name: skill.name,
+      source: skill.source,
+      ...(owner.activeTurnID ? { turnID: owner.activeTurnID } : {}),
+    });
   }
 
   function providerModelPluginInput(): import("@anthelia/provider-model").ProviderModelControllerInput {

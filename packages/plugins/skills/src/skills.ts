@@ -5,8 +5,10 @@ import {
   readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { validateSkillProposal } from "./skill-write";
 import { createHash } from "node:crypto";
 import {
@@ -73,6 +75,53 @@ async function writeDisabledSkills(
 }
 
 /**
+ * The workspace's durable protected set, the disabled set's sibling. A
+ * pinned skill is never evictable whatever its lifecycle score (hermes'
+ * pinned bypass) — the user saying "this one stays" outranks every number
+ * the garbage collector can compute.
+ */
+function pinnedSkillsPath(workspaceRoot: string): string {
+  return join(resolve(workspaceRoot), ".natalia", "skills-pinned.json");
+}
+
+async function readPinnedSkills(workspaceRoot: string): Promise<Set<string>> {
+  try {
+    const raw = JSON.parse(
+      await readFile(pinnedSkillsPath(workspaceRoot), "utf8"),
+    ) as unknown;
+    return new Set(
+      Array.isArray(raw)
+        ? raw.filter((name): name is string => typeof name === "string")
+        : [],
+    );
+  } catch {
+    // Absent (the common case) or unreadable: nothing is pinned. A corrupt
+    // file must not take every skill's protection down with it.
+    return new Set();
+  }
+}
+
+async function writePinnedSkills(
+  workspaceRoot: string,
+  names: Set<string>,
+): Promise<void> {
+  const path = pinnedSkillsPath(workspaceRoot);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  // Written atomically, the same reason the disabled set is: a half-written
+  // set would silently drop a protection.
+  const temp = `${path}.${process.pid}.tmp`;
+  await writeFile(temp, `${JSON.stringify([...names].sort(), null, 2)}\n`, {
+    mode: 0o600,
+  });
+  await rename(temp, path);
+}
+
+/** The archive's root: removed skills land here, recoverable, never gone. */
+function skillArchiveRoot(workspaceRoot: string): string {
+  return join(resolve(workspaceRoot), ".natalia", "skills-archive");
+}
+
+/**
  * An integrity failure (a declared digest did not match the bytes) is not
  * a transient fetch failure: it never degrades silently, even with a
  * cached skill present. The pull's catch keeps the old skill for network
@@ -121,6 +170,8 @@ export class SkillRegistry implements SkillService {
   origin?: SkillDiscoverInput;
   /** The workspace's durable off-switch, stamped onto every discovered skill. */
   disabled: Set<string> = new Set();
+  /** The workspace's durable protected set (hermes' pinned bypass). */
+  pinnedSet: Set<string> = new Set();
   /**
    * The catalog's version (P2-21): bumped whenever a discovery changes WHAT is
    * listed — a skill added, removed, or its content re-read. A session that
@@ -221,7 +272,10 @@ export class SkillRegistry implements SkillService {
     return { name };
   }
 
-  async removeSkill(name: string): Promise<{ removed: string }> {
+  async removeSkill(name: string): Promise<{
+    removed: string;
+    archivedTo: string;
+  }> {
     const skill = [...this.skills.values()].find((item) => item.name === name);
     if (!skill) throw new Error(`skill not found: ${name}`);
     // Only a workspace-owned skill can be removed: a plugin's skill ships with
@@ -231,9 +285,64 @@ export class SkillRegistry implements SkillService {
       throw new Error(
         `cannot remove a ${skill.source} skill: it ships with its ${skill.source} source`,
       );
-    await rm(skill.root, { recursive: true, force: true });
+    const workspaceRoot = this.origin?.workspaceRoot;
+    if (!workspaceRoot)
+      throw new Error("skill registry has no workspace origin");
+    // hermes' never-delete rule: an eviction path that cannot be undone is
+    // a path nobody dares use, so the removal IS an archive. The directory
+    // moves under .natalia/skills-archive/<name>-<timestamp>/ — a rename,
+    // so it is atomic and costs no copy — and the human recovers it by
+    // moving it back into .natalia/skills.
+    const archivedTo = join(
+      skillArchiveRoot(workspaceRoot),
+      `${skill.name}-${new Date().toISOString().replaceAll(":", "-")}`,
+    );
+    await mkdir(dirname(archivedTo), { recursive: true, mode: 0o700 });
+    await rm(archivedTo, { recursive: true, force: true });
+    await rename(skill.root, archivedTo);
     if (this.origin) await this.reload(this.origin);
-    return { removed: name };
+    return { removed: name, archivedTo };
+  }
+
+  async setPinned(name: string, pinned: boolean): Promise<{ name: string }> {
+    if (!this.origin?.workspaceRoot)
+      throw new Error("skill registry has no workspace origin");
+    if (![...this.skills.values()].some((skill) => skill.name === name))
+      throw new Error(`skill not found: ${name}`);
+    const next = new Set(this.pinnedSet);
+    if (pinned) next.add(name);
+    else next.delete(name);
+    await writePinnedSkills(this.origin.workspaceRoot, next);
+    this.pinnedSet = next;
+    return { name };
+  }
+
+  pinned(): readonly string[] {
+    return [...this.pinnedSet];
+  }
+
+  /**
+   * The newest write to the workspace's owned skills (epoch ms), the
+   * interval gate's clock. The write IS the file write, so the mtimes are
+   * the fact — durable with no extra state, and a human's edit counts
+   * too. 0 when the workspace owns no skills.
+   */
+  lastWriteAt(): number {
+    if (!this.origin?.workspaceRoot) return 0;
+    let newest = 0;
+    for (const skill of this.skills.values()) {
+      if (skill.source !== "project" && skill.source !== "user") continue;
+      try {
+        newest = Math.max(
+          newest,
+          statSync(join(skill.root, "SKILL.md")).mtimeMs,
+        );
+      } catch {
+        // A skill listed without its file on disk (a race with a removal)
+        // contributes nothing; the gate reads the newest that IS there.
+      }
+    }
+    return newest;
   }
 
   async reload(input: {
@@ -253,6 +362,7 @@ export class SkillRegistry implements SkillService {
     // discoverSkills, or its writes have no root to write to.
     this.origin = { ...input };
     this.disabled = next.disabled;
+    this.pinnedSet = await readPinnedSkills(input.workspaceRoot);
     // P2-21: the version moves only when the LISTED SET actually changed, so a
     // reload that rediscovers the same skills is not news.
     const after = this.listedNames();

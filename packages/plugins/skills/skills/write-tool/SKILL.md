@@ -109,7 +109,30 @@ refuses a list with two entries of one name, so a pushed `sandbox_diff` that
 does not replace the host's `sandbox_diff` kills every sandboxed child on its
 first step. Push through the same-name displacement helper, never append.
 
-## 5. Before you call it done
+## 5. If the tool can WRITE, it answers to the sandbox policy
+
+A new tool that touches the filesystem is not done when it is registered: it
+must take its write authority from the sandbox policy, or it is a hole in the
+confinement the other tools keep. Concretely:
+
+- the tool context carries the effective mode (`context.confinement`) and the
+  workspace root — a write path checks the path against the policy's writable
+  roots (`pathWithinDomains` is the one judgement, canonicalize-then-contain:
+  the path is realpath'd BEFORE it is compared, so `allowed/../../../etc/x`
+  and an inside-spelling-outside-identity symlink are both refused);
+- a tool that spawns a long-lived process (a pane, a daemon, a shell) confines
+  the SPAWN, not just the first call — a live shell with the host's full
+  authority is the hole the mode exists to close;
+- a refusal is a structured answer naming the effective mode, never a bare
+  throw the model learns to rephrase around;
+- a tool that offers a wider mode advertises the same escalation fields
+  (`sandbox_permissions` + `justification`) and resolves the same approval —
+  one upgrade path for every family, or one of them is the leak.
+
+A write-capable tool with none of this is refused at review: the confinement
+promise covers every write path or it covers none.
+
+## 6. Before you call it done
 
 - The tool has its own test: the happy path, the argument-validation refusals,
   and the boundary it refuses (permission, confinement, unknown id).

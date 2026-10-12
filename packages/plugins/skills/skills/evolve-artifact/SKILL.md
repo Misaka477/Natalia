@@ -1,129 +1,84 @@
 ---
 name: evolve-artifact
-description: How to run one complete self-iteration — observe, propose a falsifiable candidate, evaluate, gate, and land it with the refusal recorded.
+description: How to run one complete self-iteration — reflect or agree on a plan, change the artifact in the sandbox, run the tests, get the human's approval, hot-update. No falsifiable candidates, no evaluation rounds, no gates.
 ---
 
 # Evolve an artifact
 
-Self-iteration here is a LOOP, not a single question. "Ask once, write one
-skill" is the thing this replaces. One iteration has six steps; skipping the
-evaluation and gate steps is how a framework rots.
+Self-iteration here is a LOOP with ONE shape, entered from TWO sides:
+
+```
+   触发（两条路）
+     ├─ 自主：你干完活 → 反思（该改什么）
+     └─ 用户：聊天 → 方案定好
+            ↓
+    开始迭代 ← skills / mcp / acp / 代码 都在这里面改
+            ↓
+    测试审核（跑一下，过不过）
+            ↓
+    用户批准（拍板）
+            ↓
+    热更新到新版本（可回滚）
+```
 
 Depends on the `write-tool` skill (how a new capability is shaped and made
-reachable) and the `edit-framework` skill (how a framework change is gated
-and landed). Read both first.
+reachable), the `edit-framework` skill (how a framework change is landed,
+including the L3 code lane), and the `sandbox-discipline` skill (where the
+change happens and what the modes mean). Read all three first.
 
-## 1. Observe
+## 1. Enter — the two doors
 
-The raw material is the session journal, not memory. The background review
-loop already does the bounded version of this after each turn: a digest of
-human turns, assistant replies, and tool names (capped), plus any invariant
-violations the session tripped, asked three questions:
+**Door A, reflection.** After real work, ask the three questions the
+background review already asks: what knowledge is worth a skill, what went
+wrong that a rule or policy should have prevented, what capability did you
+reach for that did not exist. The journal is the raw material, not memory.
+A wish that names a disabled plugin in the catalog is already routed for
+you — the bridge stages the candidate from your own words.
 
-- **Sediment** — what knowledge from this work is worth a skill next time?
-- **Deficient** — what went wrong that a rule, policy, or skill should have
-  prevented? A violation fact is the strongest evidence; a failure or a redo
-  is next.
-- **Missing** — what capability did you reach for that did not exist?
+**Door B, the user's plan.** The human says what is wrong and what should
+happen ("X 不好用，改改"). The plan is the trigger; nothing else is needed.
 
-The answer is JSON only. Failures are honest edges with a reason, never
-silent. The deficiencies and aspirations lanes are recorded as FACTS
-(`growth.proposed`): recording one applies nothing — growth never
-self-authorizes, so a human decides what becomes work.
+Both doors end at the same place: a concrete change to make.
 
-## 2. Propose — a candidate, not a wish
+## 2. Iterate — change the artifact in the sandbox
 
-Every candidate carries, beside its content:
+The change happens in a SANDBOX, never in the live workspace: a git
+repository gets a real worktree branch, everything else gets a snapshot
+candidate. Skills, MCP servers, ACP adapters, and code (`packages/**`) are
+all in scope — see `edit-framework` for the code lane's drain-and-restart
+rule and `sandbox-discipline` for the modes.
 
-- **a falsifiable hypothesis** — the specific claim this candidate would make
-  true, stated so an evaluation could prove it false. "Improve the release
-  skill" is not a hypothesis. "Adding the rollback step to the release skill
-  prevents the forgotten-verify failure seen twice this week" is.
-- **an axis** — `exploitation` (sharpen what works) or `exploration` (try a
-  different mechanism). Say which; a loop that only exploits converges to a
-  local optimum and stops improving.
+There is no candidate format to fill in, no hypothesis to state, no axis to
+pick. The change is the change: make it, look at it, and be able to say in
+one sentence what it does and why.
 
-The mutator's four hard constraints:
+## 3. Test — run the suite, read the result
 
-1. **Anti parameter-tuning.** A candidate that differs from its parent only
-   in constants, thresholds, or length caps is a parameter variant, and
-   parameter variants almost always regress or tie. A good candidate changes
-   a mechanism: a different structure, a different organization of the same
-   rules, a different control flow. If only constants differ, rewrite.
-2. **Anti overfitting.** Never hardcode knowledge about specific inputs you
-   have seen, and never echo an example's identifier into the artifact.
-   General rules ("validate the parse before submitting") are fine; memorized
-   specifics are not.
-3. **Prototype first.** Validate the core idea in isolation before writing
-   the final candidate — try two or three variants, keep the one that works,
-   delete the scratch work.
-4. **Self-criticize.** After writing, re-read it: is this a genuinely new
-   mechanism or a parameter variant? If the latter, rewrite.
+Run the tests. The answer is two numbers and one sentence: did it pass, and
+what did it cost. There is no evaluation set, no holdout split, no scoring
+function — a test either passes or it does not, and a change that cannot be
+tested is not ready to propose.
 
-And one process constraint: **the mutator does not fan out.** Delegating
-candidate generation loses these constraints in transit — every subagent
-hears a summary, not the rules. Do the work in the main session.
+## 4. Approve — the human decides
 
-## 3. Evaluate — on data the candidate has not been optimized against
+The proposal reaches the human through the chat (`ask_user`) or the
+generation tool's approval floor. The human's decision is the only
+authorization: growth never self-authorizes. A refusal is recorded with its
+reason and the change stays in the sandbox — recoverable, never gone.
 
-Score the candidate on the evaluation set, and keep the splits honest:
+## 5. Hot-update — land it, keep the way back
 
-- The training split is what optimization may see.
-- The holdout split is what the final gate uses, and it is INVISIBLE to the
-  mutator by construction — not by promise. The material handed to a
-  reflection step is `{inputs, generated outputs, feedback}` for training
-  examples only; the holdout's failure cases still count toward the score but
-  are never shown as reflection material.
-- Variants produced in the same round are invisible to that round's mutator,
-  so a candidate cannot breed with its own siblings.
-- A score orders candidates; natural-language feedback gives them DIRECTION.
-  A loop with scores and no feedback is a random walk.
+An approved change lands through `apply_generation`: the four-face
+verification gate runs, then the switch. A surface-only change (config,
+plugins, prompts, policy rows) takes effect in-process; a code change
+(`packages/**`) drains the live turns, lands the code, and restarts — see
+`edit-framework`. Every switch records the generation it left, so
+`rollback_generation` can always take it back.
 
-Acceptance is strict improvement by default: a candidate lands only when its
-total on the evaluation split is strictly greater than its parent's. Ties are
-rejections unless a round explicitly opts into equal-moves exploration.
-
-## 4. Gate — the necessity gate first, then the boundary
-
-Before anything is written, the candidate faces the necessity gate:
-
-- a create must use a NEW name (an update must say `kind: "update"` — the
-  catalog is checked, not trusted);
-- it must not restate an existing skill: token overlap of name+description
-  against any catalog entry at or above 0.6 is refused;
-- the body must be at least 200 characters and carry a markdown heading.
-
-Then the validated write boundary, which is the ONLY autonomous write path:
-
-- the action whitelist is create-or-update a skill by name — delete,
-  execute, and file paths are not representable;
-- the frontmatter is rebuilt by the boundary, never pasted through, so a
-  proposal cannot smuggle a different name past validation;
-- content is capped (64KB) and the name must match the kebab-case pattern;
-- the write lands under the PROJECT skills root only. A skill that ships with
-  a plugin is not rewritable by self-review: official skills are distributed
-  by code and protected by the gate; self-sedimented skills live beside them,
-  and the two never mix.
-
-## 5. Land — with the refusals reported
-
-A candidate that passes is written and the registry reloads so it is
-immediately visible. A candidate that fails is COUNTED and its reason
-recorded: `name: reason` rides the completion event, so a human can see what
-the loop wanted to change and why it was stopped. The search history is not
-thrown away — the refusals are how a reviewer learns where the traps are.
-
-For a framework change rather than a skill, the landing is Path A or Path B
-of the `edit-framework` skill: the gated generation switch or the sandbox
-promotion, with the human's approval as the floor. Validation evidence is
-recorded through `record_validation` (a real command, run and captured, with
-the classes it satisfies) and cited by `record_completion` — claims without
-evidence are not completions.
-
-## 6. What this loop never does
+## What this loop never does
 
 - never auto-merges: the human approves every landing;
-- never hot-swaps a live session: changes take effect at the next session
-  boundary;
-- never reads the holdout to choose a candidate;
-- never lets a failed candidate disappear silently: every refusal is named.
+- never lands untested change: the suite runs before the proposal;
+- never deletes on its own: removals archive, and the archive is
+  recoverable;
+- never lets a refusal disappear: every refusal is named and journaled.

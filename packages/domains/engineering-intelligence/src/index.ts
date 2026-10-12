@@ -14,6 +14,7 @@ export * from "./engine";
 export * from "./escalation";
 export * from "./skill-lifecycle";
 export * from "./skill-usage";
+export * from "./suggestion-routing";
 export * from "./verdict";
 export * from "./verdict-trigger";
 export * from "./candidate-gate";

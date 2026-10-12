@@ -9,7 +9,15 @@ import { createExecuteCalls } from "../tool-execution/execute-calls";
 import { createExecuteOne } from "../tool-execution/execute-one";
 import { createCheckpointRuntime } from "../checkpoint-runtime";
 import { createTitleGeneration } from "../title-generation";
-import { createSelfReview } from "@natalia/engineering-intelligence";
+import {
+  createSelfReview,
+  pluginOverridesForSuggestions,
+} from "@natalia/engineering-intelligence";
+import { buildGeneration, storeGeneration } from "@anthelia/composition";
+import { ObjectStore } from "@anthelia/object-store";
+import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";
+import { generationAdapterRows, generationPrompts } from "../generation-inputs";
+import { activeConstitutionRows } from "../config-reload";
 import { skillService } from "@anthelia/runtime-services";
 import { withProviderConcurrency } from "@anthelia/runtime";
 import { createSessionAdmission } from "../session-admission";
@@ -144,6 +152,15 @@ export function wireExecution(
       const exec = ctx.ports
         .getExecutionBySession()
         .get(sessionID as SessionID);
+      // Step 6's first entry: the reflection REACHES the proposal. A
+      // suggestion that names a disabled plugin in the catalog is a wish
+      // spelled in the machine's own vocabulary — enabling it is not a
+      // guess, so a candidate is staged right here, from the model's own
+      // words as the note. Everything else keeps the old route (the fact
+      // journals it; the class policy names its approval). A bridge that
+      // invented patches for those would be the deleted mutator wearing
+      // a different hat.
+      void stageCandidateFromGrowth(ctx, fact.suggestions);
       ctx.ports.publish(
         exec
           ? ({
@@ -171,4 +188,72 @@ export function wireExecution(
   ports.commandCatalogEntries = commands.commandCatalogEntries;
   ports.isPendingInteractiveRequest = commands.isPendingInteractiveRequest;
   return { providerSelection, checkpoint, title, commands };
+}
+
+/**
+ * Stages a generation candidate from a review's growth suggestions when
+ * they map mechanically (a disabled catalog plugin the model wished for).
+ * The staging is the same path `propose_generation` takes — build, store,
+ * journal — so a bridged candidate and a model-proposed one are the same
+ * kind of fact, gated and approved the same way. A failure here is a
+ * warning, never a turn-boundary failure: the reflection already
+ * journaled its fact, and losing the bridge must not lose the turn.
+ */
+async function stageCandidateFromGrowth(
+  ctx: ProductRuntimeContext,
+  suggestions: readonly {
+    kind: string;
+    capability: string;
+    reason: string;
+  }[],
+): Promise<void> {
+  try {
+    const mapped = pluginOverridesForSuggestions({
+      suggestions: suggestions as Parameters<
+        typeof pluginOverridesForSuggestions
+      >[0]["suggestions"],
+      catalog: ctx.ports
+        .getPluginsController()
+        .catalog()
+        .map((entry) => ({ id: entry.id, enabled: entry.enabled })),
+    });
+    if (!mapped) return;
+    const live = ctx.ports.getTsRuntimeConfig();
+    if (!live) return;
+    const store = new ObjectStore(
+      resolveWorkspaceObjectsRoot(ctx.ports.getWorkspaceRoot()),
+    );
+    const candidateID = await storeGeneration(
+      store,
+      buildGeneration({
+        config: live,
+        catalog: ctx.ports
+          .getPluginsController()
+          .catalog()
+          .map((entry) => ({
+            id: entry.id,
+            enabled:
+              mapped.plugins.find((row) => row.id === entry.id)?.enabled ??
+              entry.enabled,
+            fingerprint: entry.fingerprint,
+          })),
+        policyRows: activeConstitutionRows(ctx),
+        prompts: generationPrompts(ctx.ports.getWorkspaceRoot()),
+        rows: generationAdapterRows(ctx),
+      }),
+    );
+    ctx.ports.publish({
+      type: "composition.proposed",
+      candidateID,
+      reason: mapped.note,
+    });
+  } catch (error) {
+    ctx.ports.publish({
+      type: "diagnostic",
+      level: "warning",
+      message: `growth bridge failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    });
+  }
 }

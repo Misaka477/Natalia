@@ -1354,6 +1354,8 @@ test("runtime skill catalog exposes discovery metadata without skill body", asyn
   expect(catalog?.map((entry) => entry.qualifiedName)).toEqual([
     "plugin:edit-framework",
     "plugin:evolve-artifact",
+    "plugin:generation-awareness",
+    "plugin:sandbox-discipline",
     "plugin:write-tool",
     "project:release",
   ]);

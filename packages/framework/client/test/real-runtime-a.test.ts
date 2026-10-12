@@ -1381,6 +1381,8 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
   expect(await client.skills?.()).toEqual([
     expect.objectContaining({ qualifiedName: "plugin:edit-framework" }),
     expect.objectContaining({ qualifiedName: "plugin:evolve-artifact" }),
+    expect.objectContaining({ qualifiedName: "plugin:generation-awareness" }),
+    expect.objectContaining({ qualifiedName: "plugin:sandbox-discipline" }),
     expect.objectContaining({ qualifiedName: "plugin:write-tool" }),
     expect.objectContaining({ qualifiedName: "project:reloadable" }),
   ]);

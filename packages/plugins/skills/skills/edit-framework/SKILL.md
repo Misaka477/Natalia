@@ -75,6 +75,26 @@ For edits to source, tests, or build files:
 5. **`sandbox_merge`** — lands the change; **`sandbox_rollback`** undoes a
    promotion and reports honestly when there is no rollback point to restore.
 
+### The L3 lane — changing `packages/**` (the core packages)
+
+A code change to the core packages is a GENERATION with a `source` (a git ref
+or a patch), not a sandbox promotion into the live tree. The routing is the
+field's presence, and it is not negotiable:
+
+- **a surface-only generation switches in-process** (the config reload of
+  Path A);
+- **a source-carrying generation drains first.** The live turns are waited
+  out (a restart would drop them), the code lands (the ref is checked out or
+  the patch applied in the workspace), and only then does the process
+  underneath get replaced — the installer's probeVersion + swap + restart
+  path. `apply_generation` with `now: true` runs exactly this; a caller that
+  offers no such path gets `code-switch-unavailable`, which is a refusal, not
+  a degrade to the reload. A reload over new code reports success while the
+  old code keeps running — the one failure mode this lane exists to prevent.
+
+After the restart the post-switch health check runs as always, and
+`rollback_generation` remains the way back.
+
 ## 3. The three commands that never run
 
 These are blocked BEFORE approval, so no skipped, cached, or auto-granted

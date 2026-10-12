@@ -1839,7 +1839,13 @@ export function GovernancePane(props: {
                         void (async () => {
                           const ok = await confirm({
                             title: "删除规则",
-                            message: `删除 ${rule.ruleID}？记录进 journal（墓碑），历史保留。`,
+                            // 说清到底发生什么，不承诺没交付的东西：规则立刻
+                            // 永久失效；journal 留一条删除记录且不可擦除（只增
+                            // 不改是这套 journal 的硬约束，和 feedback 的「撤
+                            // 回」同理）。「历史保留」这种说法听着像在替你保管
+                            // 数据，其实那条记录目前没有任何界面读它——空头承
+                            // 诺不如不说。
+                            message: `删除 ${rule.ruleID}？规则立刻永久失效。journal 会留一条删除记录（不可擦除）。`,
                             confirmLabel: "删除",
                             danger: true,
                           });

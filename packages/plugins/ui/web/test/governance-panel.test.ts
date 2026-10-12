@@ -1125,6 +1125,12 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
   expect(source).toContain("growthHasAnything");
   expect(source).toContain("进化数据还是空的");
   expect(source).toContain("没有对比数据");
+  // And the delete dialog says what actually happens. "历史保留" was a
+  // promise with no reader — the tombstone is journaled and the fold
+  // excludes the rule, but no surface ever shows it, so the copy claimed a
+  // benefit the user never receives.
+  expect(source).toContain("规则立刻永久失效");
+  expect(source).not.toContain("历史保留");
   // And an EMPTY queue costs one line, not three: the screen is already a
   // wall of empty sections, and this one adding a title + subtitle + an
   // empty-state box to say nothing was the wrong call.

@@ -26,6 +26,7 @@ import {
 import type { ConfigV3, RuntimeEvent } from "@anthelia/contracts";
 import { sandboxService } from "@anthelia/runtime-services";
 import { waitForDrain } from "./session-execution/drain";
+import { nextContextInstructionsRevision } from "@anthelia/session";
 import {
   buildGeneration,
   deriveCompositionPointer,
@@ -361,6 +362,17 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         },
         publish: (event) => ctx.ports.publish(event),
       });
+      // 洞 6: the model is TOLD it moved. A live switch announces itself
+      // now; a deferred one announces at the boot that performs it (the
+      // reload's own notice channel), because a notice for a switch that
+      // has not happened yet would claim the very thing it exists to
+      // report honestly.
+      if (result.switched || result.stage === "rolled-back")
+        await publishGenerationSwitchNotice(ctx, {
+          ...(pointer.current ? { from: pointer.current } : {}),
+          to: args.candidateID,
+          reason: args.reason ?? "apply_generation",
+        });
       return JSON.stringify({
         switched: result.switched,
         stage: result.stage,
@@ -433,6 +445,13 @@ export function createRollbackGenerationTool(ctx: RuntimeContext): RuntimeTool {
         type: "composition.switched",
         ...(pointer.current ? { from: pointer.current } : {}),
         ...(profile ? { compositionHash: profile.hash } : {}),
+        to: target,
+        reason: args.reason ?? "rollback_generation",
+      });
+      // 洞 6: a rollback is a switch too — the model must know it went
+      // BACK, to which generation, with the same delta.
+      await publishGenerationSwitchNotice(ctx, {
+        ...(pointer.current ? { from: pointer.current } : {}),
         to: target,
         reason: args.reason ?? "rollback_generation",
       });
@@ -542,4 +561,72 @@ export function createListGenerationCandidatesTool(
       });
     },
   };
+}
+
+/**
+ * 洞 6: a generation switch is TOLD, not silently performed. The notice is
+ * a `context.instructions` record of kind `generation_switch` per session —
+ * the same durable, latest-win channel a config reload uses — so the model
+ * learns it moved, to WHAT, and what changed. Without it a model that just
+ * switched reports the old version's work as the new one's, which is the
+ * exact failure this closes.
+ *
+ * The delta is computed from the two generations' own plugin lists: a
+ * candidate that enables a plugin the current one had off is an ADD, and
+ * the reverse a REMOVE. Skills and other surface ride in the summary when
+ * the generation's rows name them; the plugin delta is the one the
+ * generation machine can answer without guessing.
+ */
+async function publishGenerationSwitchNotice(
+  ctx: RuntimeContext,
+  input: { from?: string; to: string; reason: string },
+): Promise<void> {
+  const delta = await generationPluginDelta(ctx, input);
+  for (const exec of ctx.ports.getExecutionBySession().values()) {
+    const revision = nextContextInstructionsRevision(exec.session.events);
+    ctx.ports.publishForSession(exec, {
+      type: "context.instructions",
+      id: `context:generation:${Date.now().toString(36)}:${revision}`,
+      kind: "generation_switch",
+      at: new Date().toISOString(),
+      revision,
+      summary:
+        `switched to generation ${input.to}` +
+        (input.from ? ` from ${input.from}` : "") +
+        ` (${input.reason})`,
+      ...(delta.length ? { detail: delta } : {}),
+    });
+  }
+}
+
+/** The plugin delta between the two generations, as detail lines. */
+async function generationPluginDelta(
+  ctx: RuntimeContext,
+  input: { from?: string; to: string },
+): Promise<string[]> {
+  try {
+    const store = objectStore(ctx);
+    const to = await loadGeneration(store, input.to);
+    const from = input.from
+      ? await loadGeneration(store, input.from)
+      : undefined;
+    const enabledOf = (generation: typeof to) =>
+      new Set(
+        generation.plugins
+          .filter((entry) => entry.enabled)
+          .map((entry) => entry.id),
+      );
+    const toEnabled = enabledOf(to);
+    const fromEnabled = from ? enabledOf(from) : new Set<string>();
+    const added = [...toEnabled].filter((id) => !fromEnabled.has(id)).sort();
+    const removed = [...fromEnabled].filter((id) => !toEnabled.has(id)).sort();
+    return [
+      ...added.map((id) => `+ plugin ${id}`),
+      ...removed.map((id) => `- plugin ${id}`),
+    ];
+  } catch {
+    // A delta that cannot be computed is omitted, never invented: the
+    // summary still names the switch itself.
+    return [];
+  }
 }

@@ -172,6 +172,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "derivation",
     note: "a revision + a rules projection feeding the reload",
   },
+  "packages/framework/client/src/runtime/generation-tools.ts": {
+    count: 1,
+    cls: "derivation",
+    note: "the generation_switch notice's revision — the same monotonic counter the config_reload notice reads, on the same latest-win channel (洞 6)",
+  },
   "packages/framework/client/src/runtime/record-tools.ts": {
     count: 1,
     cls: "state-first",

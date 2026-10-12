@@ -1646,7 +1646,15 @@ type RuntimeEventData =
       type: "context.instructions";
       id: string;
       /** What produced the instruction change. */
-      kind: "config_reload" | "agent_switch" | "plan_handoff" | "notice";
+      kind:
+        | "config_reload"
+        | "agent_switch"
+        | "plan_handoff"
+        // 洞 6: a generation switch is an instruction change like any
+        // other — the model must be TOLD it moved, with the delta, or it
+        // reports the old version's work as the new one's.
+        | "generation_switch"
+        | "notice";
       at: string;
       /** Monotonic per session: the highest revision is the current state. */
       revision: number;
@@ -3561,7 +3569,12 @@ export type CapabilityRecordView = {
  */
 export type RuntimeProjectedNotice = {
   noticeID: string;
-  kind: "config_reload" | "agent_switch" | "plan_handoff" | "notice";
+  kind:
+    | "config_reload"
+    | "agent_switch"
+    | "plan_handoff"
+    | "generation_switch"
+    | "notice";
   revision: number;
   at: string;
   summary: string;

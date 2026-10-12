@@ -348,6 +348,19 @@ test("propose -> apply now -> apply now -> rollback restores the first candidate
       (event) => event.reason === "flow apply a",
     );
     expect(aSwitch).toBeDefined();
+    // 洞 6: the live switch is TOLD. A generation_switch notice reaches
+    // the session's context stream naming the move, so the model's next
+    // step can answer "which version am I running, and what changed" — a
+    // silent switch is the failure this closes.
+    const switchNotice = first.events.find(
+      (event) =>
+        event.type === "context.instructions" &&
+        event.kind === "generation_switch",
+    );
+    expect(switchNotice).toBeDefined();
+    expect((switchNotice as { summary: string }).summary).toContain(
+      "flow apply a",
+    );
     // Disposing flushes the session journal to the store — the reopened
     // session below must SEE this switch, so the flush happens before the
     // next attach (the finally-dispose is only the failure safety net).

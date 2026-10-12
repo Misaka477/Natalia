@@ -1,6 +1,7 @@
 import {
   appendInstanceEvent,
   loadInstanceGovernance,
+  mergeGovernanceEvents,
   resolveGovernanceRoot,
 } from "@natalia/governance-ledger";
 import type { RuntimeEvent } from "@anthelia/contracts";
@@ -217,10 +218,11 @@ export async function finalizeInitialize(
   // into the durable journal on every boot (idempotent — replay already holds
   // them) so `constitutionRules()` and the /constitution UI answer real rules,
   // not the empty projection CST1 shipped.
-  for (const rule of governanceLedgerController.seedConstitutionRules([
-    ...instance.events,
-    ...session.events,
-  ])) {
+  for (const rule of governanceLedgerController.seedConstitutionRules(
+    // One journal, two copies: the merge dedupes by id, so a rule the
+    // instance store already carries is not seeded a second time.
+    mergeGovernanceEvents(instance.events, session.events),
+  )) {
     appendInstanceEvent(governanceRoot, "constitution.jsonl", rule);
     scope.publish(rule);
     // CST4 Work Graph linkage: each seeded rule is a `constraint` node, so

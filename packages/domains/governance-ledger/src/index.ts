@@ -34,3 +34,4 @@ export {
   type EvidenceRecordedStatus,
   type ValidationOutcome,
 } from "./evidence-ledger";
+export * from "./merge";

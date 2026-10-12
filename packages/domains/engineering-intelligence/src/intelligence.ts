@@ -55,6 +55,7 @@ import { join, resolve } from "node:path";
 import {
   appendInstanceEvent,
   loadInstanceGovernance,
+  mergeGovernanceEvents,
   resolveGovernanceRoot,
 } from "@natalia/governance-ledger";
 import {
@@ -408,7 +409,7 @@ export function createIntelligenceSurface(
       );
       const rules = (await runSessionProjectionWithFallback(
         "constitutionRules",
-        [...instance.events, ...exec.session.events],
+        mergeGovernanceEvents(instance.events, exec.session.events),
       )) as ReturnType<typeof projectedConstitutionRules>;
       return rules.map((r) => ({
         ruleID: r.ruleID,
@@ -435,7 +436,10 @@ export function createIntelligenceSurface(
       // twice (the rule fold dedups by ruleID, the override list does not).
       // Filtering to the grants first keeps the id key honest (the event
       // union does not promise every member carries one).
-      const grants = [...instance.events, ...exec.session.events].filter(
+      const grants = mergeGovernanceEvents(
+        instance.events,
+        exec.session.events,
+      ).filter(
         (
           event,
         ): event is Extract<

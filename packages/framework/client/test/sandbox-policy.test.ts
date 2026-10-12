@@ -87,6 +87,34 @@ test("a path whose tail does not exist yet is judged on its directory", async ()
   ).toBe(false);
 });
 
+test("a not-yet-existing file under an out-pointing symlink is refused", async () => {
+  // The hole landedPath closed: the tail does not exist (it is the file the
+  // write is about to create), so a whole-path realpath returns the
+  // spelling as-is — and the spelling sits inside the domain while the
+  // kernel would create the file outside it.
+  const root = await mkdtemp(join(tmpdir(), "natalia-domain-symlink-"));
+  const outside = await mkdtemp(join(tmpdir(), "natalia-domain-out-"));
+  await mkdir(join(root, "allowed"), { recursive: true });
+  await symlink(outside, join(root, "allowed", "link"), "dir");
+  expect(
+    pathWithinDomains({
+      path: join(root, "allowed", "link", "brand-new.txt"),
+      root,
+      domains: ["allowed"],
+    }),
+  ).toBe(false);
+  // And the same path with the tail existing is refused too (the realpath
+  // case the first implementation already covered).
+  await writeFile(join(outside, "existing.txt"), "x");
+  expect(
+    pathWithinDomains({
+      path: join(root, "allowed", "link", "existing.txt"),
+      root,
+      domains: ["allowed"],
+    }),
+  ).toBe(false);
+});
+
 test("an absolute path outside the root never matches a relative domain", () => {
   expect(relativeToRoot("/etc/passwd", "/tmp/root")).toBe("/etc/passwd");
   expect(
@@ -104,4 +132,132 @@ test("the root itself reads as position empty, and a bare domain never matches i
   // domain list of ["."] does not silently come to mean "the whole root".
   expect(relativeToRoot(root, root)).toBe("");
   expect(pathWithinDomains({ path: root, root, domains: ["."] })).toBe(false);
+});
+
+/**
+ * The policy home (洞 2's item 1): one resolution entry every write path
+ * asks. The precedence and the root-fallback are the load-bearing halves —
+ * bash and fs asking the same resolve is what makes the split-world state
+ * impossible rather than merely forbidden.
+ */
+
+import {
+  isWritableUnderPolicy,
+  resolveDeploymentMode,
+  resolveSandboxPolicy,
+  sandboxWritableRoots,
+  type SandboxPolicySources,
+} from "../src/runtime/sandbox-policy";
+
+const sources = (
+  over: Partial<SandboxPolicySources> = {},
+): SandboxPolicySources => ({
+  deploymentRoot: "/repo/workspace",
+  ...over,
+});
+
+test("the row beats the config key beats the schema default", () => {
+  // No profile, no key: the schema default.
+  expect(resolveDeploymentMode(sources())).toBe("workspace-write");
+  // The config key is the row's fallback.
+  expect(resolveDeploymentMode(sources({ configMode: "read-only" }))).toBe(
+    "read-only",
+  );
+  // The row wins over the key.
+  expect(
+    resolveDeploymentMode(
+      sources({
+        configMode: "read-only",
+        profile: {
+          rows: [
+            { id: "anthelia.sandbox", config: { mode: "danger-full-access" } },
+          ],
+        } as never,
+      }),
+    ),
+  ).toBe("danger-full-access");
+});
+
+test("the platform gate: a mode this host cannot enforce degrades, said once", () => {
+  // Windows has no rung: the requested read-only degrades to full rather
+  // than advertising a sandbox the machine never had.
+  expect(
+    resolveDeploymentMode(sources({ configMode: "read-only", os: "win32" })),
+  ).toBe("danger-full-access");
+  // Linux has the rung: the mode stands.
+  expect(
+    resolveDeploymentMode(sources({ configMode: "read-only", os: "linux" })),
+  ).toBe("read-only");
+});
+
+test("the per-call precedence: explicit beats session beats deployment", () => {
+  const base = sources({ configMode: "workspace-write" });
+  // The session's rung override wins over the deployment default.
+  expect(resolveSandboxPolicy({ ...base, sessionMode: "read-only" }).mode).toBe(
+    "read-only",
+  );
+  // An explicit grant (the escalation's per-call widening) wins over both.
+  expect(
+    resolveSandboxPolicy({
+      ...base,
+      sessionMode: "read-only",
+      explicitMode: "danger-full-access",
+    }).mode,
+  ).toBe("danger-full-access");
+});
+
+test("the session's own root beats the configured one", () => {
+  // A sub-agent's worktree is ITS root; the configured workspace root is
+  // the fallback for a session without one.
+  expect(
+    resolveSandboxPolicy(sources({ sessionRoot: "/worktrees/agent-7" }))
+      .workspaceRoot,
+  ).toBe("/worktrees/agent-7");
+  expect(resolveSandboxPolicy(sources()).workspaceRoot).toBe("/repo/workspace");
+});
+
+test("the writable roots are the mode's own set, and the judgement lands", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-policy-roots-"));
+  const policy = resolveSandboxPolicy(
+    sources({ configMode: "workspace-write", sessionRoot: root }),
+  );
+  // The workspace rides the roots beside the platform temp set — the same
+  // set the kernel wrapper grants, so fs and bash cannot disagree.
+  expect(sandboxWritableRoots(policy)).toContain(root);
+  // Inside: allowed. Outside: refused. The escapes are judged on where
+  // they LAND, not how they spell.
+  await mkdir(join(root, "allowed"), { recursive: true });
+  await writeFile(join(root, "allowed", "a.txt"), "a");
+  expect(isWritableUnderPolicy(policy, join(root, "allowed", "a.txt"))).toBe(
+    true,
+  );
+  expect(isWritableUnderPolicy(policy, "/etc/passwd")).toBe(false);
+  // A workspace that is NOT under the platform temp dir, so the escape
+  // lands outside every writable root (escaping a /tmp workspace lands in
+  // /tmp, which workspace-write legitimately grants).
+  const rooted = resolveSandboxPolicy(
+    sources({ configMode: "workspace-write", sessionRoot: "/repo/workspace" }),
+  );
+  expect(
+    isWritableUnderPolicy(rooted, "/repo/workspace/allowed/../../escape"),
+  ).toBe(false);
+  // The symlink's target sits in /dev/shm — OUTSIDE every writable root
+  // (workspace-write grants the workspace, /tmp and the platform's temp
+  // dir; a target under /tmp would be legitimately writable and prove
+  // nothing about the containment). /dev/shm is the Linux tmpfs that is
+  // neither of those; this suite runs on Linux (the CI matrix and the dev
+  // box), and a host without it fails here loudly rather than silently
+  // weakening the assertion.
+  const outside = await mkdtemp(join("/dev/shm", "natalia-policy-out-"));
+  await writeFile(join(outside, "secret.txt"), "s");
+  await symlink(outside, join(root, "allowed", "link"), "dir");
+  expect(
+    isWritableUnderPolicy(policy, join(root, "allowed", "link", "secret.txt")),
+  ).toBe(false);
+  // A read-only policy writes nowhere but the platform's drain.
+  const ro = resolveSandboxPolicy(
+    sources({ configMode: "read-only", sessionRoot: root }),
+  );
+  expect(sandboxWritableRoots(ro)).toEqual(["/dev/null"]);
+  expect(isWritableUnderPolicy(ro, join(root, "allowed", "a.txt"))).toBe(false);
 });

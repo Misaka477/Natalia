@@ -8,10 +8,8 @@
  * `execute-run.ts` stays within the source line limit.
  */
 import type { ProviderToolCall } from "@anthelia/runtime";
-import {
-  compositionProfile,
-  type CompositionProfile,
-} from "@anthelia/composition";
+import { compositionProfile } from "@anthelia/composition";
+import { resolveDeploymentMode } from "../sandbox-policy";
 import {
   CONFINEMENT_COMPOSITION_ROW_ID,
   CONFINEMENT_MODES,
@@ -36,43 +34,19 @@ import type { SessionExecutionState } from "@anthelia/substrate";
 import type { WorkLedgerController } from "@natalia/work-ledger";
 
 /**
- * The composition-default file-effect mode (sandbox study: policy
- * rides the call; this is the default it rides FROM). Precedence: the
- * composition profile's `anthelia.sandbox` row — the plane the master
- * plan P3 base profile ships — then the legacy config key as its
- * fallback (retire the row with `disabled: true` in a drop-in to hand
- * the key back), then the schema's default. Both sources are validated
- * at their own boundary; this guard re-checks membership so a hand-built
- * profile cannot smuggle a mode past either.
- *
- * The last line is the platform gate, and it is why this is a function
- * rather than a lookup: the mode a host REQUESTS and the mode it can
- * ENFORCE are different questions, and only the enforceability one may
- * reach an execution. Asked here so the snapshot's danger indicator and
- * the per-turn environment block — the other two readers — degrade with
- * it instead of advertising a sandbox this machine never had.
+ * The composition-default file-effect mode — a re-export of the policy
+ * home's own resolution (sandbox-policy.ts), kept here because this is
+ * where the three readers historically imported it from. The logic moved
+ * because every write path must ask ONE resolve: the shell tool's spawn,
+ * the fs tools' judgement, the terminal pane's spawn, the sandbox
+ * controller's candidate commands. Two spellings of the precedence is how
+ * "bash circles one root, fs another" starts.
  */
-export function effectiveConfinementMode(input: {
-  profile?: CompositionProfile | undefined;
-  configMode?: string | undefined;
-  os?: NodeJS.Platform | undefined;
-}): ConfinementMode {
-  const legal = (mode: string | undefined): mode is ConfinementMode =>
-    typeof mode === "string" &&
-    (CONFINEMENT_MODES as readonly string[]).includes(mode);
-  const row = input.profile?.rows.find(
-    (candidate) =>
-      candidate.id === CONFINEMENT_COMPOSITION_ROW_ID && !candidate.disabled,
-  );
-  const rowMode =
-    typeof row?.config?.mode === "string" ? row.config.mode : undefined;
-  const requested = legal(rowMode)
-    ? rowMode
-    : legal(input.configMode)
-      ? input.configMode
-      : "workspace-write";
-  return enforceableConfinementMode(requested, input.os);
-}
+export {
+  resolveDeploymentMode as effectiveConfinementMode,
+  resolveSandboxPolicy,
+  type SandboxPolicy,
+} from "../sandbox-policy";
 
 export type BuildContextInput = {
   exec: SessionExecutionState | undefined;
@@ -122,7 +96,7 @@ export function buildToolExecutionContext(input: BuildContextInput) {
   // truth rides down to runShell (sandbox study: policy rides the call).
   // Captured once so the escalation's audit fact can name the mode the
   // call escalates FROM.
-  const effectiveMode = effectiveConfinementMode({
+  const effectiveMode = resolveDeploymentMode({
     profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
     configMode: getTsRuntimeConfig()?.confinement?.mode,
   });

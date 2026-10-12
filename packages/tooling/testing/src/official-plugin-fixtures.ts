@@ -17,7 +17,18 @@
  * executables — the release lifecycle test verifies those).
  */
 
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  link,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import {
@@ -35,6 +46,97 @@ const officialPluginDistribution = resolve(
   import.meta.dir,
   "../../../../dist/ts/plugins",
 );
+
+/**
+ * One official-plugin install shared by every workspace in the test
+ * process, anchored to this file like the distribution above.
+ *
+ * Why it exists: a plugin bundle inlines its dependencies — zod, the config
+ * schemas, hundreds of kilobytes of module state per plugin — and the ESM
+ * registry keys evaluations by URL and never releases them for the life of
+ * the process. A store per workspace therefore re-evaluates every official
+ * bundle once per test and retains it: measured at ~50MB per test, which is
+ * what put the real-runtime files at 4GB each while every assertion passed.
+ * Symlinking each workspace's node_modules at this one install makes every
+ * workspace resolve the same realpaths, so the bundles evaluate once for the
+ * whole run. A workspace's own store keeps its lock, marker and package
+ * bookkeeping, so per-workspace install state — which plugins are enabled,
+ * which fixture is installed — stays isolated; the per-workspace natalia.lock
+ * decides what loads, not what sits on disk.
+ *
+ * It lives beside client-test-workspaces rather than inside it: the
+ * test-workspace hygiene guard fails on any directory left under that root,
+ * and this one is deliberately long-lived. Freshness is self-healing — a
+ * rebuilt distribution is newer than the marker and triggers a reinstall.
+ */
+export const sharedPluginStoreRoot = resolve(
+  import.meta.dir,
+  "../../../../dist/ts/shared-plugin-store",
+);
+
+// In-process serialization is enough: bun runs every test file of a run in
+// ONE process, so a memoized promise is the lock, and this module is the one
+// both fixture assemblies import it from. (A second concurrent `bun test` on
+// the same checkout is not a supported shape; the worst case there is a
+// failed install that the freshness check heals on the next run.)
+let sharedPluginStoreReady: Promise<void> | undefined;
+
+/** Makes sure the shared official-plugin install exists and is current. */
+export async function ensureSharedPluginStore(): Promise<void> {
+  sharedPluginStoreReady ??= installSharedPluginStore();
+  await sharedPluginStoreReady;
+}
+
+async function installSharedPluginStore(): Promise<void> {
+  const marker = join(sharedPluginStoreRoot, "official-plugins-initialized-v1");
+  const distributionMtime = await newestFileMtime(officialPluginDistribution);
+  const fresh = await stat(marker)
+    .then((stats) => stats.mtimeMs >= distributionMtime)
+    .catch(() => false);
+  if (fresh) return;
+  await rm(sharedPluginStoreRoot, { recursive: true, force: true });
+  await initializeOfficialPlugins({
+    pluginStoreRoot: sharedPluginStoreRoot,
+    distributionRoot: officialPluginDistribution,
+    runPackageManager: installPrebuiltPackage,
+  });
+}
+
+async function newestFileMtime(root: string): Promise<number> {
+  let newest = 0;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, await newestFileMtime(full));
+      continue;
+    }
+    newest = Math.max(newest, (await stat(full)).mtimeMs);
+  }
+  return newest;
+}
+
+/**
+ * Points a store's node_modules at the shared install.
+ *
+ * The installer's own containment checks (a package must realpath inside its
+ * store's node_modules) still hold: the symlink resolves into the shared
+ * store, so both sides of every check land in the same tree. What changes is
+ * only the URL the loader evaluates — one per plugin for the whole run.
+ */
+async function linkSharedNodeModules(pluginStoreRoot: string): Promise<void> {
+  await mkdir(pluginStoreRoot, { recursive: true });
+  await rm(join(pluginStoreRoot, "node_modules"), {
+    recursive: true,
+    force: true,
+  });
+  await symlink(
+    join(sharedPluginStoreRoot, "node_modules"),
+    join(pluginStoreRoot, "node_modules"),
+    // A directory junction on Windows: same link, no SeCreateSymbolicLink
+    // privilege demanded of whoever runs the suite. POSIX takes "dir".
+    process.platform === "win32" ? "junction" : "dir",
+  );
+}
 
 /** Asserts the build output exists — the honest failure, not a phantom. */
 export async function assertOfficialPluginDistribution(): Promise<void> {
@@ -85,7 +187,19 @@ const installPrebuiltPackage: PackageManagerRun = async ({ cwd, args }) => {
     if (file === "wezterm") continue;
     const destination = join(target, file);
     await mkdir(dirname(destination), { recursive: true });
-    await cp(join(source, file), destination, { recursive: true });
+    const sourcePath = join(source, file);
+    if ((await stat(sourcePath)).isDirectory())
+      await cp(sourcePath, destination, { recursive: true });
+    // The shared install (see sharedPluginStoreRoot) means two workspaces
+    // can install the same package concurrently: the second link finds the
+    // destination already there with identical content, which is a no-op,
+    // not a failure.
+    else
+      await link(sourcePath, destination).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST") throw error;
+        },
+      );
   }
   // The store's own dependency record: the lifecycle derives the installed
   // package NAME from the change in that file (before/after), so a seam
@@ -139,10 +253,12 @@ export async function officialPluginWorkspace(
   prefix: string,
 ): Promise<{ workspaceRoot: string; pluginStoreRoot: string }> {
   await assertOfficialPluginDistribution();
+  await ensureSharedPluginStore();
   const parent = await mkdtemp(join(tmpdir(), "natalia-official-plugin-"));
   const workspaceRoot = join(parent, basename(prefix));
   await mkdir(workspaceRoot, { recursive: true });
   const pluginStoreRoot = officialPluginStoreRoot(workspaceRoot);
+  await linkSharedNodeModules(pluginStoreRoot);
   await initializeOfficialPlugins({
     pluginStoreRoot,
     distributionRoot: officialPluginDistribution,
@@ -178,6 +294,8 @@ export async function fillOfficialPluginStore(
   pluginStoreRoot: string,
 ): Promise<void> {
   await assertOfficialPluginDistribution();
+  await ensureSharedPluginStore();
+  await linkSharedNodeModules(pluginStoreRoot);
   await initializeOfficialPlugins({
     pluginStoreRoot,
     distributionRoot: officialPluginDistribution,

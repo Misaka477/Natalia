@@ -23,7 +23,12 @@ import { createRealRuntimeClient } from "./real-runtime-harness";
 // it AS mkdtemp so a test reaching for "mkdtemp" gets a workspace with the
 // official plugins provisioned. The raw one gives no plugin store, and every
 // tool call then fails with "Unknown tool" — four rounds lost to that.
-import { officialPluginWorkspace as mkdtemp } from "./plugin-test-helpers";
+import {
+  officialPluginWorkspace as mkdtemp,
+  useWorkspaceCleanup,
+} from "./plugin-test-helpers";
+
+useWorkspaceCleanup();
 
 const JSON_FILE = "probe-package.json";
 const JSON_BODY = JSON.stringify(

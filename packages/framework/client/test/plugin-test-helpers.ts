@@ -4,10 +4,10 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  stat,
   symlink,
   writeFile,
   rm,
-  stat,
 } from "node:fs/promises";
 import { afterAll, afterEach } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,6 +18,10 @@ import {
   OFFICIAL_PLUGIN_PACKAGES,
   type PackageManagerRun,
 } from "@natalia/installer";
+import {
+  ensureSharedPluginStore,
+  sharedPluginStoreRoot,
+} from "@natalia/testing";
 import {
   createRealRuntimeClient as createRuntimeClient,
   type RealRuntimeClientOptions,
@@ -45,13 +49,28 @@ const allWorkspaces = new Set<string>();
 const trackedClients = new Set<{ dispose?: () => Promise<void> }>();
 
 /**
- * Registers this test file's workspace cleanup.
+ * Registers this FILE's cleanup hooks.
+ *
+ * Two facts about bun's runner decide the shape of this function, both
+ * probed rather than assumed:
+ *
+ *  1. A hook registered inside an IMPORTED module attaches only to the
+ *     FIRST file that loads the module (probe: two files importing one
+ *     helper fired the helper's afterEach for the first file's test only),
+ *     so every test file must call this from its own module scope.
+ *  2. Module state is shared across a run's files (probe: a counter
+ *     incremented from two files read 1 then 2), so a module-level
+ *     "already registered" flag is a LIE told to every file after the
+ *     first: their call returns early, no hook is attached, and their
+ *     workspaces are never removed. That flag existed here once — added to
+ *     silence a double registration (a file importing the harness AND
+ *     calling directly runs the hook twice; the second pass finds the
+ *     tracked sets already cleared, so it is a no-op). Trading a no-op for
+ *     a cross-file leak is how the suite left 417 workspaces per run while
+ *     every assertion passed. The no-op stays; the flag is gone.
  *
  * Every test file that creates workspaces through this helper MUST call this
- * once at module scope. A module-scope `afterEach` inside an imported helper
- * only attaches to the first file that loads the module in a bun process
- * (probe: two files sharing one helper leave the second file's workspaces
- * behind), so the hooks have to be registered from the test file itself.
+ * once at module scope.
  *
  * The dispose-then-remove order is load-bearing: an undisposed runtime client
  * keeps async session persistence alive, and its next flush does
@@ -70,25 +89,7 @@ const trackedClients = new Set<{ dispose?: () => Promise<void> }>();
  * btrfs metadata). The test-workspace hygiene guard at the end of `npm test`
  * fails loudly on any residue, so a forgotten call cannot pass silently.
  */
-/**
- * Whether this module already registered its cleanup hook.
- *
- * `useWorkspaceCleanup` is called both by test files directly and by
- * `real-runtime-harness` at module scope, so a file that imports the harness and
- * also calls it registers the hook TWICE — observed as two `afterEach`
- * invocations for a single test. The second is a no-op (the tracked sets are
- * already cleared by then), so this is a smell rather than a leak, but it runs
- * every such file's cleanup twice and hides the real hook's cost.
- *
- * Idempotent registration serves both directions: a file that relies on the
- * harness still gets exactly one hook, and a file that calls it directly does
- * not get a second one on top.
- */
-let cleanupRegistered = false;
-
 export function useWorkspaceCleanup(): void {
-  if (cleanupRegistered) return;
-  cleanupRegistered = true;
   afterEach(async () => {
     const clients = [...trackedClients];
     trackedClients.clear();
@@ -166,6 +167,7 @@ export function registerTestArtifact(path: string): void {
 
 export async function officialPluginWorkspace(prefix: string) {
   await pluginDistributionEnsured;
+  await ensureSharedPluginStore();
   await mkdir(officialPluginTestWorkspaces, { recursive: true });
   const workspaceRoot = await mkdtemp(
     join(officialPluginTestWorkspaces, basename(prefix)),
@@ -175,6 +177,14 @@ export async function officialPluginWorkspace(prefix: string) {
   testWorkspaces.add(pluginStoreRoot);
   allWorkspaces.add(workspaceRoot);
   allWorkspaces.add(pluginStoreRoot);
+  await mkdir(pluginStoreRoot, { recursive: true });
+  await symlink(
+    join(sharedPluginStoreRoot, "node_modules"),
+    join(pluginStoreRoot, "node_modules"),
+    // A directory junction on Windows: same link, no SeCreateSymbolicLink
+    // privilege demanded of whoever runs the suite. POSIX takes "dir".
+    process.platform === "win32" ? "junction" : "dir",
+  );
   await initializeOfficialPlugins({
     pluginStoreRoot,
     distributionRoot: officialPluginDistribution,
@@ -377,7 +387,16 @@ const installPrebuiltPackage: PackageManagerRun = async ({ args }) => {
     const sourcePath = join(source, file);
     if ((await stat(sourcePath)).isDirectory())
       await cp(sourcePath, destination, { recursive: true });
-    else await link(sourcePath, destination);
+    // The shared install (see sharedPluginStoreRoot) means two workspaces
+    // can install the same package concurrently: the second link finds the
+    // destination already there with identical content, which is a no-op,
+    // not a failure.
+    else
+      await link(sourcePath, destination).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST") throw error;
+        },
+      );
   }
 
   const dependencies = await readJSON<Record<string, string>>(

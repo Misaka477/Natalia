@@ -22,7 +22,12 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "./real-runtime-harness";
-import { officialPluginWorkspace as mkdtemp } from "./plugin-test-helpers";
+import {
+  officialPluginWorkspace as mkdtemp,
+  useWorkspaceCleanup,
+} from "./plugin-test-helpers";
+
+useWorkspaceCleanup();
 
 const READ_TARGET = "probe-read-target.txt";
 const READ_BODY = "NATALIA_FS_READ_PROBE_OK";

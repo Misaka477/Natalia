@@ -17,6 +17,9 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { createRealRuntimeClient, waitForAsync } from "./real-runtime-harness";
+import { useWorkspaceCleanup } from "./plugin-test-helpers";
+
+useWorkspaceCleanup();
 
 test("a real navi turn emits its own step_usage, not just the main one", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-navi-usage-"));

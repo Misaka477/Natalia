@@ -879,6 +879,10 @@ test("truncated instance governance degrades without dropping C-TERM enforcement
   // binding.
   const store = testGovernanceRootFor(root);
   await mkdir(store, { recursive: true });
+  // This test owns its ledger path (it passes pluginStoreRoot, so the
+  // harness does not register one for it) — register it for the per-file
+  // sweep or it leaks one hidden directory per run.
+  registerTestArtifact(store);
   await writeFile(join(store, "constitution.jsonl"), "{truncated");
   const previous = process.env.NATALIA_TEST_GOVERNANCE_ROOT;
   process.env.NATALIA_TEST_GOVERNANCE_ROOT = store;

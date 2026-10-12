@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import { createRealRuntimeClient, waitForAsync } from "./real-runtime-harness";
+import { useWorkspaceCleanup } from "./plugin-test-helpers";
+
+useWorkspaceCleanup();
 
 const SESSION = "ses_ring_restart" as SessionID;
 const CONTEXT_BUDGET = { max: 32_000, thresholdPercent: 85, reserved: 4_096 };

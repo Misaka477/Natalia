@@ -2408,11 +2408,27 @@ export function GovernancePane(props: {
               Approving hands the candidate to the validated boundary (the
               only autonomous write path); rejecting keeps the candidate and
               records the human's reason. */}
-          <div class="neu-gov-section-title">进化队列（待你审批）</div>
-          <div class="neu-gov-text" style="margin-bottom:6px;">
-            这里是人出现的地方，而且只在这里 ·
-            循环自己检测、自己优化、自己提名， 部署永远由你拍板
-          </div>
+          {/* 空队列只占一行。这一屏本来就已经是五段「什么都没有」，
+              再让它用标题+副标题+空态框三行去说什么都没有，是错的。 */}
+          <Show
+            when={queueRows().length > 0}
+            fallback={
+              <div class="neu-gov-text" style="margin-bottom:6px;">
+                进化队列：没有待审批的候选
+                {queueEmptyReason() === "no-run"
+                  ? "（还没有任何一轮进化跑完过）"
+                  : queueEmptyReason() === "all-decided"
+                    ? "（这一轮的你都决定过了）"
+                    : `（本轮摘要有 ${queueSkipped()} 行读不出来）`}
+                。
+              </div>
+            }
+          >
+            <div class="neu-gov-section-title">进化队列（待你审批）</div>
+            <div class="neu-gov-text" style="margin-bottom:6px;">
+              同意 = 装进技能目录；拒绝 = 留下理由，不装。
+            </div>
+          </Show>
           <For each={queueRows()}>
             {(item) => (
               <div class="neu-gov-row">
@@ -2530,17 +2546,7 @@ export function GovernancePane(props: {
               </div>
             )}
           </For>
-          <Show when={!queueRows().length}>
-            {/* 空也要说清为什么空——三种原因是三件不同的事，一句
-                "nothing here" 把它们混成一件，人就不知道下一步该干什么。 */}
-            <div class="neu-gov-empty">
-              {queueEmptyReason() === "no-run"
-                ? "还没有任何一轮进化的记录。队列读的是最新一轮 run 目录里循环自己写的摘要——没有那个目录，就说明还没轮到过它（触发器是暗发布的，要在配置里把 backgroundReview.evolutionTrigger 打开）。"
-                : queueEmptyReason() === "all-decided"
-                  ? "这一轮的候选你都决定过了。队列只显示还没拍的——同意过的已落地，拒绝过的连理由一起留在记录里。"
-                  : `这一轮的摘要里有 ${queueSkipped()} 行读不出来（坏行按规矩计数、不静默丢）。其余候选都已决定，或这一轮没有产出可审批的候选。`}
-            </div>
-          </Show>
+
           <Show when={queueNotice()}>
             <div class="neu-gov-text" style="margin-top:6px;">
               {queueNotice()}

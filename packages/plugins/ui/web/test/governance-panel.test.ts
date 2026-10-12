@@ -1118,6 +1118,11 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
   expect(source).toContain("evolutionQueue");
   // The approve button hands the candidate to the validated boundary.
   expect(source).toContain("upsertSkill");
+  // And an EMPTY queue costs one line, not three: the screen is already a
+  // wall of empty sections, and this one adding a title + subtitle + an
+  // empty-state box to say nothing was the wrong call.
+  expect(source).toContain("fallback={");
+  expect(source).toContain("进化队列：没有待审批的候选");
   // And the labels a reader needs are in the language the panel is read in
   // (the panel's interactive layer is Chinese; English labels here were
   // unreadable). The guard reads the TEMPLATE LITERALS, not bare words —

@@ -16,7 +16,6 @@ import {
   answerAgreement,
   answerGroundedness,
   assembleResult,
-  EVOLUTION_CONCURRENCY,
   buildJudgeRequest,
   dimensionsFrom,
   type FitnessDimensions,
@@ -902,9 +901,12 @@ export async function handleLocalCommands(argv: string[]) {
         // The budget's SHAPE is validated here, beside --n: a caller error
         // must be answered with the caller error, not with a complaint
         // about a dataset that was never the problem.
+        // The optimize command's own default concurrency (it lived in the
+        // deleted trigger module only because that module was written
+        // first; the budget belongs to this command).
         const concurrency = positiveInt(
           valueAfter(argv, "--concurrency"),
-          EVOLUTION_CONCURRENCY,
+          2,
           "concurrency",
         );
         const optimizeRoot = valueAfter(argv, "--workspace") ?? process.cwd();

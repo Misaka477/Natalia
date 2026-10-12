@@ -2773,22 +2773,6 @@ type RuntimeEventData =
       scope: "session" | "message";
       messageID?: string;
       verdict: "up" | "down";
-    }
-  | {
-      /**
-       * S8: the system noticed, on the record, that a round of self-
-       * iteration is due — the three gates passed (a ranked trigger, a
-       * holdout decline, budget to spare) and the reason rides along. The
-       * fact makes the noticing durable and replayable; the round itself
-       * is run by whoever reads it.
-       */
-      type: "growth.triggered";
-      id: string;
-      capability: string;
-      potential: number;
-      holdoutDelta: number;
-      reason: string;
-      at: string;
     };
 
 /**

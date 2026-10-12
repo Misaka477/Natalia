@@ -1303,7 +1303,7 @@ Deployment notes:
 
 ### Events and projection (source scan)
 
-- Runtime event types (`RuntimeEventData` union): 138.
+- Runtime event types (`RuntimeEventData` union): 137.
 - view-store projections (`case` labels in `packages/hosts/view-store/src`): 133.
 
 ### SDK methods → RPC routes (source scan of `packages/tooling/sdk/src/sdk.ts`)
@@ -1596,7 +1596,6 @@ Names that appear in older audits but are NOT tools of any surface: `plan_genera
 | `external_run.recorded`         | `id`: string, `at`: string, `sessionID?`: SessionID, `externalTaskID`: string, `benchmark`: string, `turnID`: string, `success?`: boolean, `stopReason?`: string, `durationMs?`: number, `baselineSuccessRate`: number                                                                                                                                                                                                                                                                                                     | —                                                                                   |
 | `feedback.recorded`             | `id`: string, `at`: string, `sessionID?`: SessionID, `workspaceID?`: string, `scope`: "session" | "message", `messageID?`: string, `verdict`: "up" | "down", `category?`: string, `note?`: string                                                                                                                                                                                                                                                                                                                          | —                                                                                   |
 | `feedback.retracted`            | `id`: string, `at`: string, `sessionID?`: SessionID, `workspaceID?`: string, `recordID`: string, `scope`: "session" | "message", `messageID?`: string, `verdict`: "up" | "down"                                                                                                                                                                                                                                                                                                                                            | —                                                                                   |
-| `growth.triggered`              | `id`: string, `capability`: string, `potential`: number, `holdoutDelta`: number, `reason`: string, `at`: string                                                                                                                                                                                                                                                                                                                                                                                                            | —                                                                                   |
 <!-- /api-reference:generated -->
 
 <a id="chinese"></a>
@@ -2751,7 +2750,7 @@ createRuntimeHttpServer({
 
 ### Events and projection (source scan)
 
-- Runtime event types (`RuntimeEventData` union): 138.
+- Runtime event types (`RuntimeEventData` union): 137.
 - view-store projections (`case` labels in `packages/hosts/view-store/src`): 133.
 
 ### SDK methods → RPC routes (source scan of `packages/tooling/sdk/src/sdk.ts`)
@@ -3044,5 +3043,4 @@ Names that appear in older audits but are NOT tools of any surface: `plan_genera
 | `external_run.recorded`         | `id`: string, `at`: string, `sessionID?`: SessionID, `externalTaskID`: string, `benchmark`: string, `turnID`: string, `success?`: boolean, `stopReason?`: string, `durationMs?`: number, `baselineSuccessRate`: number                                                                                                                                                                                                                                                                                                     | —                                                                                   |
 | `feedback.recorded`             | `id`: string, `at`: string, `sessionID?`: SessionID, `workspaceID?`: string, `scope`: "session" | "message", `messageID?`: string, `verdict`: "up" | "down", `category?`: string, `note?`: string                                                                                                                                                                                                                                                                                                                          | —                                                                                   |
 | `feedback.retracted`            | `id`: string, `at`: string, `sessionID?`: SessionID, `workspaceID?`: string, `recordID`: string, `scope`: "session" | "message", `messageID?`: string, `verdict`: "up" | "down"                                                                                                                                                                                                                                                                                                                                            | —                                                                                   |
-| `growth.triggered`              | `id`: string, `capability`: string, `potential`: number, `holdoutDelta`: number, `reason`: string, `at`: string                                                                                                                                                                                                                                                                                                                                                                                                            | —                                                                                   |
 <!-- /api-reference:generated -->

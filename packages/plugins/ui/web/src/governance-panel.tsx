@@ -2342,8 +2342,8 @@ export function GovernancePane(props: {
               <div class="neu-gov-empty">
                 进化数据还是空的：没有触发器、没有提案、没有晋升记录。
                 <br />
-                触发器是暗发布的——在配置里把 backgroundReview.evolutionTrigger
-                打开，跑完几轮之后这里才 会有东西。
+                触发器每次读取时从工作区自己的历史推导——干过的活还不够多，
+                多跑几轮之后这里才会有东西。
               </div>
             }
           >

@@ -353,15 +353,6 @@ export const backgroundReviewConfigSchema = z
      * in; this is the switch.
      */
     verdictWake: z.boolean().default(false),
-    /**
-     * S8: the self-iteration trigger's noticing — at a turn boundary the
-     * three gates (a ranked trigger, a holdout decline, budget to spare)
-     * are read and, when they pass, the noticing is journaled. It costs a
-     * fact fold per checked turn, so it ships DARK too, for the same
-     * reason the verdict wake does: a new autonomous call is not something
-     * to switch on unseen.
-     */
-    evolutionTrigger: z.boolean().default(false),
   })
   .default({});
 

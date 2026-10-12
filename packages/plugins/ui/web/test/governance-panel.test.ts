@@ -1118,6 +1118,17 @@ test("the Growth tab's queue reads the runtime's face and renders the pending ro
   expect(source).toContain("evolutionQueue");
   // The approve button hands the candidate to the validated boundary.
   expect(source).toContain("upsertSkill");
+  // And the labels a reader needs are in the language the panel is read in
+  // (the panel's interactive layer is Chinese; English labels here were
+  // unreadable). The guard reads the TEMPLATE LITERALS, not bare words —
+  // a bare-word check passes on the Chinese comment that explains them,
+  // which is a guard with no teeth.
+  expect(source).toContain("`训练集 ${");
+  expect(source).toContain("`验证集 ${");
+  expect(source).toContain("`封存集 ${");
+  expect(source).toContain("七门逐门：");
+  expect(source).toContain("基线（现在的）：");
+  expect(source).toContain("本轮花费：");
   // And the section says who appears here.
-  expect(source).toContain("Evolution Queue");
+  expect(source).toContain("进化队列（待你审批）");
 });

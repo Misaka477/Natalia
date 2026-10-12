@@ -979,6 +979,14 @@ export function GovernancePane(props: {
   // record — so a refresh, a restart and a second tab see the same queue.
   const [queueRows, setQueueRows] = createSignal<any[]>([]);
   const [queueNotice, setQueueNotice] = createSignal<string | undefined>();
+  // Why the queue is empty — three different facts, not one. A queue with no
+  // run directory has never been reached; one whose items are all decided has
+  // done its job; one with skipped lines is telling you its record is damaged.
+  // Collapsing them into "nothing here" hides which one it is.
+  const [queueEmptyReason, setQueueEmptyReason] = createSignal<
+    "no-run" | "all-decided" | "damaged" | "unknown"
+  >("unknown");
+  const [queueSkipped, setQueueSkipped] = createSignal(0);
   const [liveExternalJoinedTasks, setLiveExternalJoinedTasks] = createSignal<
     any[]
   >([]);
@@ -1058,6 +1066,14 @@ export function GovernancePane(props: {
       try {
         const queue = await props.runtime?.evolutionQueue?.();
         setQueueRows(queue?.items ?? []);
+        setQueueSkipped(queue?.skipped ?? 0);
+        setQueueEmptyReason(
+          queue?.runDir === undefined
+            ? "no-run"
+            : (queue?.skipped ?? 0) > 0
+              ? "damaged"
+              : "all-decided",
+        );
       } catch {
         // An unreadable queue is an empty queue, said out loud — never a
         // silent one, and never a throw that takes the tab down.
@@ -2392,7 +2408,11 @@ export function GovernancePane(props: {
               Approving hands the candidate to the validated boundary (the
               only autonomous write path); rejecting keeps the candidate and
               records the human's reason. */}
-          <div class="neu-gov-section-title">Evolution Queue</div>
+          <div class="neu-gov-section-title">进化队列（待你审批）</div>
+          <div class="neu-gov-text" style="margin-bottom:6px;">
+            这里是人出现的地方，而且只在这里 ·
+            循环自己检测、自己优化、自己提名， 部署永远由你拍板
+          </div>
           <For each={queueRows()}>
             {(item) => (
               <div class="neu-gov-row">
@@ -2403,42 +2423,51 @@ export function GovernancePane(props: {
                     shows only a blended score asks the human to approve on
                     faith — which is the thing this queue exists to end. */}
                 <span class="neu-gov-text">{item.summary}</span>
+                {/* 三个划分各自的分数。混合分会把封存集的倒退藏在训练集的
+                    进步后面——那正是封存面要防的泄漏，所以分榜必须各自出现。 */}
                 <Show when={item.candidate.splits}>
                   <span class="neu-gov-meta">
                     {[
                       ...(item.candidate.splits.train === undefined
                         ? []
-                        : [`train ${item.candidate.splits.train.toFixed(4)}`]),
+                        : [`训练集 ${item.candidate.splits.train.toFixed(4)}`]),
                       ...(item.candidate.splits.val === undefined
                         ? []
-                        : [`val ${item.candidate.splits.val.toFixed(4)}`]),
+                        : [`验证集 ${item.candidate.splits.val.toFixed(4)}`]),
                       ...(item.candidate.splits.holdout === undefined
                         ? []
                         : [
-                            `holdout ${item.candidate.splits.holdout.toFixed(4)}`,
+                            `封存集 ${item.candidate.splits.holdout.toFixed(4)}`,
                           ]),
                     ].join(" · ")}
                   </span>
                 </Show>
+                <Show when={item.candidate.sampleCount !== undefined}>
+                  <span class="neu-gov-meta">
+                    本轮花费：{item.candidate.sampleCount} 次模型调用
+                  </span>
+                </Show>
                 <Show when={(item.candidate.gateResults ?? []).length > 0}>
                   <span class="neu-gov-meta">
+                    七门逐门：
                     {(item.candidate.gateResults ?? [])
                       .map(
                         (gate: { gate: string; ok: boolean; detail: string }) =>
-                          `${gate.gate} ${gate.ok ? "过" : "拒"} — ${gate.detail}`,
+                          `${gate.gate} ${gate.ok ? "过" : "拒"}（${gate.detail}）`,
                       )
-                      .join(" · ")}
+                      .join("；")}
                   </span>
                 </Show>
                 <Show when={item.candidate.diff}>
                   <span class="neu-gov-meta">
-                    基线：{item.candidate.diff.baseline}
+                    基线（现在的）：{item.candidate.diff.baseline}
                   </span>
                   <span class="neu-gov-meta">
-                    候选：{item.candidate.diff.candidate}
+                    候选（要换上的）：{item.candidate.diff.candidate}
                   </span>
                 </Show>
                 <span class="neu-gov-meta">
+                  假设：
                   {item.candidate.hypothesis ?? item.candidate.description}
                 </span>
                 <Show when={item.gate.refusals.length}>
@@ -2502,9 +2531,14 @@ export function GovernancePane(props: {
             )}
           </For>
           <Show when={!queueRows().length}>
+            {/* 空也要说清为什么空——三种原因是三件不同的事，一句
+                "nothing here" 把它们混成一件，人就不知道下一步该干什么。 */}
             <div class="neu-gov-empty">
-              No candidate is waiting. The queue reads the latest run's own
-              record — the summary the loop wrote and the decisions you wrote.
+              {queueEmptyReason() === "no-run"
+                ? "还没有任何一轮进化的记录。队列读的是最新一轮 run 目录里循环自己写的摘要——没有那个目录，就说明还没轮到过它（触发器是暗发布的，要在配置里把 backgroundReview.evolutionTrigger 打开）。"
+                : queueEmptyReason() === "all-decided"
+                  ? "这一轮的候选你都决定过了。队列只显示还没拍的——同意过的已落地，拒绝过的连理由一起留在记录里。"
+                  : `这一轮的摘要里有 ${queueSkipped()} 行读不出来（坏行按规矩计数、不静默丢）。其余候选都已决定，或这一轮没有产出可审批的候选。`}
             </div>
           </Show>
           <Show when={queueNotice()}>

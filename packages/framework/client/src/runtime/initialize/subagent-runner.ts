@@ -246,8 +246,13 @@ export async function installSubagents(
             domains: writePaths,
           });
           if (!inDomain)
+            // The refusal names the RULE (the domain the fan-out scoped),
+            // the PATH (where the write actually lands), and the WHY (who
+            // scoped it) — a bare "outside the domain" leaves the model
+            // guessing which rule it broke, and a model that cannot read a
+            // refusal cannot route around it.
             throw new Error(
-              `subagent write outside file domain (${toolName}): ${path}`,
+              `subagent write refused (${toolName}): ${path} lands outside this agent's file domain [${writePaths.join(", ")}] under ${sandboxRoot} — the fan-out scoped this agent's writes there; ask the parent agent or write inside the domain`,
             );
         }
       : undefined;

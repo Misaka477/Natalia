@@ -1076,7 +1076,7 @@ export function sandboxedDomainProvider(): StreamingProvider {
       }
       if (isChild && !recoveredWrite) {
         expect(domainError?.content).toContain("ERROR:");
-        expect(domainError?.content).toContain("outside file domain");
+        expect(domainError?.content).toContain("subagent write refused");
         yield {
           type: "tool_call",
           calls: [

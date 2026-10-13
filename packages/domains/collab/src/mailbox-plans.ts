@@ -54,20 +54,39 @@ export function createMailboxPlans(ctx: RuntimeContext) {
       requestNaviWake,
       wakeMainForCollaboration,
     } = ctx.ports;
+    // The full mesh (2026-10-13 user ruling): any agent can send any
+    // agent. This tool used to carry no `to` at all, so a sister could
+    // only ever reach the main agent — Nia's description promised
+    // "Natalia or Navi" with no way to name Navi, which is the worst kind
+    // of lie a schema tells. The recipient is now explicit; the sender
+    // itself is excluded (a message to yourself wakes you for nothing).
+    const meshRecipients = (["main_agent", "live_chat", "nia"] as const).filter(
+      (participant) => participant !== sender,
+    );
+    const recipientList = meshRecipients.join(", ");
     return {
       name: "collab_chat",
       description:
         sender === "main_agent"
           ? "Send or directly reply to an informal message with Navi. A new message has no messageID and always continues the thread. To answer a REPLY_REQUIRED message, provide its exact messageID; having that messageID means Navi already replied to you. Every reply is sent as the next step of the thread. Automatic exchanges are capped by runtime.collaboration.maxAutoRounds. This is never a user directive or work-state decision."
           : sender === "nia"
-            ? 'Send or directly reply to an informal message with Natalia or Navi. Use to report audit findings, request continuation, or ask for context. A new message has no messageID and always continues the thread. To answer a REPLY_REQUIRED message, provide its exact messageID. Reply example: { "text": "具体缺口...", "messageID": "collab:chat:..." }. If you do not pass the exact messageID, collab_chat will refuse the new chat.'
-            : "Send or directly reply to an informal message with Natalia. A new message has no messageID and always continues the thread. To answer a REPLY_REQUIRED message, provide its exact messageID; having that messageID means Natalia already replied to you. Every reply is sent as the next step of the thread. Automatic exchanges are capped by runtime.collaboration.maxAutoRounds. Never use this instead of mailbox_send for a confirmed user directive.",
+            ? `Send or directly reply to an informal message with any agent — ${recipientList}. Set \`to\` to choose the recipient (omit for Natalia). Use it to report audit findings, request continuation, or ask for context. A new message has no messageID and always continues the thread. To answer a REPLY_REQUIRED message, provide its exact messageID. Reply example: { "text": "具体缺口...", "messageID": "collab:chat:..." }. If you do not pass the exact messageID, collab_chat will refuse the new chat.`
+            : `Send or directly reply to an informal message with any agent — ${recipientList}. Set \`to\` to choose the recipient (omit for Natalia). A new message has no messageID and always continues the thread. To answer a REPLY_REQUIRED message, provide its exact messageID; having that messageID means that agent already replied to you. Every reply is sent as the next step of the thread. Automatic exchanges are capped by runtime.collaboration.maxAutoRounds. Never use this instead of mailbox_send for a confirmed user directive.`,
       requiresApproval: false,
       parameters: {
         type: "object",
         properties: {
           text: { type: "string" },
           messageID: { type: "string" },
+          ...(sender === "main_agent"
+            ? {}
+            : {
+                to: {
+                  type: "string",
+                  enum: [...meshRecipients],
+                  description: `The agent to address. Omitted means the main agent (Natalia). The full mesh: any agent can send any agent.`,
+                },
+              }),
         },
         required: ["text"],
         additionalProperties: false,
@@ -83,9 +102,14 @@ export function createMailboxPlans(ctx: RuntimeContext) {
         const args = parsed as {
           text?: string;
           messageID?: string;
+          to?: CollaborationParticipant;
         };
         if (typeof args.text !== "string" || !args.text.trim())
           return "collab_chat requires a non-empty text";
+        // The mesh excludes the sender itself; naming yourself is a
+        // caller mistake, not a routing decision.
+        if (args.to !== undefined && args.to === sender)
+          return `collab_chat: cannot send to yourself (${sender})`;
         const owner =
           boundExec ??
           (context.sessionID
@@ -106,6 +130,7 @@ export function createMailboxPlans(ctx: RuntimeContext) {
             kind: "chat",
             from: sender,
             text: cleanText,
+            ...(args.to === undefined ? {} : { to: args.to }),
             ...(suppliedID ? { replyToID: suppliedID } : {}),
             ...(suppliedID ? { continueConversation: true } : {}),
           });

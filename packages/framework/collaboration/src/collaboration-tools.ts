@@ -16,6 +16,15 @@ export const COLLAB_RESPONSE_DECISIONS = [
   "rejected",
   "deferred",
 ] as const;
+/**
+ * Who the main agent's `collab_chat` can address. The sisters, not itself:
+ * the 2026-10-13 user ruling made the collaboration graph a full MESH —
+ * any agent can send any agent — and the main tool already reached both
+ * sisters, so the mesh work is on the sisters' side (their chat tool had
+ * no `to` at all and could only ever reach the main agent). A message to
+ * yourself is the one pair the mesh excludes: it is a no-op that wakes
+ * you for nothing.
+ */
 export const COLLAB_CHAT_RECIPIENTS = ["live_chat", "nia"] as const;
 
 const COLLAB_INBOX_PAGE_LIMIT = 8;

@@ -2093,3 +2093,48 @@ test("the provider prefix is stable across turns whose dynamic state differs (th
     "the objective only this turn carries",
   );
 });
+
+test("the durable boundary refuses a tool call with no id", async () => {
+  // The reference harness's third layer: an empty id must fail THIS turn,
+  // never reach the journal. A tool call recorded without one poisons every
+  // later replay of the session — the provider refuses the whole request
+  // ("tool_calls.id and tool_calls.type are required") and the session never
+  // answers again. The provider adapters synthesize ids; this guard keeps a
+  // future adapter from reintroducing the hole.
+  const { runner, events } = makeHarness({
+    provider: "scripted",
+    model: "m1",
+    async *stream() {
+      yield toolCall([
+        { id: "", name: "read_file", arguments: '{"path":"a"}' },
+      ]);
+      yield { type: "done", finishReason: "tool_calls" };
+    },
+  });
+  await runner.runTurn({
+    id: "turn_poison",
+    text: "read a",
+    attachments: [],
+    resources: [],
+    agents: [],
+  });
+  const failed = events.find(
+    (event): event is Extract<RuntimeEvent, { type: "turn.finished" }> =>
+      event.type === "turn.finished",
+  );
+  // The turn FAILS — a loud failure, never a silent success that journals
+  // the poison. (The retry layer classifies the thrown refusal into its own
+  // category, so the diagnostic's wording is the layer's; the observable
+  // contract is the failure plus the absence of any execution.)
+  expect(failed?.stopReason).toBe("error");
+  // The call never ran: no tool.update, and nothing pretended it did.
+  expect(events.filter((event) => event.type === "tool.update")).toHaveLength(
+    0,
+  );
+  expect(
+    events.filter(
+      (event): event is Extract<RuntimeEvent, { type: "content.delta" }> =>
+        event.type === "content.delta",
+    ),
+  ).toHaveLength(0);
+});

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   AnthropicProvider,
+  toolCallId,
   contextEntriesToProviderMessages,
   GeminiProvider,
   normalizeRawToolCallProtocol,
@@ -14,6 +15,7 @@ import {
 import type {
   ProviderStreamChunk,
   ProviderStreamRequest,
+  ProviderToolCall,
 } from "../src/provider";
 import { defaultConfigV4 } from "@anthelia/config";
 import { ContextWindowResolver } from "../src/modelmeta";
@@ -3409,4 +3411,281 @@ test("a tool call repeated in the durable log is emitted once", () => {
   expect(calls.map((call) => call.id)).toEqual(["dup"]);
   const results = messages.filter((message) => message.role === "tool");
   expect(results).toHaveLength(1);
+});
+
+/**
+ * The tool-call id's two rules, and the failure that paid for them: an
+ * id-less tool call recorded into a session's journal poisons every later
+ * replay — the provider refuses the whole request with "tool_calls.id and
+ * tool_calls.type are required", so the session never answers again. The
+ * fixtures below are the shapes the stepfun gateway actually sent: a
+ * continuation delta that re-sends the id EMPTY, and a response that never
+ * carries one at all.
+ */
+
+const sse = (payloads: unknown[]) =>
+  new Response(
+    payloads.map((payload) => `data: ${JSON.stringify(payload)}\n\n`).join("") +
+      "data: [DONE]\n\n",
+    { headers: { "content-type": "text/event-stream" } },
+  );
+
+const toolDelta = (index: number, fields: Record<string, unknown>) => ({
+  choices: [{ delta: { tool_calls: [{ index, ...fields }] } }],
+});
+
+const callsOf = async (stream: AsyncIterable<ProviderStreamChunk>) => {
+  const calls: ProviderToolCall[] = [];
+  for await (const chunk of stream)
+    if (chunk.type === "tool_call") calls.push(...chunk.calls);
+  return calls;
+};
+
+const openAIStreaming = (body: Response) =>
+  new OpenAICompatibleProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: (async () => body) as unknown as typeof fetch,
+  });
+
+test("a continuation delta that re-sends the id EMPTY never clears it", async () => {
+  // The exact stepfun shape: the first delta carries the identity, a later
+  // one sends `"id": ""`. `"" ?? current` would yield "" and overwrite a
+  // good id with an empty one — the poison that bricks the session.
+  const provider = openAIStreaming(
+    sse([
+      toolDelta(0, {
+        id: "call_real",
+        function: { name: "run_shell", arguments: '{"a"' },
+      }),
+      toolDelta(0, { id: "", function: { arguments: ":1}" } }),
+      { choices: [{ finish_reason: "tool_calls" }] },
+    ]),
+  );
+  const calls = await callsOf(provider.stream({ messages: [] }));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.id).toBe("call_real");
+  expect(calls[0]!.arguments).toBe('{"a":1}');
+});
+
+test("a tool call that never carries an id gets a synthesized one", async () => {
+  const provider = openAIStreaming(
+    sse([
+      toolDelta(0, { function: { name: "run_shell", arguments: "{}" } }),
+      { choices: [{ finish_reason: "tool_calls" }] },
+    ]),
+  );
+  const calls = await callsOf(provider.stream({ messages: [] }));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.id).toBe("tool_0");
+});
+
+test("a non-streaming response with an empty id gets a synthesized one", async () => {
+  // The non-streaming branch reads a response with no body stream; a real
+  // fetch always has one, so the double is hand-built (body: null plus a
+  // working json()).
+  const bodyless = {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    headers: new Headers({ "content-type": "application/json" }),
+    body: null,
+    json: async () => ({
+      choices: [
+        {
+          message: {
+            tool_calls: [
+              {
+                id: "",
+                type: "function",
+                function: { name: "run_shell", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    }),
+  } as unknown as Response;
+  const provider = new OpenAICompatibleProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: (async () => bodyless) as unknown as typeof fetch,
+  });
+  const calls = await callsOf(provider.stream({ messages: [] }));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.id).toBe("call_0");
+});
+
+test("an Anthropic tool_use block with an empty id gets a synthesized one", async () => {
+  // A FRESH response per call: the Anthropic path reads the body more than
+  // once (the SSE pass plus the attempt's replay), and a shared Response's
+  // stream locks on the second read.
+  const provider = new AnthropicProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: (async () =>
+      sse([
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "", name: "read_file" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: '{"path":"a"}' },
+        },
+        { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      ])) as unknown as typeof fetch,
+  });
+  const calls = await callsOf(provider.stream({ messages: [] }));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.id).toBe("tool_0");
+});
+
+test("toolCallId: only a non-empty string is an identity", () => {
+  expect(toolCallId("call_x", "fallback")).toBe("call_x");
+  expect(toolCallId("", "fallback")).toBe("fallback");
+  expect(toolCallId(undefined, "fallback")).toBe("fallback");
+  expect(toolCallId(null, "fallback")).toBe("fallback");
+  expect(toolCallId(42 as unknown as string, "fallback")).toBe("fallback");
+});
+
+/**
+ * The serialization mouths, both adapters: an id-less tool call or result
+ * must never reach the wire, whatever its origin (an old journal written
+ * before the producer guards). On the wire an empty id is a 400 — the
+ * provider refuses the WHOLE request with "tool_calls.id and
+ * tool_calls.type are required" — so the guard drops the entry instead:
+ * the session keeps answering, at the cost of that one call reaching the
+ * model.
+ */
+
+const captureBody = () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetchImpl = Object.assign(
+    async (_input: URL | RequestInfo, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response("data: [DONE]\n\n", {
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+    { preconnect: fetch.preconnect },
+  ) as unknown as typeof fetch;
+  return { bodies, fetchImpl };
+};
+
+test("OpenAI serialization drops an id-less call and result", async () => {
+  const { bodies, fetchImpl } = captureBody();
+  const provider = new OpenAICompatibleProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: fetchImpl,
+  });
+  for await (const _chunk of provider.stream({
+    messages: [
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          { id: "", name: "run_shell", arguments: "{}" },
+          { id: "call_ok", name: "read_file", arguments: "{}" },
+        ],
+      },
+      { role: "tool", toolCallID: "", content: "the poisoned result" },
+      { role: "tool", toolCallID: "call_ok", content: "the good result" },
+    ],
+  })) {
+    // Drain to force the request.
+  }
+  // A dropped entry is ABSENT from the body — never a null in the array,
+  // which would be its own malformed request.
+  const messages = bodies[0]!.messages as Array<Record<string, unknown>>;
+  expect(messages).toHaveLength(3);
+  const live = messages;
+  const calls = (live.find((message) => Array.isArray(message.tool_calls))
+    ?.tool_calls ?? []) as Array<Record<string, unknown>>;
+  // The good call survives; the empty-id one is dropped, not sent.
+  expect(calls.map((call) => call.id)).toEqual(["call_ok"]);
+  const toolMessages = live.filter((message) => message.role === "tool");
+  expect(toolMessages.map((message) => message.tool_call_id)).toEqual([
+    "call_ok",
+  ]);
+});
+
+test("Anthropic serialization drops an id-less tool result too", async () => {
+  const { bodies, fetchImpl } = captureBody();
+  const provider = new AnthropicProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: fetchImpl,
+  });
+  for await (const _chunk of provider.stream({
+    messages: [
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: "",
+        contentParts: [
+          {
+            type: "tool_call",
+            id: "toolu_ok",
+            name: "read_file",
+            arguments: "{}",
+          },
+        ],
+      },
+      { role: "tool", toolCallID: "", content: "the poisoned result" },
+      { role: "tool", toolCallID: "toolu_ok", content: "the good result" },
+    ],
+  })) {
+    // Drain to force the request.
+  }
+  const messages = bodies[0]!.messages as Array<Record<string, unknown>>;
+  const toolResults = messages.flatMap(
+    (message) =>
+      (message.content as Array<Record<string, unknown>>)?.filter(
+        (part) => part.type === "tool_result",
+      ) ?? [],
+  );
+  expect(toolResults.map((part) => part.tool_use_id)).toEqual(["toolu_ok"]);
+});
+
+test("Anthropic serialization drops an id-less tool_use part", async () => {
+  const { bodies, fetchImpl } = captureBody();
+  const provider = new AnthropicProvider({
+    apiKey: "key",
+    model: "model",
+    fetch: fetchImpl,
+  });
+  for await (const _chunk of provider.stream({
+    messages: [
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: "",
+        contentParts: [
+          { type: "text", text: "looking" },
+          { type: "tool_call", id: "", name: "run_shell", arguments: "{}" },
+          {
+            type: "tool_call",
+            id: "toolu_ok",
+            name: "read_file",
+            arguments: "{}",
+          },
+        ],
+      },
+    ],
+  })) {
+    // Drain to force the request.
+  }
+  const messages = bodies[0]!.messages as Array<Record<string, unknown>>;
+  const content = messages.find((message) => message.role === "assistant")
+    ?.content as Array<Record<string, unknown>>;
+  const toolUses = content.filter((part) => part.type === "tool_use");
+  expect(toolUses.map((part) => part.id)).toEqual(["toolu_ok"]);
+  // The text part beside it is untouched.
+  expect(content.filter((part) => part.type === "text")).toHaveLength(1);
 });

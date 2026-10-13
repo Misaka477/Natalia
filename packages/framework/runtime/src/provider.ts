@@ -94,6 +94,31 @@ export type ProviderTool = {
   parameters: unknown;
 };
 
+/**
+ * The tool-call id's two rules, learned from the reference harness's
+ * adapter (and paid for by a real failure): an id is IDENTITY, not
+ * accumulation.
+ *
+ *  1. A non-empty string passes through. Anything else — undefined, null,
+ *     or the EMPTY STRING some OpenAI-compatible gateways fill in on a
+ *     continuation delta — is "no identity from this delta", NEVER "clear
+ *     the established one". A `??` alone does not do this: `"" ?? x`
+ *     yields `""`, so a late empty delta would overwrite a good id with an
+ *     empty one.
+ *  2. When NO delta ever establishes an identity, the call still needs one:
+ *     the id pairs the call with its result on the wire and keys the
+ *     durable session record, so a missing one is synthesized from the
+ *     call's index rather than propagated as an empty string. An empty id
+ *     written into the journal poisons every later replay of that session
+ *     (the provider refuses the whole request with "tool_calls.id and
+ *     tool_calls.type are required"), which is the failure this prevents.
+ */
+export function toolCallId(incoming: unknown, fallback: string): string {
+  return typeof incoming === "string" && incoming.length > 0
+    ? incoming
+    : fallback;
+}
+
 export type ProviderToolCall = {
   id: string;
   name: string;
@@ -1244,9 +1269,14 @@ export class OpenAICompatibleProvider implements StreamingProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        messages: request.messages.map((message) =>
-          toOpenAIMessage(message, this.interleavedReasoningField),
-        ),
+        // A message the serializer refuses (an id-less tool result) is
+        // DROPPED here, not nulled: `undefined` in a JSON array serializes
+        // as null, and a null message is its own malformed request.
+        messages: request.messages
+          .map((message) =>
+            toOpenAIMessage(message, this.interleavedReasoningField),
+          )
+          .filter((message) => message !== undefined),
         tools:
           request.toolChoice === "none"
             ? undefined
@@ -1296,11 +1326,15 @@ export class OpenAICompatibleProvider implements StreamingProvider {
       const data = (await response.json()) as OpenAIChatCompletion;
       const text = data.choices?.[0]?.message?.content;
       if (text) yield { type: "content", text };
-      const toolCalls = data.choices?.[0]?.message?.tool_calls?.map((call) => ({
-        id: call.id,
-        name: call.function.name,
-        arguments: call.function.arguments,
-      }));
+      const toolCalls = data.choices?.[0]?.message?.tool_calls?.map(
+        (call, index) => ({
+          // Rule 2: a gateway that omits the id gets a synthesized one —
+          // the same one every later replay of this turn will carry.
+          id: toolCallId(call.id, `call_${index}`),
+          name: call.function.name,
+          arguments: call.function.arguments,
+        }),
+      );
       if (toolCalls?.length) yield { type: "tool_call", calls: toolCalls };
       if (data.usage) yield openAIUsageChunk(data.usage);
       yield {
@@ -1485,7 +1519,8 @@ export class AnthropicProvider implements StreamingProvider {
       .map((message) => message.content);
     const conversationMessages = request.messages
       .filter((message) => message.role !== "system")
-      .map(toAnthropicMessage);
+      .map(toAnthropicMessage)
+      .filter((message) => message !== undefined);
     // ADR D1/E: mark the end of the conversation so the whole prefix is cached,
     // not just the header. Anthropic only *writes* a cache entry at a
     // breakpoint, so without one here the conversation is re-billed in full on
@@ -2425,7 +2460,7 @@ function parseAnthropicSSEPart(
       state.blockTypes.set(index, block?.type);
       if (block?.type === "tool_use")
         state.toolCalls.set(index, {
-          id: block.id ?? `tool_${index}`,
+          id: toolCallId(block.id, `tool_${index}`),
           name: block.name ?? "",
           arguments: "",
         });
@@ -2812,19 +2847,19 @@ function parseSSEChunks(
     }
     if (delta?.tool_calls) {
       for (const call of delta.tool_calls) {
-        const current = toolCalls.get(call.index) ?? {
-          id: call.id ?? `tool_${call.index}`,
-          name: "",
-          arguments: "",
-        };
-        const name = toolNameFromGatewayCall(call);
+        const current = toolCalls.get(call.index);
+        // Rule 1: an empty (or null) id on a continuation delta means "no
+        // update", never "clear" — the established id stands. Rule 2: when
+        // no delta ever established one, the call's index synthesizes it.
+        const id = toolCallId(call.id, current?.id ?? `tool_${call.index}`);
+        const name = toolNameFromGatewayCall(call) ?? current?.name;
         toolCalls.set(
           call.index,
           attachPendingReasoningDetail(
             {
-              id: call.id ?? current.id,
-              name: name ?? current.name,
-              arguments: `${current.arguments}${toolArgumentsFromGatewayCall(call)}`,
+              id,
+              name: name ?? "",
+              arguments: `${current?.arguments ?? ""}${toolArgumentsFromGatewayCall(call)}`,
             },
             pendingReasoningDetails,
           ),
@@ -2987,6 +3022,13 @@ function toOpenAIMessage(
     ? {}
     : openAIReasoningPayload(message, interleavedReasoningField);
   if (message.role === "tool") {
+    // The wire requires a tool_call_id that names a call the assistant
+    // made; an empty one is a 400 waiting to happen ("tool_calls.id and
+    // tool_calls.type are required"). A result whose pairing id is empty
+    // (an old journal written before the producer guards) is dropped
+    // rather than sent: the session keeps answering, at the cost of that
+    // one call's result reaching the model.
+    if (!message.toolCallID) return undefined;
     return {
       role: "tool",
       tool_call_id: message.toolCallID,
@@ -3003,11 +3045,13 @@ function toOpenAIMessage(
       ...(reasoningDetails.length
         ? { reasoning_details: reasoningDetails }
         : {}),
-      tool_calls: message.toolCalls.map((call) => ({
-        id: call.id,
-        type: "function",
-        function: { name: call.name, arguments: call.arguments },
-      })),
+      tool_calls: message.toolCalls
+        .filter((call) => Boolean(call.id))
+        .map((call) => ({
+          id: call.id,
+          type: "function",
+          function: { name: call.name, arguments: call.arguments },
+        })),
     };
   }
   if (message.images?.length)
@@ -3097,6 +3141,10 @@ function anthropicContentParts(
           ];
         return part.text ? [{ type: "text", text: part.text }] : [];
       }
+      // The same rule at this height: Anthropic's tool_use requires an id
+      // that pairs with the tool_result's tool_use_id, and an empty one is
+      // a 400. Dropped, never sent.
+      if (!part.id) return [];
       return [
         {
           type: "tool_use",
@@ -3157,7 +3205,11 @@ function markConversationBreakpoint(
 }
 
 function toAnthropicMessage(message: ProviderMessage) {
-  if (message.role === "tool")
+  if (message.role === "tool") {
+    // The wire requires a tool_use_id naming a call the assistant made; an
+    // empty one is a 400. Refused (and dropped by the caller's filter), the
+    // same rule the OpenAI serializer applies to a tool message.
+    if (!message.toolCallID) return undefined;
     return {
       role: "user",
       content: [
@@ -3168,6 +3220,7 @@ function toAnthropicMessage(message: ProviderMessage) {
         },
       ],
     };
+  }
   const contentParts = anthropicContentParts(message);
   if (message.toolCalls?.length) {
     const reasoning = anthropicReasoningBlocks(message);

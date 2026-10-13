@@ -875,7 +875,19 @@ export function createProviderRunner(input: ProviderRunnerInput) {
             if (chunk.type === "tool_call") {
               publishThinkingDone();
               result.calls.push(...chunk.calls);
-              for (const call of chunk.calls)
+              for (const call of chunk.calls) {
+                // The durable boundary (the reference harness's third
+                // layer): an empty id must fail THIS turn, never reach the
+                // journal. A tool call recorded without an id poisons
+                // every later replay of the session — the provider refuses
+                // the whole request ("tool_calls.id and tool_calls.type are
+                // required"), so the session never answers again. The
+                // provider adapters synthesize ids; this is the guard that
+                // keeps a future adapter from reintroducing the hole.
+                if (!call.id)
+                  throw new Error(
+                    `provider emitted a tool call with no id (${call.name || "unnamed"}) — refusing to record it: an id-less call in the session journal breaks every later replay`,
+                  );
                 contentParts.push({
                   type: "tool_call",
                   id: call.id,
@@ -885,6 +897,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
                     ? { thoughtSignature: call.thoughtSignature }
                     : {}),
                 });
+              }
             }
             if (chunk.type === "tool_protocol_violation")
               result.protocolViolation = chunk.text;

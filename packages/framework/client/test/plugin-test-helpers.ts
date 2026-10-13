@@ -469,7 +469,11 @@ export async function installPluginSdkLinks(root: string) {
   ] as const) {
     const target = join(scoped, name);
     try {
-      await symlink(join(repoRoot, "packages", ...source.split("/")), target, "dir");
+      await symlink(
+        join(repoRoot, "packages", ...source.split("/")),
+        target,
+        "dir",
+      );
     } catch {
       // Windows without Developer Mode cannot create directory symlinks, and a
       // hard failure here would mask the plugin-loading behaviour under test.

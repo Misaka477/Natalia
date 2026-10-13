@@ -871,6 +871,11 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "recorded",
     note: "a disposed runtime answers recorded:false without journaling; invalid input is rejected by validation at the surface AND the transport edge before anything is recorded",
   },
+  setLogVerbosity: {
+    refusal: "value",
+    expressedBy: "ok",
+    note: "an empty spec answers {ok:false, reason} rather than applying an empty table (which would silence every named logger); the note on the answer states that a restart re-reads NATALIA_LOG over the live table",
+  },
 } as const satisfies Record<keyof RuntimeClient, MemberRefusalSemantics>;
 
 type AssertNever<T extends never> = T;

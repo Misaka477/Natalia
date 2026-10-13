@@ -248,7 +248,10 @@ export async function prepareContextRequest(
     outbound,
     decision,
     compacted: outcome.compacted,
-    committed: outcome.committed,
+    // The still-over path commits without succeeding; `committed` is the
+    // structural fact, `compacted` the verdict. Both ride out so a caller
+    // can tell "the surface shrank" from "the pressure is gone".
+    committed: outcome.committed === true,
     pruned,
     used: measured.totalTokens,
   };

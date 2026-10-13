@@ -13,11 +13,8 @@
  * Exit code 0 = every check passed (or was legitimately skipped on a non-Windows
  * host). Exit code 1 = at least one check failed; the output names which.
  */
-import { PwshLocalExecutor } from "../packages/core/shell/src/pwsh-local";
-import {
-  ENCODING_PREAMBLE,
-  ENV_OVERRIDES,
-} from "../packages/core/shell/src/pwsh-local";
+import { PwshLocalExecutor, ENV_OVERRIDES } from "../packages/core/shell/src/pwsh-local";
+import { ENCODING_PREAMBLE } from "../packages/hosts/platform/src/pwsh";
 
 const results: Array<{ name: string; ok: boolean; detail: string }> = [];
 const record = (name: string, ok: boolean, detail: string) =>

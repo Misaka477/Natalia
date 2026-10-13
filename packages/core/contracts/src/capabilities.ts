@@ -264,6 +264,10 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "diagnostics",
     "operationRecords",
     "sessionSnapshot",
+    // The live verbosity valve (audit 缺口 6): raising a session's log
+    // level without the restart that would destroy the state being
+    // diagnosed.
+    "setLogVerbosity",
   ],
   /** The Work Graph: what happened and what caused it. */
   workGraph: ["workGraphNodes", "workGraphEdges"],

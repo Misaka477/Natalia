@@ -1,14 +1,7 @@
 export * from "./hash-tree";
 export * from "./store-paths";
-export {
-  ENCODING_PREAMBLE,
-  candidatePwshPaths,
-  resolvePwshPath,
-} from "./pwsh";
-import {
-  ENCODING_PREAMBLE,
-  resolvePwshPath,
-} from "./pwsh";
+export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
+import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";

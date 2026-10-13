@@ -1184,59 +1184,8 @@ function AttachmentImage(props: {
     </button>
   );
 
-  /**
-   * A media read's renderer (audit ⑦/⑧): the read card's media fields pick
-   * the surface — an image is the same thumbnail-and-lightbox the message
-   * attachments use (the user's ruling: read image IS a read), a video is
-   * a player, and anything else says "binary file" instead of decoding the
-   * bytes into a text view (a PNG used to reach the file tab as mojibake).
-   * The bytes ride the attachment URL the host already serves, so no new
-   * transport exists for this.
-   */
-  const mediaSurface = () => {
-    const mediaType = card?.mediaType ?? "";
-    if (mediaType.startsWith("image/"))
-      return (
-        <AttachmentImage
-          attachment={
-            {
-              id: card?.attachmentID,
-              path: card?.path ?? "",
-              name: card?.title ?? "image",
-              mediaType,
-            } as Attachment
-          }
-          load={props.load}
-        />
-      );
-    if (mediaType.startsWith("video/"))
-      return (
-        <video
-          class="natalia-tool-media-video"
-          controls
-          preload="metadata"
-          src={mediaSrc()}
-        />
-      );
-    return (
-      <div class="natalia-tool-media-binary">
-        二进制文件（{mediaType || "未知类型"}）——不按文本渲染
-      </div>
-    );
-  };
-  const mediaSrc = () => {
-    const attachment = {
-      id: card?.attachmentID,
-      path: card?.path ?? "",
-      name: card?.title ?? "media",
-      mediaType: card?.mediaType,
-    } as Attachment;
-    return props.load ? props.load(attachment) : Promise.resolve("");
-  };
-
   return (
     <>
-      <Show when={card?.mediaType !== undefined}>{mediaSurface()}</Show>
       <Show when={status() === "loaded" && src()} fallback={placeholder()}>
         <button
           type="button"
@@ -1612,6 +1561,46 @@ function ToolCallCard(props: {
     setExpanded(next);
     setCardExpanded(props.expansionKey, next);
   };
+  /**
+   * A media read's renderer (audit ⑦/⑧): the read card's media fields pick
+   * the surface — an image is the same thumbnail-and-lightbox the message
+   * attachments use (the user's ruling: read image IS a read), a video is
+   * a player, and anything else says "binary file" instead of decoding the
+   * bytes into a text view (a PNG used to reach the file tab as mojibake).
+   * The bytes ride the attachment URL the host already serves, so no new
+   * transport exists for this.
+   */
+  const mediaAttachment = (): Attachment => {
+    // The card's kind is `read`; the media fields ride that variant. The
+    // narrow is local to this accessor so the union stays exhaustive.
+    const read = card as Extract<ToolCard, { kind: "read" }> | undefined;
+    return {
+      id: read?.attachmentID,
+      path: read?.path ?? "",
+      name: read?.title ?? "media",
+      mediaType: read?.mediaType,
+    } as Attachment;
+  };
+  const mediaSurface = () => {
+    const read = card as Extract<ToolCard, { kind: "read" }> | undefined;
+    const mediaType = read?.mediaType ?? "";
+    if (mediaType.startsWith("image/"))
+      return (
+        <AttachmentImage
+          attachment={mediaAttachment()}
+          load={props.loadAttachmentUrl}
+        />
+      );
+    if (mediaType.startsWith("video/"))
+      return (
+        <video class="natalia-tool-media-video" controls preload="metadata" />
+      );
+    return (
+      <div class="natalia-tool-media-binary">
+        二进制文件（{mediaType || "未知类型"}）——不按文本渲染
+      </div>
+    );
+  };
   const rowLabel = () => toolRowLabel(props.toolCall.name);
   // The tool's own title, when it says something the label does not: a path, a
   // query, a job id. A title that merely repeats the label is dropped.
@@ -1766,6 +1755,9 @@ function ToolCallCard(props: {
           </For>
         </div>
       </Show>
+      <Show when={card?.kind === "read" && card.mediaType !== undefined}>
+        <div class="natalia-tool-media">{mediaSurface()}</div>
+      </Show>
       <Show when={output()}>
         <div
           class="natalia-tool-output"
@@ -1842,7 +1834,7 @@ function GoalRoundBody(props: {
         type="button"
         class="natalia-goal-round-header"
         title={props.goalRound.objective}
-        onClick={toggleExpanded}
+        onClick={() => setExpanded(!expanded())}
       >
         <span class="natalia-goal-round-badge">Goal</span>
         <span class="natalia-goal-round-title">

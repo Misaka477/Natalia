@@ -15,10 +15,7 @@ export {
   ShellEnvRegistry,
   applyShellEnv,
 } from "./shell-env";
-export {
-  PwshLocalExecutor,
-  ENV_OVERRIDES,
-} from "./pwsh-local";
+export { PwshLocalExecutor, ENV_OVERRIDES } from "./pwsh-local";
 export {
   ENCODING_PREAMBLE,
   candidatePwshPaths,

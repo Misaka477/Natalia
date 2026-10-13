@@ -38,9 +38,7 @@ test("discovers native project skills and enforces policy", async () => {
   // Trimmed: the host's own shell supplies the trailing newline (pwsh's
   // echo, like bash's), and a script runner's caller must not have to
   // care which shell the host runs.
-  expect((await runSkillScript(skill, "smoke")).stdout.trim()).toBe(
-    "skill-ok",
-  );
+  expect((await runSkillScript(skill, "smoke")).stdout.trim()).toBe("skill-ok");
   expect(authorizeSkillTool(skill, "read_file", { mode: "sandbox" })).toBe(
     true,
   );

@@ -3794,10 +3794,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                               {/* A completed goal SAYS so. The chip used to
                                   keep showing the round count with the
                                   pause/resume button simply gone — neither
-                                  disappearing (DSH's GoalBar drops a
-                                  complete goal) nor stating the completion,
-                                  so a finished goal read as a stalled one
-                                  until the human cleared it by hand. */}
+                                  disappearing (the reference harness's
+                                  GoalBar drops a complete goal) nor stating
+                                  the completion, so a finished goal read as
+                                  a stalled one until the human cleared it
+                                  by hand. */}
                               <Show when={goal()!.phase === "complete"}>
                                 <span
                                   class="neu-goal-chip-done"

@@ -1510,7 +1510,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
           type: "diagnostic",
           level: "warning",
           message: `PDF attachments are no longer supported and were ignored: ${pdfAttachments.map((attachment) => attachment.filename).join(", ")}`,
-          turnID: id,
+          code: "attachments_pdf_ignored",
         });
 
       const videoSupported =

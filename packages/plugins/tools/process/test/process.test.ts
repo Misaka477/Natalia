@@ -441,7 +441,11 @@ test("managed process IDs and deadlines are isolated by workspace", async () => 
   await tools
     .get("process_start")!
     .execute(
-      { id: "proc_same", command: sleepCmd(30), description: "Run the command" },
+      {
+        id: "proc_same",
+        command: sleepCmd(30),
+        description: "Run the command",
+      },
       { workspaceRoot: secondRoot },
     );
   await Bun.sleep(250);
@@ -731,7 +735,10 @@ test("a stop of an already-finished process keeps its real end time (P1-13)", as
   // Let it exit on its own, then read the end time it recorded. Polled
   // rather than slept: the Windows launcher chain (cmd -> pwsh) starts
   // slower than the POSIX one, and a fixed wait raced it.
-  let finished = { status: "", endedAt: undefined as string | undefined };
+  let finished: { status: string; endedAt?: string } = {
+    status: "",
+    endedAt: undefined,
+  };
   for (let attempt = 0; attempt < 100; attempt += 1) {
     finished = JSON.parse(
       await tools

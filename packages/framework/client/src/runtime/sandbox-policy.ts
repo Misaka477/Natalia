@@ -25,7 +25,15 @@ import {
   CONFINEMENT_MODES,
 } from "@anthelia/contracts";
 import type { CompositionProfile } from "@anthelia/composition";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 /**
  * Where a path ACTUALLY lands, resolved the way the kernel resolves it:
@@ -43,8 +51,16 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
  */
 export function landedPath(path: string): string {
   const abs = resolve(path);
-  let current = isAbsolute(abs) ? sep : "";
-  for (const segment of abs.split(sep)) {
+  // Start from the absolute path's own root — "/" on POSIX, "C:\" (or a
+  // UNC share) on Windows. Seeding the walk with the bare separator
+  // instead made Windows land every path at "\C:\...": the leading
+  // separator never matches the canonical root, so every in-process
+  // write read as an escape and was refused. The containment tests that
+  // only assert refusals kept passing — a fail-closed bug hides behind
+  // the escapes it refuses.
+  const { root } = parse(abs);
+  let current = root;
+  for (const segment of abs.slice(root.length).split(sep)) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") {
       current = dirname(current);
@@ -82,10 +98,15 @@ export function pathWithinDomains(input: {
   root: string;
   domains: readonly string[];
 }): boolean {
+  // The domain vocabulary spells "/" on every platform (a sub-agent's
+  // writePaths, a constitution rule's appliesTo), while `relative` speaks
+  // the host's separator. Normalizing here is the same convention the
+  // constitution path match keeps — without it every domain comparison
+  // failed on Windows and each sub-agent's domain read as empty.
   const relative = relativeToRoot(
     landedPath(input.path),
     canonicalPath(input.root),
-  );
+  ).replaceAll(sep, "/");
   return input.domains.some(
     (domain) =>
       relative === domain ||

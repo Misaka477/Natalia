@@ -2318,6 +2318,27 @@ type RuntimeEventData =
        * diagnostic without a meaningful owner omits the field.
        */
       owner?: string;
+      /**
+       * The turn this diagnostic belongs to — the correlation spine (audit
+       * 缺口 3): a diagnostic without it is a sentence with no subject, and
+       * "which turn went wrong" is the first question every reader asks.
+       */
+      turnID?: string;
+      /** The session, when the publisher knows it and it is not the turn's. */
+      sessionID?: string;
+      /**
+       * A stable machine code for this diagnostic class (e.g.
+       * `provider_unknown_error`), so a consumer can count occurrences
+       * across sessions without parsing prose. Free-form diagnostics omit
+       * it; a diagnostic that names a FAILURE class should carry one.
+       */
+      code?: string;
+      /**
+       * The failure's kind, when the diagnostic reports a classified error
+       * (the provider error taxonomy). Keeps `provider call failed
+       * [connection]: TypeError: …` greppable by its classification half.
+       */
+      errorKind?: string;
     }
   | {
       type: "resource.read";

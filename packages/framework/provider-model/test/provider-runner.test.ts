@@ -463,6 +463,17 @@ test("no provider and no reconfigured reload finishes with an error diagnostic",
         event.message.includes("No real provider configured"),
     ),
   ).toBe(true);
+  // The spine (audit 缺口 3): a diagnostic without its turn id is a
+  // sentence with no subject — "which turn went wrong" is the first
+  // question every reader asks.
+  expect(
+    events.some(
+      (event) =>
+        event.type === "diagnostic" &&
+        event.turnID === finished?.id &&
+        event.code === "provider_unconfigured",
+    ),
+  ).toBe(true);
   expect(checkpoints).toEqual([]);
 });
 

@@ -15,6 +15,7 @@ import {
   MISSING_FINAL_RESPONSE_FALLBACK,
   nativeToolCallCorrection,
   normalizeRawToolCallProtocol,
+  ProviderError,
   requestHeaderKey,
   requireNativeToolCallProtocol,
   TokenMeter,
@@ -189,6 +190,8 @@ export function createProviderRunner(input: ProviderRunnerInput) {
           level: "error",
           message:
             "No real provider configured. Set NATALIA_OPENAI_API_KEY or OPENAI_API_KEY before using the TS7 real runtime.",
+          code: "provider_unconfigured",
+          turnID: id,
         });
         input.publish({ type: "turn.finished", id, stopReason: "error" });
         return;
@@ -467,6 +470,8 @@ export function createProviderRunner(input: ProviderRunnerInput) {
             type: "diagnostic",
             level: "warning",
             message: `Correcting textual tool call; native tool calling required (attempt ${protocolCorrections})`,
+            code: "protocol_correction",
+            turnID: id,
           });
           continue;
         }
@@ -489,6 +494,8 @@ export function createProviderRunner(input: ProviderRunnerInput) {
             type: "diagnostic",
             level: "warning",
             message: `Correcting missing ${stillPendingNaviReply.action} ${stillPendingNaviReply.id} (attempt ${protocolCorrections})`,
+            code: "protocol_correction",
+            turnID: id,
           });
           continue;
         }
@@ -611,6 +618,13 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         type: "diagnostic",
         level: controller.signal.aborted ? "warning" : "error",
         message: error instanceof Error ? error.message : String(error),
+        // The failure's own classification and a stable code ride with the
+        // spine (audit 缺口 3/5): the message is the prose, this is what a
+        // consumer counts and filters by.
+        ...(error instanceof ProviderError
+          ? { errorKind: error.kind, code: `provider_${error.kind}` }
+          : { code: "turn_failed" }),
+        turnID: id,
       });
       input.publish({
         type: "turn.finished",
@@ -1064,6 +1078,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         type: "diagnostic",
         level: "warning",
         message: `provider emitted duplicate tool_call_id(s); remapped for this turn: ${normalizedCalls.duplicates.join(", ")}`,
+        turnID: id,
       });
     const calls = normalizedCalls.calls;
     // Tool-execution wall time for the dashboard (measured outside the step
@@ -1490,6 +1505,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
           type: "diagnostic",
           level: "warning",
           message: `PDF attachments are no longer supported and were ignored: ${pdfAttachments.map((attachment) => attachment.filename).join(", ")}`,
+          turnID: id,
         });
 
       const videoSupported =

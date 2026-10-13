@@ -39,9 +39,20 @@ export function asProviderError(error: unknown): ProviderError {
       cause: error,
     });
   }
+  // The original text SURVIVES classification. This used to replace every
+  // unknown error's message with "provider connection failed", so a
+  // TypeError thrown inside the turn path read to the operator as a
+  // network failure — actively misleading, and the real text was only in
+  // `.cause`, which nothing displayed (audit 缺口 1). The classification
+  // stays as the `kind` (the retry policy's question) and rides the
+  // message as a label; the error's own name and message are the payload.
+  const detail =
+    error instanceof Error
+      ? `${error.name}: ${error.message.trim() || "(no message)"}`
+      : String(error);
   return providerError({
     kind: "connection",
-    message: "provider connection failed",
+    message: `provider call failed [connection]: ${detail}`,
     cause: error,
   });
 }

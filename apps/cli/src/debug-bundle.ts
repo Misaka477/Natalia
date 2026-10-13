@@ -73,6 +73,8 @@ export type BundleReport = {
     globalConfig: boolean;
     doctor: boolean;
   };
+  /** The turn the bundle was centered on, when one was named. */
+  turn?: { id: string; records: number };
 };
 
 export async function captureDebugBundle(input: {
@@ -80,6 +82,14 @@ export async function captureDebugBundle(input: {
   dest: string;
   /** The Natalia home (defaults to NATALIA_HOME, else ~/.natalia). */
   nataliaHome?: string;
+  /**
+   * A turn id to center the bundle on (audit 缺口 7): the failed round's
+   * records ride in their own file, so the incident and its snapshot are
+   * linked by the turn rather than by the operator's memory of when it
+   * happened. The correlation spine (turnID on diagnostics and operations
+   * records) is what makes this a filter rather than a guess.
+   */
+  turnID?: string;
 }): Promise<BundleReport> {
   const workspaceRoot = resolve(input.workspaceRoot);
   const dest = resolve(input.dest);
@@ -178,6 +188,24 @@ export async function captureDebugBundle(input: {
     "utf8",
   );
 
+  // 4b. The turn's own slice (audit 缺口 7): every operations record the
+  // correlation spine stamped with this turn id. Absent ids answer zero
+  // rather than the whole log — a bundle "for a turn" that holds every
+  // turn is the same puzzle the bundle was meant to solve.
+  const turnID = input.turnID?.trim();
+  let turnRecords = 0;
+  if (turnID) {
+    const mine = readOperationRecords(logsDir).filter(
+      (record) => record.corr?.turnID === turnID,
+    );
+    turnRecords = mine.length;
+    await writeFile(
+      join(dest, "turn.jsonl"),
+      `${mine.map((record) => JSON.stringify(record)).join("\n")}\n`,
+      "utf8",
+    );
+  }
+
   // 5. The inventory (D1/D2 discipline).
   const { files, bytes } = await hashTreeFiles(dest);
   await writeFile(
@@ -196,5 +224,6 @@ export async function captureDebugBundle(input: {
       globalConfig: haveGlobalConfig,
       doctor: haveDoctor,
     },
+    ...(turnID ? { turn: { id: turnID, records: turnRecords } } : {}),
   };
 }

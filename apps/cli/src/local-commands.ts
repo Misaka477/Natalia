@@ -221,10 +221,12 @@ export async function handleLocalCommands(argv: string[]) {
       // One-key capture (decisions §5): journal slice + operational log +
       // redacted configs + doctor + a queried recents summary, inventoried
       // with SHA256SUMS. Usage: natalia debug-bundle <dest-dir> [--workspace]
+      // [--turn <id>] — a named turn gets its own correlated slice, so the
+      // failed round and its snapshot are linked by the turn.
       const dest = argv.filter((arg) => !arg.startsWith("--"))[1];
       if (!dest) {
         console.error(
-          "usage: natalia debug-bundle <dest-dir> [--workspace <root>]",
+          "usage: natalia debug-bundle <dest-dir> [--workspace <root>] [--turn <id>]",
         );
         process.exit(1);
       }
@@ -232,6 +234,9 @@ export async function handleLocalCommands(argv: string[]) {
         const report = await captureDebugBundle({
           workspaceRoot: valueAfter(argv, "--workspace") ?? process.cwd(),
           dest,
+          ...(valueAfter(argv, "--turn")
+            ? { turnID: valueAfter(argv, "--turn") }
+            : {}),
         });
         console.log(JSON.stringify(report, null, 2));
         console.log(

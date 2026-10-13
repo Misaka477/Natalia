@@ -158,6 +158,26 @@ test("an existing destination is refused — bundles never merge incidents", asy
   ).rejects.toThrow(/destination exists/u);
 });
 
+test("a named turn gets its own correlated slice (缺口 7)", async () => {
+  // The failed round and its snapshot linked by the turn: the operations
+  // records the correlation spine stamped with the id ride in turn.jsonl,
+  // and an id nothing logged answers zero records rather than the whole
+  // log.
+  const dest = join(base, "bundle-turn");
+  const report = await captureDebugBundle({
+    workspaceRoot: workspace,
+    dest,
+    nataliaHome: home,
+    turnID: "turn_probe_1",
+  });
+  expect(report.turn).toMatchObject({ id: "turn_probe_1" });
+  expect(report.turn!.records).toBe(0);
+  const slice = readFileSync(join(dest, "turn.jsonl"), "utf8").trim();
+  expect(slice).toBe("");
+  // The uncorrelated whole-log view still travels beside it.
+  expect(report.captured.operationalRecords).toBeGreaterThan(0);
+});
+
 test("the CLI command wires end to end (NATALIA_HOME honored)", () => {
   const dest = join(base, "cli-bundle");
   const child = Bun.spawnSync(

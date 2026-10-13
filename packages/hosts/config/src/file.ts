@@ -86,11 +86,24 @@ export async function saveConfigOverlayFile(path: string, overlay: unknown) {
   }
 }
 
+/**
+ * The upgrade tooling's engine: rewrite a config file IN PLACE to the
+ * current version, with a timestamped backup beside it. This is the action
+ * the version-anchored deadline asks for — a v4 upgrade leaves the old
+ * form readable through v5, and at v6 it is refused, so the file must be
+ * migrated before then. The loader's transparent conversion keeps a v3
+ * file WORKING, but only this rewrites the file, and only a rewritten file
+ * survives the window sliding past it.
+ *
+ * A file already at the current version is left untouched (no backup, no
+ * rewrite) — running the migration on a migrated config is a no-op that
+ * says so.
+ */
 export async function migrateConfigFile(path: string, now = new Date()) {
   const raw = await readFile(path, "utf8");
   const data = parseConfigText(raw);
   const result = migrateConfig(data);
-  if (result.summary.fromVersion !== 3 || result.summary.changed.length) {
+  if (result.summary.fromVersion !== CONFIG_VERSION) {
     const backupPath = `${path}.bak.${now.toISOString().replace(/[:.]/g, "-")}`;
     await copyFile(path, backupPath);
     result.summary.backupPath = backupPath;

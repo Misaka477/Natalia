@@ -1,5 +1,4 @@
 import {
-  CONFIG_READ_DEADLINE,
   CONFIG_READ_WINDOW,
   CONFIG_VERSION,
   configV3Schema,
@@ -11,21 +10,34 @@ import {
  * The config's version contract (洞 4 — the only one of the seven
  * load-bearing surfaces that had none).
  *
- * Three refusals and one conversion, in this order:
+ * Two refusals, one conversion, and one honest gap, in this order:
  *
  *  1. **NEWER than this runtime knows** — a v5 file read by a v4 runtime is
  *     refused with both numbers named. Silently parsing it as v4 would
  *     drop every field v5 added and report success on a config nobody
  *     read. A newer config is never misread.
- *  2. **Below the read window** — versions older than
- *     CURRENT - CONFIG_READ_WINDOW are refused by name.
- *  3. **Past the deadline** — the oldest readable version's window closes
- *     on CONFIG_READ_DEADLINE; after it, a v3 file is refused with the
- *     date named. An unbounded read window is a promise nobody calendared.
- *  4. **The conversion** — v3 → v4: the version bump, plus the fields the
+ *  2. **Below the read window** — versions more than CONFIG_READ_WINDOW
+ *     major versions behind are refused by name. The window IS the
+ *     migration room, and it is version-based so it moves when a version
+ *     ships rather than on a date somebody had to remember.
+ *  3. **The conversion** — v3 → v4: the version bump, plus the fields the
  *     deleted mechanisms left behind are stripped and NAMED in the
  *     warnings. A converter that silently dropped them would leave a
  *     config that claims settings nothing reads.
+ *  4. **In the window with no converter** — a version this runtime accepts
+ *     by age but has never seen a shape for is refused saying exactly
+ *     that, rather than guessed at. (Today that is v2: inside the window,
+ *     no converter. When v5 ships the window slides to v3..v5 and v3 keeps
+ *     its converter.)
+ *
+ * There is deliberately NO date deadline. The deadline IS the version at
+ * which the window slides past the old form — an upgrade at vN is refused
+ * at vN+2, so the room is two major versions and it needs no calendar. The
+ * upgrade tooling that makes the room usable is `natalia config migrate`
+ * (a rewrite in place with a timestamped backup): the loader's transparent
+ * conversion keeps an old file WORKING, but only a rewrite survives the
+ * window sliding past it, and a version-anchored refusal with no tool to
+ * escape through is the failure this rule exists to prevent.
  *
  * The shapes are otherwise identical, so the conversion is honest about
  * being small: the contract is the work, not a field shuffle.
@@ -44,14 +56,30 @@ export type MigrationResult = {
   summary: MigrationSummary;
 };
 
-/** The fields v3 carried that v4 does not: the deleted mechanisms' leftovers. */
-const DROPPED_FROM_V3: Array<{ path: string; because: string }> = [
+/**
+ * The legacy converters this runtime carries, by the version they read.
+ * A version inside the read window with no entry here is refused saying so
+ * (see the module doc's case 4) — never guessed at.
+ */
+const LEGACY_CONVERTERS: Record<
+  number,
   {
-    path: "backgroundReview.evolutionTrigger",
-    because:
-      "the S8 trigger law is deleted (D4 is the trigger); the switch gates nothing",
+    schema: typeof configV3Schema;
+    /** The fields this version carried that v4 does not, with the reason. */
+    dropped: Array<{ path: string; because: string }>;
+  }
+> = {
+  3: {
+    schema: configV3Schema,
+    dropped: [
+      {
+        path: "backgroundReview.evolutionTrigger",
+        because:
+          "the S8 trigger law is deleted (D4 is the trigger); the switch gates nothing",
+      },
+    ],
   },
-];
+};
 
 export function defaultConfigV4(): ConfigV4 {
   return configV4Schema.parse({ version: CONFIG_VERSION });
@@ -70,10 +98,7 @@ function schemaIssues(error: {
     .join("; ");
 }
 
-export function migrateConfig(
-  input: unknown,
-  now: Date = new Date(),
-): MigrationResult {
+export function migrateConfig(input: unknown): MigrationResult {
   if (typeof input !== "object" || input === null)
     refuse(
       "config carries no version — a config file must be a JSON object with a numeric version",
@@ -115,21 +140,22 @@ export function migrateConfig(
     };
   }
 
-  // 4. The oldest readable version (v3 today): the deadline, then convert.
-  const deadline = Date.parse(`${CONFIG_READ_DEADLINE}T23:59:59Z`);
-  if (now.getTime() > deadline)
+  // 4. Inside the window: convert, if this runtime has a converter for the
+  // version. No path reads the clock — there is no deadline to enforce.
+  const legacy = LEGACY_CONVERTERS[version];
+  if (!legacy)
     refuse(
-      `config v${version}'s read window closed on ${CONFIG_READ_DEADLINE}; this runtime reads v${oldest}..v${CONFIG_VERSION} and the deadline has passed`,
+      `config v${version} is inside the read window (v${oldest}..v${CONFIG_VERSION}) but this runtime has no converter for it — it has never seen a v${version} shape; migrate it forward with a runtime that still reads it, or write a v${CONFIG_VERSION} config by hand`,
     );
 
-  const legacy = configV3Schema.safeParse(input);
-  if (!legacy.success)
+  const parsedLegacy = legacy.schema.safeParse(input);
+  if (!parsedLegacy.success)
     refuse(
-      `config v${version} does not match the v${version} schema it claims: ${schemaIssues(legacy.error)}`,
+      `config v${version} does not match the v${version} schema it claims: ${schemaIssues(parsedLegacy.error)}`,
     );
 
   const warnings: string[] = [];
-  const dropped = DROPPED_FROM_V3.filter(({ path }) =>
+  const dropped = legacy.dropped.filter(({ path }) =>
     hasPath(input as Record<string, unknown>, path),
   );
   for (const { path, because } of dropped)

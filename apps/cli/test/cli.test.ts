@@ -4,6 +4,7 @@ import {
   cp,
   mkdir,
   mkdtemp as createTemporaryDirectory,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -510,4 +511,73 @@ test("old top-level install and uninstall no longer write tool activation", asyn
   }
   expect(existsSync(join(root, ".natalia", "config.json"))).toBe(false);
   expect(existsSync(join(root, ".natalia", "tools"))).toBe(false);
+});
+
+/**
+ * `natalia config migrate` — the upgrade tooling's CLI face. The config's
+ * version contract is version-anchored (an upgrade at vN leaves the old
+ * form readable through vN+1 and refuses it at vN+2), so before that
+ * version ships the FILE must be migrated: the loader's transparent
+ * conversion keeps an old file working, but only a rewrite survives the
+ * window sliding past it.
+ */
+test("CLI config migrate rewrites an old config in place with a backup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-config-migrate-"));
+  try {
+    const workspace = join(root, "ws");
+    await mkdir(join(workspace, ".natalia"), { recursive: true });
+    const configPath = join(workspace, ".natalia", "config.json");
+    // A v3 file carrying the deleted mechanism's leftover switch.
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 3,
+        backgroundReview: { evolutionTrigger: true },
+      }),
+      "utf8",
+    );
+    const run = (args: string[]) =>
+      Bun.spawnSync(
+        [
+          process.execPath,
+          join(import.meta.dir, "..", "src", "main.ts"),
+          ...args,
+        ],
+        {
+          cwd: root,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, NATALIA_CONFIG: join(root, "global.json") },
+        },
+      );
+    const child = run(["config", "migrate", "--workspace", workspace]);
+    expect(child.exitCode).toBe(0);
+    const output = new TextDecoder().decode(child.stdout);
+    // The report names the version move, the dropped field with its
+    // reason, and the backup — an upgrade tool that rewrites without
+    // saying what it dropped is a tool nobody should run.
+    expect(output).toContain("v3 -> v4");
+    expect(output).toContain("dropped backgroundReview.evolutionTrigger");
+    expect(output).toContain("backup:");
+    // The file is rewritten at the current version, the switch gone.
+    const migrated = JSON.parse(await readFile(configPath, "utf8"));
+    expect(migrated.version).toBe(4);
+    expect(migrated.backgroundReview?.evolutionTrigger).toBeUndefined();
+    // The backup holds the original bytes.
+    const backup = (await readdir(join(workspace, ".natalia"))).find((name) =>
+      name.includes(".bak."),
+    );
+    expect(backup).toBeDefined();
+    expect(
+      JSON.parse(await readFile(join(workspace, ".natalia", backup!), "utf8"))
+        .version,
+    ).toBe(3);
+    // Running it again is a no-op that says so (no second backup).
+    const again = run(["config", "migrate", "--workspace", workspace]);
+    expect(new TextDecoder().decode(again.stdout)).toContain(
+      "already at the current version",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -159,21 +159,30 @@ export const securityConfigSchema = z.object({
 });
 /**
  * The config's version contract (洞 4): the version this schema family
- * CURRENTLY writes, how many versions back a read still accepts, and the
- * date the oldest accepted version stops being read. The three numbers
- * live beside the schema so a reader and a writer cannot disagree about
- * what "current" means.
+ * CURRENTLY writes, and the migration room a read still accepts. The two
+ * numbers live beside the schema — this subsystem's own, beside its own
+ * schema, because the contract is per-subsystem: whichever one upgrades
+ * carries its own window and its own migration, and one subsystem's
+ * upgrade imposes nothing on another (the object store not upgrading at
+ * v4 means the object store gets no deadline at v6).
  */
 export const CONFIG_VERSION = 4;
-/** Versions CURRENT-1..CURRENT are readable; older is below the window. */
-export const CONFIG_READ_WINDOW = 1;
 /**
- * When the oldest readable version's window closes. A v3 file still
- * parses before this date (through the converter) and is refused with the
- * date named after it — an unbounded read window is a promise nobody
- * calendared.
+ * The migration room, in major versions BEHIND the current one — and it is
+ * also the deadline, version-anchored rather than dated:
+ *
+ *  - an upgrade at vN leaves the OLD form readable at vN and vN+1 (the room)
+ *  - at vN+2 the window has slid past it and the old form is REFUSED —
+ *    "vN+2 前必须迁移，vN+2 必须落地迁移好的"
+ *
+ * So a v4 runtime reads v3 and v2; a v5 runtime reads v4 and v3; a v6
+ * runtime reads v5 and v4 and refuses the v3 form the v4 upgrade left
+ * behind. The window moves when a version ships, which is why it needs no
+ * calendar — a date nobody calendared is a lockout, and a lockout with no
+ * upgrade tooling to escape through is the failure this rule exists to
+ * prevent.
  */
-export const CONFIG_READ_DEADLINE = "2027-04-14";
+export const CONFIG_READ_WINDOW = 2;
 
 export const configV3Schema = z.object({
   version: z.literal(3),

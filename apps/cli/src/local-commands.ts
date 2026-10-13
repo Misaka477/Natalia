@@ -61,7 +61,9 @@ import {
   workGraphLines,
 } from "./index";
 import { valueAfter } from "./command-helpers";
+import { existsSync } from "node:fs";
 import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
+import { migrateConfigFile } from "@anthelia/config";
 import {
   applyCompositionPatch,
   compositionRowViews,
@@ -126,6 +128,7 @@ export async function handleLocalCommands(argv: string[]) {
       "bench",
       "runs",
       "consults",
+      "config",
       "evolution",
       "skills",
       "update",
@@ -442,6 +445,74 @@ export async function handleLocalCommands(argv: string[]) {
             group.retries,
           ].join("\t"),
         );
+      break;
+    }
+    case "config": {
+      // The upgrade tooling's CLI face. The config's version contract is
+      // version-anchored: an upgrade at vN leaves the old form readable
+      // through vN+1 and refuses it at vN+2 — so before that version
+      // ships, the FILE must be migrated (the loader's transparent
+      // conversion keeps an old file working, but only a rewrite survives
+      // the window sliding past it). This is that rewrite, with a
+      // timestamped backup beside the original, for both config files a
+      // workspace has: the global one and the project's.
+      const action = argv[1];
+      if (action !== "migrate") {
+        console.error(
+          "usage: natalia config migrate [--workspace <root>] [--json]",
+        );
+        process.exit(1);
+      }
+      const workspaceRoot = valueAfter(argv, "--workspace") ?? process.cwd();
+      const globalPath = (await ensureNataliaConfigPath(nataliaConfigPath()))
+        .path;
+      const projectPath = joinPath(workspaceRoot, ".natalia", "config.json");
+      const paths = [
+        globalPath,
+        // The same file twice when the workspace IS the global home.
+        ...(projectPath === globalPath ? [] : [projectPath]),
+      ];
+      const reports = [];
+      for (const path of paths) {
+        if (!existsSync(path)) {
+          reports.push({ path, migrated: false, reason: "no config file" });
+          continue;
+        }
+        const result = await migrateConfigFile(path);
+        reports.push({
+          path,
+          migrated: result.summary.fromVersion !== result.summary.toVersion,
+          fromVersion: result.summary.fromVersion,
+          toVersion: result.summary.toVersion,
+          changed: result.summary.changed,
+          warnings: result.summary.warnings,
+          backupPath: result.summary.backupPath,
+        });
+      }
+      if (argv.includes("--json")) {
+        console.log(JSON.stringify({ reports }, null, 2));
+        break;
+      }
+      if (!reports.length) {
+        console.log("no config files found");
+        break;
+      }
+      for (const report of reports) {
+        if (!report.migrated && "reason" in report)
+          console.log(`${report.path}: ${report.reason}`);
+        else if (!report.migrated)
+          console.log(`${report.path}: already at the current version`);
+        else {
+          console.log(
+            [
+              `${report.path}: v${report.fromVersion} -> v${report.toVersion}`,
+              ...(report.changed ?? []).map((line) => `  changed: ${line}`),
+              ...(report.warnings ?? []).map((line) => `  warning: ${line}`),
+              ...(report.backupPath ? [`  backup: ${report.backupPath}`] : []),
+            ].join("\n"),
+          );
+        }
+      }
       break;
     }
     case "evolution": {

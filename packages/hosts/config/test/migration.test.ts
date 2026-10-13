@@ -288,22 +288,34 @@ test("a NEWER config is refused with both numbers — never silently misread", (
 });
 
 test("a version below the read window is refused by name", () => {
-  expect(() => migrateConfig({ ...configuredConfig(), version: 2 })).toThrow(
-    /below the read window/,
+  // The window is two major versions back (v2..v4 today): the migration
+  // room an upgrade at v4 leaves. v1 is below it.
+  expect(() => migrateConfig({ ...configuredConfig(), version: 1 })).toThrow(
+    /below the read window \(v2\.\.v4\)/,
   );
 });
 
-test("past the deadline the oldest readable version is refused with the date", () => {
-  const afterDeadline = new Date("2028-01-01T00:00:00Z");
-  expect(() =>
-    migrateConfig({ ...configuredConfig(), version: 3 }, afterDeadline),
-  ).toThrow(/read window closed on/);
-  // And before it, the same file converts.
-  const beforeDeadline = new Date("2026-10-14T00:00:00Z");
-  expect(
-    migrateConfig({ ...configuredConfig(), version: 3 }, beforeDeadline).config
-      .version,
-  ).toBe(4);
+test("inside the window with no converter is refused saying exactly that", () => {
+  // v2 is inside the window by AGE but this runtime has never seen a v2
+  // shape — refused with that reason named, never guessed at. When v5
+  // ships the window slides to v3..v5 and v3 keeps its converter; v2 falls
+  // out below the window then.
+  expect(() => migrateConfig({ ...configuredConfig(), version: 2 })).toThrow(
+    /inside the read window \(v2\.\.v4\) but this runtime has no converter/,
+  );
+});
+
+test("no date deadline: the clock never enters the judgement", () => {
+  // The rule this design follows: a hard DATE may only exist together with
+  // the upgrade tooling, and it must leave at least two major versions of
+  // room. No tooling ships a date today, so a v3 config converts whenever
+  // it is read — the deadline is the VERSION at which the window slides
+  // past it (v6 for a v4 upgrade), not a day anybody had to calendar.
+  const legacy = { ...configuredConfig(), version: 3 };
+  expect(migrateConfig(legacy).config.version).toBe(4);
+  // The same file, read "years later": same answer, because nothing here
+  // reads the clock.
+  expect(migrateConfig(legacy).config.version).toBe(4);
 });
 
 test("a config with no integer version is refused with what it got", () => {

@@ -32,6 +32,7 @@ import {
   toolOutputHidden,
   visibleOutputLines,
 } from "./head-tail-cap";
+import { isCardExpanded, setCardExpanded, toolCardKey } from "./expanded-cards";
 import { TailScrollController } from "./scroll-controller";
 import {
   decideMeasurementFollow,
@@ -1534,9 +1535,19 @@ function renderCard(card: ToolCard, toolCall: ToolCall): ToolCardLine[] {
   }
 }
 
-function ToolCallCard(props: { toolCall: ToolCall }) {
+function ToolCallCard(props: { toolCall: ToolCall; expansionKey: string }) {
   const card = props.toolCall.card;
-  const [expanded, setExpanded] = createSignal(false);
+  // The expansion survives a virtual-list unmount: the signal seeds from
+  // the row-keyed store and writes through on every toggle, so scrolling
+  // away and back restores what the reader asked for (audit ③).
+  const [expanded, setExpanded] = createSignal(
+    isCardExpanded(props.expansionKey),
+  );
+  const toggleExpanded = () => {
+    const next = !expanded();
+    setExpanded(next);
+    setCardExpanded(props.expansionKey, next);
+  };
   const rowLabel = () => toolRowLabel(props.toolCall.name);
   // The tool's own title, when it says something the label does not: a path, a
   // query, a job id. A title that merely repeats the label is dropped.
@@ -1715,7 +1726,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
               <button
                 type="button"
                 class="natalia-tool-output-toggle"
-                onClick={() => setExpanded(!expanded())}
+                onClick={toggleExpanded}
               >
                 {`展开全部（${outputLines().length} 行，已折叠 ${hiddenCount()} 行）`}
               </button>
@@ -1738,7 +1749,7 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
             <button
               type="button"
               class="natalia-tool-output-toggle"
-              onClick={() => setExpanded(!expanded())}
+              onClick={toggleExpanded}
             >
               收起
             </button>
@@ -1767,7 +1778,7 @@ function GoalRoundBody(props: {
         type="button"
         class="natalia-goal-round-header"
         title={props.goalRound.objective}
-        onClick={() => setExpanded(!expanded())}
+        onClick={toggleExpanded}
       >
         <span class="natalia-goal-round-badge">Goal</span>
         <span class="natalia-goal-round-title">
@@ -1927,7 +1938,12 @@ export function MessageRow(props: MessageRowProps) {
       >
         <div class="natalia-tool-calls">
           <For each={props.message.toolCalls}>
-            {(toolCall) => <ToolCallCard toolCall={toolCall} />}
+            {(toolCall, index) => (
+              <ToolCallCard
+                toolCall={toolCall}
+                expansionKey={toolCardKey(props.message.id, index())}
+              />
+            )}
           </For>
         </div>
       </Show>

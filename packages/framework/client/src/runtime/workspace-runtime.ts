@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import {
+  workspaceBaselineStore,
+  type WorkspaceBaselineStore,
+} from "./workspace-baseline";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
@@ -518,10 +522,30 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
      * index's own (50 files) — a workspace-wide scan is the caller's
      * `workspaceList` to narrow.
      */
-    async workspaceAstMove(input?: { paths?: string[]; from?: string }) {
+    async workspaceAstMove(input?: {
+      paths?: string[];
+      from?: string;
+      /**
+       * The git-free door: `"capture"` captures a content-addressed
+       * baseline of the tracked tree first and reads the BEFORE side from
+       * it; an id reuses a recorded one. Present = the face never touches
+       * git, so a workspace that is not a repository answers "what moved"
+       * exactly like one that is. Absent = the ref path (a human naming a
+       * ref is richer than a captured index).
+       */
+      baseline?: "capture" | string;
+    }) {
       await ctx.ports.getReady();
       const root = ctx.ports.getWorkspaceRoot();
       const from = input?.from ?? "HEAD";
+      // The before-side source, chosen once here so the two readers below
+      // (the deleted set and the per-path content) cannot disagree.
+      const baselineID =
+        input?.baseline === undefined
+          ? undefined
+          : input.baseline === "capture"
+            ? (await workspaceBaselines(root).capture()).id
+            : input.baseline;
       // No paths named: the WHOLE workspace is the move surface (the
       // plan's "按 workspace 建立索引" — the caller should not have to
       // enumerate). The walk runs under the ignore rules, so node_modules
@@ -549,7 +573,9 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
       // the before set — otherwise a moved symbol has no left side and
       // the detection has nothing to pair. (The first cut named only the
       // paths and its own e2e caught the hole: a move detected nothing.)
-      const deleted = await gitDeletedFiles(root, from);
+      const deleted = baselineID
+        ? await workspaceBaselines(root).deletedFiles(baselineID)
+        : await gitDeletedFiles(root, from);
       // No cap: the index is content-addressed in the object store's
       // metadata, so a workspace's move detection costs per CHANGED file,
       // not per file — the same reason the 50-file caps in the sibling
@@ -559,7 +585,9 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
         beforePaths.map(async (path) => {
           const language = astLanguageForPath(path);
           if (!language) return;
-          const committedText = await gitShowContentBuffer(root, from, path);
+          const committedText = baselineID
+            ? await workspaceBaselines(root).show(baselineID, path)
+            : await gitShowContentBuffer(root, from, path);
           if (committedText !== undefined)
             before.push({
               path,
@@ -1305,6 +1333,19 @@ export function parseStatusLine(line: string):
       ? "added"
       : "modified";
   return { path: unquoteGitPath(rest), operation, untracked: false };
+}
+
+/** The workspace's own baseline store, under its .natalia area. */
+const baselineStores = new Map<string, WorkspaceBaselineStore>();
+function workspaceBaselines(root: string): WorkspaceBaselineStore {
+  const existing = baselineStores.get(root);
+  if (existing) return existing;
+  const created = workspaceBaselineStore({
+    workspaceRoot: root,
+    dir: resolve(root, ".natalia", "baselines"),
+  });
+  baselineStores.set(root, created);
+  return created;
 }
 
 async function gitCapture(

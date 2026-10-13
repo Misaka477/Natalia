@@ -208,7 +208,11 @@ jobs:
                               packages/framework/client/test/performance-trace.test.ts \
                               packages/framework/client/test/permission-settings.test.ts \
                               packages/framework/client/test/plan-active-session.test.ts \
-                              packages/framework/client/test/plan-contract.test.ts
+                              packages/framework/client/test/plan-contract.test.ts \
+                              packages/framework/client/test/generation-tree.test.ts \
+                              packages/framework/client/test/sandbox-rung.test.ts \
+                              packages/framework/client/test/sandbox-policy.test.ts \
+                              packages/framework/client/test/workspace-baseline.test.ts
           - layer: "client-rest-2"
             dirs: >-
               bun test --max-concurrency=4 --timeout 180000 \

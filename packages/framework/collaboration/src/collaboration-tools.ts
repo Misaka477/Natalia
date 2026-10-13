@@ -10,6 +10,12 @@ import {
 import type { RuntimeTool } from "@anthelia/tools";
 import type { CollaborationService } from "./collaboration-service";
 import { waitForConsult } from "./consult-bridge";
+import {
+  collabAskOutput,
+  collabChatOutput,
+  collabInboxOutput,
+  collabRespondOutput,
+} from "./collab-cards";
 
 export const COLLAB_RESPONSE_DECISIONS = [
   "adopted",
@@ -118,6 +124,7 @@ export function collaborationTools(
       required: ["messageID", "decision"],
       additionalProperties: false,
     },
+    output: collabRespondOutput,
     async execute(parsed, context) {
       const args = parsed as {
         messageID?: string;
@@ -171,6 +178,7 @@ export function collaborationTools(
       },
       additionalProperties: false,
     },
+    output: collabInboxOutput,
     async execute(parsed, context) {
       const events = sessionEvents(context.sessionID);
       if (!events) return "[]";
@@ -235,6 +243,7 @@ export function collaborationTools(
       required: ["question"],
       additionalProperties: false,
     },
+    output: collabAskOutput,
     async execute(parsed, context) {
       const question = (parsed as { question?: string }).question;
       if (typeof question !== "string" || !question.trim())
@@ -308,6 +317,7 @@ function createMainAgentChatTool(
       required: ["text"],
       additionalProperties: false,
     },
+    output: collabChatOutput,
     async execute(parsed, context) {
       const args = parsed as {
         text?: string;

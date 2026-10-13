@@ -226,6 +226,15 @@ export type CompactionOptions = {
   instruction?: string;
   enabled?: boolean;
   force?: boolean;
+  /**
+   * The overflow relief path: the provider already rejected an oversized
+   * request, so this compaction may not preserve the recent-tail policy.
+   * Keeping the tail is right for a pressure compaction (the newest work
+   * is the live work) and wrong here — the request did not fit WITH the
+   * tail, so the reduction has to reach it. The reference implementation
+   * bypasses the retained-tail policy for exactly this trigger.
+   */
+  overflow?: boolean;
   now?: () => Date;
   onEvent?: (event: RuntimeEvent) => void;
   retry?: RetryRunnerOptions;
@@ -250,10 +259,10 @@ export async function compactContext(
     compactable: compactedEntries,
     hasRange,
   } = selectCompactableRange(snapshot.entries, {
-    ...(options.preservedRecentTokens === undefined
+    ...(options.overflow || options.preservedRecentTokens === undefined
       ? {}
       : { recentTokens: options.preservedRecentTokens }),
-    recentMessages: options.preservedRecentMessages,
+    recentMessages: options.overflow ? 0 : options.preservedRecentMessages,
   });
   if (!hasRange)
     return { compacted: false, skipped: "nothing_to_compact" as const };
@@ -369,6 +378,56 @@ export async function compactContext(
       expectedRevision,
     );
     const afterTokens = ledger.effectiveTokens();
+    // The release facts, carried out of here. "Success" used to mean only
+    // "the summary is smaller than the span it replaced" — and the span can
+    // be a sliver of the ledger when the preserved tail is the bulk. The
+    // 2026-10-13 audit watched a Nia audit history release 0.7% of 1.6M
+    // tokens and report success: the summary shrank its span, the context
+    // stayed where it was, and every consumer read a healthy compaction.
+    // A compaction that was asked to relieve pressure and left the context
+    // still above the threshold has not succeeded, whatever the span math
+    // says — the replacement stays committed (the ledger is better off),
+    // but the event and the result both say so.
+    const releasedTokens = Math.max(0, beforeTokens - afterTokens);
+    const releaseRate = beforeTokens > 0 ? releasedTokens / beforeTokens : 0;
+    const thresholdTokens = Math.floor(
+      (options.maxTokens * options.thresholdPercent) / 100,
+    );
+    // The pressure triggers promise "get under the threshold"; a manual
+    // compaction promises only "condense this range", and a huge ledger
+    // condensed by hand is still a successful manual compaction. So the
+    // still-over verdict belongs to the pressure-driven triggers alone.
+    const pressureDriven =
+      options.trigger === "ratio" ||
+      options.trigger === "reserved" ||
+      options.trigger === "context_limit";
+    const wasOverThreshold = beforeTokens >= thresholdTokens;
+    const stillOverThreshold = afterTokens >= thresholdTokens;
+    if (pressureDriven && wasOverThreshold && stillOverThreshold) {
+      options.onEvent?.({
+        type: "compaction.end",
+        id: options.id,
+        trigger: options.trigger,
+        success: false,
+        beforeTokens,
+        afterTokens,
+        durationMs: Math.max(
+          0,
+          (options.now?.() ?? new Date()).getTime() - started.getTime(),
+        ),
+        attempts,
+        error: `compaction released only ${(releaseRate * 100).toFixed(1)}% (${beforeTokens} → ${afterTokens} tokens) and the context is still above the compaction threshold (${thresholdTokens}); the summary shrank its span, not the context`,
+      });
+      return {
+        compacted: false,
+        committed: true,
+        skipped: "still_over_threshold" as const,
+        beforeTokens,
+        afterTokens,
+        releasedTokens,
+        releaseRate,
+      };
+    }
     options.onEvent?.({
       type: "compaction.end",
       id: options.id,
@@ -382,7 +441,14 @@ export async function compactContext(
       ),
       attempts,
     });
-    return { compacted: true, beforeTokens, afterTokens };
+    return {
+      compacted: true,
+      committed: true,
+      beforeTokens,
+      afterTokens,
+      releasedTokens,
+      releaseRate,
+    };
   } catch (error) {
     ledger.restore(snapshot);
     const provider = error as ProviderError;

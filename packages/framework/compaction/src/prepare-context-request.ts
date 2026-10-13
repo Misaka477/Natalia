@@ -121,6 +121,14 @@ export type PrepareContextRequestResult = {
   outbound: ProviderMessage[];
   decision: CompactionDecision;
   compacted: boolean;
+  /**
+   * Whether the compaction COMMITTED a replacement to the ledger, whatever
+   * the verdict. A still-over compaction committed (the surface is smaller
+   * than it was) without succeeding (the threshold still stands); the
+   * outbound rebuild below keys on this, because the messages must reflect
+   * the rewritten ledger either way.
+   */
+  committed: boolean;
   pruned: number;
   /** Final measured full-request tokens. */
   used: number;
@@ -191,6 +199,7 @@ export async function prepareContextRequest(
       outbound,
       decision,
       compacted: false,
+      committed: false,
       pruned,
       used: measured.totalTokens,
     };
@@ -224,7 +233,7 @@ export async function prepareContextRequest(
     },
   );
 
-  if (outcome.compacted) {
+  if (outcome.committed) {
     // The provider usage anchor described the pre-compaction surface; drop it
     // so the re-measure prices the rewritten request instead of reusing a
     // stale (now-too-large) sample.
@@ -239,6 +248,7 @@ export async function prepareContextRequest(
     outbound,
     decision,
     compacted: outcome.compacted,
+    committed: outcome.committed,
     pruned,
     used: measured.totalTokens,
   };

@@ -1446,8 +1446,123 @@ test("the shrink check compares against the replaced span, not the whole ledger"
   );
 
   // The tail alone is far larger than the summary, yet the compaction stands
-  // because only u1 was replaced.
+  // because only u1 was replaced. A MANUAL compaction promises "condense
+  // this range", so a ledger still above the threshold is still a success.
   expect(result.compacted).toBe(true);
+});
+
+test("a pressure compaction that leaves the context over the threshold is not a success", async () => {
+  // The 2026-10-13 audit's case: a Nia audit history released 0.7% of 1.6M
+  // tokens and reported success, because the summary was smaller than the
+  // sliver of span it replaced while the preserved tail held the bulk. The
+  // span math was true and the verdict was a lie — every consumer read a
+  // healthy compaction on a context that had not moved.
+  const ledger = new ContextLedger();
+  ledger.add({
+    id: "u1",
+    role: "user",
+    content: "x".repeat(4000),
+    tokens: 1000,
+  });
+  ledger.add({
+    id: "keep",
+    role: "assistant",
+    content: "y".repeat(40000),
+    tokens: 10000,
+  });
+  ledger.add({
+    id: "u2",
+    role: "user",
+    content: "z".repeat(40000),
+    tokens: 10000,
+  });
+  const events: RuntimeEvent[] = [];
+  const result = await compactContext(
+    ledger,
+    new FakeCompactor([{ summary: "s".repeat(400), tokens: 100 }]),
+    {
+      id: "cmp_honest",
+      trigger: "ratio",
+      maxTokens: 5000,
+      thresholdPercent: 50,
+      reservedTokens: 10,
+      preservedRecentMessages: 2,
+      onEvent: (event) => events.push(event),
+    },
+  );
+
+  // The span math passes (100 < 1000), the replacement commits, and the
+  // ledger IS smaller — but 21000 → 20100 is nowhere near under the 2500
+  // threshold, so the honest verdict is not-a-success with the release
+  // facts attached.
+  expect(result.compacted).toBe(false);
+  expect(result.committed).toBe(true);
+  expect(result.skipped).toBe("still_over_threshold");
+  expect(result.releasedTokens).toBe(900);
+  expect(result.releaseRate).toBeCloseTo(900 / 21000, 6);
+  const end = events.find((event) => event.type === "compaction.end");
+  expect(end).toMatchObject({ success: false });
+  expect(
+    (end as Extract<RuntimeEvent, { type: "compaction.end" }>).error,
+  ).toContain("released only 4.3%");
+});
+
+test("the overflow path reaches the retained tail", async () => {
+  // The provider already refused the request WITH the tail preserved, so a
+  // pressure-shaped reduction (newest work kept) cannot fix what it is
+  // asked to fix. The overflow relief path bypasses the configured
+  // retained-tail policy; only the structural floor (the newest entry and
+  // the user turn enclosing it) survives, which is a correctness minimum,
+  // not a policy.
+  const ledger = new ContextLedger();
+  for (let index = 0; index < 6; index++)
+    ledger.add({
+      id: `m${index}`,
+      role: index % 2 ? "assistant" : "user",
+      content: `message ${index}`,
+      tokens: 10,
+    });
+  const compactedMessages: string[][] = [];
+  const compactor: Compactor = {
+    async compact(input) {
+      compactedMessages.push(
+        input.messages.map((message) => String(message.content)),
+      );
+      return { summary: "s".repeat(400), tokens: 5 };
+    },
+  };
+  const shared = {
+    id: "cmp_overflow",
+    trigger: "context_limit",
+    maxTokens: 100,
+    thresholdPercent: 50,
+    reservedTokens: 10,
+    onEvent: () => {},
+  } as const;
+
+  // The pressure shape with a token tail that covers the whole surface:
+  // nothing is compactable, the compaction declines before any LLM call.
+  const pressure = await compactContext(ledger, compactor, {
+    ...shared,
+    preservedRecentMessages: 2,
+    preservedRecentTokens: 1000,
+  });
+  expect(pressure.skipped).toBe("nothing_to_compact");
+  expect(compactedMessages).toEqual([]);
+
+  // The overflow shape reaches what that tail protected.
+  await compactContext(ledger, compactor, {
+    ...shared,
+    preservedRecentMessages: 2,
+    preservedRecentTokens: 1000,
+    overflow: true,
+  });
+  expect(compactedMessages[0]).toEqual([
+    "message 0",
+    "message 1",
+    "message 2",
+    "message 3",
+  ]);
 });
 
 test("the summarization call replays the span so its prefix matches the routed request", async () => {

@@ -330,7 +330,15 @@ test("prepareContextRequest does not re-summarize when a prior compaction left o
     }) as never;
 
   const first = await prepareContextRequest(build());
-  expect(first.compacted).toBe(true);
+  // The compaction COMMITTED (the provider was called once and the summary
+  // replaced the span) but it did not get under the threshold — the summary
+  // is deliberately oversized — and the 2026-10-13 honesty rule says that
+  // is not a success: the result carries the still-over verdict instead of
+  // a green check on a context that is still over. The outbound is still
+  // rebuilt from the committed ledger — the request must reflect the
+  // smaller surface either way.
+  expect(first.compacted).toBe(false);
+  expect(first.committed).toBe(true);
   expect(counter.calls).toBe(1);
 
   // A second preflight over the same (now summarized) ledger must not call the

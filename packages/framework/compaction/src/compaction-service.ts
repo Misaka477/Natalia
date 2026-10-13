@@ -34,7 +34,12 @@ export function createCompactionService(input: {
   const compact = (
     operation: CompactionOperation,
     trigger: CompactionTrigger,
-    options?: { enabled?: boolean; force?: boolean; beforeTokens?: number },
+    options?: {
+      enabled?: boolean;
+      force?: boolean;
+      overflow?: boolean;
+      beforeTokens?: number;
+    },
   ) =>
     compactContext(
       operation.ledger,
@@ -55,6 +60,17 @@ export function createCompactionService(input: {
         instruction: operation.instruction,
         onEvent: operation.onEvent,
         retry: { policy: input.retry.policy(), signal: operation.signal },
+        // The overflow relief path reaches the retained tail: the provider
+        // already refused the request WITH the tail preserved, so a
+        // pressure-shaped reduction cannot fix what it is being asked to
+        // fix. Declared after the operation's own policy so it wins.
+        ...(options?.overflow
+          ? {
+              overflow: true,
+              preservedRecentMessages: 0,
+              preservedRecentTokens: 0,
+            }
+          : {}),
         ...options,
       },
     );
@@ -115,6 +131,7 @@ export function createCompactionService(input: {
           });
           const outcome = await compact(operation, "context_limit", {
             force: true,
+            overflow: true,
           });
           if (outcome.compacted === true)
             await operation.onCompacted?.(outcome);

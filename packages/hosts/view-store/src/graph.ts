@@ -323,8 +323,8 @@ export function selectUnattributedWorkGraphNodes(
  * so any UI (or a future TUI) computes the same figures from the same sums.
  *
  * The two cache figures come from the shared `@anthelia/contracts` helpers so a
- * session bar and the provider trace can never report different rates for the
- * same tokens.
+ * session bar, the provider trace, and the status panel's provider row can
+ * never report different rates for the same tokens.
  */
 export function deriveSessionUsageView(
   stats: SessionUsageStats,

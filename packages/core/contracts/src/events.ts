@@ -1382,7 +1382,12 @@ type RuntimeEventData =
           steps: number;
           inputTokens: number;
           cacheReadTokens: number;
-          /** cacheReadTokens / inputTokens, 0 when no input was billed. */
+          /**
+           * The token-usage contract's cache hit rate over this tier's
+           * counters — cacheReadTokens / (inputTokens + cacheReadTokens),
+           * 0 when no input was billed — the same formula the session
+           * usage bar derives, so the two faces cannot disagree.
+           */
           hitShare: number;
         };
       };

@@ -2282,6 +2282,13 @@ type OpenAIRawUsage = {
 /**
  * Map OpenAI-compatible usage into the provider-neutral chunk.
  *
+ * `prompt_tokens` **includes** cached traffic — the same wire convention
+ * the Responses family has — so the read is subtracted to keep
+ * `inputTokens` fresh-only as the token-usage contract requires. Mapping
+ * the wire number straight through double-counts every cached token: the
+ * hit rate halves, the context pressure reads double, and compaction
+ * triggers while the real window is half empty.
+ *
  * Both the streaming and buffered paths go through here so they cannot drift:
  * a session whose usage is read by one path and not the other would report a
  * hit rate that depends on which code path happened to serve the request.
@@ -2290,7 +2297,7 @@ function openAIUsageChunk(usage: OpenAIRawUsage): ProviderStreamChunk {
   const cached = usage.prompt_tokens_details?.cached_tokens;
   return {
     type: "usage",
-    inputTokens: usage.prompt_tokens,
+    inputTokens: Math.max(0, usage.prompt_tokens - (cached ?? 0)),
     outputTokens: usage.completion_tokens,
     ...(cached === undefined ? {} : { cacheReadInputTokens: cached }),
   };

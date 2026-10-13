@@ -2950,7 +2950,10 @@ test("OpenAI-compatible reports prefix-cache reads from prompt_tokens_details", 
   const usage = chunks.find((chunk) => chunk.type === "usage");
   expect(usage).toEqual({
     type: "usage",
-    inputTokens: 12000,
+    // prompt_tokens includes the cached read on this wire, so the fresh
+    // input is the remainder: 12000 - 11000. Mapping the wire number
+    // straight through would double-count the read on every usage face.
+    inputTokens: 1000,
     outputTokens: 4,
     cacheReadInputTokens: 11000,
   });
@@ -3009,7 +3012,8 @@ test("OpenAI-compatible reads cache usage on the buffered path too", async () =>
   );
 
   const usage = chunks.find((chunk) => chunk.type === "usage");
-  expect(usage).toMatchObject({ cacheReadInputTokens: 5000 });
+  // A fully cached request bills zero fresh input, not 5000.
+  expect(usage).toMatchObject({ inputTokens: 0, cacheReadInputTokens: 5000 });
 });
 
 /** Drive the Anthropic adapter and capture the request body and headers. */

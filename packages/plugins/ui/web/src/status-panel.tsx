@@ -109,7 +109,7 @@ export function StatusPanel(props: {
     if (!provider) return undefined;
     const percent = Math.round(provider.hitShare * 1000) / 10;
     return {
-      text: `命中 ${percent}%（${provider.cacheReadTokens}/${provider.inputTokens}）`,
+      text: `命中 ${percent}%（${provider.cacheReadTokens}/${provider.inputTokens + provider.cacheReadTokens}）`,
       title: `${provider.steps} 步的 provider 前缀缓存（静态前缀稳定是其命中前提）`,
     };
   };

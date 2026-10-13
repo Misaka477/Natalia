@@ -14,10 +14,12 @@ import {
  * usage events.
  */
 
-test("the share divides by the billed input, and zero input reads zero", () => {
+test("the share divides by fresh input plus read, and zero input reads zero", () => {
+  // The contract formula: read over (fresh + read) — the same function the
+  // session usage bar uses, so the two faces cannot report two numbers.
   expect(
     providerCacheShare({ steps: 3, inputTokens: 100, cacheReadTokens: 90 }),
-  ).toBe(0.9);
+  ).toBeCloseTo(90 / 190, 10);
   // Division by zero never crashes and never invents a full hit.
   expect(
     providerCacheShare({ steps: 1, inputTokens: 0, cacheReadTokens: 0 }),
@@ -62,6 +64,6 @@ test("the posture rides nothing when the session has run no step", () => {
     steps: 4,
     inputTokens: 400,
     cacheReadTokens: 388,
-    hitShare: 0.97,
+    hitShare: 388 / 788,
   });
 });

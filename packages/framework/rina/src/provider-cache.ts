@@ -12,6 +12,8 @@
  * state (per step, O(1)); this module only derives.
  */
 
+import { cacheHitRate } from "@anthelia/contracts";
+
 /** A tier's accumulated usage (the execution state's shape). */
 export type ProviderCacheUsage = {
   steps: number;
@@ -20,13 +22,18 @@ export type ProviderCacheUsage = {
 };
 
 /**
- * The cache-read share of the billed input: 0 when nothing was billed
- * (a division by zero reads as "no cache observed", never as a crash or
- * an invented 100%).
+ * The cache-read share of the request's input, by the token-usage
+ * contract's formula: the read over fresh input plus read. The session
+ * usage bar derives its rate from the same function, so the status panel
+ * and the bar cannot report two numbers for one set of tokens. Zero when
+ * nothing was billed (a division by zero reads as "no cache observed",
+ * never as a crash or an invented 100%).
  */
 export function providerCacheShare(usage: ProviderCacheUsage): number {
-  if (usage.inputTokens <= 0) return 0;
-  return usage.cacheReadTokens / usage.inputTokens;
+  return cacheHitRate({
+    inputTokens: usage.inputTokens,
+    cacheReadInputTokens: usage.cacheReadTokens,
+  });
 }
 
 /**

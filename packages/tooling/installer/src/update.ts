@@ -358,6 +358,100 @@ const defaultRestartExec = (argv: string[]) => {
   };
 };
 
+/**
+ * The atomic install lane, extracted so the generation switch's
+ * `staged-build` source lands through the SAME sequence `natalia update`
+ * uses — one spelling of "how new code takes over", not a second one.
+ *
+ * Stage the files into `versions/<version>/`, flip the symlink (atomic on
+ * POSIX), then the gate: the new binary must answer `--version` with
+ * EXACTLY this version. A failed probe rolls the link back and drops the
+ * staged directory — a flip that cannot prove itself never stays flipped.
+ * The drain is the CALLER's (the switch drains before it calls; update
+ * drains before it calls), so the quiet window covers the flip itself.
+ */
+export type StagedBuildInstall = {
+  home: string;
+  version: string;
+  files: Map<string, Uint8Array>;
+  /** The systemd unit to restart AFTER a passed probe — explicit or not at all. */
+  restartUnit?: string;
+  /** The restart executor, injected for tests; default = systemctl. */
+  exec?: (argv: string[]) => { code: number; output: string };
+};
+
+export type StagedBuildOutcome =
+  | { outcome: "switched"; warning?: string }
+  | { outcome: "rolled_back"; reason: string }
+  | { outcome: "failed"; reason: string };
+
+export function installStagedBuild(
+  input: StagedBuildInstall,
+): StagedBuildOutcome {
+  const { home, version, files } = input;
+  const binLink = join(home, "bin", "natalia");
+  const versionDir = join(home, "versions", version);
+  const previousLink = existsSync(binLink) ? readlinkSync(binLink) : undefined;
+  try {
+    rmSync(versionDir, { recursive: true, force: true });
+    mkdirSync(versionDir, { recursive: true });
+    for (const [name, bytes] of files) {
+      const dest = stagedPath(versionDir, name);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, bytes);
+    }
+    chmodSync(join(versionDir, "natalia"), 0o755);
+    mkdirSync(join(home, "bin"), { recursive: true });
+    // A symlink resolves against ITS OWN directory: ../versions/... for
+    // exactly this reason (bin/versions would be wrong).
+    swapSymlink(binLink, join("..", "versions", version, "natalia"));
+  } catch (error) {
+    rmSync(versionDir, { recursive: true, force: true });
+    return {
+      outcome: "failed",
+      reason: `stage/swap failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  const probe = probeVersion(binLink);
+  if (probe.code === 0 && probe.version === version) {
+    if (input.restartUnit) {
+      const argv = ["systemctl", "restart", input.restartUnit];
+      const run = input.exec ?? defaultRestartExec;
+      try {
+        const outcome = run(argv);
+        if (outcome.code !== 0)
+          return {
+            outcome: "switched",
+            warning:
+              `restart not executed (exit ${outcome.code}: ${outcome.output}) — the new binary is linked and verified; ` +
+              `run \`systemctl restart ${input.restartUnit}\` yourself`,
+          };
+      } catch (error) {
+        return {
+          outcome: "switched",
+          warning: `restart not executed (${error instanceof Error ? error.message : String(error)})`,
+        };
+      }
+    }
+    return { outcome: "switched" };
+  }
+  // Rollback: restore the previous link exactly (relative as the installer
+  // wrote it), drop the failed version directory.
+  const detail = `code=${probe.code} version=${probe.version ?? "?"} expected=${version} ${probe.detail}`;
+  try {
+    rmSync(binLink, { force: true });
+    if (previousLink !== undefined) symlinkSync(previousLink, binLink);
+  } catch {
+    // The link restore is best-effort; the staged directory drop below is
+    // the part that must not leave a half-install behind.
+  }
+  rmSync(versionDir, { recursive: true, force: true });
+  return {
+    outcome: "rolled_back",
+    reason: `the new binary failed its self-check: ${detail}`,
+  };
+}
+
 export async function updateProgram(
   input: UpdateProgramInput,
 ): Promise<UpdateResult> {

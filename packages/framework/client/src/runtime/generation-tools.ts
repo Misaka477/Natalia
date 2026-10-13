@@ -16,7 +16,8 @@
  *   undo (study: 回退永不被候选禁止).
  */
 import { existsSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { ObjectStore } from "@anthelia/object-store";
 import {
@@ -27,6 +28,9 @@ import {
 import type { ConfigV4, Generation, RuntimeEvent } from "@anthelia/contracts";
 import { sandboxService } from "@anthelia/runtime-services";
 import { waitForDrain } from "./session-execution/drain";
+import { planTreePromotion, treeConflictReason } from "./generation-tree";
+import { editParent, planEdits } from "@anthelia/tools";
+import { installStagedBuild, resolveUpdateHome } from "@natalia/installer";
 import { nextContextInstructionsRevision } from "@anthelia/session";
 import {
   buildGeneration,
@@ -614,13 +618,24 @@ async function generationPluginDelta(
 }
 
 /**
- * Lands a generation's SOURCE in the workspace's repository: the ref is
- * checked out, or the patch is applied. A direct git spawn, not the shell
- * service: this runs once per approved code switch, at deployment time,
- * and the kernel must not take a dependency on the shell package for it
- * (the dependency guard names that direction). git's own exit code and
- * stderr are the verdict — a landing that fails says so with git's words,
- * never a generic "could not start".
+ * Lands a generation's SOURCE — the L3 code lane, entirely on our own
+ * infrastructure. Three lanes, none of which shells out:
+ *
+ *  - **edits** — the friendly editor's planner (verify-then-write,
+ *    all-or-nothing, named failures), the same one `apply_edits` runs.
+ *  - **tree** — a content-addressed snapshot promoted through our own
+ *    three-way check over the object store's sha256 hashes (see
+ *    generation-tree.ts): workspace==base takes the tree's content,
+ *    workspace==next is already landed, anything else is a named conflict
+ *    that refuses the whole promotion before the first write.
+ *  - **staged-build** — the installer's own atomic sequence (stage →
+ *    swapSymlink → probeVersion → rollback on a failed probe).
+ *
+ * The git study was absorbed, not routed around: the object store already
+ * addresses content the way git's object database does, and the promotion
+ * above is the merge discipline that makes that addressing safe to land
+ * with. A branch name was never the point — "this content, cut from that
+ * content" is, and we can say it without an external binary.
  */
 async function landGenerationSource(
   ctx: RuntimeContext,
@@ -628,20 +643,63 @@ async function landGenerationSource(
 ): Promise<void> {
   if (!source) return;
   const workspace = workspaceRoot(ctx);
-  const git = spawnSync(
-    "git",
-    source.kind === "git-ref" ? ["checkout", source.ref] : ["apply", "-"],
-    {
-      cwd: workspace,
-      encoding: "utf8",
-      timeout: 120_000,
-      ...(source.kind === "patch" ? { input: source.patch } : {}),
-    },
+  if (source.kind === "edits") {
+    const plan = await planEdits({
+      root: workspace,
+      edits: source.edits,
+      label: "generation edits",
+    });
+    for (const write of plan.writes) {
+      await mkdir(editParent(write.abs), { recursive: true });
+      await writeFile(write.abs, write.content);
+    }
+    for (const del of plan.deletes) await rm(del.abs, { force: true });
+    return;
+  }
+  if (source.kind === "tree") {
+    const store = objectStore(ctx);
+    const plan = await planTreePromotion({
+      root: workspace,
+      files: source.files,
+      readWorkspace: async (abs) => {
+        try {
+          return await readFile(abs);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          return undefined;
+        }
+      },
+      readContent: async (hash) => Buffer.from(await store.get(hash)),
+      hash: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+    });
+    if (plan.conflicts.length)
+      throw new Error(treeConflictReason(plan.conflicts));
+    for (const write of plan.writes) {
+      await mkdir(editParent(write.abs), { recursive: true });
+      await writeFile(write.abs, write.content);
+    }
+    for (const del of plan.deletes) await rm(del.abs, { force: true });
+    return;
+  }
+  // staged-build: the installer's atomic lane. The manifest lives in the
+  // object store (content-addressed, so the generation stays self-contained
+  // and the build outlives its sandbox).
+  const store = objectStore(ctx);
+  const manifest = JSON.parse(
+    new TextDecoder().decode(await store.get(source.artifact)),
+  ) as { files: Array<{ name: string; content: string }> };
+  const files = new Map<string, Uint8Array>(
+    manifest.files.map((file) => [
+      file.name,
+      Uint8Array.from(atob(file.content), (char) => char.charCodeAt(0)),
+    ]),
   );
-  if (git.error)
-    throw new Error(`landing the source failed: ${git.error.message}`);
-  if (git.status !== 0)
+  const home = resolveUpdateHome(process.env);
+  const landed = installStagedBuild({ home, version: source.version, files });
+  if (landed.outcome === "rolled_back")
     throw new Error(
-      `landing the generation's source failed (${source.kind}): ${(git.stderr || git.stdout || `exit ${git.status}`).trim()}`,
+      `the staged build failed its self-check and was rolled back: ${landed.reason}`,
     );
+  if (landed.outcome === "failed")
+    throw new Error(`the staged build could not be landed: ${landed.reason}`);
 }

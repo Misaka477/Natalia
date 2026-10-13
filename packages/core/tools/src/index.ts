@@ -83,6 +83,14 @@ export {
   timeoutSecOr,
   workspacePath,
 } from "./arguments";
+export {
+  countOccurrences,
+  editDisplayPath,
+  editParent,
+  planEdits,
+  type EditPlan,
+  type PlanEditsInput,
+} from "./edits";
 import type { RuntimeTool } from "./types";
 
 export type {

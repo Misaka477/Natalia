@@ -193,7 +193,12 @@ function sourceCandidate(
       catalog: [],
       policyRows: [RULE],
       prompts: { perRoleStatic: {}, docs: [] },
-      source: { kind: "git-ref", ref: "candidate-branch" },
+      source: {
+        kind: "tree",
+        files: [
+          { path: "packages/core/tools/src/edits.ts", next: "a".repeat(64) },
+        ],
+      },
     }),
     when: "now",
     ...overrides,

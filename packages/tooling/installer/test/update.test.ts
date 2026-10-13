@@ -18,6 +18,7 @@ import {
   UPDATE_EXIT_CONCURRENT,
   UPDATE_LOCK_MAX_AGE_MS,
   UPDATE_RECEIPT_KEEP,
+  installStagedBuild,
   markLockStale,
   resolveUpdateHome,
   stagedPath,
@@ -259,4 +260,51 @@ test("resolveUpdateHome follows install.sh's rule: NATALIA_HOME wins, else $HOME
   expect(resolveUpdateHome({ HOME: "/u" })).toBe(join("/u", ".natalia"));
   expect(resolveUpdateHome({ HOME: "/u" }, "/override")).toBe("/override");
   expect(() => resolveUpdateHome({})).toThrow(/NATALIA_HOME/u);
+});
+
+/**
+ * The extracted install lane — the same sequence `natalia update` runs, now
+ * callable on its own so the generation switch's `staged-build` source
+ * lands through ONE spelling of "how new code takes over" (and so a
+ * deployment without git has a code lane at all).
+ */
+test("installStagedBuild: an exact-version probe flips the link", () => {
+  const home = makeHome("1.0.0");
+  const dir = mkdtempSync(join(tmpdir(), "natalia-staged-"));
+  homes.push(dir);
+  shell(join(dir, "natalia"), binary("2.0.0"));
+  const files = new Map<string, Uint8Array>([
+    ["natalia", new Uint8Array(readFileSync(join(dir, "natalia")))],
+    ["VERSION", new TextEncoder().encode("2.0.0\n")],
+  ]);
+  const outcome = installStagedBuild({ home, version: "2.0.0", files });
+  expect(outcome.outcome).toBe("switched");
+  expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
+    "../versions/2.0.0/natalia",
+  );
+  const probe = Bun.spawnSync([join(home, "bin", "natalia"), "--version"], {
+    stdout: "pipe",
+  });
+  expect(new TextDecoder().decode(probe.stdout).trim()).toBe("2.0.0");
+});
+
+test("installStagedBuild: a failed probe rolls the link back and drops the stage", () => {
+  const home = makeHome("1.0.0");
+  const dir = mkdtempSync(join(tmpdir(), "natalia-staged-bad-"));
+  homes.push(dir);
+  shell(join(dir, "natalia"), binary("2.0.0", "wrong-version"));
+  const files = new Map<string, Uint8Array>([
+    ["natalia", new Uint8Array(readFileSync(join(dir, "natalia")))],
+  ]);
+  const outcome = installStagedBuild({ home, version: "2.0.0", files });
+  expect(outcome.outcome).toBe("rolled_back");
+  // The OLD binary still answers — a landing may never leave the install dead.
+  expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
+    "../versions/1.0.0/natalia",
+  );
+  expect(existsSync(join(home, "versions", "2.0.0"))).toBe(false);
+  const probe = Bun.spawnSync([join(home, "bin", "natalia"), "--version"], {
+    stdout: "pipe",
+  });
+  expect(new TextDecoder().decode(probe.stdout).trim()).toBe("1.0.0");
 });

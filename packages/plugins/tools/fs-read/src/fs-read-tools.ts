@@ -108,6 +108,10 @@ function numberedLines(
   content: string,
   offset: number | undefined,
 ): Array<{ number: number; text: string }> {
+  // An empty page is zero lines, not one empty line: a split of "" yields
+  // [""], which used to render a phantom first row (the legacy header with
+  // no content behind it, an empty file read).
+  if (content === "") return [];
   const start = offset ?? 1;
   return content.split("\n").map((text, index) => ({
     number: start + index,
@@ -123,12 +127,13 @@ function readWindowFacts(args: unknown, value: string): ReadWindowFacts {
   };
   const offset = optionalInteger(record.offset, "offset");
   if (offset !== undefined) facts.offset = offset;
-  const parsed = parseReadEnvelope(value);
-  if (typeof parsed?.totalLines === "number")
-    facts.totalLines = parsed.totalLines;
-  if (parsed?.truncated === true) facts.truncated = true;
-  if (typeof parsed?.content === "string")
-    facts.lines = numberedLines(parsed.content, offset);
+  // The one read of the result — JSON envelope, legacy text envelope, or
+  // raw text — so the facts and the page can never come from different
+  // parses of the same value.
+  const window = readWindowContent(value);
+  if (window.totalLines !== undefined) facts.totalLines = window.totalLines;
+  if (window.truncated === true) facts.truncated = true;
+  facts.lines = numberedLines(window.content, offset);
   return facts;
 }
 
@@ -159,6 +164,52 @@ function parseReadEnvelope(
   } catch {
     return null;
   }
+}
+
+/**
+ * The legacy TEXT envelope's header line, from before the read result
+ * became JSON: `TOTALLINES 204 TRUNCATED true` as the first line, the
+ * page's text after it. Old durable events still carry that shape, and a
+ * JSON parse of it fails — which used to send the whole value (header
+ * included) down the content path, so the header was numbered and rendered
+ * as the file's first line (audit ④: the reader saw a line no source file
+ * contains). The header's facts belong to the structured fields; the body
+ * keeps only the content.
+ */
+const LEGACY_READ_HEADER =
+  /^TOTALLINES\s+(\d+)\s+TRUNCATED\s+(true|false)\s*$/iu;
+
+/**
+ * The ONE read of a read result: the JSON envelope, the legacy text
+ * envelope, or the raw text. Every caller derives the page from this, so
+ * there is no second path that can disagree about what the content is.
+ */
+function readWindowContent(value: string): {
+  content: string;
+  totalLines?: number;
+  truncated?: boolean;
+} {
+  const parsed = parseReadEnvelope(value);
+  if (typeof parsed?.content === "string")
+    return {
+      content: parsed.content,
+      ...(typeof parsed.totalLines === "number"
+        ? { totalLines: parsed.totalLines }
+        : {}),
+      ...(parsed.truncated === true ? { truncated: true } : {}),
+    };
+  const newline = value.indexOf("\n");
+  const first = (newline === -1 ? value : value.slice(0, newline)).trim();
+  const header = LEGACY_READ_HEADER.exec(first);
+  if (header)
+    return {
+      content: newline === -1 ? "" : value.slice(newline + 1),
+      totalLines: Number(header[1]),
+      truncated: header[2]!.toLowerCase() === "true",
+    };
+  // A genuinely non-envelope result degrades to the raw text — the
+  // defensive shape, unchanged.
+  return { content: value };
 }
 
 function readFileOutput(): ToolOutputDefinition {
@@ -193,19 +244,22 @@ function readFileOutput(): ToolOutputDefinition {
         meta === undefined
           ? readWindowFacts(args, value)
           : readWindowFromMeta(meta);
-      const parsed = parseReadEnvelope(value);
-      const content =
-        typeof parsed?.content === "string" ? parsed.content : value;
-      const { path, offset, totalLines, truncated } = facts;
-      const numbered = facts.lines ?? numberedLines(content, offset);
+      // The same one read of the result the facts used, so the page and
+      // the window can never come from different parses (audit ④).
+      const window = readWindowContent(value);
+      const content = window.content;
+      const totalLines = facts.totalLines ?? window.totalLines;
+      const truncated = facts.truncated === true || window.truncated === true;
+      const numbered = facts.lines ?? numberedLines(content, facts.offset);
       const pageLines = numbered.length;
+      const { path, offset } = facts;
       // The window, named from the SAME numbers the footer uses, so the card
       // and the text can never disagree: `offset` is where this page starts
       // (an argument, available while the call runs) and the page's own line
       // count closes the range. A reader sees "lines 2-3 of 5" — the window
       // read, not a char count that presents a capped page as the whole
       // file.
-      const window =
+      const summary =
         offset !== undefined && totalLines !== undefined
           ? `lines ${offset}-${offset + pageLines - 1} of ${totalLines}`
           : totalLines === undefined
@@ -214,7 +268,7 @@ function readFileOutput(): ToolOutputDefinition {
       return {
         kind: "read",
         title: path,
-        summary: window,
+        summary,
         // The page is the file's own text; the window facts are the
         // structured fields a renderer reads. The facets stay for a UI
         // without a read-specific card.

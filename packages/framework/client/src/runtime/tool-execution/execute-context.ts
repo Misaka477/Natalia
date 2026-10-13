@@ -11,6 +11,8 @@ import type { ProviderToolCall } from "@anthelia/runtime";
 import { compositionProfile } from "@anthelia/composition";
 import { resolveSandboxPolicy } from "../sandbox-policy";
 import { sandboxEscalationID } from "../sandbox-rung";
+import { SandboxRefusal } from "@anthelia/contracts";
+import { isInsideRoot } from "../sandbox-policy";
 import {
   CONFINEMENT_COMPOSITION_ROW_ID,
   CONFINEMENT_MODES,
@@ -207,6 +209,29 @@ export function buildToolExecutionContext(input: BuildContextInput) {
     ...(attachImage ? { attachImage } : {}),
     workspaceReadAuthorize: (request: { toolName: string; paths: string[] }) =>
       authorizeWorkspaceRead(request, exec),
+    // The write half of the same containment (洞 2's acceptance: no write
+    // path escapes the writable set). The main agent's fs writes are
+    // IN-PROCESS — no kernel fence wraps them (the study's threat model:
+    // untrusted PATHS get canonicalize-then-contain, untrusted CODE gets
+    // the shell's kernel sandbox) — and `workspacePath`'s lexical check is
+    // not the answer to that: a symlink inside the workspace spells its
+    // way in while the kernel creates the file outside. The landed
+    // judgement is, and it is the SAME law the sub-agent's file domain and
+    // the mode's writable roots are judged by — one spelling, three heights.
+    workspaceWriteAuthorize: async ({
+      toolName,
+      path,
+    }: {
+      toolName: string;
+      path: string;
+    }) => {
+      if (isInsideRoot(path, workspaceRoot)) return;
+      throw new SandboxRefusal({
+        rule: `workspace containment under ${workspaceRoot}`,
+        path,
+        reason: `write refused (${toolName}): the path lands outside the workspace — a symlink or a traversal inside the workspace spelling its way out; write inside the workspace or ask for a sandbox escalation`,
+      });
+    },
     sandboxMergeAuthorize: (request: { id: string; paths: string[] }) =>
       authorizeSandboxMerge(request, exec),
     // The resolved config as a service: a tool family reads it by

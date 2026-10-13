@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   COMPOSITION_PROFILE_SCHEMA,
   type CompositionProfile,
@@ -296,4 +299,62 @@ test("the session's rung override is the mode the tool context resolves", async 
     justification: "tightening for the install",
   });
   expect(approvals).toEqual(["run_shell:sandbox:read-only"]);
+});
+
+test("the main agent's write authorize refuses a symlink escape", async () => {
+  // The containment every write path answers to (洞 2's acceptance): the
+  // context's `workspaceWriteAuthorize` is wired to the policy home's
+  // landed judgement, so a symlink inside the workspace spelling its way
+  // out is refused rather than waved through by the lexical check.
+  const { buildToolExecutionContext } = await import(
+    "../src/runtime/tool-execution/execute-context"
+  );
+  const root = await mkdtemp(join(tmpdir(), "natalia-ctx-containment-"));
+  const outside = await mkdtemp(join(tmpdir(), "natalia-ctx-out-"));
+  const ctx = {
+    state: { serviceDirectory: { getOptional: () => undefined } },
+    ports: {
+      getTsRuntimeConfig: () => ({ confinement: {}, runtime: {} }),
+      getInteractive: () => undefined,
+      getCapabilityRegistry: () => ({ service: () => undefined }),
+      authorizeWorkspaceRead: async () => undefined,
+      authorizeSandboxMerge: async () => undefined,
+      toolSettings: () => ({}),
+      scheduleRuntimeStatusSnapshot: () => undefined,
+    },
+  } as never;
+  const context = buildToolExecutionContext({
+    ctx,
+    exec: { session: { id: "ses_ctx" } } as never,
+    publish: () => undefined,
+    toolID: "write_file",
+    tool: { name: "write_file" } as never,
+    call: { id: "call_1" } as never,
+    turnID: "turn_1",
+    sessionID: "ses_ctx" as never,
+    workspaceRoot: root,
+    signal: new AbortController().signal,
+    parsed: {},
+  });
+  try {
+    await mkdir(join(root, "allowed"), { recursive: true });
+    await writeFile(join(root, "allowed", "inside.txt"), "x");
+    await symlink(outside, join(root, "allowed", "link"), "dir");
+    // Inside: allowed.
+    await context.workspaceWriteAuthorize?.({
+      toolName: "write_file",
+      path: join(root, "allowed", "inside.txt"),
+    });
+    // Through the link: refused, and the refusal names the rule, the path
+    // and the reason (the structured refusal).
+    await expect(
+      context.workspaceWriteAuthorize?.({
+        toolName: "write_file",
+        path: join(root, "allowed", "link", "escaped.txt"),
+      }),
+    ).rejects.toThrow(/lands outside the workspace/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });

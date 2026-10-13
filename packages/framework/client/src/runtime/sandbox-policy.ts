@@ -185,6 +185,25 @@ export function sandboxWritableRoots(policy: SandboxPolicy): string[] {
 }
 
 /**
+ * Whether a path — judged on where it ACTUALLY lands — sits inside one
+ * root. The single-root spelling of the same question `isWritableUnderPolicy`
+ * asks of the mode's set: the main agent's in-process writes have no kernel
+ * fence, so their containment is this judgement, and a write path that
+ * spells its way out (a symlink inside the workspace, a traversal) is
+ * refused here rather than waved through by a lexical prefix match.
+ */
+export function isInsideRoot(path: string, root: string): boolean {
+  const landed = landedPath(path);
+  const canonicalRoot = canonicalPath(root);
+  return (
+    landed === canonicalRoot ||
+    landed.startsWith(
+      canonicalRoot.endsWith(sep) ? canonicalRoot : `${canonicalRoot}${sep}`,
+    )
+  );
+}
+
+/**
  * The containment judgement for a policy: the path, judged on where it
  * ACTUALLY lands, inside one of the mode's writable roots.
  */

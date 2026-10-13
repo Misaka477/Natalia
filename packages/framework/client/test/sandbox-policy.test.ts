@@ -115,6 +115,32 @@ test("a not-yet-existing file under an out-pointing symlink is refused", async (
   ).toBe(false);
 });
 
+test("isInsideRoot judges where the write lands, not how it spells", async () => {
+  // The main agent's in-process writes have no kernel fence, so their
+  // containment is this judgement: a symlink inside the workspace spelling
+  // its way out is refused, and so is a traversal, while a plain inside
+  // write passes. `workspacePath`'s lexical check alone would wave both
+  // escapes through.
+  const root = await mkdtemp(join(tmpdir(), "natalia-inside-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "natalia-inside-out-"));
+  await mkdir(join(root, "allowed"), { recursive: true });
+  await writeFile(join(root, "allowed", "inside.txt"), "x");
+  await symlink(outside, join(root, "allowed", "link"), "dir");
+  expect(isInsideRoot(join(root, "allowed", "inside.txt"), root)).toBe(true);
+  // A file that does not exist yet, inside: allowed (the write creates it).
+  expect(isInsideRoot(join(root, "allowed", "new.txt"), root)).toBe(true);
+  // The escapes.
+  expect(isInsideRoot(join(root, "allowed", "link", "escaped.txt"), root)).toBe(
+    false,
+  );
+  expect(isInsideRoot(join(root, "allowed", "..", "..", "escape"), root)).toBe(
+    false,
+  );
+  expect(isInsideRoot("/etc/passwd", root)).toBe(false);
+  // The root itself is inside itself.
+  expect(isInsideRoot(root, root)).toBe(true);
+});
+
 test("an absolute path outside the root never matches a relative domain", () => {
   expect(relativeToRoot("/etc/passwd", "/tmp/root")).toBe("/etc/passwd");
   expect(
@@ -142,6 +168,7 @@ test("the root itself reads as position empty, and a bare domain never matches i
  */
 
 import {
+  isInsideRoot,
   isWritableUnderPolicy,
   resolveDeploymentMode,
   resolveSandboxPolicy,

@@ -24,20 +24,8 @@
  */
 import { ShellExecutor } from "./shell";
 import { clampTimeout } from "./types";
-import { resolvePwshPath } from "./pwsh-resolve";
+import { ENCODING_PREAMBLE, resolvePwshPath } from "@anthelia/platform";
 import type { ShellExecRequest, ShellExecSpec } from "./types";
-
-/**
- * Pinned before every command.
- *
- * Windows PowerShell 5.1 — the last-resort executable — writes the console's OEM
- * code page by default, which garbles any non-ASCII output; pwsh 7 defaults to
- * UTF-8 and is unaffected. The statements ride on line 1 separated by `; ` rather
- * than on their own line so PowerShell's error LINE NUMBERS stay accurate, which
- * is the reason this is a prefix and not a preamble block.
- */
-export const ENCODING_PREAMBLE =
-  "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
 
 /**
  * Model-facing environment overrides.

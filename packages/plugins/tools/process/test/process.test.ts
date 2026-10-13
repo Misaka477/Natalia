@@ -5,6 +5,13 @@ import { join } from "node:path";
 import { createPluginRegistry } from "@anthelia/plugin";
 import { createToolRegistry } from "@anthelia/tools";
 import {
+  echoSleepCmd,
+  groupWithChildCmd,
+  sleepCmd,
+  utf8SleepCmd,
+  zFillCmd,
+} from "./fixtures";
+import {
   createProcessPlugin,
   ManagedProcessRegistry,
   managedProcessTools,
@@ -103,7 +110,7 @@ test("default process tools execute real commands", async () => {
     await tools.get("process_start")!.execute(
       {
         id: "proc_test",
-        command: "echo ready; sleep 0.2",
+        command: echoSleepCmd("ready", 0.2),
         description: "Start the managed process",
 
         readyPattern: "ready",
@@ -158,7 +165,7 @@ test("managed process registry reports live workspace process counts", async () 
   await tools.get("process_start")!.execute(
     {
       id: "proc_count",
-      command: "sleep 30",
+      command: sleepCmd(30),
       description: "Sleep for thirty seconds",
     },
     { workspaceRoot: root },
@@ -176,7 +183,7 @@ test("managed process registry persists state across registry instances", async 
   await first.get("process_start")!.execute(
     {
       id: "proc_persist",
-      command: "echo persisted; sleep 0.2",
+      command: echoSleepCmd("persisted", 0.2),
       description: "Echo persisted then sleep",
     },
     { workspaceRoot: root },
@@ -208,7 +215,7 @@ test("managed process restart preserves readiness configuration", async () => {
   await tools.get("process_start")!.execute(
     {
       id: "proc_restart",
-      command: "echo ready; sleep 1",
+      command: echoSleepCmd("ready", 1),
       description: "Start the managed process",
 
       readyPattern: "ready",
@@ -243,7 +250,7 @@ test("managed process stop terminates the owned process group", async () => {
     await tools.get("process_start")!.execute(
       {
         id: "proc_group",
-        command: "sleep 30 & echo $! > child.pid; wait",
+        command: groupWithChildCmd,
         description: "Start the managed process",
         stopTimeoutMs: 50,
       },
@@ -266,7 +273,7 @@ test("managed process output uses a UTF-8 byte budget", async () => {
   await tools.get("process_start")!.execute(
     {
       id: "proc_output",
-      command: "printf 'abc界界'; sleep 1",
+      command: utf8SleepCmd("abc界界", 1),
       description: "Start the managed process",
       maxOutputBytes: 6,
     },
@@ -296,25 +303,31 @@ test("managed process output uses a UTF-8 byte budget", async () => {
 test("managed process max runtime stops the owned process group", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-deadline-"));
   const tools = processRegistryTools();
+  // The deadline must outlive the launcher chain's STARTUP, not just the
+  // work: on Windows the chain is cmd -> pwsh, and a 100ms budget there
+  // killed the process before it ever spawned the child whose death is the
+  // evidence this test exists to collect. The point is the deadline
+  // terminating the GROUP, which a longer budget still proves.
+  const deadlineMs = process.platform === "win32" ? 3_000 : 100;
   const started = JSON.parse(
     await tools.get("process_start")!.execute(
       {
         id: "proc_deadline",
-        command: "sleep 30 & echo $! > child.pid; wait",
+        command: groupWithChildCmd,
         description: "Start the managed process",
-        maxRuntimeMs: 100,
+        maxRuntimeMs: deadlineMs,
       },
       { workspaceRoot: root },
     ),
   ) as { pid?: number; maxRuntimeMs?: number; deadlineAt?: string };
   const childPID = Number(await waitForFile(join(root, "child.pid")));
-  expect(started.maxRuntimeMs).toBe(100);
+  expect(started.maxRuntimeMs).toBe(deadlineMs);
   expect(started.deadlineAt).toBeString();
-  // The deadline stops the process at 100ms, but the LIVENESS SWEEP is
+  // The deadline stops the process at the budget, but the LIVENESS SWEEP is
   // what observes it — a ~500ms poll whose timer stretches under the
   // full-suite load. The window here must outlive the sweep's cadence,
   // not the deadline's.
-  await Bun.sleep(1_500);
+  await Bun.sleep(4_000);
   const status = JSON.parse(
     await tools
       .get("process_status")!
@@ -322,7 +335,7 @@ test("managed process max runtime stops the owned process group", async () => {
   ) as { status: string };
   expect(["stopped", "exited"]).toContain(status.status);
   expect(processAlive(childPID)).toBe(false);
-});
+}, 30_000);
 
 test("reopened managed process registry restores a durable deadline", async () => {
   const root = await mkdtemp(
@@ -332,7 +345,7 @@ test("reopened managed process registry restores a durable deadline", async () =
   await first.get("process_start")!.execute(
     {
       id: "proc_reopen_deadline",
-      command: "sleep 30",
+      command: sleepCmd(30),
       description: "Start the managed process",
       maxRuntimeMs: 150,
     },
@@ -360,7 +373,7 @@ test("reopened registry immediately stops an overdue durable deadline", async ()
     await first.get("process_start")!.execute(
       {
         id: "proc_overdue",
-        command: "sleep 30",
+        command: sleepCmd(30),
         description: "Run the command",
         maxRuntimeMs: 10_000,
       },
@@ -389,7 +402,7 @@ test("managed process resource limits require positive values", async () => {
   await expect(
     tools.get("process_start")!.execute(
       {
-        command: "sleep 1",
+        command: sleepCmd(1),
         description: "Sleep with a zero byte budget",
         maxOutputBytes: 0,
       },
@@ -399,7 +412,7 @@ test("managed process resource limits require positive values", async () => {
   await expect(
     tools.get("process_start")!.execute(
       {
-        command: "sleep 1",
+        command: sleepCmd(1),
         description: "Run the command",
         stopTimeoutMs: -1,
       },
@@ -419,7 +432,7 @@ test("managed process IDs and deadlines are isolated by workspace", async () => 
   await tools.get("process_start")!.execute(
     {
       id: "proc_same",
-      command: "sleep 30",
+      command: sleepCmd(30),
       description: "Run the command",
       maxRuntimeMs: 100,
     },
@@ -428,7 +441,7 @@ test("managed process IDs and deadlines are isolated by workspace", async () => 
   await tools
     .get("process_start")!
     .execute(
-      { id: "proc_same", command: "sleep 30", description: "Run the command" },
+      { id: "proc_same", command: sleepCmd(30), description: "Run the command" },
       { workspaceRoot: secondRoot },
     );
   await Bun.sleep(250);
@@ -458,7 +471,7 @@ test("unloading the process plugin terminates the processes it started", async (
     await tools.get("process_start")!.execute(
       {
         id: "proc_dispose",
-        command: "sleep 30",
+        command: sleepCmd(30),
         description: "Run the command",
       },
       { workspaceRoot: root },
@@ -490,14 +503,24 @@ test("a capped process output names its spill file", async () => {
   await tools.get("process_start")!.execute(
     {
       id: "proc_spill",
-      command: "printf 'z%.0s' $(seq 1 5000); echo",
+      command: zFillCmd(5001),
       description: "Start the managed process",
       maxOutputBytes: 200,
     },
     { workspaceRoot: root },
   );
   // Let the child finish so the output file holds everything it wrote.
-  await Bun.sleep(600);
+  // Polled: the Windows launcher chain (cmd -> pwsh) needs longer to start
+  // than the POSIX one, and a fixed wait raced it.
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const seen = String(
+      await tools
+        .get("process_output")!
+        .execute({ id: "proc_spill" }, { workspaceRoot: root }),
+    );
+    if (seen.includes("[output truncated")) break;
+    await Bun.sleep(25);
+  }
   const output = await tools
     .get("process_output")!
     .execute({ id: "proc_spill" }, { workspaceRoot: root });
@@ -532,7 +555,7 @@ test("process_status output carries its freshness, and process_output refreshes 
   await tools.get("process_start")!.execute(
     {
       id: "proc_fresh",
-      command: "echo first; sleep 5",
+      command: echoSleepCmd("first", 5),
       description: "Print once then idle",
     },
     { workspaceRoot: root },
@@ -573,7 +596,7 @@ test("a natural death presents one terminal state across status, wait and audit 
     await tools.get("process_start")!.execute(
       {
         id: "proc_dies",
-        command: "sleep 30",
+        command: sleepCmd(30),
         description: "A process that will be killed",
       },
       { workspaceRoot: root },
@@ -627,7 +650,7 @@ test("the process family's read tools project terminal cards (R1)", async () => 
   await tools.get("process_start")!.execute(
     {
       id: "proc_card",
-      command: "sleep 5",
+      command: sleepCmd(5),
       description: "A process for its card",
     },
     { workspaceRoot: root },
@@ -700,18 +723,24 @@ test("a stop of an already-finished process keeps its real end time (P1-13)", as
   await tools.get("process_start")!.execute(
     {
       id: "proc_idem",
-      command: "true",
+      command: "exit 0",
       description: "Exit immediately",
     },
     { workspaceRoot: root },
   );
-  // Let it exit on its own, then read the end time it recorded.
-  await Bun.sleep(300);
-  const finished = JSON.parse(
-    await tools
-      .get("process_status")!
-      .execute({ id: "proc_idem" }, { workspaceRoot: root }),
-  ) as { status: string; endedAt?: string };
+  // Let it exit on its own, then read the end time it recorded. Polled
+  // rather than slept: the Windows launcher chain (cmd -> pwsh) starts
+  // slower than the POSIX one, and a fixed wait raced it.
+  let finished = { status: "", endedAt: undefined as string | undefined };
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    finished = JSON.parse(
+      await tools
+        .get("process_status")!
+        .execute({ id: "proc_idem" }, { workspaceRoot: root }),
+    ) as { status: string; endedAt?: string };
+    if (finished.status !== "running") break;
+    await Bun.sleep(25);
+  }
   expect(finished.status).not.toBe("running");
   const realEnd = finished.endedAt;
   expect(realEnd).toBeDefined();
@@ -736,7 +765,7 @@ test("a status read reports the output the process actually produced (P1-12)", a
   await tools.get("process_start")!.execute(
     {
       id: "proc_fresh",
-      command: "sh -c 'echo server listening; sleep 30'",
+      command: echoSleepCmd("server listening", 30),
       description: "Print then sleep",
       readyPattern: "server listening",
     },

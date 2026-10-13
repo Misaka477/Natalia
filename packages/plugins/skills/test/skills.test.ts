@@ -23,7 +23,11 @@ test("discovers native project skills and enforces policy", async () => {
   await mkdir(skillRoot, { recursive: true });
   await writeFile(
     join(skillRoot, "SKILL.md"),
-    "---\nname: review\ndescription: Review code\nallowed-tools: [read_file, grep]\nsandbox-required: true\nresources: [notes.txt]\nscripts: {smoke: printf skill-ok}\n---\nUse careful review.",
+    // `echo`, not `printf`: the script runs under the HOST's own shell
+    // (pwsh on Windows), and printf is not a PowerShell command. The
+    // assertion is about the script's stdout reaching the caller, which
+    // echo proves on every platform the seam supports.
+    "---\nname: review\ndescription: Review code\nallowed-tools: [read_file, grep]\nsandbox-required: true\nresources: [notes.txt]\nscripts: {smoke: echo skill-ok}\n---\nUse careful review.",
   );
   await writeFile(join(skillRoot, "notes.txt"), "resource-ok");
   const registry = await discoverSkills({ workspaceRoot: root });
@@ -31,7 +35,12 @@ test("discovers native project skills and enforces policy", async () => {
   expect(skill.body).toBe("Use careful review.");
   expect(skill.resources).toEqual(["notes.txt"]);
   expect(await readSkillResource(skill, "notes.txt")).toBe("resource-ok");
-  expect((await runSkillScript(skill, "smoke")).stdout).toBe("skill-ok");
+  // Trimmed: the host's own shell supplies the trailing newline (pwsh's
+  // echo, like bash's), and a script runner's caller must not have to
+  // care which shell the host runs.
+  expect((await runSkillScript(skill, "smoke")).stdout.trim()).toBe(
+    "skill-ok",
+  );
   expect(authorizeSkillTool(skill, "read_file", { mode: "sandbox" })).toBe(
     true,
   );

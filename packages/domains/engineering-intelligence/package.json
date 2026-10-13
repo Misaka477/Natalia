@@ -16,6 +16,7 @@
     "@anthelia/runtime-services": "workspace:*",
     "@anthelia/session": "workspace:*",
     "@anthelia/session-store": "workspace:*",
+    "@anthelia/shell": "workspace:*",
     "@anthelia/substrate": "workspace:*",
     "@anthelia/workspace": "workspace:*",
     "@natalia/collab": "workspace:*",

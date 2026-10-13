@@ -450,14 +450,26 @@ async function readJSONFile<T>(path: string, fallback: T): Promise<T> {
  * file, and `/tmp` workspaces have no bun.lock/workspace context). Real
  * deployments must provide the same resolution — see the plugin guide's
  * dependency-resolution note.
+ *
+ * The source paths are anchored to THIS FILE, not the process's cwd, and they
+ * name the nested layout (`packages/core/<pkg>`): the old spelling resolved
+ * `<cwd>/packages/<pkg>`, which exists on no platform — a dangling symlink is
+ * legal on POSIX, so the Linux suite never noticed, and Windows refuses to
+ * create one (ENOENT), which failed six tests there. The anchor matters as
+ * much as the layout: `bun test` from a package directory sets cwd there, the
+ * same trap {@link pluginSdkImportPath} documents.
  */
 export async function installPluginSdkLinks(root: string) {
   const scoped = join(root, "node_modules", "@natalia");
   await mkdir(scoped, { recursive: true });
-  for (const pkg of ["plugin", "contracts"]) {
-    const target = join(scoped, pkg);
+  const repoRoot = resolve(import.meta.dir, "..", "..", "..", "..");
+  for (const [name, source] of [
+    ["plugin", "core/plugin"],
+    ["contracts", "core/contracts"],
+  ] as const) {
+    const target = join(scoped, name);
     try {
-      await symlink(join(process.cwd(), "packages", pkg), target, "dir");
+      await symlink(join(repoRoot, "packages", ...source.split("/")), target, "dir");
     } catch {
       // Windows without Developer Mode cannot create directory symlinks, and a
       // hard failure here would mask the plugin-loading behaviour under test.
@@ -465,7 +477,7 @@ export async function installPluginSdkLinks(root: string) {
       // own node_modules links (bun junctions) cannot be copied either, so
       // they are excluded: `@anthelia/contracts` resolves from the sibling
       // copy, and anything else resolves up through the repository root.
-      await cp(join(process.cwd(), "packages", pkg), target, {
+      await cp(join(repoRoot, "packages", ...source.split("/")), target, {
         recursive: true,
         filter: (source) => !source.includes(`${sep}node_modules${sep}`),
       });

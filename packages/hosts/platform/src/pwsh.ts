@@ -1,15 +1,28 @@
 /**
- * PowerShell executable resolution.
+ * The PowerShell spelling, owned by the platform layer.
  *
- * Parameterised by env and platform so resolution is a pure function of its
- * inputs on every host, and by `exists` so the order can be tested without a
- * real Windows filesystem — the same injection `@anthelia/platform`'s
- * `resolveBashExecutable` takes.
- *
- * The order is PowerShell 7 first, then PATH, then Windows PowerShell 5.1 as the
- * legacy last resort: a host that has 7 and 5.1 should use 7, and one that has
- * only 5.1 should still work rather than fail for a version it cannot fix.
+ * This lived one layer up in the shell package until the platform layer
+ * itself needed it: `startDetachedProcess`'s Windows branch used to launch
+ * its redirecting launcher through a BASH (`bash -lc "( cmd ) > log 2>&1"`),
+ * which on Windows means Git bash or WSL — neither of which can see the
+ * Windows paths Natalia hands its processes, and WSL cannot see the
+ * Windows-installed node/bun either. The detached branch now speaks the
+ * platform's own shell, exactly like the foreground path, and the knowledge
+ * lives at the layer both can import.
  */
+
+/**
+ * Pinned before every command.
+ *
+ * Windows PowerShell 5.1 — the last-resort executable — writes the console's OEM
+ * code page by default, which garbles any non-ASCII output; pwsh 7 defaults to
+ * UTF-8 and is unaffected. The statements ride on line 1 separated by `; ` rather
+ * than on their own line so PowerShell's error LINE NUMBERS stay accurate, which
+ * is the reason this is a prefix and not a preamble block.
+ */
+export const ENCODING_PREAMBLE =
+  "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
+
 import { lstatSync } from "node:fs";
 
 /**

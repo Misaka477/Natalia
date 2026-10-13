@@ -7,6 +7,7 @@ import {
   ManagedProcessRegistry,
   settlementReasonFor,
 } from "../src/process-tools";
+import { longLivedArgv, sleepCmd } from "./fixtures";
 import type { ToolExecutionContext } from "@anthelia/tools";
 
 /**
@@ -43,7 +44,7 @@ async function seed(root: string, id: string, pid = 0x7fffffff) {
       processes: [
         {
           id,
-          command: "sleep 999",
+          command: sleepCmd(999),
           description: "Sleep for 999 seconds",
           cwd: root,
           status: "running",
@@ -88,7 +89,7 @@ test("a sweep-detected exit delivers one exit notice through the spine", async (
       reason: "exited",
       sourceKind: "process-exited",
     });
-    expect(settlement.notices[0]!.notice.summary).toContain("sleep 999");
+    expect(settlement.notices[0]!.notice.summary).toContain(sleepCmd(999));
     // The record is settled, so a second sweep adds nothing.
     await registry.observer.sweep();
     expect(settlement.notices).toHaveLength(1);
@@ -101,7 +102,7 @@ test("a sweep-detected readiness delivers one ready notice", async () => {
   const root = await mkdtemp(join(tmpdir(), "settle-ready-"));
   // A REAL live process the test owns: a foreign pid (even init) answers
   // EPERM to a non-root signal-0, which the sweep would read as dead.
-  const child = Bun.spawn(["sleep", "30"]);
+  const child = Bun.spawn(longLivedArgv(30));
   try {
     await seed(root, "proc_ready", child.pid);
     const settlement = fakeSettlement();

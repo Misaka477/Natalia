@@ -20,7 +20,11 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { detachedShellPrefix, startDetachedProcess } from "@anthelia/platform";
+import {
+  detachedShellPrefix,
+  isWindows,
+  startDetachedProcess,
+} from "@anthelia/platform";
 import { selectExecutor } from "@anthelia/shell";
 import {
   processFingerprint,
@@ -443,11 +447,17 @@ export class ManagedProcessRegistry {
       // `setsid` (a process group a later negative-pid signal can address), which
       // is a prefix it passes rather than something the seam hardcodes — the
       // Windows branch of startDetachedProcess ignores it entirely, because an
-      // MSYS `$!` is in a different pid namespace from a Windows one.
-      posixScript: `${detachedShellPrefix()}${shell.detachedPosixScript({
-        command,
-        outputPath,
-      })}`,
+      // MSYS `$!` is in a different pid namespace from a Windows one. Windows
+      // therefore passes no script at all: its native detach is the mechanism,
+      // and the pwsh executor cannot spell a POSIX launcher.
+      ...(isWindows()
+        ? {}
+        : {
+            posixScript: `${detachedShellPrefix()}${shell.detachedPosixScript({
+              command,
+              outputPath,
+            })}`,
+          }),
       cwd: context.workspaceRoot,
       outputPath,
       env: safeToolEnv(context.settings?.envAllowlist),

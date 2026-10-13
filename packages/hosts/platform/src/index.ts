@@ -1,5 +1,14 @@
 export * from "./hash-tree";
 export * from "./store-paths";
+export {
+  ENCODING_PREAMBLE,
+  candidatePwshPaths,
+  resolvePwshPath,
+} from "./pwsh";
+import {
+  ENCODING_PREAMBLE,
+  resolvePwshPath,
+} from "./pwsh";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -245,6 +254,15 @@ export function detachedShellPrefix(os?: NodeJS.Platform): string {
 }
 
 /**
+ * Quotes a value for a PowerShell single-quoted string: the embedded quote is
+ * DOUBLED. The POSIX `'\''` spelling is a parse error in PowerShell, and the
+ * launcher's script is PowerShell source — so the quoting is PowerShell's.
+ */
+function pwshQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
  * Starts a detached background process and reports a PID that the operating
  * system can later signal.
  *
@@ -257,7 +275,13 @@ export function detachedShellPrefix(os?: NodeJS.Platform): string {
  */
 export async function startDetachedProcess(input: {
   command: string;
-  posixScript: string;
+  /**
+   * The POSIX launcher script. Omitted on Windows, whose branch detaches
+   * natively and never reads it — a pwsh executor cannot produce one, and
+   * making callers build it anyway was a refusal on the one platform that
+   * does not need it.
+   */
+  posixScript?: string;
   cwd: string;
   outputPath: string;
   env?: Record<string, string | undefined>;
@@ -275,24 +299,59 @@ export async function startDetachedProcess(input: {
     exists: input.exists,
   };
   if (isWindows(input.os)) {
-    // The shell performs the redirection, exactly as the POSIX launcher script
-    // does. A detached Windows child does not inherit a descriptor opened
-    // here, so `stdio: [..., log.fd, log.fd]` left every background log empty
-    // and made process output invisible. The command is grouped first because
-    // a bare `cmd > log` would only redirect the final stage of a `;` or `&&`
-    // sequence. The native spawn is still required so the returned PID is a
-    // real Windows one rather than an MSYS id.
-    const shell = profileShellCommand(
-      `( ${input.command} ) > ${shellQuote(input.outputPath)} 2>&1`,
-      resolution,
+    // The detach itself cannot be the shell's own process: DETACHED_PROCESS
+    // gives the child no console, and a console app that tries to initialize
+    // one exits 0 WITHOUT running its command — measured on pwsh 7.4
+    // (`-Command "exit 42"` returns 0 and writes no output). cmd.exe
+    // survives DETACHED_PROCESS, so the launcher is `cmd /c pwsh -Command …`
+    // and the worker script rides an ENVIRONMENT VARIABLE rather than a
+    // generated file: a launcher file beside the log raced the caller's
+    // cleanup — the detached chain had not opened it yet when the workspace
+    // was removed, and every background start died with ERROR_CANT_ACCESS_FILE.
+    // An env entry cannot be deleted out from under the spawn, and no shell
+    // quoting stands between the caller and the worker.
+    //
+    // The command is grouped in a SCRIPT BLOCK, not a parenthesized
+    // expression: PowerShell parses `( a; b )` as an expression and rejects
+    // the statement list, and `$( ... )` — the other grouping — BUFFERS the
+    // group's output until it completes, which would leave a long-running
+    // server's log empty until the server exits. `& { ... }` streams, so the
+    // redirect sees output as it is produced, exactly like the POSIX
+    // launcher's grouping.
+    //
+    // The log is written through .NET, not through `>`: Windows PowerShell
+    // 5.1 — the fallback executable — redirects with Out-File's default
+    // UTF-16 LE, so a log read back as UTF-8 arrives as NUL-interleaved
+    // mojibake (measured). AppendAllText with an explicit no-BOM UTF-8
+    // encoding is the one spelling both 5.1 and 7 honour, and it streams.
+    const logPath = pwshQuote(input.outputPath);
+    const workerScript =
+      `${ENCODING_PREAMBLE}` +
+      `[System.IO.File]::WriteAllText(${logPath}, '', [System.Text.UTF8Encoding]::new($false)); ` +
+      `& { ${input.command} } 2>&1 | ForEach-Object { ` +
+      `[System.IO.File]::AppendAllText(${logPath}, "$_" + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }`;
+    const child = spawn(
+      "cmd.exe",
+      [
+        "/c",
+        resolvePwshPath(undefined, input.env, input.os),
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Invoke-Expression $env:NATALIA_DETACHED_SCRIPT",
+      ],
+      {
+        cwd: input.cwd,
+        env: {
+          ...(input.env ?? process.env),
+          NATALIA_DETACHED_SCRIPT: workerScript,
+        },
+        detached: true,
+        windowsHide: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      },
     );
-    const child = spawn(shell.executable, shell.args, {
-      cwd: input.cwd,
-      env: input.env as NodeJS.ProcessEnv | undefined,
-      detached: true,
-      windowsHide: true,
-      stdio: ["ignore", "ignore", "ignore"],
-    });
     const pid = await new Promise<number | undefined>(
       (resolvePromise, reject) => {
         const childEvents = child as unknown as NodeJS.EventEmitter;
@@ -305,6 +364,10 @@ export async function startDetachedProcess(input: {
     child.unref();
     return { pid };
   }
+  if (input.posixScript === undefined)
+    throw new Error(
+      "startDetachedProcess: a POSIX host requires posixScript (the Windows branch is the one that detaches natively)",
+    );
   const launcherShell = profileShellCommand(input.posixScript, resolution);
   const launcher = spawn(launcherShell.executable, launcherShell.args, {
     cwd: input.cwd,

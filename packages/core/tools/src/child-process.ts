@@ -50,8 +50,14 @@ export function sendProcessSignal(pid: number, signal: NodeJS.Signals) {
     // their owned process group and includes background children. Windows has
     // no equivalent, so the tree is terminated through the OS utility instead.
     if (isWindows()) {
+      // For BOTH signals, not just SIGKILL: Windows has no catchable
+      // termination to escalate from — TerminateProcess is final — and a
+      // signal aimed at the launcher alone (cmd exits; the pwsh worker and
+      // ITS child keep running) orphaned the very children the group stop
+      // exists to kill. The tree kill is the mechanism on Windows, so the
+      // graceful-then-force escalation collapses into it.
       const treeKill = processTreeKillCommand(pid);
-      if (treeKill && signal === "SIGKILL") {
+      if (treeKill) {
         Bun.spawnSync([treeKill.executable, ...treeKill.args], {
           stdout: "ignore",
           stderr: "ignore",

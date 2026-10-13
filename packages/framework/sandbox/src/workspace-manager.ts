@@ -20,6 +20,7 @@ import type { ConfinementMode } from "@anthelia/confinement";
 import { wrapConfinedCommand } from "@anthelia/confinement";
 import {
   forceRemove,
+  isWindows,
   shellQuote,
   startDetachedProcess,
 } from "@anthelia/platform";
@@ -373,11 +374,18 @@ export class WorkspaceSandboxManager
     // handshake intact while the command itself lands under the same floor
     // as every other candidate command. Without this, a resource — the one
     // long-running surface — would be the hole the floor claims to close.
-    const script = shell.detachedPosixScript({ command, outputPath });
-    const posixScript = this.confinedScript(script, manifest.root);
+    // Windows has no POSIX launcher: the platform layer detaches natively
+    // (and the pwsh executor cannot spell `setsid`/`$!` at all), so the
+    // script — and its confinement wrapper — is built only where it runs.
+    const posixScript = isWindows()
+      ? undefined
+      : this.confinedScript(
+          shell.detachedPosixScript({ command, outputPath }),
+          manifest.root,
+        );
     const { pid } = await startDetachedProcess({
       command,
-      posixScript,
+      ...(posixScript === undefined ? {} : { posixScript }),
       cwd: manifest.root,
       outputPath,
       env: this.environment(manifest.envAllowlist),

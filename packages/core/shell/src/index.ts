@@ -17,10 +17,13 @@ export {
 } from "./shell-env";
 export {
   PwshLocalExecutor,
-  ENCODING_PREAMBLE,
   ENV_OVERRIDES,
 } from "./pwsh-local";
-export { candidatePwshPaths, resolvePwshPath } from "./pwsh-resolve";
+export {
+  ENCODING_PREAMBLE,
+  candidatePwshPaths,
+  resolvePwshPath,
+} from "@anthelia/platform";
 export {
   executorFor,
   platformShell,

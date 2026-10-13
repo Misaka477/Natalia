@@ -656,13 +656,15 @@ export async function runSkillScript(
 ) {
   const command = skill.scripts[name];
   if (!command) throw new Error(`skill script not found: ${name}`);
-  // The user's own shell when they have one, else the absolute bash path this
-  // call site has always fallen back to. Both ride the seam, so the choice is
-  // still data rather than a shell built here.
+  // The user's own shell when they have one. The valve is PATH-shaped, so a
+  // POSIX `$SHELL` still wins; on Windows there is no `$SHELL` and the
+  // executor resolves pwsh. The old unconditional fallback spelled
+  // `/usr/bin/bash` — a path that does not exist on Windows — so every skill
+  // script there died with ENOENT before the command was ever attempted.
   const spec = shell.resolve({
     command,
     loginShell: true,
-    shellExecutable: process.env.SHELL ?? "/usr/bin/bash",
+    ...(process.env.SHELL ? { shellExecutable: process.env.SHELL } : {}),
   });
   const child = Bun.spawn([spec.command, ...spec.args], {
     cwd: skill.root,

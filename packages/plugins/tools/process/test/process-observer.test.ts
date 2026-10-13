@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { sleepCmd } from "./fixtures";
 import {
   ManagedProcessObserver,
   ManagedProcessRegistry,
@@ -15,7 +16,7 @@ function record(input: {
 }) {
   return {
     id: input.id,
-    command: "sleep 1",
+    command: sleepCmd(1),
     status: input.status,
     workspaceRoot: input.workspaceRoot ?? "/ws",
     startedAt: "2026-01-01T00:00:00.000Z",
@@ -36,7 +37,7 @@ function source(
     },
     settled,
     snapshot: () => records,
-    // T-03: the sweep no longer names the status — the registry's one
+    // T-03: the sweep no longer names the status —the registry's one
     // classifier (settleFromRecord) decides, so this stub settles what the
     // sweep observed (a dead pid) as the registry would.
     async settle(input: { id: string }) {
@@ -186,7 +187,7 @@ test("a settled event carries the command and the workspace it ran in", async ()
     {
       kind: "settled",
       id: "proc_9",
-      command: "sleep 1",
+      command: sleepCmd(1),
       status: "exited",
       workspaceRoot: "/other-ws",
       startedAt: "2026-01-01T00:00:00.000Z",
@@ -258,7 +259,7 @@ test("a second sweep does not re-notice a settled process", async () => {
   expect(seen).toEqual(["proc_1"]);
 });
 
-test("the sweep never names the terminal status — the registry's one classifier does (T-03)", async () => {
+test("the sweep never names the terminal status —the registry's one classifier does (T-03)", async () => {
   // The observer used to settle every death `exited` itself, so a PID-reuse
   // death (settleFromRecord's `failed`) presented as two different terminal
   // states depending on which path noticed it first. The sweep now carries
@@ -309,12 +310,12 @@ test("the sweep's settle delegates to the registry's one classifier (T-03)", asy
   internals.processes.set(workspaceRoot, new Map());
   internals.processes.get(workspaceRoot)!.set("proc_reuse", {
     id: "proc_reuse",
-    command: "sleep 30",
+    command: sleepCmd(30),
     status: "running",
     workspaceRoot,
     startedAt: "2026-01-01T00:00:00.000Z",
     // A live pid with a fingerprint that cannot match it: the process this
-    // record names died and its id was taken by something else — exactly
+    // record names died and its id was taken by something else —exactly
     // what settleFromRecord's fingerprint branch exists to catch.
     pid: process.pid,
     pidStartTicks: "stale-start-ticks",

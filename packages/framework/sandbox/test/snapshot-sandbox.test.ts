@@ -340,3 +340,75 @@ test("the conflict's guidance names a tool the surface actually exposes (F14)", 
   expect(refresh).toBeDefined();
   expect(refresh!.description).toContain("up to date");
 });
+
+test("a host that moved in a DISJOINT region merges instead of refusing", async () => {
+  // Git's most valuable behavior, on our own diff: the candidate changed one
+  // region of a file, the host changed a different one since the base, and
+  // BOTH land. Refusing these cost a re-run of work that never collided.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sb-merge-"));
+  const host = join(root, "host");
+  await mkdir(host, { recursive: true });
+  const base = ["l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"];
+  await writeFile(join(host, "shared.ts"), `${base.join("\n")}\n`);
+  const store = new SnapshotStore(
+    new ObjectStore(join(root, ".natalia", "objects")),
+    join(root, ".natalia", "store"),
+  );
+  const snapshot = await store.capture(host);
+  // The candidate edits the head; the host edits the tail, after the snapshot.
+  const dir = join(root, "cand");
+  await mkdir(dir, { recursive: true });
+  const index = await store.materialize(dir, snapshot);
+  const candidateLines = ["CANDIDATE-l0", ...base.slice(1)];
+  await writeFile(join(dir, "shared.ts"), `${candidateLines.join("\n")}\n`);
+  const hostLines = [...base.slice(0, 9), "HOST-l9"];
+  await writeFile(join(host, "shared.ts"), `${hostLines.join("\n")}\n`);
+  const changes = await store.diff(
+    dir,
+    snapshot,
+    await store.capture(dir, index),
+  );
+  expect(changes).toHaveLength(1);
+
+  await store.promote("sb_merge", dir, host, changes, undefined, snapshot);
+
+  // Both sides' edits are in the host file — the merge landed.
+  const landed = (await readFile(join(host, "shared.ts"), "utf8"))
+    .trimEnd()
+    .split("\n");
+  expect(landed[0]).toBe("CANDIDATE-l0");
+  expect(landed[9]).toBe("HOST-l9");
+  expect(landed[5]).toBe("l5");
+});
+
+test("a host that moved in the SAME region still refuses, naming both sides", async () => {
+  // The merge is not a silent overwrite: overlapping different edits are a
+  // named conflict, and nothing lands.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sb-mergeconflict-"));
+  const host = join(root, "host");
+  await mkdir(host, { recursive: true });
+  await writeFile(join(host, "shared.ts"), "l0\nl1\nl2\n");
+  const store = new SnapshotStore(
+    new ObjectStore(join(root, ".natalia", "objects")),
+    join(root, ".natalia", "store"),
+  );
+  const snapshot = await store.capture(host);
+  const dir = join(root, "cand");
+  await mkdir(dir, { recursive: true });
+  const index = await store.materialize(dir, snapshot);
+  await writeFile(join(dir, "shared.ts"), "l0\nCANDIDATE-l1\nl2\n");
+  await writeFile(join(host, "shared.ts"), "l0\nHOST-l1\nl2\n");
+  const changes = await store.diff(
+    dir,
+    snapshot,
+    await store.capture(dir, index),
+  );
+
+  await expect(
+    store.promote("sb_mc", dir, host, changes, undefined, snapshot),
+  ).rejects.toThrow(/conflicts with changes already on the host/);
+  // The host's edit survives the refusal.
+  expect(await readFile(join(host, "shared.ts"), "utf8")).toBe(
+    "l0\nHOST-l1\nl2\n",
+  );
+});

@@ -32,12 +32,17 @@ import { WorkspaceSandboxManager } from "./workspace-manager";
 /**
  * How strongly this controller's backend keeps its promises.
  *
- * `full` — the worktree backend: a candidate is a REAL branch, promotion
- * is a real merge, rollback is a real reset. `partial` — the snapshot
- * backend: promotion is copy-and-hope, so "verified rollbackable" is a
- * claim the backend cannot underwrite. A consumer that needs the absolute
- * claim must read this fact and refuse the partial answer rather than
- * treating the two as the same thing (the sandbox study's rule, our spelling).
+ * `full` — the worktree backend: a candidate is a REAL branch in a real
+ * history, promotion is git's merge, rollback is a real reset. `partial` —
+ * the snapshot backend: a candidate is a content-addressed snapshot in OUR
+ * store, promotion is our own three-way resolution (disjoint regions merge,
+ * real collisions refuse by name before anything is written), and rollback
+ * restores what the promotion touched from its last-known-good backup. What
+ * it cannot underwrite is the HISTORY claim: no branch line, no reset to an
+ * arbitrary ancestor — the rollback is scoped to the last promotion. A
+ * consumer that needs the absolute claim must read this fact and refuse the
+ * partial answer rather than treating the two as the same thing (the
+ * sandbox study's rule, our spelling).
  */
 export type SandboxEnforcement = "full" | "partial";
 
@@ -101,8 +106,8 @@ export function createSandboxController(input: {
     // round — the worktree backend was an opt-in — which meant the
     // history-integrating backend (real branches, a real promotion, a real
     // rollback) was the exception in exactly the repositories that could
-    // support it, and the snapshot backend's copy-and-hope promotion was the
-    // norm. `backend === "snapshot"` still forces the snapshot path for a
+    // support it, and the snapshot backend's content-addressed promotion
+    // was the norm. `backend === "snapshot"` still forces the snapshot path for a
     // caller that wants it (a test, or a deployment that must not touch
     // git); nothing else may choose.
     if (!initializing)

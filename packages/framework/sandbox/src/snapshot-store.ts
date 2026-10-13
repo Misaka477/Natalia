@@ -32,6 +32,7 @@ import type { SandboxDiffKind } from "@anthelia/contracts";
 import type { SandboxChange } from "./workspace-manager";
 import { DiffCache, ObjectStore } from "@anthelia/object-store";
 import { diffTextAsync, type TextDiffResult } from "./diff";
+import { mergeConflictReason, mergeTexts } from "./merge";
 
 export type IndexedFile = {
   objectID: string;
@@ -347,9 +348,12 @@ export class SnapshotStore {
       .filter((change) => change.kind !== "delete")
       .map((change) => change.path);
     await authorize?.(paths);
-    // Checked before anything is written, so a conflict leaves the host exactly
-    // as it was.
-    if (base) await this.assertNoConflict(hostRoot, changes, base);
+    // Resolved before anything is written, so a conflict leaves the host
+    // exactly as it was — and a clean merge lands its merged text rather than
+    // the candidate's raw one.
+    const merged = base
+      ? await this.resolvePromotion(hostRoot, candidateRoot, changes, base)
+      : new Map<string, string>();
     const lkgDir = this.lkgDir(id);
     await mkdir(lkgDir, { recursive: true });
     const record: PromotionRecord = { version: 1, applied: [] };
@@ -367,9 +371,11 @@ export class SnapshotStore {
           await rm(target, { force: true });
         } else {
           await mkdir(dirname(target), { recursive: true });
+          const resolved = merged.get(change.path);
           await writeFile(
             target,
-            await readFile(containPath(candidateRoot, change.path)),
+            resolved ??
+              (await readFile(containPath(candidateRoot, change.path))),
           );
         }
       } catch (error) {
@@ -437,28 +443,63 @@ export class SnapshotStore {
    * reported. This is the case the ownership map is meant to prevent, and the
    * check is here because the map is a declaration, not a guarantee.
    */
-  private async assertNoConflict(
+  /**
+   * The three-way resolution, before anything is written: for every change,
+   * either the host still matches the base (the ordinary case), or the two
+   * sides are MERGED (git's most valuable behavior — disjoint regions both
+   * land), or the collision is real and the whole promotion refuses.
+   *
+   * Returns the merged content for the paths a merge resolved, which the
+   * promote loop writes INSTEAD of the candidate's raw text.
+   */
+  private async resolvePromotion(
     hostRoot: string,
+    candidateRoot: string,
     changes: SandboxChange[],
     base: SnapshotIndex,
-  ): Promise<void> {
+  ): Promise<Map<string, string>> {
+    const merged = new Map<string, string>();
     const conflicts: string[] = [];
     for (const change of changes) {
-      const expected = base.get(change.path)?.objectID;
+      const baseObject = base.get(change.path)?.objectID;
       const target = containPath(hostRoot, change.path);
       const raw = await readFile(target).catch(() => undefined);
       const actual = raw
         ? createHash("sha256").update(raw).digest("hex")
         : undefined;
-      // `add` expects nothing on the host; `modify` and `delete` expect exactly
-      // the base blob. Anything else means the host moved under the candidate.
-      if (actual !== expected)
-        conflicts.push(
-          `${change.path} (host is ${actual ? "modified" : "missing"}, ` +
-            `candidate was built from ${expected ? "an earlier revision" : "nothing"})`,
+      if (actual === baseObject) continue;
+      // The host moved under the candidate. A MODIFY is mergeable when the
+      // two sides touched different regions of the same base; an add/add and
+      // a delete-against-a-moved-file have no regions to separate, so they
+      // refuse (git conflicts on those too).
+      if (change.kind === "modify" && baseObject && raw) {
+        const theirs = await readFile(
+          containPath(candidateRoot, change.path),
+          "utf8",
         );
+        const result = mergeTexts({
+          base: await this.objects
+            .get(baseObject)
+            .then((bytes) => new TextDecoder().decode(bytes)),
+          ours: raw.toString("utf8"),
+          theirs,
+        });
+        if (result.outcome === "clean") {
+          merged.set(change.path, result.lines.join("\n"));
+          continue;
+        }
+        conflicts.push(
+          `${change.path} (${mergeConflictReason(result.conflicts).split("\n").join("; ")})`,
+        );
+        continue;
+      }
+      conflicts.push(
+        `${change.path} (host is ${actual ? "modified" : "missing"}, ` +
+          `candidate was built from ${baseObject ? "an earlier revision" : "nothing"})`,
+      );
     }
     if (conflicts.length) throw new SandboxPromotionConflict(conflicts);
+    return merged;
   }
 
   private async pathExists(path: string): Promise<boolean> {

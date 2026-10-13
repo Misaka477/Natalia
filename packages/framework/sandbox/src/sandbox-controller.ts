@@ -4,6 +4,7 @@ import type { SandboxBackend } from "@anthelia/contracts";
 import type { ConfinementMode } from "@anthelia/confinement";
 import type { SandboxToolService } from "@anthelia/tools";
 import { dependencyRootsFor } from "./dependency-links";
+import type { SandboxLog } from "./sandbox-log";
 import { SnapshotSandboxManager } from "./snapshot-sandbox";
 import {
   WorktreeSandboxManager,
@@ -90,6 +91,13 @@ export function createSandboxController(input: {
    * unsetting anything on the machine it runs on.
    */
   confinementBinaryPath?: string;
+  /**
+   * The operation-log seam for the family's consequential acts (audit
+   * 缺口 4): promotions, their gate refusals, rollbacks, discarding
+   * deletes. Absent leaves the managers silent, which is what a directly
+   * constructed controller gets.
+   */
+  log?: SandboxLog;
 }): SandboxController {
   let manager: WorkspaceSandboxManager | undefined;
   // "partial" until a backend is chosen: a controller that has not
@@ -124,6 +132,7 @@ export function createSandboxController(input: {
           ...(input.confinementBinaryPath
             ? { confinementBinaryPath: input.confinementBinaryPath }
             : {}),
+          ...(input.log ? { log: input.log } : {}),
         };
         const requested = input.backend?.();
         const worktree = requested !== "snapshot" && isGitRepo;

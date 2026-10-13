@@ -113,7 +113,7 @@ test("promoteWithValidation refuses an empty command and a failed check", async 
     code: "ENOENT",
   });
   const promotion = await manager.promoteWithValidation("box", {
-    command: "true",
+    command: "exit 0",
     hostRoot: host,
   });
   expect(promotion.changedFiles).toContainEqual(

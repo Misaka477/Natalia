@@ -340,7 +340,17 @@ export abstract class ShellExecutor {
     return {
       child: spawn(command, [...args], {
         cwd: spec.cwd,
-        detached: true,
+        // DETACHED_PROCESS is a POSIX process-group device. On Windows it
+        // hands a console app NO console, and pwsh then exits 0 WITHOUT
+        // running the command — measured: `-Command "exit 42"` returns 0
+        // and writes no output, so every foreground command on Windows
+        // (run_shell, the sandbox validation gate, every executor call)
+        // silently succeeded with empty output. The foreground run awaits
+        // the child's exit either way, so the group detachment buys
+        // nothing here; the background path has its own native Windows
+        // detach in the platform layer.
+        detached: process.platform !== "win32",
+        windowsHide: process.platform === "win32",
         stdio: ["ignore", "pipe", "pipe"],
         // The SPEC, not the request: `resolve` is where an executor applies its
         // defaults (pwsh's NO_COLOR and PAGER) ON TOP of the caller's

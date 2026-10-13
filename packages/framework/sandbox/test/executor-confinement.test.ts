@@ -112,7 +112,7 @@ test("a missing confinement backend fails CLOSED, never unconfined", async () =>
     /confinement-exec backend was found/u,
   );
   // The promotion gate's command fails closed the same way.
-  await expect(manager.validate("box.1", "true")).rejects.toThrow(
+  await expect(manager.validate("box.1", "exit 0")).rejects.toThrow(
     /confinement-exec backend was found/u,
   );
 });

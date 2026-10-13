@@ -294,7 +294,7 @@ test("a promotion is undoable by sandbox id through the manager", async () => {
   const sandbox = await manager.create("sb_undo");
   await writeFile(join(sandbox.root, "file.txt"), "promoted\n");
   await manager.promoteWithValidation("sb_undo", {
-    command: "true",
+    command: "exit 0",
     hostRoot: root,
   });
   expect(await readFile(join(root, "file.txt"), "utf8")).toBe("promoted\n");

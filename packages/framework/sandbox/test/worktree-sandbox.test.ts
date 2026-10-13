@@ -7,7 +7,11 @@ import { WorktreeSandboxManager } from "../src/worktree-sandbox";
 import { rmSync } from "node:fs";
 
 async function git(cwd: string, args: string[]) {
-  const process = Bun.spawn(["git", ...args], {
+  // `autocrlf=false` per command: a Windows git with autocrlf on checks
+  // files out with CRLF, and every assertion in this file reads the bytes
+  // it wrote. The repo's own content, not the platform's line-ending
+  // preference, is what the worktree backend must carry.
+  const process = Bun.spawn(["git", "-c", "core.autocrlf=false", ...args], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
@@ -28,6 +32,10 @@ async function scratchRepo() {
   await git(root, ["init", "-b", "main"]);
   await git(root, ["config", "user.email", "test@natalia"]);
   await git(root, ["config", "user.name", "Natalia Test"]);
+  // In the REPO's own config, so the manager's worktree checkouts inherit
+  // it: a Windows git with autocrlf on checks candidates out with CRLF and
+  // every assertion reads back the bytes it wrote.
+  await git(root, ["config", "core.autocrlf", "false"]);
   await writeFile(join(root, "file.txt"), "base\n");
   await git(root, ["add", "."]);
   await git(root, ["commit", "-m", "base"]);
@@ -136,7 +144,7 @@ test("a candidate that fails validation is refused promotion with its build outp
   await writeFile(join(good.root, "file.txt"), "good\n");
   await git(good.root, ["add", "."]);
   await git(good.root, ["commit", "-m", "good candidate"]);
-  await manager.promoteWithValidation("sbx.7", { command: "true" });
+  await manager.promoteWithValidation("sbx.7", { command: "exit 0" });
   expect(await readFile(join(root, "file.txt"), "utf8")).toBe("good\n");
 });
 
@@ -181,7 +189,7 @@ test("governance skips the human approval for a low-risk promotion", async () =>
   await git(sandbox.root, ["commit", "-m", "low risk edit"]);
   const authorized: string[][] = [];
   await manager.promoteWithValidation("sbx.8", {
-    command: "true",
+    command: "exit 0",
     requireApprovalTier: "medium",
     authorize: async (paths) => {
       authorized.push(paths);
@@ -206,7 +214,7 @@ test("governance requires the human approval for a high-risk promotion", async (
   await git(sandbox.root, ["commit", "-m", "contract edit"]);
   const authorized: string[][] = [];
   await manager.promoteWithValidation("sbx.9", {
-    command: "true",
+    command: "exit 0",
     requireApprovalTier: "medium",
     authorize: async (paths) => {
       authorized.push(paths);

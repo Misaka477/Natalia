@@ -25,6 +25,7 @@ import {
   startDetachedProcess,
 } from "@anthelia/platform";
 import { selectExecutor, type ShellSandboxInfo } from "@anthelia/shell";
+import { noopSandboxLog, type SandboxLog } from "./sandbox-log";
 
 // The shell that owns both spellings this file needs: the profile-reading argv
 // for a foreground execute, and the detached POSIX launcher for a background
@@ -192,13 +193,16 @@ export class WorkspaceSandboxManager
   private readonly confinementMode: ConfinementMode;
   /** The confinement backend override, when one was named. */
   private readonly confinementBinaryPath: string | undefined;
+  /** The operation-log seam (audit 缺口 4); silent when none was passed. */
+  private readonly log: SandboxLog;
 
   constructor(
     private readonly baseRoot: string,
-    options?: SandboxExecutorOptions,
+    options?: SandboxExecutorOptions & { log?: SandboxLog },
   ) {
     this.confinementMode = options?.confinementMode ?? "danger-full-access";
     this.confinementBinaryPath = options?.confinementBinaryPath;
+    this.log = options?.log ?? noopSandboxLog;
   }
 
   async initialize() {
@@ -525,6 +529,7 @@ export class WorkspaceSandboxManager
     if (!command) throw new Error("sandbox promote command must not be empty");
     const hostRoot = input.hostRoot;
     if (!hostRoot) throw new Error("sandbox promote requires hostRoot");
+    this.log.info("promote.start", { id, command });
     // F1 (2026-10-10 sweep): the validation runs INSIDE the candidate, so
     // whatever it builds lands in the candidate — and the merge then diffs
     // the candidate and promotes the validation's own artifacts into the
@@ -546,12 +551,28 @@ export class WorkspaceSandboxManager
         force: true,
       });
     await this.restoreCandidateIndex(id, beforeValidation);
-    if (!evidence.ok) throw new Error(validationFailure(id, command, evidence));
+    if (!evidence.ok) {
+      // The gate refused: the one outcome that used to leave no durable
+      // trace at all. The output rides bounded — it is the build's own
+      // text, already what the tool shows the model.
+      this.log.warn("promote.validation_failed", {
+        id,
+        command,
+        exitCode: evidence.exitCode,
+        output: evidence.output.slice(0, 2000),
+      });
+      throw new Error(validationFailure(id, command, evidence));
+    }
     const changedFiles = await this.merge(id, hostRoot, input.authorize);
     // Reported rather than assumed: the completion record states whether a
     // rollback point exists, and a constant would be a claim the backend never
     // checked.
     const rollbackPoint = await this.rollbackPoint(id);
+    this.log.info("promote.merged", {
+      id,
+      files: changedFiles.length,
+      ...(rollbackPoint ? { rollbackPoint } : {}),
+    });
     return {
       sandboxID: id,
       changedFiles,
@@ -568,6 +589,9 @@ export class WorkspaceSandboxManager
    * as a tool. `restored: false` means there was nothing to undo.
    */
   async rollback(_id: string): Promise<{ restored: boolean; reason?: string }> {
+    // The refusal is logged: a rollback that answers "nothing to undo" with
+    // no durable trace is indistinguishable from one that never ran.
+    this.log.warn("rollback.unsupported", { id: _id });
     return {
       restored: false,
       reason: "this backend keeps no rollback point for a promotion",
@@ -783,6 +807,13 @@ export class WorkspaceSandboxManager
     };
     for (const resourceID of manifest.runningResources)
       await this.stopResource(id, resourceID).catch(() => undefined);
+    // A delete that destroys unmerged work is the family's most
+    // consequential irreversible act, and it left no durable trace.
+    if (discardedPaths.length > 0)
+      this.log.warn("delete.discarded_unmerged", {
+        id,
+        discarded: discardedPaths.length,
+      });
     this.sandboxes.delete(id);
     await forceRemove(manifest.root, { recursive: true });
     return result;

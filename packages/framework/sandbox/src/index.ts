@@ -26,6 +26,10 @@ export {
   linkDependencyRoots,
 } from "./dependency-links";
 export { createSandboxController } from "./sandbox-controller";
+// The family's operation-log seam (audit 缺口 4): the sandbox package's
+// first log points — promotions, gate refusals, rollbacks, discarding
+// deletes.
+export { noopSandboxLog, type SandboxLog } from "./sandbox-log";
 export {
   SnapshotStore,
   type IndexedFile,

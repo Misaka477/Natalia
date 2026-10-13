@@ -67,7 +67,7 @@ test("sandbox tools run through the worktree backend (create/write/merge)", asyn
   const context = {
     workspaceRoot: root,
     sandboxes: manager,
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: () => undefined,
     onWorkspaceChange: () => undefined,
     sandboxMergeAuthorize: async () => undefined,
@@ -103,7 +103,7 @@ test("sandbox tools run through the git-free snapshot backend (no git needed)", 
   const context = {
     workspaceRoot: root,
     sandboxes: manager,
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: () => undefined,
     onWorkspaceChange: () => undefined,
     sandboxMergeAuthorize: async () => undefined,
@@ -158,7 +158,7 @@ test("sandbox tools create execute diff and merge through the registry", async (
   const context = {
     workspaceRoot: root,
     sandboxes: new WorkspaceSandboxManager(join(root, ".natalia", "sandboxes")),
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: (event: { type: string }) => events.push(event.type),
   };
   const tools = new Map(sandboxTools().map((tool) => [tool.name, tool]));
@@ -226,7 +226,7 @@ test("sandbox_rollback undoes a promotion and clears the same gate as the merge"
   const sandbox = await manager.create("sb_tool");
   await writeFile(join(sandbox.root, "file.txt"), "promoted\n");
   await manager.promoteWithValidation("sb_tool", {
-    command: "true",
+    command: "exit 0",
     hostRoot: root,
   });
   const events: unknown[] = [];
@@ -270,13 +270,13 @@ test("a second candidate from the same base is refused and the first survives", 
   await writeFile(join(first.root, "shared.ts"), "ONE\n");
   await writeFile(join(other.root, "shared.ts"), "TWO\n");
   await manager.promoteWithValidation("sb_one", {
-    command: "true",
+    command: "exit 0",
     hostRoot: root,
   });
 
   await expect(
     manager.promoteWithValidation("sb_two", {
-      command: "true",
+      command: "exit 0",
       hostRoot: root,
     }),
   ).rejects.toThrow(/conflicts with changes already on the host/);
@@ -360,7 +360,7 @@ test("sandbox_merge validates with the marker's command, the config's, or refuse
     contextFor(() => ({ sandbox: { promoteCommand: "  true  " } })),
   );
   // The configured command wins over the marker (and its whitespace is trimmed).
-  expect(commands[1]).toBe("true");
+  expect(commands[1]).toBe("exit 0");
 });
 
 test("sandbox_merge's buildCommand outranks the marker and the config (P0-2)", async () => {
@@ -701,7 +701,7 @@ test("a validation command's own output is never merged into the host (F1)", asy
   const context = {
     workspaceRoot: root,
     sandboxes: manager,
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: () => undefined,
     onWorkspaceChange: () => undefined,
     sandboxMergeAuthorize: async () => undefined,
@@ -756,7 +756,7 @@ test("a merge answer is capped, and says so (F2)", async () => {
   const context = {
     workspaceRoot: root,
     sandboxes: manager,
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: () => undefined,
     onWorkspaceChange: () => undefined,
     sandboxMergeAuthorize: async () => undefined,
@@ -817,7 +817,7 @@ test("a rollback removes the directories an addition made (F3)", async () => {
   const context = {
     workspaceRoot: root,
     sandboxes: manager,
-    runtimeConfig: () => ({ sandbox: { promoteCommand: "true" } }),
+    runtimeConfig: () => ({ sandbox: { promoteCommand: "exit 0" } }),
     onSandboxEvent: () => undefined,
     onWorkspaceChange: () => undefined,
     sandboxMergeAuthorize: async () => undefined,

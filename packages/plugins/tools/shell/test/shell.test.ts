@@ -53,10 +53,19 @@ test("run_shell exposes a bounded per-call timeout", () => {
 // output, not latency, so the timeout only needs to cover profile startup.
 const runShellTimeoutSec = 60;
 
+// The command under test is spelled for the HOST's own shell (the executor
+// picks it per platform): `printf` and `>&2` are not PowerShell, and a
+// fixture that forgot the platform parsed as an error the moment the
+// command actually ran on Windows.
+const echoBothStreams =
+  process.platform === "win32"
+    ? `[Console]::Out.Write("out"); [Console]::Error.Write("err"); exit 0`
+    : `printf 'out'; printf 'err' >&2; exit 0`;
+
 test("run_shell runs a command inside the workspace and reports exit", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tool-shell-"));
   const result = await runShell(
-    "printf 'out'; printf 'err' >&2; exit 0",
+    echoBothStreams,
     { workspaceRoot: root, settings: {} } as never,
     runShellTimeoutSec,
   );

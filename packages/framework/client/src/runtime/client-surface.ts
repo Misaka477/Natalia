@@ -92,9 +92,5 @@ export function createClientSurface(
         message: "goal edit unavailable",
       },
   };
-  // Goal `pause` hard-stops the in-flight goal round through the standard cancel
-  // path, so it must be reachable from the goal runtime (event sink).
-  ctx.ports.cancelTurn = (reason, sessionID) =>
-    surface.cancel(reason, sessionID as SessionID | undefined);
   return surface;
 }

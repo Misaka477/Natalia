@@ -210,14 +210,6 @@ export type RuntimePorts = {
     input: import("@anthelia/contracts").GoalEditInput,
     sessionID?: SessionID,
   ) => Promise<{ ok: boolean; action: string; message?: string }>;
-  /**
-   * Cancels the session's active/pending turn through the standard cancel path.
-   * Used by the goal pause control so "pause" actually stops the running round.
-   */
-  cancelTurn?: (
-    reason: string,
-    sessionID?: SessionID,
-  ) => void | Promise<unknown>;
   /** Re-seed and re-publish the live goal status on attach / reconnect. */
   syncGoalStatus?: (sessionID: SessionID) => Promise<void>;
   /** Flush in-flight streaming text into its durable partial batch. */

@@ -9,6 +9,7 @@ import {
   contextEntriesToProviderMessages,
   contextStatusBuckets,
   contextStatusEvent,
+  errorStackFrames,
   estimateTokens,
   MAX_STEPS_PROMPT,
   memoryTrace,
@@ -612,6 +613,10 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         stopReason: failedStopReason,
         model: activeProvider.model,
         error: error instanceof Error ? error.message : String(error),
+        // The WHERE, for anything the classification did not already say
+        // (audit 缺口 2): a provider error's message IS its classification,
+        // so the frames ride for the unclassified ones.
+        ...(errorStackFrames(error) ? { stack: errorStackFrames(error) } : {}),
         durationMs: Date.now() - startedAt,
       });
       input.publish({

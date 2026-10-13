@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { asProviderError, providerError } from "../src/errors";
+import {
+  asProviderError,
+  errorStackFrames,
+  providerError,
+} from "../src/errors";
 
 /**
  * The classifier keeps the original text (audit 缺口 1).
@@ -43,4 +47,35 @@ test("a non-error value still classifies without losing it", () => {
   expect(classified.kind).toBe("connection");
   expect(classified.message).toContain("plain string failure");
   expect(classified.cause).toBe("plain string failure");
+});
+
+test("the stack frames ride for the unclassified errors (缺口 2)", () => {
+  // A message says WHAT failed; the frames say WHERE. The durable record
+  // carries both for anything the classification did not already say.
+  // A real throw/capture — not a constructed error — is what carries the
+  // call path.
+  let failure: unknown;
+  try {
+    function inner() {
+      throw new TypeError("x is not a function");
+    }
+    function outer() {
+      inner();
+    }
+    outer();
+  } catch (error) {
+    failure = error;
+  }
+  const frames = errorStackFrames(failure);
+  expect(frames).toBeDefined();
+  expect(frames!.length).toBeGreaterThan(1);
+  expect(frames![0]).toStartWith("at ");
+  // Bounded: a deep stack does not flood the record.
+  expect(errorStackFrames(failure, 2)).toHaveLength(2);
+  // A provider error's message IS its classification — no frames.
+  expect(
+    errorStackFrames(providerError({ kind: "server", message: "boom" })),
+  ).toBeUndefined();
+  // A valueless throw has no frames either.
+  expect(errorStackFrames(undefined)).toBeUndefined();
 });

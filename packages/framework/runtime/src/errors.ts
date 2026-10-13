@@ -30,6 +30,35 @@ export function providerError(input: ProviderErrorInput) {
   return new ProviderError(input);
 }
 
+/**
+ * The top frames of an error's stack, for the durable log (audit 缺口 2).
+ *
+ * A message says what failed; the frames say WHERE. Provider errors are
+ * classified — their message is the classification's own text, and a stack
+ * of the harness's call path adds nothing — so this is for everything else:
+ * the TypeError in the turn path, the unexpected throw in a tool. The
+ * frames are the raw `at ...` lines, bounded, with the message line
+ * dropped (the caller logs the message separately).
+ */
+export function errorStackFrames(
+  error: unknown,
+  limit = 8,
+): string[] | undefined {
+  // A ProviderError's message IS its classification — the frames would be
+  // the harness's own call path, which says nothing about the failure.
+  if (
+    !(error instanceof Error) ||
+    error instanceof ProviderError ||
+    typeof error.stack !== "string"
+  )
+    return undefined;
+  const frames = error.stack
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("at "));
+  return frames.length > 0 ? frames.slice(0, Math.max(1, limit)) : undefined;
+}
+
 export function asProviderError(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
   if (error instanceof DOMException && error.name === "AbortError") {

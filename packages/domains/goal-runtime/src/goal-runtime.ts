@@ -25,6 +25,12 @@ import type {
 } from "@anthelia/substrate";
 import { goalTools } from "./goal-tools";
 import { runCompletionCheck } from "./goal-completion-check";
+import {
+  foldStepUsage,
+  roundCost,
+  turnIDFromStepUsageID,
+  type RoundCostFold,
+} from "./round-cost";
 import { logOf } from "@anthelia/operation-log";
 
 export type GoalRuntime = {
@@ -37,6 +43,13 @@ export type GoalRuntime = {
    * the driver decide whether another round should start.
    */
   onTurnFinished(exec: SessionExecutionState, event: RuntimeEvent): void;
+  /**
+   * Called for every main-channel `runtime.step_usage` event: the round's
+   * cost is the SUM of its steps (each re-sends the growing surface), not
+   * the last step's figures the turn reports. Folded here, settled by
+   * {@link GoalRuntime.onTurnFinished}.
+   */
+  onStepUsage(event: RuntimeEvent): void;
   /** Re-check the goal now (e.g. after a create/resume mutation). */
   requestDrive(exec: SessionExecutionState): void;
   /** Drop process-local continuation authority for a session. */
@@ -74,6 +87,13 @@ export function createGoalRuntime(ctx: RuntimeContext): GoalRuntime {
   const nextEventId = () => `goal_evt_${Date.now().toString(36)}_${++sequence}`;
   const execFor = (sessionID: string) =>
     ctx.ports.getExecutionBySession().get(sessionID as SessionID);
+  /**
+   * Per-turn step-usage folds for in-flight rounds, keyed by turn id. The
+   * goal round's cost is the sum of its steps, so the steps are folded as
+   * they publish and settled when the turn finishes; a turn that never
+   * reports a step usage settles on its own figures instead.
+   */
+  const roundCosts = new Map<string, RoundCostFold>();
 
   /**
    * The engine fact state's goal slice when it is complete (paged from the
@@ -370,6 +390,14 @@ export function createGoalRuntime(ctx: RuntimeContext): GoalRuntime {
     control,
     edit,
     refresh,
+    onStepUsage(event) {
+      if (event.type !== "runtime.step_usage") return;
+      // Subagent steps carry an agentID and are the child's own cost; the
+      // event sink already keeps them out, this is the belt.
+      if (event.agentID) return;
+      const turnID = turnIDFromStepUsageID(event.id);
+      roundCosts.set(turnID, foldStepUsage(roundCosts.get(turnID), event));
+    },
     onTurnFinished(exec, event) {
       if (event.type !== "turn.finished") return;
       const stop: GoalRoundStop =
@@ -378,15 +406,16 @@ export function createGoalRuntime(ctx: RuntimeContext): GoalRuntime {
           : event.stopReason === "error"
             ? "error"
             : "done";
-      // The turn's own report is the round's cost: input plus output tokens, and
-      // its wall clock. A turn that reports neither books nothing, so a goal
-      // without a budget never blocks on a figure it cannot observe.
-      const tokens =
-        event.inputTokens === undefined && event.outputTokens === undefined
-          ? undefined
-          : (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
+      // The round's cost is the sum of its provider steps; the turn's own
+      // report is the LAST step's surface, which under-counts a multi-step
+      // round by however much the surface grew (measured 3.3× on a real
+      // round: 10,973 reported against 36,678 spent). A turn that booked
+      // no step usage falls back to its own figures — a provider that
+      // reports none books nothing rather than a lie.
+      const cost = roundCost(roundCosts.get(event.id), event);
+      roundCosts.delete(event.id);
       driver.settle(exec.session.id, event.id, stop, {
-        tokens: tokens ?? 0,
+        tokens: cost.tokens,
         durationMs: event.durationMs ?? 0,
       });
       requestDrive(exec);

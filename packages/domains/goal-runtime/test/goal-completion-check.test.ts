@@ -4,6 +4,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCompletionCheck } from "@natalia/goal-runtime";
 
+/**
+ * The check runs the WORKSPACE's configured command through the host's own
+ * shell (`shell: true`), so the fixtures spell the host's dialect: a POSIX
+ * `true` is not a Windows command, and a fixture that forgot the platform
+ * failed four tests there for a reason that had nothing to do with the
+ * check itself. Each helper is the same behaviour in both shells.
+ */
+const onWindows = process.platform === "win32";
+const passCmd = "exit 0";
+const failCmd = onWindows
+  ? "echo tests failed & exit 3"
+  : "echo 'tests failed'; exit 3";
+const cwdCmd = onWindows ? "if exist marker.txt exit 0" : "test -f marker.txt";
+const hugeCmd =
+  "node -e \"process.stdout.write('x'.repeat(20000)); process.exit(1)\"";
+
 async function workspace(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "natalia-goal-check-"));
 }
@@ -18,10 +34,10 @@ test("no configured command means no check at all", () => {
 
 test("a passing command reports success with no detail", async () => {
   const root = await workspace();
-  const result = runCompletionCheck({ workspaceRoot: root, command: "true" });
+  const result = runCompletionCheck({ workspaceRoot: root, command: passCmd });
 
   expect(result?.ok).toBe(true);
-  expect(result?.command).toBe("true");
+  expect(result?.command).toBe(passCmd);
   expect(result?.detail).toBeUndefined();
 });
 
@@ -29,7 +45,7 @@ test("a failing command reports the exit code and its output", async () => {
   const root = await workspace();
   const result = runCompletionCheck({
     workspaceRoot: root,
-    command: "echo 'tests failed'; exit 3",
+    command: failCmd,
   });
 
   expect(result?.ok).toBe(false);
@@ -43,7 +59,7 @@ test("the command runs in the workspace root", async () => {
   await writeFile(join(root, "marker.txt"), "here");
   const result = runCompletionCheck({
     workspaceRoot: root,
-    command: "test -f marker.txt",
+    command: cwdCmd,
   });
 
   expect(result?.ok).toBe(true);
@@ -53,7 +69,7 @@ test("a huge output is bounded, because the result is read by the model", async 
   const root = await workspace();
   const result = runCompletionCheck({
     workspaceRoot: root,
-    command: `printf 'x%.0s' $(seq 1 20000); exit 1`,
+    command: hugeCmd,
   });
 
   expect(result?.ok).toBe(false);

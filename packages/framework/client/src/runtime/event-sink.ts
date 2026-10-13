@@ -398,6 +398,15 @@ export function createEventSink(
     // active, armed goal on the next idle edge (human work always outranks it).
     if (!event.agentID && event.type === "turn.finished" && exec?.session)
       goalRuntime.onTurnFinished(exec, event);
+    // The goal round's real cost: every main-channel step's usage, folded
+    // per turn and settled by onTurnFinished. The turn's own token figures
+    // are its LAST step's surface, which under-counts a multi-step round.
+    if (
+      !event.agentID &&
+      event.type === "runtime.step_usage" &&
+      event.channel === undefined
+    )
+      goalRuntime.onStepUsage(event);
     // TERM-M.3 (c): when the human releases the requested pane, the runtime
     // starts the continuation turn automatically. Replay never passes through
     // publish, so a replayed detach cannot double-resume.

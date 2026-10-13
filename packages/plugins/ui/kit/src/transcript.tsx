@@ -30,6 +30,7 @@ import {
   clipLongLine,
   headTailCap,
   toolOutputHidden,
+  visibleOutputLines,
 } from "./head-tail-cap";
 import { TailScrollController } from "./scroll-controller";
 import {
@@ -1603,14 +1604,32 @@ function ToolCallCard(props: { toolCall: ToolCall }) {
       Array.from(lines[0]!.line).length > SINGLE_LINE_MAX_CHARS
     );
   };
+  // EXPANDED means every line. The slice used to ignore `expanded` — the
+  // head window was 4 rows whether or not the reader had opened the card —
+  // so the toggle that promised "展开全部（17 行，已折叠 9 行）" delivered
+  // the same 8-row window and the row read as SHRINKING when it opened.
+  // A control that promises complete content and delivers the same window
+  // is the worst UI bug class there is; the cap now applies only while
+  // collapsed, which is the only state the user ruled it belongs to. The
+  // window itself is the cap module's pure function, so the toggle's
+  // promise is pinned by a test rather than by this call site.
+  const window = () =>
+    visibleOutputLines(allLines(), CHAT_OUTPUT_MAX_LINES, expanded());
+  const headLines = () => {
+    if (longSingle())
+      return [
+        {
+          line: expanded()
+            ? allLines()[0]!.line
+            : clipLongLine(allLines()[0]!.line),
+          kind: allLines()[0]!.kind,
+        },
+      ];
+    return window().head;
+  };
+  const tailLines = () => (longSingle() ? [] : window().tail);
   const hiddenCount = () => (longSingle() ? 1 : Math.max(0, cap().hidden));
   const isCollapsed = () => hiddenCount() > 0 && !expanded();
-  const headLines = () =>
-    longSingle()
-      ? [{ line: clipLongLine(allLines()[0]!.line), kind: allLines()[0]!.kind }]
-      : allLines().slice(0, cap().headLines);
-  const tailLines = () =>
-    longSingle() ? [] : allLines().slice(allLines().length - cap().tailLines);
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.

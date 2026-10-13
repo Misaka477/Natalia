@@ -63,6 +63,32 @@ export function toolOutputHidden(text: string): number {
   return Math.max(0, lines - CHAT_OUTPUT_MAX_LINES);
 }
 
+/**
+ * The rows one capped output SHOWS: everything when expanded, the head/tail
+ * window when collapsed. Pure, so the toggle's promise — "展开全部" delivers
+ * every row — is testable without a DOM.
+ *
+ * The `expanded` flag used to stop at the cap's metrics: the slice was
+ * `ceil(maxLines/2)` head rows whether or not the reader had opened the
+ * card, so the toggle named 17 hidden rows and delivered the same 8-row
+ * window. A control that promises complete content and delivers the same
+ * window is the worst UI bug class there is; the cap now applies only
+ * while collapsed, which is the only state the user ruled it belongs to
+ * (2026-10-13: the collapsed window is by design, the expanded lie is not).
+ */
+export function visibleOutputLines<T>(
+  lines: readonly T[],
+  maxLines: number,
+  expanded: boolean,
+): { head: T[]; tail: T[] } {
+  if (expanded) return { head: [...lines], tail: [] };
+  const cap = headTailCap(lines.length, maxLines, expanded);
+  return {
+    head: lines.slice(0, cap.headLines),
+    tail: lines.slice(lines.length - cap.tailLines),
+  };
+}
+
 /** The collapsed preview of one over-long line: a bounded head plus a mark. */
 export function clipLongLine(
   text: string,

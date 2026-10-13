@@ -5,6 +5,7 @@ import {
   clipLongLine,
   headTailCap,
   toolOutputHidden,
+  visibleOutputLines,
 } from "../src/head-tail-cap";
 
 /**
@@ -47,6 +48,39 @@ test("expanding uncaps the same list without changing its rows", () => {
   expect(cap.capped).toBe(false);
   // The hidden count is still reported, so the collapse control knows.
   expect(cap.hidden).toBe(30 - CHAT_OUTPUT_MAX_LINES);
+});
+
+test("the collapsed window is the head/tail split; expanding shows EVERY row", () => {
+  // The 2026-10-13 audit's finding ①: the toggle promised
+  // "展开全部（17 行，已折叠 9 行）" and delivered the same 8-row window,
+  // because the slice never consulted `expanded`. The user's ruling kept
+  // the collapsed window (a window into something longer is by design)
+  // and killed the lie: expanded must be the whole list.
+  const rows = Array.from({ length: 17 }, (_, index) => `line ${index}`);
+  const collapsed = visibleOutputLines(rows, CHAT_OUTPUT_MAX_LINES, false);
+  expect(collapsed.head).toEqual(rows.slice(0, 4));
+  expect(collapsed.tail).toEqual(rows.slice(rows.length - 4));
+  // The window is 8 rows; 9 are hidden — exactly what the toggle names.
+  expect(collapsed.head.length + collapsed.tail.length).toBe(
+    CHAT_OUTPUT_MAX_LINES,
+  );
+
+  const expanded = visibleOutputLines(rows, CHAT_OUTPUT_MAX_LINES, true);
+  expect(expanded.head).toEqual(rows);
+  expect(expanded.tail).toEqual([]);
+  // A short list is whole in both states.
+  const short = ["a", "b", "c"];
+  expect(visibleOutputLines(short, CHAT_OUTPUT_MAX_LINES, false).head).toEqual(
+    short,
+  );
+  expect(visibleOutputLines(short, CHAT_OUTPUT_MAX_LINES, true).head).toEqual(
+    short,
+  );
+  // An empty list stays empty rather than producing a negative slice.
+  expect(visibleOutputLines([], CHAT_OUTPUT_MAX_LINES, false)).toEqual({
+    head: [],
+    tail: [],
+  });
 });
 
 test("a single over-long line collapses on its own term (P0.2 kept)", () => {

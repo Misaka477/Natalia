@@ -52,7 +52,10 @@ const ALLOWED: Record<string, string> = {
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
+    // Every filter below matches forward-slash paths; the filesystem hands
+    // out native separators. Normalizing here kept Windows scans finding
+    // zero source files, which read as "nothing produces any member".
+    const path = join(dir, entry.name).replaceAll("\\", "/");
     if (entry.isDirectory()) {
       if (!/node_modules|dist/.test(path)) walk(path, out);
     } else if (/\.tsx?$/.test(entry.name)) out.push(path);

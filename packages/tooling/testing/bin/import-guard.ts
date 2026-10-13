@@ -347,10 +347,15 @@ for (const failure of await findFullReadInventoryViolations(root))
 }
 for (const dir of dependencyGuarded)
   await scan(join(root, dir), sourceExtensions, (full, text) => {
+    // Every rule in this file matches forward-slash paths; the filesystem
+    // hands out native separators, so normalize before any test. Skipping
+    // this made the /src/ui/ exemption below silently dead on Windows and
+    // failed the gate on committed, CI-green files.
+    const relative = full.slice(root.length + 1).replaceAll("\\", "/");
     // Plugin UI subpaths are intentionally presentation code (they export a
     // SolidJS UI plugin through package `./ui`); backend dependency rules do
     // not apply to a dedicated UI entry point.
-    if (/\/src\/ui\//u.test(full)) return;
+    if (/\/src\/ui\//u.test(relative)) return;
     for (const pattern of forbiddenDependencies) {
       if (pattern.test(text))
         failures.push(`${full}: forbidden dependency ${pattern}`);
@@ -830,8 +835,13 @@ await scan(join(root, "packages/domains"), sourceExtensions, (full, text) => {
       // orphans whose .ts twin MOVED AWAY both vanish behind one rule —
       // the orphan case is how a stale compiled test kept running in the
       // full suite after its source moved. Only ALLOWED_LEGACY_JS stays.
+      // The allowlist spells forward-slash paths, and `dir` carries native
+      // separators, so the joined path is normalized before the lookup —
+      // otherwise every allowlisted entry fails on Windows.
       const violation = findSourceTreeJsViolation(
-        `${dir.slice(root.length + 1)}/${entry.name}`.replace(/^\//u, ""),
+        `${dir.slice(root.length + 1)}/${entry.name}`
+          .replace(/^\//u, "")
+          .replaceAll("\\", "/"),
       );
       if (violation) failures.push(violation);
     }

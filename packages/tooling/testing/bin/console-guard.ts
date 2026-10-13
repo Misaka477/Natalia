@@ -33,7 +33,10 @@ async function walk(dir: string): Promise<string[]> {
 
 const violations: string[] = [];
 for (const file of await walk(SCAN_DIR)) {
-  const name = file.split("/").pop() ?? "";
+  // The filesystem hands out native separators; the allowlist spells bare
+  // basenames, so split on both — a "/"-only split made the single
+  // allowlist entry unrecognized on Windows and failed the gate on it.
+  const name = file.split(/[/\\]/u).pop() ?? "";
   if (ALLOW.has(name)) continue;
   const lines = (await readFile(file, "utf8")).split("\n");
   lines.forEach((line, index) => {

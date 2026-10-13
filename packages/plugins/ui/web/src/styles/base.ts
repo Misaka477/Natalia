@@ -4839,6 +4839,15 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
 }
+.neu-goal-chip-done {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(46, 160, 67, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(46, 160, 67, 0.45);
+  color: #3fb950;
+  font-size: 10px;
+  white-space: nowrap;
+}
 .session-usage-bar {
   display: flex;
   flex-wrap: nowrap;

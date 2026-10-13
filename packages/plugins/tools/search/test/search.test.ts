@@ -347,3 +347,35 @@ test("a search result that is not the envelope still renders", () => {
   const card = tool.output?.presentResult?.({ pattern: "**/*.ts" }, "not json");
   expect(card?.body).toBe("not json");
 });
+
+test("a zero-result envelope never rides in the card body (audit ⑥)", () => {
+  // The reader's screenshot: `{"matches":[],"truncated":true,
+  // "nextCursor":"eyJ..."}` drawn as a tool card — an internal paging token,
+  // base64, exposed to a human. The tool used to drop the raw envelope into
+  // `body` at zero results and the renderer, with no hits to draw, fell
+  // through to it. Zero hits is a PROCESSED answer: the empty field plus the
+  // "no matches" summary, and no body.
+  for (const name of ["glob", "grep"] as const) {
+    const tool = searchToolFamily().tools.find((t) => t.name === name)!;
+    const envelope =
+      name === "glob"
+        ? JSON.stringify({
+            paths: [],
+            truncated: true,
+            nextCursor: "eyJhbGciOiJIUzI1NiJ9",
+          })
+        : JSON.stringify({
+            matches: [],
+            truncated: true,
+            nextCursor: "eyJhbGciOiJIUzI1NiJ9",
+          });
+    const card = tool.output?.presentResult?.({ pattern: "zzz" }, envelope) as
+      | { body?: unknown; nextCursor?: unknown; summary?: unknown }
+      | undefined;
+    expect(card?.body).toBeUndefined();
+    // The cursor still travels its structured slot — the MODEL pages with
+    // it; the READER never sees it.
+    expect(card?.nextCursor).toBe("eyJhbGciOiJIUzI1NiJ9");
+    expect(card?.summary).toBe("no matches · more");
+  }
+});

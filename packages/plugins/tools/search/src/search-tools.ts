@@ -216,7 +216,13 @@ function globTool(): RuntimeTool {
             ["truncated", "true"],
           ];
         }
-        if (count === 0) card.body = value;
+        // A malformed result degrades to the raw text (the defensive shape);
+        // a WELL-FORMED zero-result envelope must never ride in the body —
+        // the renderer had no paths to draw, fell through to it, and printed
+        // `{"paths":[],"nextCursor":"eyJ..."}` with the internal paging token
+        // exposed (audit ⑥). The envelope is the only well-formed JSON this
+        // tool produces, so parse success is the distinguishing fact.
+        if (count === 0 && !isJsonEnvelope(value)) card.body = value;
         return card;
       },
     },
@@ -255,6 +261,23 @@ function globTool(): RuntimeTool {
       });
     },
   };
+}
+
+/**
+ * Whether a tool result is a well-formed JSON envelope.
+ *
+ * The search tools produce exactly one well-formed JSON shape, so parse
+ * success is what tells a real zero-result envelope (which must NOT ride in
+ * the card body — its `nextCursor` is an internal paging token) from a
+ * malformed result (which degrades to raw text as the card's body).
+ */
+function isJsonEnvelope(value: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null;
+  } catch {
+    return false;
+  }
 }
 
 function grepTool(): RuntimeTool {
@@ -362,7 +385,13 @@ function grepTool(): RuntimeTool {
             ["truncated", "true"],
           ];
         }
-        if (count === 0) card.body = value;
+        // Zero hits is a processed answer (the empty `matches` above plus
+        // the "no matches" summary). A MALFORMED result still degrades to
+        // the raw text; a well-formed zero-hit envelope must not — the
+        // renderer fell through to it and printed
+        // `{"matches":[],"nextCursor":"eyJ..."}`, internal token exposed
+        // (audit ⑥).
+        if (count === 0 && !isJsonEnvelope(value)) card.body = value;
         return card;
       },
     },

@@ -1485,13 +1485,21 @@ export const CARD_RENDERERS: CardRendererMap = {
   // search kind's own drawing, the way the diff kind colors its marks. A
   // path search's listing is one line per path.
   search: (card, toolCall) => {
-    const matches = rowsOf(card.matches);
-    const paths = Array.isArray(card.paths) ? card.paths : undefined;
-    return matches
-      ? groupedMatchLines(matches)
-      : paths
-        ? plainCardLines(paths.join("\n"))
-        : plainCardLines(card.body ?? toolCall.output ?? "");
+    // An explicitly EMPTY result is an answer, not a missing field: a
+    // search that hit nothing draws "无匹配" instead of falling through to
+    // the raw envelope, whose nextCursor is an internal paging token the
+    // reader must never see (audit ⑥). The emptiness is read off the
+    // structured field itself, so an old event that still carries the body
+    // is covered by the same branch.
+    if (Array.isArray(card.matches))
+      return card.matches.length > 0
+        ? groupedMatchLines(card.matches)
+        : [{ line: "无匹配", kind: "plain" as const }];
+    if (Array.isArray(card.paths))
+      return card.paths.length > 0
+        ? plainCardLines(card.paths.join("\n"))
+        : [{ line: "无匹配文件", kind: "plain" as const }];
+    return plainCardLines(card.body ?? toolCall.output ?? "");
   },
   web: (card, toolCall) => plainCardLines(card.body ?? toolCall.output ?? ""),
   // The body IS the reading: the tool-side flatten (or, since R5.5, the

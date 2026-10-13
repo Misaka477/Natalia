@@ -66,7 +66,7 @@ import {
 import { objectStoreVaultBlobStore } from "./rina-blob-store";
 import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";
 import { join } from "node:path";
-import { createOperationLog, operationLog } from "@anthelia/operation-log";
+import { createOperationLog, logOf, operationLog } from "@anthelia/operation-log";
 import { createRuntimeDiagnostics } from "@anthelia/runtime-diagnostics";
 import { runtimeDiagnostics } from "@anthelia/runtime-services";
 import { sessionInvariants } from "@anthelia/session";
@@ -217,6 +217,11 @@ export async function wireFrameworkServices(
         profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
         configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
       }),
+    // The operation-log seam (audit 缺口 4): the family's consequential
+    // acts — a promotion, its gate refusal, a rollback, a delete that
+    // discards unmerged work — reach the durable operations log instead of
+    // leaving no trace at all.
+    log: logOf(ctx.state.serviceDirectory).component("sandbox"),
   });
   // The service binds through the directory; the owner stays for the tools
   // contribution below.

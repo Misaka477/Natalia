@@ -1,13 +1,18 @@
 import { statusSnapshotController } from "@anthelia/runtime-status";
 import { dirname } from "node:path";
 import { operationLog, readOperationRecords } from "@anthelia/operation-log";
+import { logService, parseLogSpec } from "@anthelia/logging";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
 import type { StatusSnapshotController } from "@anthelia/runtime-status";
 type Surface = Pick<
   RuntimeServiceClient,
-  "runtimeStatus" | "diagnostics" | "sessionSnapshot" | "operationRecords"
+  | "runtimeStatus"
+  | "diagnostics"
+  | "sessionSnapshot"
+  | "operationRecords"
+  | "setLogVerbosity"
 >;
 async function observabilityExec(ctx: RuntimeContext, sessionID?: string) {
   // Session snapshots may be the first routed call on a workspace proxy.
@@ -84,6 +89,28 @@ export function createObservabilitySurface(
         exec,
         `snapshot:live:${exec.session.id}`,
       );
+    },
+    async setLogVerbosity(spec: string) {
+      // The live valve (audit 缺口 6): `NATALIA_LOG` is read once at boot,
+      // so raising verbosity on a session that is already misbehaving used
+      // to mean a restart — which destroys the state being diagnosed. The
+      // spec is the boot spelling (`debug`, `name=debug,other=warn`); the
+      // service's own parser keeps the two paths identical, and the answer
+      // is the table that took effect so the caller can see what it got.
+      await ctx.ports.ensureReady();
+      const trimmed = spec?.trim();
+      if (!trimmed)
+        return { ok: false as const, reason: "a log spec is required" };
+      const levels = parseLogSpec(trimmed);
+      logService.setLevels(levels);
+      return {
+        ok: true as const,
+        levels,
+        // What a reader should expect: the boot spec's own semantics — an
+        // unnamed level is the default, and a restart would have re-read
+        // the env over this. Say so rather than letting the caller assume.
+        note: "applied to the live process; a restart re-reads NATALIA_LOG",
+      };
     },
   };
 }

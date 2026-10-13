@@ -261,6 +261,7 @@ export const RPC_ROUTE_MEMBERS = {
   "runtime.status": "runtimeStatus",
   "diagnostics.list": "diagnostics",
   "diagnostics.operations": "operationRecords",
+  "diagnostics.set_verbosity": "setLogVerbosity",
   "growth.propose": "growthPropose",
   "growth.proposals": "growthProposals",
   "ast.move": "astMove",
@@ -4372,6 +4373,23 @@ export async function handleRPCMessage(
               : {}),
             ...(typeof limit === "number" ? { limit } : {}),
           })) ?? [],
+      };
+    }
+    if (body.method === "diagnostics.set_verbosity") {
+      // The live verbosity valve (audit 缺口 6): the spec is the boot
+      // NATALIA_LOG spelling, applied to the running process so a session
+      // that is already misbehaving can be made louder without the restart
+      // that would destroy the state being diagnosed.
+      optionsGuard(client, "setLogVerbosity");
+      const spec = body.params?.spec;
+      if (typeof spec !== "string" || !spec.trim())
+        throw invalidParams(
+          "diagnostics.set_verbosity.params.spec must be a non-empty string",
+        );
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.setLogVerbosity?.(spec),
       };
     }
     if (body.method === "mcp.prompt") {

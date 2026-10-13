@@ -4797,6 +4797,19 @@ export type RuntimeClient = {
     since?: string;
     limit?: number;
   }): Promise<import("./schema-types").OperationRecord[]>;
+  /**
+   * The live verbosity valve (audit 缺口 6): `NATALIA_LOG` is read once at
+   * boot, so raising verbosity on a session that is already misbehaving
+   * meant a restart — which destroys the state being diagnosed. The spec is
+   * the boot spelling (`debug`, `name=debug,other=warn`); the answer is the
+   * table that took effect. A restart re-reads the env over it.
+   */
+  setLogVerbosity?(spec: string): Promise<{
+    ok: boolean;
+    levels?: Record<string, "error" | "info" | "warn" | "debug">;
+    reason?: string;
+    note?: string;
+  }>;
   snapshot(input?: { sessionID?: string; workspaceID?: string }): RuntimeEvent;
   diagnostic(message: string, level?: "info" | "warning" | "error"): void;
   lastSubmission(input?: {

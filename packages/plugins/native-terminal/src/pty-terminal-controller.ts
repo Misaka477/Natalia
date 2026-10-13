@@ -21,6 +21,7 @@ import {
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import { SandboxRefusal } from "@anthelia/contracts";
 import type {
   NativeTerminalOwnershipChange,
   RuntimeEvent,
@@ -1380,9 +1381,17 @@ export function createPtyTerminalController(
         binaryPath: confinement.binaryPath,
       });
       if (!wrapped)
-        throw new Error(
-          `terminal start refused: confinement mode ${confinement.mode} has no usable backend on this host — an unconfined pane is not an option`,
-        );
+        // The structured refusal: the rule (this host cannot enforce the
+        // mode the deployment asked for) and the why (an unconfined pane
+        // is not an option), as fields a consumer branches on and as prose
+        // the model reads. No path here — the refusal is about the MODE,
+        // not a judged location.
+        throw new SandboxRefusal({
+          rule: `confinement mode ${confinement.mode} requires a backend`,
+          path: confinement.workspaceRoot ?? "(the host)",
+          reason:
+            "terminal start refused: this host has no usable backend for that mode — an unconfined pane is not an option",
+        });
       spawnFile = wrapped.command;
       spawnArgs = wrapped.args;
     }

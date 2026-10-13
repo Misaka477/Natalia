@@ -75,6 +75,39 @@ plugins, prompts, policy rows) takes effect in-process; a code change
 `edit-framework`. Every switch records the generation it left, so
 `rollback_generation` can always take it back.
 
+## 6. A generation that changes a persisted shape owes a converter
+
+Config schema, object-store format, journal event shape, any on-disk
+structure: when the change you are landing alters one of these, the code
+landing is not the finish line. The generation owes three things, and the
+third is a rule about time, not about code:
+
+- **a dedicated converter per old shape.** One named function per version
+  this generation leaves behind, in that subsystem's own converter table
+  beside its own schema. Never a guess — a shape that "probably still
+  parses" is a shape whose unknown fields silently vanish while the load
+  reports success on data nobody read. A version inside the read window
+  with no converter is REFUSED saying exactly that, never parsed hopefully.
+- **a backup of the source before any rewrite.** The migration writes a
+  timestamped `.bak` beside the file and names it in its report. The user's
+  data is not yours to overwrite in place without a way back.
+- **a version-anchored window, never a date.** The old form stays readable
+  for two major versions — an upgrade at vN is refused at vN+2 — and the
+  window is PER SUBSYSTEM: whichever surface upgraded carries its own
+  window and its own migration, and one subsystem's upgrade imposes nothing
+  on another. A hard date is never the mechanism: it locks a user out of
+  their own data on a day nobody calendared.
+
+The refusal paths are the other half of the contract: a file NEWER than the
+runtime knows is refused with both versions named (never silently misread as
+the current one), and the migration tool is reachable (`natalia config
+migrate` rewrites the global and the project file in place, with a backup)
+— a window with no tool to migrate through is a lockout with extra steps.
+
+The config already has all of this. When you add a version to any other
+persisted surface, that surface gets the same three things: its own
+converter table, its own backup, its own window — not a borrow of config's.
+
 ## What this loop never does
 
 - never auto-merges: the human approves every landing;
@@ -82,3 +115,5 @@ plugins, prompts, policy rows) takes effect in-process; a code change
 - never deletes on its own: removals archive, and the archive is
   recoverable;
 - never lets a refusal disappear: every refusal is named and journaled.
+- never changes a persisted shape without a converter for the old one and a
+  backup of the source — see §6.

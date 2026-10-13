@@ -68,7 +68,14 @@ export type RuntimeFailureData =
    * group at once instead of learning member by member that nothing works.
    */
   | { kind: "notSupported"; member: string; capability?: string }
-  | { kind: "refused"; reason: string }
+  /**
+   * A sandbox refusal (洞 2's structured refusal): the rule that said no,
+   * the path it judged, and the reason — the three things a bare message
+   * leaves the reader to reconstruct. Optional because a policy refusal
+   * with no path (a mode that refuses every write, say) is still a
+   * refusal; present whenever a path was judged.
+   */
+  | { kind: "refused"; reason: string; rule?: string; path?: string }
   /**
    * No detail: an internal failure's message can carry a path, a command line or
    * a secret. `errorID` correlates with a durable diagnostic, so the detail is
@@ -111,10 +118,40 @@ export function runtimeFailureData(
  * Prefer a value; see this module's header.
  */
 export class RuntimeRefusal extends Error {
-  constructor(reason: string) {
+  /** The rule that said no — a named law, not a prose reconstruction. */
+  readonly rule?: string;
+  /** The path the rule judged, when the refusal judged one. */
+  readonly path?: string;
+  constructor(reason: string, detail?: { rule?: string; path?: string }) {
     super(reason);
     this.name = "RuntimeRefusal";
-    mark(this, { kind: "refused", reason });
+    this.rule = detail?.rule;
+    this.path = detail?.path;
+    mark(this, {
+      kind: "refused",
+      reason,
+      ...(detail?.rule ? { rule: detail.rule } : {}),
+      ...(detail?.path ? { path: detail.path } : {}),
+    });
+  }
+}
+
+/**
+ * A sandbox refusal, said structurally (洞 2's 修法表 item 6): the RULE that
+ * refused, the PATH it judged, and the WHY. The message is assembled from
+ * the three so a human or a model reading prose gets the same content a
+ * program branching on the fields gets — one spelling, not two that can
+ * drift.
+ *
+ * Thrown by every write path that judges containment: the fan-out
+ * sub-agent's file domain, the terminal's confinement mode, the fs tools'
+ * authorization. The shared type is what makes the refusals comparable —
+ * "which rule did I break" is answerable the same way everywhere.
+ */
+export class SandboxRefusal extends RuntimeRefusal {
+  constructor(input: { rule: string; path: string; reason: string }) {
+    super(`${input.reason} (rule: ${input.rule}; path: ${input.path})`, input);
+    this.name = "SandboxRefusal";
   }
 }
 

@@ -1,3 +1,4 @@
+import { SandboxRefusal } from "@anthelia/contracts";
 import type {
   InitializeOptions,
   RuntimeContext,
@@ -246,14 +247,18 @@ export async function installSubagents(
             domains: writePaths,
           });
           if (!inDomain)
-            // The refusal names the RULE (the domain the fan-out scoped),
-            // the PATH (where the write actually lands), and the WHY (who
-            // scoped it) — a bare "outside the domain" leaves the model
-            // guessing which rule it broke, and a model that cannot read a
-            // refusal cannot route around it.
-            throw new Error(
-              `subagent write refused (${toolName}): ${path} lands outside this agent's file domain [${writePaths.join(", ")}] under ${sandboxRoot} — the fan-out scoped this agent's writes there; ask the parent agent or write inside the domain`,
-            );
+            // The structured refusal (洞 2's 修法表 item 6): the RULE (the
+            // domain the fan-out scoped), the PATH (where the write actually
+            // lands), and the WHY (who scoped it), as FIELDS as well as
+            // prose — a bare "outside the domain" leaves the model guessing
+            // which rule it broke, and a model that cannot read a refusal
+            // cannot route around it. The message is assembled from the
+            // fields, so the two spellings cannot drift.
+            throw new SandboxRefusal({
+              rule: `file domain [${writePaths.join(", ")}] under ${sandboxRoot}`,
+              path,
+              reason: `subagent write refused (${toolName}): the write lands outside this agent's file domain — the fan-out scoped this agent's writes there; ask the parent agent or write inside the domain`,
+            });
         }
       : undefined;
     runner.log(`accepted (sandboxed): ${task}`);

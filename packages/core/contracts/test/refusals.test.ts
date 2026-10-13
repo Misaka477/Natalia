@@ -130,3 +130,36 @@ test("a member's capability comes from the capability table, not a second list",
     expect(capabilityGroupOf(member)).toBeUndefined();
   expect(capabilityGroupOf("notAMember")).toBeUndefined();
 });
+
+/**
+ * The sandbox refusal's structure (洞 2's 修法表 item 6): the rule, the
+ * path, and the reason — as fields a program branches on and as one prose
+ * message assembled FROM them, so the two spellings cannot drift.
+ */
+test("a sandbox refusal carries the rule, the path and the reason", () => {
+  const { SandboxRefusal, runtimeFailureData } = require("../src/failures");
+  const refusal = new SandboxRefusal({
+    rule: "file domain [allowed] under /worktrees/agent-7",
+    path: "/etc/passwd",
+    reason:
+      "subagent write refused: the write lands outside this agent's file domain",
+  });
+  // The fields a consumer branches on.
+  expect(refusal.rule).toBe("file domain [allowed] under /worktrees/agent-7");
+  expect(refusal.path).toBe("/etc/passwd");
+  // The prose, assembled from the fields — one spelling.
+  expect(refusal.message).toContain("subagent write refused");
+  expect(refusal.message).toContain("rule: file domain [allowed]");
+  expect(refusal.message).toContain("path: /etc/passwd");
+  // The machine-readable half, read off the marker (not instanceof, which
+  // does not survive a worker hop).
+  expect(runtimeFailureData(refusal)).toEqual({
+    kind: "refused",
+    reason: refusal.message,
+    rule: "file domain [allowed] under /worktrees/agent-7",
+    path: "/etc/passwd",
+  });
+  // It is still a RuntimeRefusal: the existing classification holds.
+  expect(refusal).toBeInstanceOf(Error);
+  expect(refusal.name).toBe("SandboxRefusal");
+});

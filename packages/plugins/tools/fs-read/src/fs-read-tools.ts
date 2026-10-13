@@ -563,10 +563,21 @@ export function imageReadTool(): RuntimeTool {
         // "What the model read" for this tool is WHICH image entered its
         // context. The card says the file; the result sentence rides as a facet
         // so a reader does not have to decode `image attached: <path>`.
+        //
+        // A media read rides the read card's media fields (audit ⑦/⑧): the
+        // detected MIME type and the attachment id the runtime stored the
+        // bytes under. The user's ruling — read image IS a read — means the
+        // family stays `read` and the CLIENT renders by media type: a
+        // thumbnail that opens full-size for an image, a player for a video,
+        // a "binary file" statement for anything else. The old card said
+        // "image attached" and showed nothing, and the file tab used to
+        // base64-decode the bytes into a text view (a PNG as mojibake).
         return {
           kind: "read",
           title: requireObject(args).path as string,
           summary: "image attached",
+          mediaType: mediaTypeOf(requireObject(args).path as string),
+          attachmentID: attachmentIDFromResult(value),
           meta: [["result", value]],
         };
       },
@@ -593,6 +604,42 @@ export function imageReadTool(): RuntimeTool {
       return `image attached: ${path}`;
     },
   };
+}
+
+/**
+ * The MIME type a path's extension names, for a media read's card.
+ *
+ * The host detects the real type when it stores the attachment; the
+ * extension is what the CARD can know without reading the bytes, and it
+ * is enough for the client to pick a renderer (an image extension renders
+ * a thumbnail even when the bytes turn out to be something else — the
+ * attachment load is what corrects it).
+ */
+const MEDIA_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".svg": "image/svg+xml",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+};
+
+function mediaTypeOf(path: string): string | undefined {
+  const dot = path.lastIndexOf(".");
+  if (dot < 0) return undefined;
+  return MEDIA_TYPES[path.slice(dot).toLowerCase()];
+}
+
+/** The attachment id the runtime's result sentence carries, when it does. */
+function attachmentIDFromResult(value: string): string | undefined {
+  // The result is `image attached: <attachment-id>` (the runtime's own
+  // sentence). A shape change must fail loud rather than guess an id.
+  const match = /^image attached: (.+)$/u.exec(value.trim());
+  return match?.[1];
 }
 
 export const readFileTools: RuntimeTool[] = [

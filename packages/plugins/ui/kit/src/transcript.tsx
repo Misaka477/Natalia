@@ -1184,8 +1184,59 @@ function AttachmentImage(props: {
     </button>
   );
 
+  /**
+   * A media read's renderer (audit ⑦/⑧): the read card's media fields pick
+   * the surface — an image is the same thumbnail-and-lightbox the message
+   * attachments use (the user's ruling: read image IS a read), a video is
+   * a player, and anything else says "binary file" instead of decoding the
+   * bytes into a text view (a PNG used to reach the file tab as mojibake).
+   * The bytes ride the attachment URL the host already serves, so no new
+   * transport exists for this.
+   */
+  const mediaSurface = () => {
+    const mediaType = card?.mediaType ?? "";
+    if (mediaType.startsWith("image/"))
+      return (
+        <AttachmentImage
+          attachment={
+            {
+              id: card?.attachmentID,
+              path: card?.path ?? "",
+              name: card?.title ?? "image",
+              mediaType,
+            } as Attachment
+          }
+          load={props.load}
+        />
+      );
+    if (mediaType.startsWith("video/"))
+      return (
+        <video
+          class="natalia-tool-media-video"
+          controls
+          preload="metadata"
+          src={mediaSrc()}
+        />
+      );
+    return (
+      <div class="natalia-tool-media-binary">
+        二进制文件（{mediaType || "未知类型"}）——不按文本渲染
+      </div>
+    );
+  };
+  const mediaSrc = () => {
+    const attachment = {
+      id: card?.attachmentID,
+      path: card?.path ?? "",
+      name: card?.title ?? "media",
+      mediaType: card?.mediaType,
+    } as Attachment;
+    return props.load ? props.load(attachment) : Promise.resolve("");
+  };
+
   return (
     <>
+      <Show when={card?.mediaType !== undefined}>{mediaSurface()}</Show>
       <Show when={status() === "loaded" && src()} fallback={placeholder()}>
         <button
           type="button"
@@ -1543,7 +1594,12 @@ function renderCard(card: ToolCard, toolCall: ToolCall): ToolCardLine[] {
   }
 }
 
-function ToolCallCard(props: { toolCall: ToolCall; expansionKey: string }) {
+function ToolCallCard(props: {
+  toolCall: ToolCall;
+  expansionKey: string;
+  /** The attachment-URL loader, for a media read's renderer (audit ⑦). */
+  loadAttachmentUrl?: (attachment: Attachment) => Promise<string>;
+}) {
   const card = props.toolCall.card;
   // The expansion survives a virtual-list unmount: the signal seeds from
   // the row-keyed store and writes through on every toggle, so scrolling
@@ -1950,6 +2006,7 @@ export function MessageRow(props: MessageRowProps) {
               <ToolCallCard
                 toolCall={toolCall}
                 expansionKey={toolCardKey(props.message.id, index())}
+                loadAttachmentUrl={props.loadAttachmentUrl}
               />
             )}
           </For>

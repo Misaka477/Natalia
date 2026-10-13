@@ -467,6 +467,17 @@ export type ToolCard =
        * file used to arrive as `key: value` lines through the flatten).
        */
       content?: string;
+      /**
+       * A media read (audit ⑦/⑧): the MIME type the host detected, and the
+       * attachment id the runtime stored the bytes under. A client renders
+       * by media type — an image is a thumbnail that opens full-size, a
+       * video is a player, anything else is a "binary file" statement —
+       * instead of base64-decoding the bytes into a text view, which is
+       * how a PNG used to arrive in the file tab as mojibake. Absent on a
+       * text read: the vocabulary is per-card, not per-kind.
+       */
+      mediaType?: string;
+      attachmentID?: string;
     })
   | (ToolCardHeader & {
       kind: "diff";

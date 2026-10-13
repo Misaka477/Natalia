@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -244,4 +245,86 @@ test("the default asks about this host, so Linux keeps its sandbox", () => {
   expect(enforceableConfinementMode("workspace-write")).toBe(
     process.platform === "linux" ? "workspace-write" : "danger-full-access",
   );
+});
+
+/**
+ * The ownership domain at the kernel height (洞 2's remaining gap): an
+ * explicit writable set narrows the WORKSPACE grant to the named paths, so a
+ * sub-agent's shell answers to the same fence its file tools answer to —
+ * "a branch only changes its own domain" holds for a redirect, not just for
+ * write_file.
+ */
+test("an explicit writable set narrows the kernel grant to those paths", async () => {
+  if (!available) return;
+  // NOT under /tmp: the always-granted temp root would pass this test
+  // without the domain rule (the same reason the workspace/outside pair
+  // lives under the test directory).
+  const base = join(import.meta.dir, `.confinement-domain-${process.pid}`);
+  const allowed = join(base, "packages", "foo");
+  const outside = join(base, "packages", "bar");
+  await mkdir(allowed, { recursive: true });
+  await mkdir(outside, { recursive: true });
+  try {
+    const wrapped = wrapConfinedCommand({
+      mode: "workspace-write",
+      workspaceRoot: base,
+      writablePaths: [allowed],
+      command: "/bin/sh",
+      // `&&`, not `;`: a refused write must break the chain, so the exit
+      // code itself is evidence (a `;` chain would end on `echo done` and
+      // report success either way).
+      args: [
+        "-c",
+        `echo in > ${allowed}/in.txt && echo out > ${outside}/out.txt && echo done`,
+      ],
+    });
+    expect(wrapped).toBeDefined();
+    const confined = spawnSync(wrapped!.command, wrapped!.args, {
+      encoding: "utf8",
+    });
+    // The in-domain write lands; the out-of-domain one is refused BY THE
+    // KERNEL (landlock) — the chain broke before `echo done`, which is what
+    // makes this a fence and not a convention. This is the whole point of
+    // narrowing the shell's root to the sub-agent's writePaths: "a branch
+    // only changes its own domain" now holds for a redirect too.
+    expect(confined.status).not.toBe(0);
+    expect(confined.stdout).not.toContain("done");
+    expect(existsSync(join(allowed, "in.txt"))).toBe(true);
+    expect(existsSync(join(outside, "out.txt"))).toBe(false);
+    // The platform set is untouched by the narrowing: the command can still
+    // write the platform's temp drain.
+    const drain = wrapConfinedCommand({
+      mode: "workspace-write",
+      workspaceRoot: base,
+      writablePaths: [allowed],
+      command: "/bin/sh",
+      args: [
+        "-c",
+        `echo tmp > ${tmpdir()}/natalia-domain-drain.txt && echo ok`,
+      ],
+    });
+    const drained = run(drain!.command, drain!.args);
+    expect(drained.stdout.trim()).toBe("ok");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+    rmSync(join(tmpdir(), "natalia-domain-drain.txt"), { force: true });
+  }
+});
+
+test("the argv for an explicit set carries the platform roots and the domain", () => {
+  if (!available) return;
+  const wrapped = wrapConfinedCommand({
+    mode: "workspace-write",
+    workspaceRoot: "/repo/ws",
+    writablePaths: ["/repo/ws/packages/foo", "/repo/ws/packages/baz"],
+    command: "/bin/echo",
+    args: ["hi"],
+  });
+  const argv = wrapped!.args;
+  expect(argv).toContain("/dev/null");
+  expect(argv).toContain("/tmp");
+  expect(argv).toContain(canonicalPath("/repo/ws/packages/foo"));
+  expect(argv).toContain(canonicalPath("/repo/ws/packages/baz"));
+  // The whole workspace root is NOT granted when a domain narrows it.
+  expect(argv).not.toContain(canonicalPath("/repo/ws"));
 });

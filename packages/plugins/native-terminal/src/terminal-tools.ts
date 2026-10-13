@@ -267,6 +267,14 @@ function interactiveStartTool(): RuntimeTool {
               confinement: {
                 mode: context.confinement,
                 workspaceRoot: context.workspaceRoot,
+                // The session's ownership domain rides the spawn: a pane is a
+                // REAL shell, so its kernel fence is the same set of paths the
+                // session's file tools are judged against — a sub-agent's
+                // shell cannot write outside its domain any more than its
+                // write_file can.
+                ...(context.confinementWritablePaths?.length
+                  ? { writablePaths: context.confinementWritablePaths }
+                  : {}),
               },
             }
           : {}),

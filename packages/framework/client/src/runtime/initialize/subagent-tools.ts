@@ -48,6 +48,13 @@ export async function createSubagentTools(
       toolName: string;
       path: string;
     }) => Promise<void>;
+    /**
+     * The child's ownership domain, resolved against its worktree: the paths
+     * its confinement fence grants. The kernel-level shell (a terminal pane)
+     * rides the same set as the file tools' judgement, so a branch that only
+     * owns `packages/foo/**` cannot write elsewhere through a redirect.
+     */
+    writablePaths?: readonly string[];
     exposeSandboxes?: boolean;
     /**
      * The child's OWN candidate, read-only (T6-4). A sandboxed subagent's
@@ -174,6 +181,9 @@ export async function createSubagentTools(
           scope.authorizeWorkspaceRead(request, input.exec),
         ...(input.writeAuthorize
           ? { workspaceWriteAuthorize: input.writeAuthorize }
+          : {}),
+        ...(input.writablePaths?.length
+          ? { confinementWritablePaths: input.writablePaths }
           : {}),
         sandboxMergeAuthorize: (request) =>
           scope.authorizeSandboxMerge(request, input.exec),

@@ -167,6 +167,15 @@ export function writableRoots(
 export function wrapConfinedCommand(input: {
   mode: ConfinementMode;
   workspaceRoot?: string;
+  /**
+   * An explicit writable set — the paths the kernel grants, INSTEAD of the
+   * workspace root. The fan-out sub-agent's ownership domain rides here: its
+   * kernel fence is its worktree, but the paths it may write are narrower
+   * (its writePaths), and a shell redirect must answer to the same fence the
+   * fs tools answer to. Without this, "a branch only changes its own domain"
+   * held for the model's file tools and not for its shell.
+   */
+  writablePaths?: readonly string[];
   rlimits?: ConfinementRlimits;
   command: string;
   args: string[];
@@ -182,8 +191,19 @@ export function wrapConfinedCommand(input: {
   // argv carries only the flags: the binary is the `command`, and a second
   // copy here would arrive as a bogus first argument (usage refusal).
   const wrapped: string[] = [];
-  for (const root of writableRoots(mode, workspaceRoot))
-    wrapped.push("--read-write", root);
+  // An explicit set narrows the WORKSPACE grant to the named paths; the
+  // platform set (/dev/null, /tmp, os.tmpdir) is what every confined command
+  // has always had, and a domain is about ownership of workspace content —
+  // not about taking the platform drain away.
+  const roots = input.writablePaths?.length
+    ? [
+        "/dev/null",
+        "/tmp",
+        tmpdir(),
+        ...new Set(input.writablePaths.map((path) => canonicalPath(path))),
+      ]
+    : writableRoots(mode, workspaceRoot);
+  for (const root of roots) wrapped.push("--read-write", root);
   for (const [name, value] of Object.entries(rlimits ?? {})) {
     if (value !== undefined) wrapped.push("--rlimit", `${name}=${value}`);
   }

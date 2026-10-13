@@ -102,7 +102,17 @@ export type PtySpawnOptions = {
    * shell — and everything typed into it — runs at that mode. Absent means
    * `danger-full-access` (a human's own pane).
    */
-  confinement?: { mode: ConfinementMode; workspaceRoot?: string };
+  confinement?: {
+    mode: ConfinementMode;
+    workspaceRoot?: string;
+    /**
+     * The caller's ownership domain: the paths the kernel grants INSTEAD of
+     * the whole workspace root (the fan-out sub-agent's writePaths, resolved
+     * against its worktree). Present = the pane's shell answers to the same
+     * fence the session's file tools answer to; absent = the workspace root.
+     */
+    writablePaths?: readonly string[];
+  };
   /**
    * The command text as it was requested, before the shell argv was derived.
    * The WezTerm adapter passes it to the host's own start (which applies the
@@ -1285,6 +1295,8 @@ export function createPtyTerminalController(
       workspaceRoot?: string;
       /** The caller's own backend, when it names one (the test seam). */
       binaryPath?: string;
+      /** The caller's ownership domain (see the tool's wiring). */
+      writablePaths?: readonly string[];
     };
     /**
      * The grid to spawn at. Absent means the default; a human pane resizes the
@@ -1376,6 +1388,9 @@ export function createPtyTerminalController(
       const wrapped = wrapConfinedCommand({
         mode: confinement.mode,
         workspaceRoot: confinement.workspaceRoot ?? startInput.cwd,
+        ...(confinement.writablePaths?.length
+          ? { writablePaths: confinement.writablePaths }
+          : {}),
         command: file,
         args: [...args],
         binaryPath: confinement.binaryPath,

@@ -1,4 +1,5 @@
 import { SandboxRefusal } from "@anthelia/contracts";
+import { resolve } from "node:path";
 import type {
   InitializeOptions,
   RuntimeContext,
@@ -423,6 +424,17 @@ export async function installSubagents(
           repeatedCalls,
           exec,
           writeAuthorize,
+          // The kernel fence for the child's shell: its domain, resolved
+          // against its own worktree. The model-facing fence (writeAuthorize)
+          // judges the file tools; this is the same set at the kernel height,
+          // so a shell redirect answers to it too.
+          ...(writePaths?.length
+            ? {
+                writablePaths: writePaths.map((entry) =>
+                  resolve(sandboxRoot, entry),
+                ),
+              }
+            : {}),
           // The child's OWN candidate, read-only (T6-4): a sandboxed subagent
           // used to get no sandbox surface at all, so every `sandbox_*` tool
           // threw "sandbox runtime unavailable" — it could not look at the

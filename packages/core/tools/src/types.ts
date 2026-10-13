@@ -675,6 +675,15 @@ export type ToolExecutionContext = {
    */
   confinement?: ConfinementMode;
   /**
+   * The paths this session's confinement fence actually grants, when they
+   * are narrower than the workspace root — the fan-out sub-agent's
+   * ownership domain (its writePaths, resolved against its worktree). The
+   * terminal pane's kernel-level shell rides the same set, so "a branch
+   * only changes its own domain" holds for a shell redirect too, not just
+   * for the model's file tools. Absent = the workspace root is the grant.
+   */
+  confinementWritablePaths?: readonly string[];
+  /**
    * The sandbox escalation channel for this call, closed over the runtime's
    * tool/call/turn identity (askQuestion's shape: the tool asks, the runtime
    * owns the ids). Present when the runtime resolved one; a tool that

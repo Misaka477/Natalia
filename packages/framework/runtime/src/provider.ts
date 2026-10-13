@@ -575,8 +575,19 @@ Response must include:
 
 Any attempt to use tools is a critical violation. Respond with text ONLY.`;
 
+/**
+ * The stand-in for a final text response the provider never sent.
+ *
+ * It must read as an UNFINISHED turn, not as an answer: the 2026-10-13
+ * audit watched a Nia round announce its audit, lose the provider
+ * response, settle on this fallback and close `done` — and every consumer
+ * downstream read a normal ending while the audit content was zero. The
+ * turn.finished event carries `reason: "missing_final_response"` for
+ * machines; this sentence is the same fact for the model and the human
+ * reading the transcript, so neither can mistake boilerplate for work.
+ */
 export const MISSING_FINAL_RESPONSE_FALLBACK =
-  "Tool execution completed, but the model did not provide a final text summary. The completed tool results remain available in the conversation context.";
+  "This turn is UNFINISHED — no final answer was produced. The model ran its tools but never provided the required closing text response, so nothing was concluded here. The tool results remain available in the conversation context; treat this turn as incomplete and continue the work rather than reading it as an answer.";
 
 function attachmentHasInlineDataURL(
   attachment: ProviderAttachment,

@@ -499,7 +499,7 @@ test("tool calls with an empty final answer emit a deterministic fallback", asyn
       )
       .map((event) => event.text)
       .join(""),
-  ).toContain("Tool execution completed");
+  ).toContain("UNFINISHED");
 });
 
 test("complete textual tool calls are normalized and executed once", async () => {
@@ -872,8 +872,7 @@ test("structured calls on the configured final step are ignored with fallback te
   expect(
     events.some(
       (event) =>
-        event.type === "content.delta" &&
-        event.text.includes("Tool execution completed"),
+        event.type === "content.delta" && event.text.includes("UNFINISHED"),
     ),
   ).toBe(true);
 });

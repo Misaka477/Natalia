@@ -173,6 +173,7 @@
       "version": "0.0.0-m13",
       "dependencies": {
         "@anthelia/contracts": "workspace:*",
+        "@anthelia/diff-wasm": "workspace:*",
         "@anthelia/platform": "workspace:*",
         "@anthelia/runtime": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
@@ -203,6 +204,7 @@
         "@anthelia/substrate": "workspace:*",
         "@anthelia/tools": "workspace:*",
         "@natalia/goal": "workspace:*",
+        "@natalia/work-ledger": "workspace:*",
       },
     },
     "packages/domains/governance-ledger": {
@@ -455,6 +457,7 @@
       "name": "@anthelia/sandbox",
       "version": "0.0.0-m11",
       "dependencies": {
+        "@anthelia/confinement": "workspace:*",
         "@anthelia/contracts": "workspace:*",
         "@anthelia/diff-wasm": "workspace:*",
         "@anthelia/object-store": "workspace:*",
@@ -637,6 +640,7 @@
       "name": "@natalia/plugin-native-terminal",
       "version": "1.0.0",
       "dependencies": {
+        "@anthelia/confinement": "workspace:*",
         "@anthelia/contracts": "workspace:*",
         "@anthelia/platform": "workspace:*",
         "@anthelia/plugin": "workspace:*",
@@ -678,6 +682,7 @@
         "@anthelia/contracts": "workspace:*",
         "@anthelia/plugin": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
+        "@anthelia/sandbox": "workspace:*",
         "@anthelia/tools": "workspace:*",
         "@natalia/collaboration": "workspace:*",
       },
@@ -706,7 +711,9 @@
       "name": "@natalia/plugin-tool-fs-write",
       "version": "1.0.0",
       "dependencies": {
+        "@anthelia/contracts": "workspace:*",
         "@anthelia/plugin": "workspace:*",
+        "@anthelia/sandbox": "workspace:*",
         "@anthelia/tools": "workspace:*",
       },
     },

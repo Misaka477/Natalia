@@ -163,13 +163,12 @@ export function ModelPanel(props: {
     createSignal(false);
   let discoveryGeneration = 0;
   let discoveryRequestID = 0;
+  // One empty row, the same shape openAddProvider resets to. The initial
+  // value used to name a model ("glm-5.3-flash") that was never the
+  // user's: both form paths overwrite this before it renders, so it was
+  // a dead state that read like a shipped default.
   const [models, setModels] = createSignal<ModelRow[]>([
-    {
-      id: "glm-5.3-flash",
-      name: "glm-5.3-flash",
-      reasoning: true,
-      image: true,
-    },
+    { id: "", name: "", reasoning: true, image: false },
   ]);
   const [headers, setHeaders] = createSignal<HeaderRow[]>([
     { name: "", value: "" },

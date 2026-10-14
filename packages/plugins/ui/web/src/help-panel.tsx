@@ -1,10 +1,13 @@
 import { Show, For, onCleanup, onMount } from "solid-js";
 
+// ONLY what the shell actually handles. The list used to advertise
+// Ctrl+K (a command palette that does not exist) and Ctrl+/ (settings,
+// which has no hotkey) — two rows a user could try and find dead, which
+// is worse than not listing them. The handlers live in app-neu.tsx; when
+// one is added there it belongs here, and not before.
 const shortcuts = [
   { keys: ["Ctrl", "B"], description: "切换左侧栏" },
   { keys: ["Ctrl", "J"], description: "切换右侧栏" },
-  { keys: ["Ctrl", "K"], description: "打开命令面板" },
-  { keys: ["Ctrl", "/"], description: "打开设置" },
   { keys: ["Ctrl", "Shift", "P"], description: "搜索工作区" },
 ];
 

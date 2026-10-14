@@ -106,8 +106,15 @@ export function SandboxPanel(props: {
                 {selected()?.changedFiles} pending changes
               </div>
               <div class="neu-flow-section-title">Changes</div>
-              <Show when={selected()?.changedFiles ?? 0 > 0}>
-                <div class="neu-sandbox-change">3 个待合并变更</div>
+              {/* The real count, and a condition that means what it
+                  says. The old one was `changedFiles ?? 0 > 0`, which
+                  parses as `changedFiles ?? (0 > 0)` — true whenever
+                  the count is absent — so every changeless sandbox
+                  showed a row claiming three pending changes. */}
+              <Show when={(selected()?.changedFiles ?? 0) > 0}>
+                <div class="neu-sandbox-change">
+                  {selected()?.changedFiles} 个待合并变更
+                </div>
               </Show>
               <div class="neu-flow-section-title">Resources</div>
               <div class="neu-flow-detail-field">

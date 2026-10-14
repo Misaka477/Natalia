@@ -830,7 +830,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     | {
         text: string;
         safetyCheckpointID?: string;
-        restoredCount: number;
       }
     | undefined
   >();
@@ -4242,19 +4241,28 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                                   : undefined;
                                 await refreshTranscript();
                                 if (messageResult || preview) {
+                                  // No count: the rollback contract
+                                  // returns {id, rolledBackTo} and nothing
+                                  // about how much was removed, so the
+                                  // "1 条消息" this used to print was
+                                  // invented — a number that was wrong
+                                  // for every rollback that removed more
+                                  // than one message and right only by
+                                  // coincidence. Saying what happened is
+                                  // honest; counting it needs the store
+                                  // to return the number.
                                   setRollbackNotice({
                                     text:
                                       messageResult && preview
-                                        ? `已还原消息，并恢复工作区检查点。`
+                                        ? `已还原会话到所选消息，并恢复了工作区检查点。`
                                         : preview
                                           ? `已恢复工作区检查点。`
                                           : messageResult?.safetyCheckpointID
-                                            ? `已还原 1 条消息，并创建了安全后悔点。`
-                                            : `已还原 1 条消息。没有可用的文件检查点，因此未恢复工作区更改。`,
+                                            ? `已还原会话到所选消息，并创建了安全后悔点。`
+                                            : `已还原会话到所选消息。没有可用的文件检查点，因此未恢复工作区更改。`,
                                     safetyCheckpointID:
                                       messageResult?.safetyCheckpointID ??
                                       preview?.safetyCheckpointID,
-                                    restoredCount: 1,
                                   });
                                 }
                               } else {

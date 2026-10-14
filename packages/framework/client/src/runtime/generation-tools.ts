@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore, type ObjectStore } from "@anthelia/object-store";
 import {
   mergeConfig,
   replaceProjectConfig,
@@ -63,7 +63,11 @@ function workspaceRoot(ctx: RuntimeContext): string {
 }
 
 function objectStore(ctx: RuntimeContext): ObjectStore {
-  return new ObjectStore(resolveWorkspaceObjectsRoot(workspaceRoot(ctx)));
+  // The shared store for this root, not a fresh one: a construction per
+  // call was one SQLite handle (and pack daemon) per operation, none of
+  // them released — which Windows answers with EBUSY when the root is
+  // later removed. See sharedObjectStore.
+  return sharedObjectStore(resolveWorkspaceObjectsRoot(workspaceRoot(ctx)));
 }
 
 /**

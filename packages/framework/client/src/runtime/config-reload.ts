@@ -22,7 +22,7 @@ import {
   checkpointFactory,
   type CheckpointFactory,
 } from "@anthelia/checkpoint";
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore } from "@anthelia/object-store";
 import { buildGeneration, storeGeneration } from "@anthelia/composition";
 import { generationAdapterRows, generationPrompts } from "./generation-inputs";
 import type { RuntimeContext } from "@anthelia/substrate";
@@ -192,7 +192,9 @@ export function createConfigReload(
     try {
       const config = ctx.ports.getTsRuntimeConfig();
       if (!config) return undefined;
-      const store = new ObjectStore(
+      // The shared store for this root: one handle per staged candidate
+      // was one handle per reload, none released (see sharedObjectStore).
+      const store = sharedObjectStore(
         resolveWorkspaceObjectsRoot(ctx.ports.getWorkspaceRoot()),
       );
       const catalog = ctx.ports.getPluginsController().catalog();

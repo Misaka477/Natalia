@@ -724,16 +724,30 @@ export function createContextVault(input: {
   if (!columns.some((column) => column.name === "vector_ref"))
     db.exec("ALTER TABLE context_records ADD COLUMN vector_ref TEXT");
 
-  const insert = db.prepare(`
+  // Every statement this vault prepares, tracked so close() can
+  // finalize them all. bun:sqlite's close() does not release the
+  // Windows file handle while a prepared statement is still alive, so a
+  // vault whose statements outlive it leaves its directory undeletable
+  // (EBUSY). Tracking is the only shape that also covers the per-call
+  // ones (search's touch, and any added later) — a list of the four
+  // long-lived statements would miss exactly those.
+  const statements: Array<{ finalize(): void }> = [];
+  function prepare(sql: string) {
+    const statement = db.prepare(sql);
+    statements.push(statement);
+    return statement;
+  }
+
+  const insert = prepare(`
     INSERT OR REPLACE INTO context_records
       (id, workspace_id, session_id, agent_id, record_type, entity_key, summary,
        content, source_evidence_id, seq, created_at, updated_at, access_count, priority, vector, vector_ref)
     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 0, 0.5, ?, ?)
   `);
-  const ftsInsert = db.prepare(
+  const ftsInsert = prepare(
     "INSERT OR REPLACE INTO context_records_fts (id, summary, entity_key) VALUES (?, ?, ?)",
   );
-  const historyInsert = db.prepare(
+  const historyInsert = prepare(
     "INSERT OR REPLACE INTO context_history (id, record_id, action, at) VALUES (?, ?, ?, ?)",
   );
 
@@ -1022,7 +1036,7 @@ export function createContextVault(input: {
           if (row) rows.push({ ...row, rank: 0 });
         }
       }
-      const touch = db.prepare(
+      const touch = prepare(
         "UPDATE context_records SET access_count = access_count + 1 WHERE id = ?",
       );
       const now = new Date().toISOString();
@@ -1245,6 +1259,19 @@ export function createContextVault(input: {
       if (closed) return;
       closed = true;
       flushNow();
+      // The statements BEFORE the database: bun:sqlite's close() does not
+      // release the Windows file handle while a prepared statement is
+      // still alive, so the vault's directory then answers EBUSY to
+      // every delete — measured: a finalized statement releases it, a
+      // live one does not. POSIX unlinks tolerate the open handle,
+      // which is why nothing here noticed.
+      for (const statement of statements) {
+        try {
+          statement.finalize();
+        } catch {
+          /* already finalized */
+        }
+      }
       db.close();
     },
   };

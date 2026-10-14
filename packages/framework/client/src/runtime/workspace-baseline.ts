@@ -20,7 +20,7 @@
  * captured index); a git-less workspace gets the same answer from here.
  */
 
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore } from "@anthelia/object-store";
 import { SnapshotStore, type SnapshotIndex } from "@anthelia/sandbox";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -61,7 +61,11 @@ export function workspaceBaselineStore(input: {
   // one directory, which made a record and a store index the same kind of
   // file in the same place — a reader and a writer could disagree about
   // where a baseline lives.
-  const objects = new ObjectStore(resolve(input.dir, "objects"));
+  // The shared store for the baselines' own root: a construction per
+  // baseline store was one handle per store, none released — and a
+  // workspace's baselines are created more than once
+  // (see sharedObjectStore).
+  const objects = sharedObjectStore(resolve(input.dir, "objects"));
   const store = new SnapshotStore(objects, resolve(input.dir, "store"));
   const recordsDir = resolve(input.dir, "records");
   const indexPath = (id: string) => resolve(recordsDir, `${id}.json`);

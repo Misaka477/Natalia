@@ -5,7 +5,7 @@ import {
 } from "./workspace-baseline";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore } from "@anthelia/object-store";
 import {
   isSnapshotIgnored,
   loadNataliaIgnore,
@@ -187,7 +187,9 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
     }>
   > => {
     await ctx.ports.getReady();
-    const astIndexStore = new ObjectStore(
+    // The shared store for this root: a construction per index run was
+    // one SQLite handle per run, none released (see sharedObjectStore).
+    const astIndexStore = sharedObjectStore(
       resolveWorkspaceObjectsRoot(ctx.ports.getWorkspaceRoot()),
     );
     // The 50-file cap is GONE: a workspace's move detection was blind

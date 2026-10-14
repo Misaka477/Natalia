@@ -23,7 +23,7 @@ import {
   type SandboxChange,
   type SandboxExecutorOptions,
 } from "./workspace-manager";
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore } from "@anthelia/object-store";
 import { SnapshotStore, type SnapshotIndex } from "./snapshot-store";
 import { linkDependencyRoots } from "./dependency-links";
 
@@ -59,8 +59,14 @@ export class SnapshotSandboxManager extends WorkspaceSandboxManager {
     super(resolve(hostRoot, ".natalia", "sandboxes"), options);
     this.hostRoot = hostRoot;
     this.dependencyRoots = [...(options?.dependencyRoots ?? [])];
+    // The SHARED store for this root. This manager is created once per
+    // session recovery and lives as long as the sandbox service, so a
+    // construction of its own was a handle held for the whole runtime —
+    // and a second one beside the checkpoint store's, on the same
+    // directory. Shared, one handle serves both, and the runtime's
+    // dispose releases it (see sharedObjectStore).
     this.store = new SnapshotStore(
-      new ObjectStore(resolve(hostRoot, ".natalia", "objects")),
+      sharedObjectStore(resolve(hostRoot, ".natalia", "objects")),
       resolve(hostRoot, ".natalia", "snapshots"),
     );
   }

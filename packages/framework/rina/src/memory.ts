@@ -291,6 +291,17 @@ export function createRinaMemory(
       return base;
     },
     close() {
+      // The statements first: bun:sqlite's close() keeps the Windows
+      // file handle while a prepared statement is alive, so the
+      // store's directory would answer EBUSY to every later delete
+      // (see the vault's close, which measured it).
+      for (const statement of [insert, updateStatus, historyInsert]) {
+        try {
+          statement.finalize();
+        } catch {
+          /* already finalized */
+        }
+      }
       db.close();
     },
   };

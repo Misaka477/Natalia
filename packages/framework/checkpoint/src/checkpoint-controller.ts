@@ -29,14 +29,13 @@ export function createCheckpointController(input: {
   let initPromise: Promise<void> | undefined;
 
   function close() {
-    // The store is per session and the object library it opens is per
-    // workspace: without this, a runtime that served a session holds the
-    // workspace's SQLite index open for the rest of the process, and
-    // Windows refuses every later delete of that workspace with EBUSY.
-    const opened = store;
+    // Dropping the reference is the whole job: the store's object
+    // library is shared per root and owned by the runtime, whose
+    // dispose releases it — a per-session close that closed the handle
+    // would pull it out from under every other user of the same
+    // directory. A later use of this session re-opens on demand.
     store = undefined;
     initPromise = undefined;
-    opened?.dispose();
   }
 
   async function init() {

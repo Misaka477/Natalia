@@ -1,4 +1,8 @@
-import { DiffCache, ObjectStore } from "@anthelia/object-store";
+import {
+  DiffCache,
+  sharedObjectStore,
+  type ObjectStore,
+} from "@anthelia/object-store";
 import { createHash } from "node:crypto";
 import { getLogger } from "@anthelia/logging";
 import { ChunkStore } from "./chunk-store";
@@ -266,7 +270,13 @@ export class CheckpointStore {
       options.storeDir ??
         defaultCheckpointStoreDir(this.workspaceRoot, options.sessionID),
     );
-    this.objects = new ObjectStore(
+    // The SHARED library for this root. A construction of its own was a
+    // second SQLite handle beside the sandbox manager's on the same
+    // directory — two connections to one index in one process, which is
+    // a locking question nobody asked for. Shared, there is exactly one,
+    // and its owner is the runtime, whose dispose releases it
+    // (see sharedObjectStore).
+    this.objects = sharedObjectStore(
       explicitStore
         ? join(this.workspaceRoot, ".natalia", "objects")
         : resolveWorkspaceObjectsRoot(this.workspaceRoot),
@@ -348,28 +358,12 @@ export class CheckpointStore {
     return this.enabled;
   }
 
-  /**
-   * Releases what this store holds open.
-   *
-   * The object library keeps a SQLite index (and, when the daemon is in
-   * use, a pipe) open for the process's lifetime, and a store is
-   * created per session — so a runtime that has served a session holds
-   * the workspace's object index open forever. POSIX deletes a
-   * directory out from under an open handle without complaint, which
-   * is why nothing here noticed; Windows refuses the delete with
-   * EBUSY, and the workspace (or a test's temp tree) cannot be
-   * removed. The chunk library and the stat cache hold no handles —
-   * they read and write on demand — so closing the object library is
-   * the whole job.
-   */
-  dispose() {
-    try {
-      this.objects.dispose();
-    } catch {
-      // A store that cannot be closed is still better closed than
-      // leaked; the next attempt is the process exiting.
-    }
-  }
+  // NO dispose(): this store holds nothing OS-level of its own. The
+  // object library is SHARED per root (see sharedObjectStore) and owned
+  // by the runtime, whose dispose releases it; the chunk library and
+  // the stat cache read and write on demand. A per-session dispose that
+  // closed the shared handle would pull it out from under the sandbox
+  // manager and every other user of the same directory.
 
   async initialize() {
     if (!this.enabled) {

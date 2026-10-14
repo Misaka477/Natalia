@@ -3,6 +3,11 @@ import { waitForDrain } from "./drain";
 import { sessionStoreController } from "@anthelia/session-store";
 import { checkpointFactory } from "@anthelia/checkpoint";
 import {
+  releaseSharedObjectStore,
+  releaseSharedObjectStoresUnder,
+} from "@anthelia/object-store";
+import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";
+import {
   sandboxService,
   terminalController,
   type SandboxService,
@@ -175,6 +180,18 @@ export function createLifecycleSurface(
         checkpointFactory,
       ) as (CheckpointFactory & { close?(): void }) | undefined;
       checkpointClose?.close?.();
+      // The workspace's object libraries, released at last: every
+      // runtime site now shares one store per root, and without this
+      // the shared handle outlives the runtime it served — which
+      // Windows answers with EBUSY when the workspace (or a test's
+      // temp root) is removed afterwards. TWO roots to cover: the
+      // objects library lives OUTSIDE the workspace once the store
+      // migration has moved it (resolveWorkspaceObjectsRoot), and the
+      // per-workspace areas under the workspace itself (the baselines'
+      // own object root, the legacy location) are the other.
+      const workspaceRoot = ctx.ports.getWorkspaceRoot();
+      releaseSharedObjectStore(resolveWorkspaceObjectsRoot(workspaceRoot));
+      releaseSharedObjectStoresUnder(workspaceRoot);
       await shutdownStep(
         "pluginsClose",
         () => ctx.ports.getPluginsController().close(),

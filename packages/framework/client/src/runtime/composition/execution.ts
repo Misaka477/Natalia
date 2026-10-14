@@ -14,7 +14,7 @@ import {
   pluginOverridesForSuggestions,
 } from "@natalia/engineering-intelligence";
 import { buildGeneration, storeGeneration } from "@anthelia/composition";
-import { ObjectStore } from "@anthelia/object-store";
+import { sharedObjectStore } from "@anthelia/object-store";
 import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";
 import { generationAdapterRows, generationPrompts } from "../generation-inputs";
 import { activeConstitutionRows } from "../config-reload";
@@ -220,7 +220,9 @@ async function stageCandidateFromGrowth(
     if (!mapped) return;
     const live = ctx.ports.getTsRuntimeConfig();
     if (!live) return;
-    const store = new ObjectStore(
+    // The shared store for this root, not a fresh one per suggestion
+    // apply — see sharedObjectStore.
+    const store = sharedObjectStore(
       resolveWorkspaceObjectsRoot(ctx.ports.getWorkspaceRoot()),
     );
     const candidateID = await storeGeneration(

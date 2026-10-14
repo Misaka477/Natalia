@@ -21,6 +21,7 @@ import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashTreeFiles } from "../packages/hosts/platform/src/hash-tree";
+import { resolvePwshPath } from "../packages/hosts/platform/src/pwsh";
 import { censusFromWorkspace } from "../apps/cli/src/layer-census";
 
 type TargetResult = {
@@ -190,6 +191,176 @@ async function stageAppIcon(outDir: string): Promise<void> {
   await cp(source, join(outDir, "icon.ico"));
 }
 
+/**
+ * The application icon source, or undefined when the repo has none.
+ *
+ * Read once so the two consumers (the release tree's `icon.ico` and the
+ * exe's own PE resource) cannot disagree about which file is the icon.
+ */
+const iconSource = join(root, "assets", "icons", "icon.ico");
+
+/**
+ * Stamp the application icon into a compiled Windows executable's resource
+ * section.
+ *
+ * This exists because `bun build --compile --windows-icon=<path>` is a
+ * SILENT no-op on this toolchain: the flag parses, the build exits 0 with
+ * no warning, and the exe keeps bun's stock mark (oven-sh/bun#19916 is the
+ * upstream report; there it at least prints `warn: Failed to set executable
+ * icon`, which made it findable — here even that is missing). A shipped
+ * install therefore showed a generic circle for `natalia.exe` while the
+ * Start Menu shortcut, which reads `icon.ico` from the install root, showed
+ * the real one: two faces for one app.
+ *
+ * The PE resource layout Windows reads is two entries:
+ *   RT_ICON (3)        one per image, each a PNG payload
+ *   RT_GROUP_ICON (14) one entry binding them: a 6-byte GRPICONDIR header
+ *                      plus a 14-byte GRPICONDIRENTRY per image, whose last
+ *                      field is the image's RESOURCE ID (not a file offset)
+ * That is what `LoadImage(..., "#1", IMAGE_ICON, ...)`, Explorer, the
+ * taskbar and the file-properties sheet all read.
+ *
+ * The Win32 calls need PowerShell (BeginUpdateResource/UpdateResource/
+ * EndUpdateResource are kernel32 and are not reachable from Bun without a
+ * native addon), so this shells out to a thin pwsh script with the payloads
+ * already prepared on disk. The script is generated, not stored, so there
+ * is no second copy of the layout to keep in sync.
+ */
+async function stampWindowsIcon(
+  exePath: string,
+  icoPath: string,
+): Promise<void> {
+  if (!(await Bun.file(icoPath).exists()))
+    throw new Error(
+      `cannot stamp the exe icon: ${icoPath} is missing — the compiled ` +
+        `binary would keep bun's stock mark`,
+    );
+  // Payloads on disk, read by the pwsh step as bytes (no quoting hazards:
+  // the paths may contain spaces, and a script that interpolated them into
+  // a command line would break).
+  const work = join(root, ".btmp", "icon-stamp");
+  await rm(work, { recursive: true, force: true });
+  await mkdir(work, { recursive: true });
+  const iconBin = join(work, "icon.bin");
+  const groupBin = join(work, "group.bin");
+  await buildIconPayloads(icoPath, iconBin, groupBin);
+
+  const script = join(work, "stamp.ps1");
+  await Bun.write(
+    script,
+    [
+      "$ErrorActionPreference = 'Stop'",
+      "Add-Type -TypeDefinition @'",
+      "using System;",
+      "using System.Runtime.InteropServices;",
+      "public class IconStamper {",
+      '  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]',
+      "  public static extern IntPtr BeginUpdateResource(string fileName, bool deleteExistingResources);",
+      '  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]',
+      "  public static extern bool UpdateResource(IntPtr hUpdate, IntPtr type, IntPtr name, ushort language, byte[] data, uint size);",
+      '  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]',
+      "  public static extern bool EndUpdateResource(IntPtr hUpdate, bool discardChanges);",
+      "}",
+      "'@",
+      "$exe = $args[0]; $icon = $args[1]; $group = $args[2]",
+      "$h = [IconStamper]::BeginUpdateResource($exe, $false)",
+      'if ($h -eq [IntPtr]::Zero) { throw "BeginUpdateResource failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
+      "$iconBytes = [System.IO.File]::ReadAllBytes($icon)",
+      'if (-not [IconStamper]::UpdateResource($h, [IntPtr]3, [IntPtr]1, 0x0409, $iconBytes, $iconBytes.Length)) { throw "UpdateResource RT_ICON failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
+      "$groupBytes = [System.IO.File]::ReadAllBytes($group)",
+      'if (-not [IconStamper]::UpdateResource($h, [IntPtr]14, [IntPtr]1, 0x0409, $groupBytes, $groupBytes.Length)) { throw "UpdateResource RT_GROUP_ICON failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
+      'if (-not [IconStamper]::EndUpdateResource($h, $false)) { throw "EndUpdateResource failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
+      "",
+    ].join("\n"),
+  );
+
+  // pwsh, resolved the way the rest of the repo does it (never required from
+  // the user: 5.1 is the fallback, and the resolution order is the
+  // platform's own).
+  const pwsh = resolvePwshPath();
+  const run2 = Bun.spawnSync(
+    [
+      pwsh,
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      script,
+      exePath,
+      iconBin,
+      groupBin,
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  if (run2.exitCode !== 0) {
+    // Loud, not silent: an exe that ships with bun's mark is exactly the
+    // defect this step exists to remove, and a build that quietly skipped
+    // it would reintroduce it.
+    throw new Error(
+      `could not stamp the application icon into ${exePath}: ` +
+        `${new TextDecoder().decode(run2.stderr).trim() || `exit ${run2.exitCode}`}`,
+    );
+  }
+}
+
+/**
+ * The two PE payloads a stamped icon needs, from one .ico file.
+ *
+ * `iconBin` is the FIRST image's bytes (the one RT_ICON id 1 names — the
+ * smallest, which is what a 16x16 shell slot asks for). `groupBin` is the
+ * GRPICONDIR + one GRPICONDIRENTRY, whose trailing field is the resource
+ * id rather than the file offset the .ico directory carries.
+ *
+ * A multi-image icon would be nicer, and is deliberately not attempted
+ * here: the group format's per-image ids have to line up with the RT_ICON
+ * ids, and a mismatch is a silently-wrong icon — the exact failure mode
+ * this whole step exists to end. One image, written correctly.
+ */
+async function buildIconPayloads(
+  icoPath: string,
+  iconBin: string,
+  groupBin: string,
+): Promise<void> {
+  const ico = await Bun.file(icoPath).arrayBuffer();
+  const bytes = new Uint8Array(ico);
+  if (bytes.length < 22)
+    throw new Error(`${icoPath} is too small to be an .ico`);
+  // The image count is the uint16 at offset 4, little-endian — the LOW byte
+  // first. Reading `bytes[5]` reads the high byte, which is 0 for any real
+  // icon, so a perfectly good 7-image .ico was refused with "declares no
+  // images" and the whole stamp step died on its own guard.
+  const count = bytes[4] | (bytes[5] << 8);
+  if (count < 1) throw new Error(`${icoPath} declares no images`);
+  const first = 6; // the first directory entry
+  const width = bytes[first] === 0 ? 256 : bytes[first];
+  const length =
+    bytes[first + 8] |
+    (bytes[first + 9] << 8) |
+    (bytes[first + 10] << 16) |
+    (bytes[first + 11] << 24);
+  const offset =
+    bytes[first + 12] |
+    (bytes[first + 13] << 8) |
+    (bytes[first + 14] << 16) |
+    (bytes[first + 15] << 24);
+  if (offset + length > bytes.length)
+    throw new Error(`${icoPath}'s first image points outside the file`);
+  // Buffer.from, not the subarray view: `Bun.write(path, view)` rejects a
+  // Uint8Array view sharing an ArrayBuffer ("Expected options to be a
+  // object for 'write'"), while a copied Buffer is the shape it accepts.
+  await Bun.write(
+    iconBin,
+    Buffer.from(bytes.subarray(offset, offset + length)),
+  );
+
+  const group = Buffer.alloc(6 + 14);
+  bytes.subarray(0, 6).forEach((value, index) => (group[index] = value)); // reserved, type=1, count=1
+  bytes
+    .subarray(first, first + 12)
+    .forEach((value, index) => (group[6 + index] = value)); // width..bitcount
+  group[6 + 12] = 1; // the resource id — NOT the file offset
+  group[6 + 13] = 0;
+  await Bun.write(groupBin, group);
+}
 /** The command that produces the host for a given release platform. */
 function hostBuildCommand(platformDir: string): string {
   if (platformDir.startsWith("windows"))
@@ -545,18 +716,12 @@ for (const target of targets) {
         "--outfile",
         join(outDir, "natalia"),
         ...(triple === `bun-${hostTarget}` ? [] : [`--target=${triple}`]),
-        // The compiled binary's OWN icon — the one Explorer, the taskbar and
-        // the shortcut show for natalia.exe. `bun build --compile` embeds
-        // bun's stock mark when this is absent, so a shipped install showed
-        // a generic circle where the app's icon should be (measured on the
-        // m13 installer: the shortcut picked up icon.ico from the install
-        // root, but the exe itself — and everything that resolves the exe's
-        // own icon, including the running window before the CEF host loads —
-        // still carried bun's). Only accepted for windows targets; passing it
-        // on a POSIX compile is an error, hence the guard.
-        ...(platformDir.startsWith("windows")
-          ? [`--windows-icon=${join(root, "assets", "icons", "icon.ico")}`]
-          : []),
+        // NOTE: no `--windows-icon` here on purpose. It is accepted by the
+        // CLI and does nothing (oven-sh/bun#19916 — a silent no-op on this
+        // toolchain), so passing it would read as "the icon is handled" and
+        // ship bun's stock mark. The icon is stamped after the compile by
+        // `stampWindowsIcon` below, which is the step that actually writes
+        // the PE resource.
       ],
       root,
     );
@@ -565,6 +730,21 @@ for (const target of targets) {
       results.push(result);
       continue;
     }
+    // The binary's OWN icon, written AFTER the compile because bun's
+    // `--windows-icon` is inert on this toolchain: the flag is accepted, the
+    // build exits 0 with no warning, and the exe still carries bun's stock
+    // mark (measured — the flag is a known no-op, oven-sh/bun#19916, where
+    // it at least prints `warn: Failed to set executable icon`). So the
+    // icon is stamped into the PE's resource section with Win32
+    // UpdateResource: one RT_ICON per image, one RT_GROUP_ICON that binds
+    // them, exactly the layout `LoadImage`/Explorer read.
+    //
+    // Skipped everywhere except a native Windows build: UpdateResource is
+    // Windows-only, and a cross-compile from POSIX cannot run it (the icon
+    // for a windows target built on Linux would have to be stamped on a
+    // Windows host — which the Inno step of `package:windows` already is).
+    if (platformDir.startsWith("windows") && process.platform === "win32")
+      await stampWindowsIcon(join(outDir, "natalia.exe"), iconSource);
     // The tree-sitter WASM files, staged under wasm/ in the release so an
     // installed copy can find them on disk. Required, not tidy-up: the compiled
     // binary resolves @vscode/tree-sitter-wasm and web-tree-sitter through Bun's

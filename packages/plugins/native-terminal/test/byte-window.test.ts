@@ -260,10 +260,19 @@ test("a full-speed flood does not starve the keyboard", async () => {
   // on the runner (a shared CPU running `yes` at full rate is exactly where
   // the echo latency is not the local 14.5ms); 20s keeps the real failure
   // unambiguous — a blocked input path never echoes at all.
+  //
+  // The flood runs NICE'd, and that is the fix for the fourth red: an
+  // unniced `yes` on a shared runner outranks the pane's own input path for
+  // the whole 20s window, so the echo starves for a reason that has nothing
+  // to do with the fold. `nice -n 19` keeps the flood at full rate (the
+  // pressure under test is unchanged — the fold still has to keep up) while
+  // leaving the CPU the echo needs actually available. A bounded flood was
+  // the other option and was rejected: it would let the test pass because
+  // the flood ENDED, which is exactly the false green it exists to catch.
   const root = await mkdtemp(join(tmpdir(), "natalia-flood-latency-"));
   const { controller } = await paneIn(root, "t_flood");
   try {
-    controller.write("t_flood", "yes FLOODLINE\n");
+    controller.write("t_flood", "nice -n 19 yes FLOODLINE\n");
     await new Promise((r) => setTimeout(r, 400));
     let echoed = false;
     const unsub = controller.subscribeOutput!("t_flood", (chunk) => {

@@ -145,9 +145,9 @@ describe("the pinned pane contract", () => {
       const argv = nativeTerminalPaneCommand("pwsh", "win32");
       expect(argv[0]).not.toBe("pwsh");
       expect(argv[0].toLowerCase()).toContain("powershell");
-      expect(argv.some((arg) => arg.includes("shell-integration-pwsh.ps1"))).toBe(
-        true,
-      );
+      expect(
+        argv.some((arg) => arg.includes("shell-integration-pwsh.ps1")),
+      ).toBe(true);
     },
   );
 

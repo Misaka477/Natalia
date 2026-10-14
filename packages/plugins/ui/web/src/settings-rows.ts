@@ -131,7 +131,11 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
     category: "runtime",
   },
   // --- 界面 -------------------------------------------------------------
-  { label: "Theme Mode", description: "切换浅色 / 深色", category: "interface" },
+  {
+    label: "Theme Mode",
+    description: "切换浅色 / 深色",
+    category: "interface",
+  },
   {
     label: "运行中发送",
     description:

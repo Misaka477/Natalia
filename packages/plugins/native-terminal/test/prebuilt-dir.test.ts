@@ -45,9 +45,7 @@ test("the bridge beside the real executable is found, whatever argv[0] says", as
     value: join(root, "natalia.exe"),
     configurable: true,
   });
-  const { nativeTerminalPrebuiltDir } = await import(
-    "../src/prebuilt-dir.ts"
-  );
+  const { nativeTerminalPrebuiltDir } = await import("../src/prebuilt-dir.ts");
   expect(nativeTerminalPrebuiltDir("win32")).toBe(
     join(root, "prebuilt", "windows-x64"),
   );
@@ -64,9 +62,7 @@ test("a cwd that is the install root does not make the answer relative", async (
     value: join(root, "natalia.exe"),
     configurable: true,
   });
-  const { nativeTerminalPrebuiltDir } = await import(
-    "../src/prebuilt-dir.ts"
-  );
+  const { nativeTerminalPrebuiltDir } = await import("../src/prebuilt-dir.ts");
   expect(nativeTerminalPrebuiltDir("win32")).toBe(
     join(root, "prebuilt", "windows-x64"),
   );
@@ -80,9 +76,7 @@ test("an embedded-filesystem execPath is not mistaken for an install", async () 
     value: "B:\\~BUN\\root\\natalia.exe",
     configurable: true,
   });
-  const { nativeTerminalPrebuiltDir } = await import(
-    "../src/prebuilt-dir.ts"
-  );
+  const { nativeTerminalPrebuiltDir } = await import("../src/prebuilt-dir.ts");
   const resolved = nativeTerminalPrebuiltDir("win32");
   expect(resolved.toLowerCase()).not.toContain("~bun");
   // Nothing on disk matched, so the answer is the plugin-relative fallback —

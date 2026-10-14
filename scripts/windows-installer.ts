@@ -84,6 +84,15 @@ function innoPragmas(plan: WindowsInstallPlan, signTool?: string): string[] {
     "CreateUninstallRegkey=yes",
     `UninstallDisplayName={#MyAppName} {#MyAppVersion}`,
     `UninstallDisplayIcon={app}\\${plan.shortcut.iconRelative ?? "app.ico"}`,
+    // The wizard's OWN icon — the one in the title bar of every page and the
+    // final "Finish" button. `SetupIconFile` is what Inno reads for it, and
+    // without the line the installer shows the stock Inno icon while the app
+    // it installs has its own: a first impression that says the wrong name.
+    // The path is relative to the script's own directory, which is where the
+    // release tree sits (the script is written beside the files it packs).
+    ...(plan.shortcut.iconRelative
+      ? [`SetupIconFile=${plan.shortcut.iconRelative}`]
+      : []),
     "OutputDir=.",
     `OutputBaseFilename=Setup-{#MyAppName}-${plan.version}`,
     "Compression=lzma2",

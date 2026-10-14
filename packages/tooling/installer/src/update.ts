@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { compareVersions } from "./channel";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -48,6 +49,15 @@ export const UPDATE_EXIT_CONCURRENT = 2;
 export const UPDATE_LOCK_MAX_AGE_MS = 10 * 60_000;
 export const UPDATE_RECEIPT_KEEP = 20;
 const LOCK_NAME = ".natalia-update-in-progress";
+/**
+ * The installed binary's name in `bin/`. Windows needs the extension for a
+ * spawn to resolve it at all — `Bun.spawnSync(["bin/natalia", …])` fails
+ * there with ENOENT while the same call works on POSIX. `install.sh` writes
+ * `natalia` and `install.ps1` writes `natalia.exe`; this is that
+ * difference, in the one place both installers and the updater agree on.
+ */
+const INSTALLED_BINARY =
+  process.platform === "win32" ? "natalia.exe" : "natalia";
 
 export type UpdateOutcome =
   | "switched"
@@ -148,8 +158,11 @@ async function loadSource(from: string): Promise<SourceFiles> {
       files.set(name, new Uint8Array(await res.arrayBuffer()));
     }
     // The sums list itself is not self-listed; the binary must be there.
-    if (![...files.keys()].includes("natalia"))
-      throw new Error("source: SHA256SUMS does not cover natalia");
+    // The name is platform-spelled: a Windows release's sums list
+    // `natalia.exe` (install.ps1's layout), and a check for the bare name
+    // would refuse a perfectly good Windows release.
+    if (![...files.keys()].includes(INSTALLED_BINARY))
+      throw new Error(`source: SHA256SUMS does not cover ${INSTALLED_BINARY}`);
     return { files };
   }
   if (!existsSync(join(from, "SHA256SUMS")))
@@ -169,8 +182,10 @@ async function loadSource(from: string): Promise<SourceFiles> {
 function verifySource(source: SourceFiles): UpdateStep {
   const sumsText = new TextDecoder().decode(source.files.get("SHA256SUMS"));
   const sums = parseSha256Sums(sumsText);
-  if (!sums.has("natalia"))
-    throw new Error("source: SHA256SUMS does not cover natalia");
+  // Platform-spelled, like the fetch path above: install.sh's sums list
+  // `natalia`, install.ps1's list `natalia.exe`.
+  if (!sums.has(INSTALLED_BINARY))
+    throw new Error(`source: SHA256SUMS does not cover ${INSTALLED_BINARY}`);
   for (const [name, expected] of sums) {
     const bytes = source.files.get(name);
     if (!bytes) throw new Error(`source: SHA256SUMS lists ${name}, missing`);
@@ -206,21 +221,28 @@ function acquireLock(home: string): "held" | "concurrent" {
   }
 }
 
-function probeVersion(binPath: string): {
+/**
+ * Run the installed binary's `--version` and read its answer.
+ *
+ * `runner` is injectable so a test can drive a fixture that is not a PE
+ * image: Windows executes `.exe` names only when they are real portable
+ * executables, so a batch-file fixture under that name cannot be spawned
+ * directly. Production passes nothing and gets the real spawn.
+ */
+function probeVersion(
+  binPath: string,
+  runner: ProbeRunner = defaultProbeRunner,
+): {
   code: number;
   version?: string;
   detail: string;
 } {
   try {
-    const proc = Bun.spawnSync([binPath, "--version"], {
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 30_000,
-    });
-    const out = new TextDecoder().decode(proc.stdout).trim();
-    const err = new TextDecoder().decode(proc.stderr).trim();
+    const proc = runner([binPath, "--version"]);
+    const out = proc.stdout.trim();
+    const err = proc.stderr.trim();
     return {
-      code: proc.exitCode ?? -1,
+      code: proc.code,
       version: out || undefined,
       detail: err || out,
     };
@@ -232,12 +254,84 @@ function probeVersion(binPath: string): {
   }
 }
 
-/** Atomically points linkPath at targetPath (temp link + rename). */
-function swapSymlink(linkPath: string, targetPath: string): void {
+/**
+ * Atomically points linkPath at targetPath (temp link + rename), keeping the
+ * previous state restorable.
+ *
+ * POSIX: a relative symlink, swapped by renaming a temp link over it — the
+ * rename is the atomic step, so a reader either sees the old target or the
+ * new one, never half a file. The previous TARGET is returned, because that
+ * is what a rollback needs (re-create the same link).
+ *
+ * Windows: no symlink. Creating one needs SeCreateSymbolicLink, which a
+ * clean machine may not grant, and `install.ps1` already documents the
+ * deliberate difference — `bin/natalia.exe` is a COPY. So the Windows
+ * branch copies the staged binary beside the link path and swaps it in with
+ * a rename, which is atomic here too (`MoveFileEx` with
+ * MOVEFILE_REPLACE_EXISTING). The previous BYTES are returned as a backup
+ * path, because that is what a rollback needs there (restore the file).
+ */
+/**
+ * What the current install points at, or undefined when there is none.
+ *
+ * `readlinkSync` throws EINVAL on a plain file, which is what the Windows
+ * layout's `bin/natalia.exe` always is — so a copy install reads as "no
+ * link" rather than as an error.
+ */
+function readLinkTarget(linkPath: string): string | undefined {
+  if (!existsSync(linkPath)) return undefined;
+  try {
+    return readlinkSync(linkPath);
+  } catch {
+    return undefined;
+  }
+}
+
+function swapInstall(
+  linkPath: string,
+  targetPath: string,
+): { previousLink?: string; previousBytes?: string } {
   const tmp = `${linkPath}.new-${process.pid}`;
   rmSync(tmp, { force: true });
+  if (process.platform === "win32") {
+    const previousBytes = existsSync(linkPath)
+      ? `${linkPath}.old-${process.pid}`
+      : undefined;
+    if (previousBytes) copyFileSync(linkPath, previousBytes);
+    // The target arrives as the POSIX spelling — `../versions/<v>/natalia`
+    // — because a symlink resolves it against ITS OWN directory. A copy
+    // has no such rule: `copyFileSync` would resolve it against the
+    // process cwd and fail with ENOENT. Resolve it against the link's own
+    // directory here, which is the same place the symlink would have
+    // pointed from.
+    copyFileSync(resolve(dirname(linkPath), targetPath), tmp);
+    renameSync(tmp, linkPath); // atomic replace on Windows too
+    return previousBytes ? { previousBytes } : {};
+  }
+  const previousLink = readLinkTarget(linkPath);
   symlinkSync(targetPath, tmp);
   renameSync(tmp, linkPath); // atomic replace on POSIX
+  return previousLink !== undefined ? { previousLink } : {};
+}
+
+/** Put the previous install back, whichever shape this platform keeps. */
+function restoreInstall(
+  linkPath: string,
+  previous: { previousLink?: string; previousBytes?: string },
+): void {
+  try {
+    rmSync(linkPath, { force: true });
+    if (previous.previousLink !== undefined)
+      symlinkSync(previous.previousLink, linkPath);
+    else if (previous.previousBytes !== undefined)
+      copyFileSync(previous.previousBytes, linkPath);
+  } catch {
+    // Best-effort: the caller's other cleanup (dropping the failed version
+    // directory) is the part that must not leave a half-install behind.
+  } finally {
+    if (previous.previousBytes !== undefined)
+      rmSync(previous.previousBytes, { force: true });
+  }
 }
 
 function pruneReceipts(dir: string): void {
@@ -288,6 +382,8 @@ export type UpdateProgramInput = {
   restartUnit?: string;
   /** The restart executor, injected for tests; default = systemctl. */
   exec?: (argv: string[]) => { code: number; output: string };
+  /** How `--version` is run; injected for tests with a non-PE fixture. */
+  probeRunner?: ProbeRunner;
   /**
    * The resolved CHANNEL's latest version. Checked right beside the
    * locate probe (one probe, one truth): equal = up-to-date (nothing
@@ -359,6 +455,31 @@ const defaultRestartExec = (argv: string[]) => {
 };
 
 /**
+ * How `--version` is run, injectable so a test can drive a fixture that is
+ * not a real executable (Windows executes `.exe` names only when they are
+ * PE images, so a batch fixture under that name cannot be spawned
+ * directly). Production passes nothing and gets the real spawn.
+ */
+export type ProbeRunner = (argv: string[]) => {
+  code: number;
+  stdout: string;
+  stderr: string;
+};
+
+const defaultProbeRunner: ProbeRunner = (argv) => {
+  const proc = Bun.spawnSync(argv, {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 30_000,
+  });
+  return {
+    code: proc.exitCode ?? -1,
+    stdout: new TextDecoder().decode(proc.stdout),
+    stderr: new TextDecoder().decode(proc.stderr),
+  };
+};
+
+/**
  * The atomic install lane, extracted so the generation switch's
  * `staged-build` source lands through the SAME sequence `natalia update`
  * uses — one spelling of "how new code takes over", not a second one.
@@ -378,6 +499,8 @@ export type StagedBuildInstall = {
   restartUnit?: string;
   /** The restart executor, injected for tests; default = systemctl. */
   exec?: (argv: string[]) => { code: number; output: string };
+  /** How `--version` is run; injected for tests with a non-PE fixture. */
+  probeRunner?: ProbeRunner;
 };
 
 export type StagedBuildOutcome =
@@ -389,9 +512,12 @@ export function installStagedBuild(
   input: StagedBuildInstall,
 ): StagedBuildOutcome {
   const { home, version, files } = input;
-  const binLink = join(home, "bin", "natalia");
+  const binLink = join(home, "bin", INSTALLED_BINARY);
   const versionDir = join(home, "versions", version);
-  const previousLink = existsSync(binLink) ? readlinkSync(binLink) : undefined;
+  // The previous install's shape, kept by the swap so a failed probe can put
+  // it back exactly: the relative link on POSIX, the previous bytes on
+  // Windows (whose layout is a copy — see swapInstall).
+  let previous: { previousLink?: string; previousBytes?: string } = {};
   try {
     rmSync(versionDir, { recursive: true, force: true });
     mkdirSync(versionDir, { recursive: true });
@@ -400,11 +526,14 @@ export function installStagedBuild(
       mkdirSync(dirname(dest), { recursive: true });
       writeFileSync(dest, bytes);
     }
-    chmodSync(join(versionDir, "natalia"), 0o755);
+    chmodSync(join(versionDir, INSTALLED_BINARY), 0o755);
     mkdirSync(join(home, "bin"), { recursive: true });
     // A symlink resolves against ITS OWN directory: ../versions/... for
     // exactly this reason (bin/versions would be wrong).
-    swapSymlink(binLink, join("..", "versions", version, "natalia"));
+    previous = swapInstall(
+      binLink,
+      join("..", "versions", version, INSTALLED_BINARY),
+    );
   } catch (error) {
     rmSync(versionDir, { recursive: true, force: true });
     return {
@@ -412,7 +541,7 @@ export function installStagedBuild(
       reason: `stage/swap failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-  const probe = probeVersion(binLink);
+  const probe = probeVersion(binLink, input.probeRunner);
   if (probe.code === 0 && probe.version === version) {
     if (input.restartUnit) {
       const argv = ["systemctl", "restart", input.restartUnit];
@@ -435,16 +564,10 @@ export function installStagedBuild(
     }
     return { outcome: "switched" };
   }
-  // Rollback: restore the previous link exactly (relative as the installer
-  // wrote it), drop the failed version directory.
+  // Rollback: restore the previous state exactly (relative link on POSIX,
+  // previous bytes on Windows), drop the failed version directory.
   const detail = `code=${probe.code} version=${probe.version ?? "?"} expected=${version} ${probe.detail}`;
-  try {
-    rmSync(binLink, { force: true });
-    if (previousLink !== undefined) symlinkSync(previousLink, binLink);
-  } catch {
-    // The link restore is best-effort; the staged directory drop below is
-    // the part that must not leave a half-install behind.
-  }
+  restoreInstall(binLink, previous);
   rmSync(versionDir, { recursive: true, force: true });
   return {
     outcome: "rolled_back",
@@ -458,7 +581,7 @@ export async function updateProgram(
   const { home, from } = input;
   const now = input.now ?? (() => new Date());
   const steps: UpdateStep[] = [];
-  const binLink = join(home, "bin", "natalia");
+  const binLink = join(home, "bin", INSTALLED_BINARY);
 
   if (acquireLock(home) === "concurrent") {
     return {
@@ -502,14 +625,18 @@ export async function updateProgram(
 
     // The current install, by the installer's exact-match discipline.
     if (!existsSync(binLink)) {
-      steps.push({ name: "locate", ok: false, detail: "no bin/natalia" });
+      steps.push({
+        name: "locate",
+        ok: false,
+        detail: `no bin/${INSTALLED_BINARY}`,
+      });
       return finish(
         "not-installed",
         1,
         `not installed at ${home} — run install.sh first (update swaps an existing install; it is not an installer)`,
       );
     }
-    const current = probeVersion(binLink);
+    const current = probeVersion(binLink, input.probeRunner);
     const fromVersion = current.version;
     steps.push({
       name: "locate",
@@ -587,11 +714,11 @@ export async function updateProgram(
       }
     }
 
-    // Stage the new version directory, then flip the symlink.
+    // Stage the new version directory, then flip the install. The previous
+    // state is kept by the swap itself (link target on POSIX, previous bytes
+    // on Windows) so the rollback below can put back exactly what was there.
     const versionDir = join(home, "versions", targetVersion);
-    const previousLink = existsSync(binLink)
-      ? readlinkSync(binLink)
-      : undefined;
+    let previous: { previousLink?: string; previousBytes?: string } = {};
     try {
       rmSync(versionDir, { recursive: true, force: true });
       mkdirSync(versionDir, { recursive: true });
@@ -602,13 +729,22 @@ export async function updateProgram(
         return dest;
       };
       for (const [name, bytes] of source.files) stageFile(name, bytes);
-      chmodSync(join(versionDir, "natalia"), 0o755);
+      chmodSync(join(versionDir, INSTALLED_BINARY), 0o755);
       steps.push({ name: "stage", ok: true, detail: versionDir });
       mkdirSync(join(home, "bin"), { recursive: true });
       // A symlink resolves against ITS OWN directory: install.sh writes
       // ../versions/... for exactly this reason (bin/versions would be wrong).
-      swapSymlink(binLink, join("..", "versions", targetVersion, "natalia"));
-      steps.push({ name: "swap", ok: true, detail: previousLink ?? "(none)" });
+      previous = swapInstall(
+        binLink,
+        join("..", "versions", targetVersion, INSTALLED_BINARY),
+      );
+      steps.push({
+        name: "swap",
+        ok: true,
+        detail:
+          previous.previousLink ??
+          (previous.previousBytes ? "(previous bytes kept)" : "(none)"),
+      });
     } catch (error) {
       const reason = `stage/swap failed: ${error instanceof Error ? error.message : String(error)}`;
       steps.push({ name: "stage", ok: false, detail: reason });
@@ -621,7 +757,7 @@ export async function updateProgram(
 
     // The gate: the new binary must answer --version with EXACTLY the
     // staged version. Anything else = automatic rollback.
-    const probe = probeVersion(binLink);
+    const probe = probeVersion(binLink, input.probeRunner);
     if (probe.code === 0 && probe.version === targetVersion) {
       steps.push({ name: "probe", ok: true, detail: probe.version });
       const switchFacts = {
@@ -658,16 +794,16 @@ export async function updateProgram(
     }
     const detail = `code=${probe.code} version=${probe.version ?? "?"} expected=${targetVersion} ${probe.detail}`;
     steps.push({ name: "probe", ok: false, detail });
-    // Rollback: restore the previous link exactly (relative as the
-    // installer wrote it), drop the failed version directory.
-    if (previousLink !== undefined) {
-      rmSync(binLink, { force: true });
-      symlinkSync(previousLink, binLink);
-      steps.push({ name: "rollback-link", ok: true, detail: previousLink });
-    } else {
-      rmSync(binLink, { force: true });
-      steps.push({ name: "rollback-link", ok: true, detail: "(removed)" });
-    }
+    // Rollback: restore the previous state exactly (relative link on POSIX,
+    // previous bytes on Windows), drop the failed version directory.
+    restoreInstall(binLink, previous);
+    steps.push({
+      name: "rollback-link",
+      ok: true,
+      detail:
+        previous.previousLink ??
+        (previous.previousBytes ? "(previous bytes restored)" : "(removed)"),
+    });
     rmSync(versionDir, { recursive: true, force: true });
     steps.push({ name: "rollback-stage", ok: true });
     return finish(

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -35,24 +36,56 @@ function shell(path: string, body: string) {
   writeFileSync(path, body);
   chmodSync(path, 0o755);
 }
+
+/**
+ * The installed binary's name — the product rule (`INSTALLED_BINARY` in
+ * update.ts): install.sh writes `natalia`, install.ps1 writes
+ * `natalia.exe`. The updater looks for the platform's own spelling, so a
+ * fixture that writes the wrong one reads as "not installed".
+ */
+const installedBinary =
+  process.platform === "win32" ? "natalia.exe" : "natalia";
+
+// The probe tests need a spawnable fixture — an `.exe` name must be a real
+// PE image on Windows, and a shebang script under it cannot be spawned
+// ("This version of … is not compatible with the version of Windows"). The
+// same limitation update.test.ts documents. The drain-refusal test below
+// never reaches a probe, so it stays ungated.
+const probeTest = process.platform === "win32" ? test.skip : test;
+
+/**
+ * Point bin/<name> at the staged version, the way the host's installer
+ * does. POSIX: a relative symlink (install.sh's layout, and the one
+ * `update.ts` reads back with `readlinkSync`). Windows: install.ps1's
+ * layout is a COPY, because creating a symlink there needs a privilege a
+ * clean machine may not grant — so the fixture copies too.
+ */
+function pointBinAt(binPath: string, stagedBinary: string) {
+  if (process.platform === "win32") copyFileSync(stagedBinary, binPath);
+  else symlinkSync("../versions/1.0.0/natalia", binPath);
+}
+
 function makeHome() {
   const home = mkdtempSync(join(tmpdir(), "orch-home-"));
   homes.push(home);
   mkdirSync(join(home, "versions", "1.0.0"), { recursive: true });
   mkdirSync(join(home, "bin"), { recursive: true });
   shell(
-    join(home, "versions", "1.0.0", "natalia"),
+    join(home, "versions", "1.0.0", installedBinary),
     `#!/bin/sh\nprintf '%s\\n' "1.0.0"\n`,
   );
-  symlinkSync("../versions/1.0.0/natalia", join(home, "bin", "natalia"));
+  pointBinAt(
+    join(home, "bin", installedBinary),
+    join(home, "versions", "1.0.0", installedBinary),
+  );
   return home;
 }
 function makeRelease(version = "2.0.0") {
   const dir = mkdtempSync(join(tmpdir(), "orch-rel-"));
   homes.push(dir);
-  shell(join(dir, "natalia"), `#!/bin/sh\nprintf '%s\\n' "${version}"\n`);
+  shell(join(dir, installedBinary), `#!/bin/sh\nprintf '%s\\n' "${version}"\n`);
   writeFileSync(join(dir, "VERSION"), `${version}\n`);
-  const lines = ["natalia", "VERSION"].map(
+  const lines = [installedBinary, "VERSION"].map(
     (name) => `${sha(new Uint8Array(readFileSync(join(dir, name))))}  ${name}`,
   );
   writeFileSync(join(dir, "SHA256SUMS"), `${lines.join("\n")}\n`);
@@ -86,51 +119,54 @@ function fakeRuntime(mode: "ok" | "refuse") {
 }
 const stepNames = (steps: Array<{ name: string }>) => steps.map((s) => s.name);
 
-test("the ordered orchestration: detect and drain bracket D3a's path, restart runs LAST", async () => {
-  const home = makeHome();
-  const rel = makeRelease();
-  const runtime = fakeRuntime("ok");
-  const calls: string[][] = [];
-  const result = await updateProgram({
-    home,
-    from: rel,
-    runtime: { url: runtime.url, token: "tok", drainTimeoutMs: 500 },
-    restartUnit: "natalia-daemon.service",
-    exec: (argv) => {
-      calls.push(argv);
-      return { code: 0, output: "ok" };
-    },
-  });
-  expect(result.outcome).toBe("switched");
-  expect(result.warning).toBeUndefined();
-  expect(stepNames(result.steps)).toEqual([
-    "locate",
-    "detect",
-    "verify",
-    "version",
-    "drain",
-    "stage",
-    "swap",
-    "probe",
-    "restart",
-  ]);
-  const drainStep = result.steps.find((s) => s.name === "drain")!;
-  expect(drainStep.detail).toBe("waited 42ms");
-  // the wire spoke B1's route with the bearer and the bounded timeout
-  const bodies = runtime.seen.bodies as Array<{
-    method?: string;
-    params?: { timeoutMs?: number };
-  }>;
-  expect(bodies[0]?.method).toBe("daemon.drain");
-  expect(bodies[0]?.params).toEqual({ timeoutMs: 500 });
-  expect(runtime.seen.auths[0]).toBe("Bearer tok");
-  expect(calls).toEqual([["systemctl", "restart", "natalia-daemon.service"]]);
-  // the receipt carries the same order (it IS the proof)
-  const receipt = JSON.parse(readFileSync(result.receiptPath!, "utf8")) as {
-    steps: Array<{ name: string }>;
-  };
-  expect(stepNames(receipt.steps)).toEqual(stepNames(result.steps));
-});
+probeTest(
+  "the ordered orchestration: detect and drain bracket D3a's path, restart runs LAST",
+  async () => {
+    const home = makeHome();
+    const rel = makeRelease();
+    const runtime = fakeRuntime("ok");
+    const calls: string[][] = [];
+    const result = await updateProgram({
+      home,
+      from: rel,
+      runtime: { url: runtime.url, token: "tok", drainTimeoutMs: 500 },
+      restartUnit: "natalia-daemon.service",
+      exec: (argv) => {
+        calls.push(argv);
+        return { code: 0, output: "ok" };
+      },
+    });
+    expect(result.outcome).toBe("switched");
+    expect(result.warning).toBeUndefined();
+    expect(stepNames(result.steps)).toEqual([
+      "locate",
+      "detect",
+      "verify",
+      "version",
+      "drain",
+      "stage",
+      "swap",
+      "probe",
+      "restart",
+    ]);
+    const drainStep = result.steps.find((s) => s.name === "drain")!;
+    expect(drainStep.detail).toBe("waited 42ms");
+    // the wire spoke B1's route with the bearer and the bounded timeout
+    const bodies = runtime.seen.bodies as Array<{
+      method?: string;
+      params?: { timeoutMs?: number };
+    }>;
+    expect(bodies[0]?.method).toBe("daemon.drain");
+    expect(bodies[0]?.params).toEqual({ timeoutMs: 500 });
+    expect(runtime.seen.auths[0]).toBe("Bearer tok");
+    expect(calls).toEqual([["systemctl", "restart", "natalia-daemon.service"]]);
+    // the receipt carries the same order (it IS the proof)
+    const receipt = JSON.parse(readFileSync(result.receiptPath!, "utf8")) as {
+      steps: Array<{ name: string }>;
+    };
+    expect(stepNames(receipt.steps)).toEqual(stepNames(result.steps));
+  },
+);
 
 test("a refused drain aborts BEFORE anything is touched", async () => {
   const home = makeHome();
@@ -156,93 +192,102 @@ test("a refused drain aborts BEFORE anything is touched", async () => {
   ).toBe(false);
 });
 
-test("a failed restart is a WARNING: the verified flip stands, the receipt says why", async () => {
-  const home = makeHome();
-  const result = await updateProgram({
-    home,
-    from: makeRelease(),
-    restartUnit: "broken.service",
-    exec: () => ({ code: 1, output: "unit not found" }),
-  });
-  expect(result.outcome).toBe("switched");
-  expect(result.exitCode).toBe(0);
-  expect(result.warning).toContain("unit not found");
-  expect(result.warning).toContain("systemctl restart broken.service");
-  expect(result.steps.at(-1)).toMatchObject({ name: "restart", ok: false });
-  const receipt = JSON.parse(readFileSync(result.receiptPath!, "utf8"));
-  expect(receipt.warning).toContain("unit not found");
-});
+probeTest(
+  "a failed restart is a WARNING: the verified flip stands, the receipt says why",
+  async () => {
+    const home = makeHome();
+    const result = await updateProgram({
+      home,
+      from: makeRelease(),
+      restartUnit: "broken.service",
+      exec: () => ({ code: 1, output: "unit not found" }),
+    });
+    expect(result.outcome).toBe("switched");
+    expect(result.exitCode).toBe(0);
+    expect(result.warning).toContain("unit not found");
+    expect(result.warning).toContain("systemctl restart broken.service");
+    expect(result.steps.at(-1)).toMatchObject({ name: "restart", ok: false });
+    const receipt = JSON.parse(readFileSync(result.receiptPath!, "utf8"));
+    expect(receipt.warning).toContain("unit not found");
+  },
+);
 
-test("no runtime = no drain step (the interactive path is unchanged)", async () => {
-  const home = makeHome();
-  const result = await updateProgram({ home, from: makeRelease() });
-  expect(result.outcome).toBe("switched");
-  expect(stepNames(result.steps)).toEqual([
-    "locate",
-    "detect",
-    "verify",
-    "version",
-    "stage",
-    "swap",
-    "probe",
-  ]);
-  expect(result.steps.find((s) => s.name === "detect")!.detail).toContain(
-    "none",
-  );
-});
+probeTest(
+  "no runtime = no drain step (the interactive path is unchanged)",
+  async () => {
+    const home = makeHome();
+    const result = await updateProgram({ home, from: makeRelease() });
+    expect(result.outcome).toBe("switched");
+    expect(stepNames(result.steps)).toEqual([
+      "locate",
+      "detect",
+      "verify",
+      "version",
+      "stage",
+      "swap",
+      "probe",
+    ]);
+    expect(result.steps.find((s) => s.name === "detect")!.detail).toContain(
+      "none",
+    );
+  },
+);
 
-test("channelLatest: equal = up-to-date with nothing staged; older = a refused downgrade; newer proceeds", async () => {
-  // equal: the channel's latest IS the installed version
-  const equalHome = makeHome(); // installed 1.0.0
-  const equal = await updateProgram({
-    home: equalHome,
-    from: makeRelease("2.0.0"),
-    channelLatest: "1.0.0",
-  });
-  expect(equal.outcome).toBe("up-to-date");
-  expect(equal.exitCode).toBe(0);
-  expect(equal.steps.map((s) => s.name)).toEqual(["locate", "detect"]);
-  expect(existsSync(join(equalHome, "versions", "2.0.0"))).toBe(false);
+probeTest(
+  "channelLatest: equal = up-to-date with nothing staged; older = a refused downgrade; newer proceeds",
+  async () => {
+    // equal: the channel's latest IS the installed version
+    const equalHome = makeHome(); // installed 1.0.0
+    const equal = await updateProgram({
+      home: equalHome,
+      from: makeRelease("2.0.0"),
+      channelLatest: "1.0.0",
+    });
+    expect(equal.outcome).toBe("up-to-date");
+    expect(equal.exitCode).toBe(0);
+    expect(equal.steps.map((s) => s.name)).toEqual(["locate", "detect"]);
+    expect(existsSync(join(equalHome, "versions", "2.0.0"))).toBe(false);
 
-  // older: the channel would ROLL US BACK — a channel is upgrade-only,
-  // an explicit --from is the deliberate exact install
-  const olderHome = makeHome(); // installed 1.0.0... downgrade needs an
-  // installed version NEWER than the channel: make the install 2.0.0
-  rmSync(join(olderHome, "versions", "1.0.0"), {
-    recursive: true,
-    force: true,
-  });
-  const two = join(olderHome, "versions", "2.0.0");
-  mkdirSync(two, { recursive: true });
-  const bin = join(two, "natalia");
-  writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"2.0.0\"\n");
-  chmodSync(bin, 0o755);
-  rmSync(join(olderHome, "bin", "natalia"));
-  symlinkSync("../versions/2.0.0/natalia", join(olderHome, "bin", "natalia"));
-  const down = await updateProgram({
-    home: olderHome,
-    from: makeRelease("1.0.0"),
-    channelLatest: "1.0.0",
-  });
-  expect(down.outcome).toBe("refused");
-  expect(down.reason).toContain("OLDER than the installed 2.0.0");
-  expect(down.reason).toContain("--from");
-  expect(existsSync(join(olderHome, "versions", "1.0.0"))).toBe(false);
+    // older: the channel would ROLL US BACK — a channel is upgrade-only,
+    // an explicit --from is the deliberate exact install
+    const olderHome = makeHome(); // installed 1.0.0... downgrade needs an
+    // installed version NEWER than the channel: make the install 2.0.0
+    rmSync(join(olderHome, "versions", "1.0.0"), {
+      recursive: true,
+      force: true,
+    });
+    const two = join(olderHome, "versions", "2.0.0");
+    mkdirSync(two, { recursive: true });
+    const bin = join(two, "natalia");
+    writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"2.0.0\"\n");
+    chmodSync(bin, 0o755);
+    rmSync(join(olderHome, "bin", "natalia"));
+    symlinkSync("../versions/2.0.0/natalia", join(olderHome, "bin", "natalia"));
+    const down = await updateProgram({
+      home: olderHome,
+      from: makeRelease("1.0.0"),
+      channelLatest: "1.0.0",
+    });
+    expect(down.outcome).toBe("refused");
+    expect(down.reason).toContain("OLDER than the installed 2.0.0");
+    expect(down.reason).toContain("--from");
+    expect(existsSync(join(olderHome, "versions", "1.0.0"))).toBe(false);
 
-  // newer: the upgrade proceeds through the whole path
-  const newer = await updateProgram({
-    home: makeHome(),
-    from: makeRelease("3.0.0"),
-    channelLatest: "3.0.0",
-  });
-  expect(newer.outcome).toBe("switched");
-  expect(newer.steps.map((s) => s.name)).toEqual([
-    "locate",
-    "detect",
-    "verify",
-    "version",
-    "stage",
-    "swap",
-    "probe",
-  ]);
-});
+    // newer: the upgrade proceeds through the whole path
+    const newer = await updateProgram({
+      home: makeHome(),
+      from: makeRelease("3.0.0"),
+      channelLatest: "3.0.0",
+    });
+    expect(newer.outcome).toBe("switched");
+    expect(newer.steps.map((s) => s.name)).toEqual([
+      "locate",
+      "detect",
+      "verify",
+      "version",
+      "stage",
+      "swap",
+      "probe",
+    ]);
+  },
+);

@@ -168,6 +168,28 @@ async function stageWebShell(outDir: string): Promise<void> {
   await cp(built, target, { recursive: true });
 }
 
+/**
+ * The application icon, at the install root as `icon.ico`.
+ *
+ * The Windows install plan's shortcut and the Apps & features row both name
+ * a file called `icon.ico` in the install root, and the Inno script writes
+ * `UninstallDisplayIcon={app}\icon.ico` — so the release tree must carry it
+ * under that exact name. The repository keeps the source at
+ * `assets/icons/icon.ico`; this is the copy that puts it where the plan
+ * looks. A missing source is reported rather than skipped: a release whose
+ * installer promises an icon and does not deliver one is the same class of
+ * lie as a release that omits its window.
+ */
+async function stageAppIcon(outDir: string): Promise<void> {
+  const source = join(root, "assets", "icons", "icon.ico");
+  if (!(await Bun.file(source).exists()))
+    throw new Error(
+      `the application icon is missing: ${source} — the Windows installer ` +
+        `names icon.ico in the install root and the release must carry it`,
+    );
+  await cp(source, join(outDir, "icon.ico"));
+}
+
 /** The command that produces the host for a given release platform. */
 function hostBuildCommand(platformDir: string): string {
   if (platformDir.startsWith("windows"))
@@ -631,6 +653,18 @@ for (const target of targets) {
     await stageBrowserExtension(outDir);
     await stageDesktopHost(outDir, platformDir);
     await stageWebShell(outDir);
+    // The application icon, BESIDE THE BINARY. The Windows install plan
+    // names `icon.ico` in the install root for the Start Menu shortcut and
+    // the Apps & features row (`assets/icons/icon.ico` is where the build
+    // keeps it; `icon.ico` next to the binary is where it lives on the
+    // user's disk), and the Inno script writes
+    // `UninstallDisplayIcon={app}\icon.ico` — but nothing ever copied it
+    // into the release tree, so every installer shipped a shortcut with a
+    // broken icon reference and an uninstall row with no icon at all.
+    // Copied before the hash walk so SHA256SUMS lists it and the file list
+    // the plan derives contains it (the plan's "installable" check asks
+    // for exactly that).
+    await stageAppIcon(outDir);
     // The shipped composition base (P3 "base profile 随包机制"): copied
     // into the app root BEFORE the hash walk, so SHA256SUMS lists it and
     // install.sh's files loop lands it next to the binary — where the

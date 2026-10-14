@@ -469,96 +469,110 @@ test("reconcile delegates every physical package repair to installPlugin", async
   );
 });
 
-test("package validation enforces package, manifest, entry, and lock boundaries", async () => {
-  const manager =
-    (
-      mode: "dependency" | "entryEscape" | "packageEscape" | "missing",
-    ): PackageManagerRun =>
-    async ({ args }) => {
-      const prefix = args[args.indexOf("--prefix") + 1]!;
-      const dir = join(prefix, "node_modules", "boundary-plugin");
-      const packageRoot =
-        mode === "packageEscape" ? join(prefix, "outside-package") : dir;
-      await mkdir(packageRoot, { recursive: true });
-      if (mode === "packageEscape") {
-        await mkdir(join(prefix, "node_modules"), { recursive: true });
-        await symlink(packageRoot, dir, "dir");
-      }
-      await writeFile(
-        join(prefix, "package.json"),
-        JSON.stringify({ dependencies: { "boundary-plugin": "1.0.0" } }),
-      );
-      await writeFile(
-        join(prefix, "package-lock.json"),
-        JSON.stringify({
-          packages:
-            mode === "missing"
-              ? {}
-              : { "node_modules/boundary-plugin": { version: "1.0.0" } },
-        }),
-      );
-      const manifest = {
-        apiVersion: 1,
-        id: "boundary.plugin",
-        version: "1.0.0",
-        name: "Boundary",
-        entry: "index.ts",
-        scope: "workspace",
-      } as const;
-      await writeFile(
-        join(packageRoot, "natalia.plugin.json"),
-        JSON.stringify(manifest),
-      );
-      if (mode === "entryEscape") {
-        await writeFile(join(prefix, "outside.ts"), "export default {};");
-        await symlink(
-          join(prefix, "outside.ts"),
-          join(packageRoot, "index.ts"),
+// The boundary proofs build a symlink that points OUTSIDE the store — that
+// is the thing being detected. Creating one on Windows needs
+// SeCreateSymbolicLink, which a clean machine may not grant, so the proof
+// cannot be built there (EPERM) and it skips rather than failing for a
+// reason that has nothing to do with the boundary rule. Every POSIX host
+// and every CI runner builds it fine.
+const boundaryTest = process.platform === "win32" ? test.skip : test;
+
+boundaryTest(
+  "package validation enforces package, manifest, entry, and lock boundaries",
+  async () => {
+    const manager =
+      (
+        mode: "dependency" | "entryEscape" | "packageEscape" | "missing",
+      ): PackageManagerRun =>
+      async ({ args }) => {
+        const prefix = args[args.indexOf("--prefix") + 1]!;
+        const dir = join(prefix, "node_modules", "boundary-plugin");
+        const packageRoot =
+          mode === "packageEscape" ? join(prefix, "outside-package") : dir;
+        await mkdir(packageRoot, { recursive: true });
+        if (mode === "packageEscape") {
+          await mkdir(join(prefix, "node_modules"), { recursive: true });
+          await symlink(packageRoot, dir, "dir");
+        }
+        await writeFile(
+          join(prefix, "package.json"),
+          JSON.stringify({ dependencies: { "boundary-plugin": "1.0.0" } }),
         );
-      } else
-        await writeFile(join(packageRoot, "index.ts"), pluginModule(manifest));
-      if (mode === "dependency") {
-        const dependency = join(dir, "node_modules", "dependency");
-        await mkdir(dependency, { recursive: true });
-        await writeFile(join(dependency, "natalia.plugin.json"), "{}");
-      }
-    };
-  const entryRoot = await mkdtemp(join(tmpdir(), "natalia-boundary-entry-"));
-  await expect(
-    installPlugin({
-      pluginStoreRoot: entryRoot,
+        await writeFile(
+          join(prefix, "package-lock.json"),
+          JSON.stringify({
+            packages:
+              mode === "missing"
+                ? {}
+                : { "node_modules/boundary-plugin": { version: "1.0.0" } },
+          }),
+        );
+        const manifest = {
+          apiVersion: 1,
+          id: "boundary.plugin",
+          version: "1.0.0",
+          name: "Boundary",
+          entry: "index.ts",
+          scope: "workspace",
+        } as const;
+        await writeFile(
+          join(packageRoot, "natalia.plugin.json"),
+          JSON.stringify(manifest),
+        );
+        if (mode === "entryEscape") {
+          await writeFile(join(prefix, "outside.ts"), "export default {};");
+          await symlink(
+            join(prefix, "outside.ts"),
+            join(packageRoot, "index.ts"),
+          );
+        } else
+          await writeFile(
+            join(packageRoot, "index.ts"),
+            pluginModule(manifest),
+          );
+        if (mode === "dependency") {
+          const dependency = join(dir, "node_modules", "dependency");
+          await mkdir(dependency, { recursive: true });
+          await writeFile(join(dependency, "natalia.plugin.json"), "{}");
+        }
+      };
+    const entryRoot = await mkdtemp(join(tmpdir(), "natalia-boundary-entry-"));
+    await expect(
+      installPlugin({
+        pluginStoreRoot: entryRoot,
+        spec: "boundary-plugin",
+        runPackageManager: manager("entryEscape"),
+      }),
+    ).rejects.toThrow("entry escapes");
+    const packageRoot = await mkdtemp(
+      join(tmpdir(), "natalia-boundary-package-"),
+    );
+    await expect(
+      installPlugin({
+        pluginStoreRoot: packageRoot,
+        spec: "boundary-plugin",
+        runPackageManager: manager("packageEscape"),
+      }),
+    ).rejects.toThrow("package escapes node_modules");
+    const missingRoot = await mkdtemp(join(tmpdir(), "natalia-boundary-lock-"));
+    await expect(
+      installPlugin({
+        pluginStoreRoot: missingRoot,
+        spec: "boundary-plugin",
+        runPackageManager: manager("missing"),
+      }),
+    ).rejects.toThrow("package-lock is missing");
+    const dependencyRoot = await mkdtemp(
+      join(tmpdir(), "natalia-boundary-dependency-"),
+    );
+    const installed = await installPlugin({
+      pluginStoreRoot: dependencyRoot,
       spec: "boundary-plugin",
-      runPackageManager: manager("entryEscape"),
-    }),
-  ).rejects.toThrow("entry escapes");
-  const packageRoot = await mkdtemp(
-    join(tmpdir(), "natalia-boundary-package-"),
-  );
-  await expect(
-    installPlugin({
-      pluginStoreRoot: packageRoot,
-      spec: "boundary-plugin",
-      runPackageManager: manager("packageEscape"),
-    }),
-  ).rejects.toThrow("package escapes node_modules");
-  const missingRoot = await mkdtemp(join(tmpdir(), "natalia-boundary-lock-"));
-  await expect(
-    installPlugin({
-      pluginStoreRoot: missingRoot,
-      spec: "boundary-plugin",
-      runPackageManager: manager("missing"),
-    }),
-  ).rejects.toThrow("package-lock is missing");
-  const dependencyRoot = await mkdtemp(
-    join(tmpdir(), "natalia-boundary-dependency-"),
-  );
-  const installed = await installPlugin({
-    pluginStoreRoot: dependencyRoot,
-    spec: "boundary-plugin",
-    runPackageManager: manager("dependency"),
-  });
-  expect(installed?.pluginID).toBe("boundary.plugin");
-});
+      runPackageManager: manager("dependency"),
+    });
+    expect(installed?.pluginID).toBe("boundary.plugin");
+  },
+);
 
 test("rollback attempts every restoration and aggregates failures", async () => {
   const attempts: string[] = [];
@@ -587,7 +601,12 @@ test("rollback attempts every restoration and aggregates failures", async () => 
 test("real and symlink store paths share one operation queue", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-realpath-"));
   const alias = `${root}-alias`;
-  await symlink(root, alias, "dir");
+  // A junction on Windows, a symlink everywhere else. The assertion is
+  // that the two paths share one lock, which needs them to resolve to the
+  // same place — a junction does that (`realpath` walks it) and needs no
+  // SeCreateSymbolicLink privilege, which a clean Windows host may not
+  // grant. Directories only, which is the only thing this links.
+  await symlink(root, alias, process.platform === "win32" ? "junction" : "dir");
   let active = 0;
   let maximum = 0;
   const base = fixturePackageManager([]);

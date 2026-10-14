@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   exportStores,
   nataliaHome,
@@ -79,7 +79,11 @@ function snapshot(dir: string): Record<string, string> {
 test("DoD #6: uninstall removes the program and never touches the store", async () => {
   const home = fixtureHome("dod6");
   const before = snapshot(join(home, "stores"));
-  expect(before["ws-one/sessions/ses_a/rescue.txt"]).toBeDefined();
+  // The snapshot's keys carry the platform separator (they are
+  // join()-built paths), so the rescue-ring key must be joined too — a
+  // hardcoded forward-slash key is simply absent on Windows.
+  const rescueKey = join("ws-one", "sessions", "ses_a", "rescue.txt");
+  expect(before[rescueKey]).toBeDefined();
 
   const report = await uninstallProgram(home);
   expect(report.programPresent).toBe(true);
@@ -203,9 +207,11 @@ test("an installed binary derives its home from the install layout", () => {
     ).toBe("/opt/natalia");
     // A dev run (bun) has no install layout: the default stands.
     expect(nataliaHomeForExecutable("/usr/bin/bun")).toBeUndefined();
-    // The env override still wins over both.
+    // The env override still wins over both. nataliaHome() returns
+    // resolve(NATALIA_HOME), so the expected value is the resolved spelling
+    // — which is the literal on POSIX and the drive-absolute form on Windows.
     process.env.NATALIA_HOME = "/explicit/home";
-    expect(nataliaHome()).toBe("/explicit/home");
+    expect(nataliaHome()).toBe(resolve("/explicit/home"));
   } finally {
     if (saved === undefined) delete process.env.NATALIA_HOME;
     else process.env.NATALIA_HOME = saved;

@@ -19,7 +19,18 @@ import { join } from "node:path";
  * positionals (flag VALUES are not positionals — the `runs` lesson),
  * a source is explicit until D5's channel, and the real CLI performs
  * the full switch against a fixture home.
+ *
+ * The two fixture-switch proofs below build install.sh's POSIX layout:
+ * bin/natalia is a relative symlink to versions/<v>/natalia, the binary is a
+ * #!/bin/sh script, and the REAL CLI's default --version probe spawns it
+ * directly. On Windows that layout is bin/natalia.exe (a copy, per
+ * install.ps1) and only a real PE can be spawned under an .exe name, so a
+ * shebang fixture cannot answer the probe — and creating the symlink itself
+ * needs SeCreateSymbolicLink. updateProgram is POSIX-first here (its atomic
+ * swap is a symlink rename; Windows parity is install.ps1's own follow-up),
+ * so these proofs skip on Windows and CI's Linux keeps running them.
  */
+const posixTest = process.platform === "win32" ? test.skip : test;
 
 let scratch = "";
 afterAll(() => {
@@ -73,79 +84,85 @@ test("a bare update resolves its channel — unreachable fails bounded, naming b
   expect(err(none)).toContain("--from");
 });
 
-test("the real CLI switches a fixture install (and its receipt lands)", () => {
-  scratch = mkdtempSync(join(tmpdir(), "natalia-update-cli-"));
-  const home = join(scratch, "home");
-  const rel = join(scratch, "release");
-  // install.sh layout: relative link under bin/
-  mkdirSync(join(home, "versions", "1.0.0"), { recursive: true });
-  mkdirSync(join(home, "bin"), { recursive: true });
-  const oldBin = join(home, "versions", "1.0.0", "natalia");
-  writeFileSync(oldBin, "#!/bin/sh\nprintf '%s\\n' \"1.0.0\"\n");
-  chmodSync(oldBin, 0o755);
-  symlinkSync("../versions/1.0.0/natalia", join(home, "bin", "natalia"));
-  // release:build layout: VERSION + the binary + sums
-  mkdirSync(rel, { recursive: true });
-  const newBin = join(rel, "natalia");
-  writeFileSync(newBin, "#!/bin/sh\nprintf '%s\\n' \"2.0.0\"\n");
-  chmodSync(newBin, 0o755);
-  writeFileSync(join(rel, "VERSION"), "2.0.0\n");
-  const lines = ["natalia", "VERSION"].map((name) => {
-    const hex = sha(new Uint8Array(readFileSync(join(rel, name))));
-    return `${hex}  ${name}`;
-  });
-  writeFileSync(join(rel, "SHA256SUMS"), `${lines.join("\n")}\n`);
+posixTest(
+  "the real CLI switches a fixture install (and its receipt lands)",
+  () => {
+    scratch = mkdtempSync(join(tmpdir(), "natalia-update-cli-"));
+    const home = join(scratch, "home");
+    const rel = join(scratch, "release");
+    // install.sh layout: relative link under bin/
+    mkdirSync(join(home, "versions", "1.0.0"), { recursive: true });
+    mkdirSync(join(home, "bin"), { recursive: true });
+    const oldBin = join(home, "versions", "1.0.0", "natalia");
+    writeFileSync(oldBin, "#!/bin/sh\nprintf '%s\\n' \"1.0.0\"\n");
+    chmodSync(oldBin, 0o755);
+    symlinkSync("../versions/1.0.0/natalia", join(home, "bin", "natalia"));
+    // release:build layout: VERSION + the binary + sums
+    mkdirSync(rel, { recursive: true });
+    const newBin = join(rel, "natalia");
+    writeFileSync(newBin, "#!/bin/sh\nprintf '%s\\n' \"2.0.0\"\n");
+    chmodSync(newBin, 0o755);
+    writeFileSync(join(rel, "VERSION"), "2.0.0\n");
+    const lines = ["natalia", "VERSION"].map((name) => {
+      const hex = sha(new Uint8Array(readFileSync(join(rel, name))));
+      return `${hex}  ${name}`;
+    });
+    writeFileSync(join(rel, "SHA256SUMS"), `${lines.join("\n")}\n`);
 
-  const ok = run(["update", "--from", rel, "--home", home]);
-  expect(ok.exitCode).toBe(0);
-  expect(out(ok)).toContain("update: switched");
-  expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
-    "../versions/2.0.0/natalia",
-  );
-  expect(out(ok)).toContain("receipt:");
-  const receipts = readdirSync(join(home, "receipts"));
-  expect(receipts.some((name) => name.startsWith("update-"))).toBe(true);
-});
+    const ok = run(["update", "--from", rel, "--home", home]);
+    expect(ok.exitCode).toBe(0);
+    expect(out(ok)).toContain("update: switched");
+    expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
+      "../versions/2.0.0/natalia",
+    );
+    expect(out(ok)).toContain("receipt:");
+    const receipts = readdirSync(join(home, "receipts"));
+    expect(receipts.some((name) => name.startsWith("update-"))).toBe(true);
+  },
+);
 
-test("a LOCAL channel drives a bare update end to end (D5's mechanism)", () => {
-  scratch = mkdtempSync(join(tmpdir(), "natalia-update-channel-"));
-  const home = join(scratch, "home");
-  const rel = join(scratch, "0.2.0");
-  // installed 0.1.0 — the channel's latest must be an UPGRADE
-  // (0.2.0 > 0.1.0; the downgrade guard refuses the other direction)
-  mkdirSync(join(home, "versions", "0.1.0"), { recursive: true });
-  mkdirSync(join(home, "bin"), { recursive: true });
-  const oldBin = join(home, "versions", "0.1.0", "natalia");
-  writeFileSync(oldBin, "#!/bin/sh\nprintf '%s\\n' \"0.1.0\"\n");
-  chmodSync(oldBin, 0o755);
-  symlinkSync("../versions/0.1.0/natalia", join(home, "bin", "natalia"));
-  // the release the channel points at
-  mkdirSync(rel, { recursive: true });
-  const newBin = join(rel, "natalia");
-  writeFileSync(newBin, "#!/bin/sh\nprintf '%s\\n' \"0.2.0\"\n");
-  chmodSync(newBin, 0o755);
-  writeFileSync(join(rel, "VERSION"), "0.2.0\n");
-  const sums = ["natalia", "VERSION"]
-    .map(
-      (name) =>
-        `${sha(new Uint8Array(readFileSync(join(rel, name))))}  ${name}`,
-    )
-    .join("\n");
-  writeFileSync(join(rel, "SHA256SUMS"), `${sums}\n`);
-  // the channel descriptor — the ONLY thing the command needs
-  const channel = join(scratch, "channel.json");
-  writeFileSync(
-    channel,
-    JSON.stringify({
-      schema: "natalia.update-channel/1",
-      latest: "0.2.0",
-      source: "0.2.0/",
-    }),
-  );
-  const bare = run(["update", "--home", home, "--channel", channel]);
-  expect(bare.exitCode).toBe(0);
-  expect(out(bare)).toContain("update: switched");
-  expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
-    "../versions/0.2.0/natalia",
-  );
-});
+posixTest(
+  "a LOCAL channel drives a bare update end to end (D5's mechanism)",
+  () => {
+    scratch = mkdtempSync(join(tmpdir(), "natalia-update-channel-"));
+    const home = join(scratch, "home");
+    const rel = join(scratch, "0.2.0");
+    // installed 0.1.0 — the channel's latest must be an UPGRADE
+    // (0.2.0 > 0.1.0; the downgrade guard refuses the other direction)
+    mkdirSync(join(home, "versions", "0.1.0"), { recursive: true });
+    mkdirSync(join(home, "bin"), { recursive: true });
+    const oldBin = join(home, "versions", "0.1.0", "natalia");
+    writeFileSync(oldBin, "#!/bin/sh\nprintf '%s\\n' \"0.1.0\"\n");
+    chmodSync(oldBin, 0o755);
+    symlinkSync("../versions/0.1.0/natalia", join(home, "bin", "natalia"));
+    // the release the channel points at
+    mkdirSync(rel, { recursive: true });
+    const newBin = join(rel, "natalia");
+    writeFileSync(newBin, "#!/bin/sh\nprintf '%s\\n' \"0.2.0\"\n");
+    chmodSync(newBin, 0o755);
+    writeFileSync(join(rel, "VERSION"), "0.2.0\n");
+    const sums = ["natalia", "VERSION"]
+      .map(
+        (name) =>
+          `${sha(new Uint8Array(readFileSync(join(rel, name))))}  ${name}`,
+      )
+      .join("\n");
+    writeFileSync(join(rel, "SHA256SUMS"), `${sums}\n`);
+    // the channel descriptor — the ONLY thing the command needs
+    const channel = join(scratch, "channel.json");
+    writeFileSync(
+      channel,
+      JSON.stringify({
+        schema: "natalia.update-channel/1",
+        latest: "0.2.0",
+        source: "0.2.0/",
+      }),
+    );
+    const bare = run(["update", "--home", home, "--channel", channel]);
+    expect(bare.exitCode).toBe(0);
+    expect(out(bare)).toContain("update: switched");
+    expect(readlinkSync(join(home, "bin", "natalia"))).toBe(
+      "../versions/0.2.0/natalia",
+    );
+  },
+);

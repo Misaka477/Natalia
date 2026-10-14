@@ -22,7 +22,18 @@ import { spawnSync } from "node:child_process";
  * Both installer paths are exercised: a local release directory (cp) and
  * URL mode over file:// (curl) — the same fetch code a hosted release
  * would hit, without pretending a channel exists before D5.
+ *
+ * The four install proofs below drive scripts/install.sh — a bash installer
+ * built on POSIX tools (sha256sum/shasum, mktemp, readlink, ln -sfn, chmod)
+ * and a POSIX install layout: bin/natalia is a relative symlink and the
+ * shipped binary is a #!/bin/sh script. None of that runs on Windows (no
+ * bash installer there, no POSIX exec bit, and symlink creation needs a
+ * privilege a clean machine may not grant) — the Windows face is
+ * scripts/install.ps1, proven by the last test in this file. So these proofs
+ * skip on Windows rather than fail for a reason that has nothing to do with
+ * the installer they pin; CI's Linux keeps running them unchanged.
  */
+const posixTest = process.platform === "win32" ? test.skip : test;
 
 let base = "";
 const repoRoot = resolve(import.meta.dir, "../../..");
@@ -100,29 +111,32 @@ function install(args: string[]) {
   return spawnSync("bash", [installer, ...args], { encoding: "utf8" });
 }
 
-test("a clean home installs from a local release and the result runs", () => {
-  const release = fixtureRelease("local");
-  const home = seededHome("local");
-  const before = snapshot(join(home, "stores"));
+posixTest(
+  "a clean home installs from a local release and the result runs",
+  () => {
+    const release = fixtureRelease("local");
+    const home = seededHome("local");
+    const before = snapshot(join(home, "stores"));
 
-  const result = install(["--from", release, "--home", home]);
-  expect(result.stderr).not.toContain("FAILED");
-  expect(result.status).toBe(0);
+    const result = install(["--from", release, "--home", home]);
+    expect(result.stderr).not.toContain("FAILED");
+    expect(result.status).toBe(0);
 
-  // Layout: the versioned tree plus a bin entry that answers.
-  const bin = join(home, "bin", "natalia");
-  expect(lstatSync(bin).isSymbolicLink()).toBe(true);
-  expect(
-    spawnSync(bin, ["--version"], { encoding: "utf8" }).stdout.trim(),
-  ).toBe(FIXTURE_VERSION);
-  // The study's promise: stores are never the installer's to touch.
-  expect(snapshot(join(home, "stores"))).toEqual(before);
-  // The first-run guidance is printed, not auto-executed (an installer
-  // must not launch an interactive TUI).
-  expect(result.stdout).toContain("next: natalia doctor");
-});
+    // Layout: the versioned tree plus a bin entry that answers.
+    const bin = join(home, "bin", "natalia");
+    expect(lstatSync(bin).isSymbolicLink()).toBe(true);
+    expect(
+      spawnSync(bin, ["--version"], { encoding: "utf8" }).stdout.trim(),
+    ).toBe(FIXTURE_VERSION);
+    // The study's promise: stores are never the installer's to touch.
+    expect(snapshot(join(home, "stores"))).toEqual(before);
+    // The first-run guidance is printed, not auto-executed (an installer
+    // must not launch an interactive TUI).
+    expect(result.stdout).toContain("next: natalia doctor");
+  },
+);
 
-test("a tampered byte fails verification with nothing installed", () => {
+posixTest("a tampered byte fails verification with nothing installed", () => {
   const release = fixtureRelease("tampered");
   // Flip a byte AFTER the digests were generated.
   const target = join(release, "plugins", "dummy", "plugin.json");
@@ -138,19 +152,22 @@ test("a tampered byte fails verification with nothing installed", () => {
   expect(snapshot(join(home, "stores"))).toEqual(before);
 });
 
-test("URL mode fetches over file:// — the hosted path without a channel", () => {
-  const release = fixtureRelease("url");
-  const home = seededHome("url");
-  const result = install(["--from", `file://${release}`, "--home", home]);
-  expect(result.status).toBe(0);
-  expect(
-    spawnSync(join(home, "bin", "natalia"), ["--version"], {
-      encoding: "utf8",
-    }).stdout.trim(),
-  ).toBe(FIXTURE_VERSION);
-});
+posixTest(
+  "URL mode fetches over file:// — the hosted path without a channel",
+  () => {
+    const release = fixtureRelease("url");
+    const home = seededHome("url");
+    const result = install(["--from", `file://${release}`, "--home", home]);
+    expect(result.status).toBe(0);
+    expect(
+      spawnSync(join(home, "bin", "natalia"), ["--version"], {
+        encoding: "utf8",
+      }).stdout.trim(),
+    ).toBe(FIXTURE_VERSION);
+  },
+);
 
-test("re-running replaces the same version cleanly", () => {
+posixTest("re-running replaces the same version cleanly", () => {
   const release = fixtureRelease("rerun");
   const home = seededHome("rerun");
   expect(install(["--from", release, "--home", home]).status).toBe(0);

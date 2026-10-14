@@ -400,12 +400,20 @@ export function createWebRuntimeClient(
     return token === sessionLoadToken;
   }
 
-  function beginSessionLoad(sessionID?: string) {
+  function beginSessionLoad(
+    sessionID?: string,
+    opts: { announceReset?: boolean } = {},
+  ) {
     const token = ++sessionLoadToken;
     const load = sessionLoadGlobal();
     load.__nataliaSessionLoadToken = token;
     load.__nataliaReplayingHistory = true;
-    if (typeof window !== "undefined")
+    // The reset tells the host to drop what it rendered for the PREVIOUS
+    // session. A reconnect re-attaches the SAME session, so announcing one
+    // there wipes a transcript that is still correct — which is what made
+    // a dropped stream read as an emptied session on Windows, where the
+    // re-attach RPCs are slow enough for the wipe to be visible.
+    if (opts.announceReset !== false && typeof window !== "undefined")
       window.dispatchEvent(new Event("natalia:session-switch-reset"));
     return token;
   }
@@ -446,8 +454,11 @@ export function createWebRuntimeClient(
 
   let attachChain = Promise.resolve();
 
-  async function attachAndReplay(id: string) {
-    const token = beginSessionLoad(id);
+  async function attachAndReplay(
+    id: string,
+    opts: { reconnect?: boolean } = {},
+  ) {
+    const token = beginSessionLoad(id, { announceReset: !opts.reconnect });
     const run = async () => {
       if (!isCurrentSessionLoad(token)) return undefined;
       try {
@@ -564,8 +575,13 @@ export function createWebRuntimeClient(
         // The server may replay its event ring buffer on connect; those events
         // are only live transport history, not session content. They must never
         // be applied before the current session has been re-attached/resynced.
+        //
+        // The buffer is NOT cleared here. It holds the events that arrived
+        // between the drop and this reconnect — the server replays history
+        // only when a client asks with `since`, and this client does not, so
+        // the buffer is the only copy of that stretch. Clearing it here is
+        // how a reconnect lost events outright.
         sessionLoadGlobal().__nataliaReplayingHistory = true;
-        liveBuffer.length = 0;
 
         const response = await (options.fetch ?? globalThis.fetch)(
           new URL("/events", options.url),
@@ -635,7 +651,12 @@ export function createWebRuntimeClient(
         // On the first connection this restores the most recent session. On a
         // reconnect it re-attaches the already-active session and lets the UI
         // re-hydrate the latest message page, closing any history gap.
-        if (activeSessionID) await attachAndReplay(activeSessionID);
+        //
+        // The reconnect is NOT a session switch: it re-attaches the same
+        // session, so it must not announce the reset that clears the
+        // transcript the user is reading.
+        if (activeSessionID)
+          await attachAndReplay(activeSessionID, { reconnect: true });
         else await restoreRecentSession();
 
         await streamEnd;
@@ -653,9 +674,13 @@ export function createWebRuntimeClient(
           return;
         // A failed connect must not leave the replay guard latched: the host
         // projection would stop receiving live events until the next successful
-        // attach, which looks like a frozen or emptied transcript.
+        // attach, which looks like a frozen or emptied transcript. The events
+        // buffered during the guard are real and are the only copy (the
+        // server replays history only on request), so they are delivered,
+        // not discarded.
         sessionLoadGlobal().__nataliaReplayingHistory = false;
-        liveBuffer.length = 0;
+        const stranded = liveBuffer.splice(0);
+        for (const event of stranded) emitLive(event);
         console.log("[web-runtime] sse error", error);
       }
       await sleep(1000);

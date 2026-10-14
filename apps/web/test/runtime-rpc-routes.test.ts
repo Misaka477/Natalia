@@ -64,6 +64,36 @@ test("the transcript's rating buttons have a web route", () => {
   });
 });
 
+test("a reconnect re-attaches the same session without clearing the transcript", () => {
+  // Measured on the user's machine: a dropped SSE stream (the server's
+  // 255s idle timeout cutting a quiet stream) was followed by an EMPTY
+  // transcript for minutes. The reconnect re-attached the active session,
+  // and that path announced the session-switch reset — which clears the
+  // host's rendered state — and cleared the event buffer, losing the
+  // stretch between the drop and the reconnect. Both are pinned here.
+  const rpc = readFileSync(
+    join(import.meta.dir, "..", "src", "runtime-rpc.ts"),
+    "utf8",
+  );
+  // The reconnect is not a switch: the reset is opt-out, and the
+  // reconnect path opts out.
+  expect(rpc).toContain("announceReset?: boolean");
+  expect(rpc).toContain("announceReset: !opts.reconnect");
+  expect(rpc).toContain(
+    "attachAndReplay(activeSessionID, { reconnect: true })",
+  );
+  // And the guard no longer discards the buffer on every connection:
+  // without a `since` request the server replays nothing, so the buffer
+  // is the only copy of that stretch.
+  const guard = rpc.slice(rpc.indexOf("Before every /events connection"));
+  expect(guard.slice(0, guard.indexOf("const response"))).not.toContain(
+    "liveBuffer.length = 0",
+  );
+  // A failed connect delivers the stranded events rather than dropping
+  // them on the floor.
+  expect(rpc).toContain("const stranded = liveBuffer.splice(0);");
+});
+
 test("the approval queue's faces are routed — a missing row makes the button dead", () => {
   // The Proxy synthesizes methods only for tabled faces, so an untabled
   // face is `undefined` at the call site and the click does nothing (the

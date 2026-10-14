@@ -24,7 +24,15 @@ const exists = (p: string) =>
 test("createWorkspaceFile cannot escape the workspace through a symlinked directory", async () => {
   const ws = await tmp("natalia-ws-create-");
   const outside = await tmp("natalia-outside-");
-  await symlink(outside, join(ws, "escape"));
+  // A junction on Windows: an unprivileged process cannot create a
+  // directory symlink there (EPERM), and a junction is what the
+  // resolver sees through realpath either way — the property under test
+  // is the escape detection, not the link kind.
+  await symlink(
+    outside,
+    join(ws, "escape"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   // Lexically inside the workspace, but `escape` is a symlink pointing out.
   await expect(
     createWorkspaceFile({

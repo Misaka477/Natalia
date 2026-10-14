@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { win32 } from "node:path";
+import { join, win32 } from "node:path";
 import {
   LEGACY_STATE_DIR_NAMES,
   STATE_DIR_NAME,
@@ -333,20 +333,28 @@ describe("the configured bash path (the settings UI's Git Bash row)", () => {
 });
 
 describe("the state directory's live name and its legacy fallback", () => {
+  // The state path is a real filesystem path, so it carries the HOST's
+  // separator: join() builds "/root/natalia/config.json" on POSIX and
+  // "\root\natalia\config.json" on Windows. The expectations are spelled
+  // with the same join, so they assert the property — writes land under
+  // the live name — rather than one platform's spelling of it.
+  const livePath = join("/root", STATE_DIR_NAME, "config.json");
+  const legacyPath = join("/root", "natalia-cli", "config.json");
+
   test("writes go to the live name", () => {
     expect(statePath("/home/demo/.config", "config.json")).toBe(
-      "/home/demo/.config/natalia/config.json",
+      join("/home/demo/.config", STATE_DIR_NAME, "config.json"),
     );
   });
 
   test("a reader prefers the live path", () => {
     const resolved = resolveStatePath(
       "/root",
-      (path) => path === "/root/natalia/config.json",
+      (path) => path === livePath,
       "config.json",
     );
     expect(resolved).toEqual({
-      path: "/root/natalia/config.json",
+      path: livePath,
       legacy: false,
     });
   });
@@ -354,11 +362,11 @@ describe("the state directory's live name and its legacy fallback", () => {
   test("a reader falls back to the legacy location an existing install wrote", () => {
     const resolved = resolveStatePath(
       "/root",
-      (path) => path === "/root/natalia-cli/config.json",
+      (path) => path === legacyPath,
       "config.json",
     );
     expect(resolved).toEqual({
-      path: "/root/natalia-cli/config.json",
+      path: legacyPath,
       legacy: true,
     });
   });
@@ -366,7 +374,7 @@ describe("the state directory's live name and its legacy fallback", () => {
   test("neither existing still answers with the live path, so writes land there", () => {
     const resolved = resolveStatePath("/root", () => false, "config.json");
     expect(resolved).toEqual({
-      path: "/root/natalia/config.json",
+      path: livePath,
       legacy: false,
     });
   });

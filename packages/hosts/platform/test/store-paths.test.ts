@@ -89,8 +89,17 @@ test("the store id is stable and reconnects by canonical path", () => {
   // The reconnection property: a symlink spelling of the same directory
   // resolves to the same id — restore the workspace to the same path and
   // the store finds it without anyone remembering an id.
+  //
+  // The link is a junction on Windows: an unprivileged process cannot
+  // create a symlink there (EPERM), and a junction resolves through
+  // realpathSync exactly the same way — which is the property under
+  // test, not the link kind.
   const link = join(workspace, "..", "link");
-  symlinkSync(workspace, link);
+  symlinkSync(
+    workspace,
+    link,
+    process.platform === "win32" ? "junction" : "dir",
+  );
   expect(workspaceStoreID(link)).toBe(id);
 });
 
@@ -110,12 +119,21 @@ test("the store root lives under the injected home, not the workspace", () => {
   );
 });
 
-test("store directories are created 0700", async () => {
-  const { home } = sandbox();
-  const dir = join(home, ".natalia", "stores", "perm-probe");
-  await ensureStoreDir(dir);
-  expect(statSync(dir).mode & 0o777).toBe(0o700);
-});
+// POSIX-only, and the platform says so rather than the assertion lying:
+// the 0700 the store asks for is a MODE, and Windows has no mode bits —
+// mkdir's mode is ignored there and statSync reports the ACL-shaped
+// default (0666), so this assertion could only ever pass on POSIX.
+// Windows' answer to "nobody else may read this" is an ACL, which is a
+// feature, not a fixture.
+test.skipIf(process.platform === "win32")(
+  "store directories are created 0700",
+  async () => {
+    const { home } = sandbox();
+    const dir = join(home, ".natalia", "stores", "perm-probe");
+    await ensureStoreDir(dir);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+  },
+);
 
 test("the legacy move relocates checkpoints, objects and chunks", async () => {
   const { home, workspace } = sandbox();
@@ -262,21 +280,32 @@ test("the json journal never splits across two roots", async () => {
   );
 });
 
-test("an unwritable home degrades the journal to workspace-local", () => {
-  const { home, workspace } = sandbox();
-  // A home that refuses writes (read-only mounts, restricted containers —
-  // and this harness's own /home): the journal must fall back, not vanish.
-  chmodSync(home, 0o555);
-  try {
-    const fresh = sandbox(); // creates dirs — use the chmod'd home directly
-    void fresh;
-    expect(resolveWorkspaceJournalDatabasePath(workspace, home)).toBe(
-      join(workspace, ".natalia", "sessions.db"),
-    );
-    expect(resolveWorkspaceJsonSessionsDir(workspace, home)).toBe(
-      join(workspace, ".natalia", "sessions"),
-    );
-  } finally {
-    chmodSync(home, 0o755);
-  }
-});
+// POSIX-only: the fixture makes the home unwritable with chmod 0555,
+// and Windows has no such bit — the owning process keeps writing
+// through an ACL it is allowed by, so the mkdir the product tries
+// succeeds and there is nothing to degrade from. The product's
+// fallback is real (a read-only mount, a restricted container); the
+// Windows spelling of that fixture would be an ACL denial, which is
+// a different harness.
+test.skipIf(process.platform === "win32")(
+  "an unwritable home degrades the journal to workspace-local",
+  () => {
+    const { home, workspace } = sandbox();
+    // A home that refuses writes (read-only mounts, restricted
+    // containers — and this harness's own /home): the journal must
+    // fall back, not vanish.
+    chmodSync(home, 0o555);
+    try {
+      const fresh = sandbox(); // creates dirs — use the chmod'd home
+      void fresh;
+      expect(resolveWorkspaceJournalDatabasePath(workspace, home)).toBe(
+        join(workspace, ".natalia", "sessions.db"),
+      );
+      expect(resolveWorkspaceJsonSessionsDir(workspace, home)).toBe(
+        join(workspace, ".natalia", "sessions"),
+      );
+    } finally {
+      chmodSync(home, 0o755);
+    }
+  },
+);

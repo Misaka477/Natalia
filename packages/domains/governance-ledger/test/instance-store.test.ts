@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync } from "node:fs";
 import { governanceViews } from "../src/views";
@@ -29,8 +29,11 @@ test("the test override answers only for the workspace it was set for", () => {
     // No workspace to belong to: the override is the whole answer.
     expect(resolveGovernanceRoot()).toBe(testGovernanceRootFor(workspace));
     // A DIFFERENT workspace: the stale value does not answer for it.
+    // The product resolves the root (a real filesystem path), so the
+    // expectation is spelled with the same resolve — "/tmp/..." on
+    // POSIX and the drive-absolute form on Windows.
     expect(resolveGovernanceRoot("/tmp/other-workspace")).toBe(
-      "/tmp/other-workspace/.natalia/governance",
+      resolve("/tmp/other-workspace", ".natalia", "governance"),
     );
   } finally {
     if (previous === undefined) delete process.env.NATALIA_TEST_GOVERNANCE_ROOT;
@@ -39,11 +42,13 @@ test("the test override answers only for the workspace it was set for", () => {
 });
 
 test("resolveGovernanceRoot is workspace-scoped, not plugin-store scoped", () => {
+  // resolve() spells the expectation the way the product builds it: the
+  // POSIX literal there, the drive-absolute form on Windows.
   expect(resolveGovernanceRoot("/workspace/a")).toBe(
-    "/workspace/a/.natalia/governance",
+    resolve("/workspace/a", ".natalia", "governance"),
   );
   expect(resolveGovernanceRoot("/workspace/b")).toBe(
-    "/workspace/b/.natalia/governance",
+    resolve("/workspace/b", ".natalia", "governance"),
   );
 });
 
@@ -87,7 +92,9 @@ test("a stale override from another test file cannot answer for this workspace",
       testGovernanceRootFor(workspaceA);
     // File B resolves its own — and reads ITS instance store, not A's.
     const rootB = resolveGovernanceRoot(workspaceB);
-    expect(rootB).toBe(`${workspaceB}/.natalia/governance`);
+    // resolve() again: the workspace is a real path, so the expected
+    // root carries the host separator rather than a hardcoded "/".
+    expect(rootB).toBe(resolve(workspaceB, ".natalia", "governance"));
     // A rule written into B's store is visible to B, and a rule that exists
     // only in A's is not: that is the contradiction F-C fixed, and this is
     // what stops it coming back through the test seam.

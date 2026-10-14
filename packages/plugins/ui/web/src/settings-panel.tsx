@@ -16,6 +16,13 @@ import {
 } from "@anthelia/contracts";
 import { NeuSelect } from "./components/NeuSelect";
 import { hostFromSegments, rowsForHost } from "./settings-host-rows";
+import {
+  SETTINGS_CATEGORIES,
+  SETTINGS_ROWS,
+  rowsForCategory,
+  UNSET_VALUE_LABEL,
+  type SettingsRowSpec,
+} from "./settings-rows";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 
 const BUILTIN_PERMISSION_PROFILES = ["ask", "auto", "read_only"];
@@ -204,143 +211,30 @@ type CategoryId =
 const ACADEMIC_NAME =
   "Native Agent Toolkit: Accountable Ledger, Instrumented Architecture";
 
-type SettingItem = {
-  label: string;
-  description: string;
-  value: string;
-};
-
+/**
+ * A rendered category: the active one and the rows it shows. The rows come
+ * from settings-rows.ts; the panel's own pseudo-category ("插件配置") is
+ * built at render time and carries no spec rows of its own.
+ */
 type Category = {
   id: CategoryId;
   label: string;
-  items: SettingItem[];
+  items: readonly SettingsRowSpec[];
 };
 
-const categories: Category[] = [
-  {
-    id: "model",
-    label: "模型与 Agent",
-    items: [
-      {
-        label: "Providers & Models",
-        description: "配置 provider 并导入模型",
-        value: "",
-      },
-      {
-        label: "Default Model",
-        description: "默认使用的模型",
-        value: "Opus 4",
-      },
-      {
-        label: "子 Agent 并发数",
-        description: "团队子 agent 最大并发数",
-        value: "3",
-      },
-    ],
-  },
-  {
-    id: "security",
-    label: "权限与安全",
-    items: [
-      {
-        label: "Permission Profile",
-        description: "选择、新增、编辑权限配置",
-        value: "ask",
-      },
-    ],
-  },
-  {
-    id: "runtime",
-    label: "运行时与上下文",
-    items: [
-      {
-        label: "Max Steps",
-        description: "单轮最大执行步数",
-        value: "unlimited",
-      },
-      { label: "Max Retry", description: "单步最大重试次数", value: "3" },
-      {
-        label: "Request Timeout",
-        description: "模型请求超时（0 表示不设置）",
-        value: "不设置",
-      },
-      { label: "Compaction", description: "上下文压缩", value: "开启" },
-      {
-        label: "Compaction Threshold",
-        description: "压缩触发阈值",
-        value: "85%",
-      },
-      {
-        label: "Checkpoint 目录",
-        description: "额外 checkpoint 目录",
-        value: "2 个",
-      },
-      {
-        label: "Terminal Window Mode",
-        description: "终端窗口模式",
-        value: "auto",
-      },
-      {
-        // Windows-only, and the guard is not cosmetic: on Linux and macOS
-        // the shell IS bash and no path can change that, so the resolver
-        // off Windows never reads this setting (see resolveBashExecutable's
-        // platform guard). A row that does nothing on two of three hosts
-        // is noise, so it is filtered out rather than shown-disabled.
-        label: "Git Bash 路径",
-        description:
-          "Git for Windows 的 bash.exe 位置（仅 Windows 需要；Linux/macOS 默认即 bash，无需设置）。留空 = 自动搜索默认安装位置与 PATH",
-        value: "",
-      },
-    ],
-  },
-  {
-    // The exit, in its own category on purpose: it is the one setting that is
-    // not a setting. A window may hide on close (the minimise policy) and the
-    // runtime keep running, so a visible way to end the app has to exist — and
-    // it must not sit among toggles, where a mis-aimed tap would end a session
-    // with live work in it.
-    id: "system",
-    label: "系统",
-    items: [
-      {
-        label: "Quit Natalia",
-        description: "结束 Natalia：关闭窗口并停止运行时（需确认）",
-        value: "",
-      },
-    ],
-  },
-  {
-    id: "interface",
-    label: "界面",
-    items: [
-      { label: "Theme Mode", description: "切换浅色 / 深色", value: "浅色" },
-      {
-        label: "运行中发送",
-        description:
-          "busy 时发送默认注入当前轮（next-step），或排到下一轮（next-turn）",
-        value: "注入当前轮",
-      },
-    ],
-  },
-  {
-    id: "storage",
-    label: "配置保存范围",
-    items: [
-      {
-        label: "界面偏好保存范围",
-        description: "主题 / 密度 / 快捷键保存位置",
-        value: "项目",
-      },
-      {
-        label: "运行时配置保存范围",
-        description: "模型 / 权限 / 运行时设置保存位置",
-        value: "全局",
-      },
-    ],
-  },
-];
+/**
+ * A nav entry. The category list carries no rows — rows are a property of
+ * the ACTIVE category, computed by current(); putting them in the list is
+ * what let the fabricated static values live there in the first place.
+ */
+type CategoryNavItem = {
+  id: CategoryId;
+  label: string;
+};
 
-/** The plugin's own verbose gate — the browser console is the operator's. */
+/**
+ * The panel's own verbose gate — the browser console is the operator's.
+ */
 function verboseLog(...args: unknown[]) {
   if (
     (globalThis as { __NATALIA_PERF_VERBOSE?: number })
@@ -537,17 +431,16 @@ export function SettingsPanel(props: {
     }
     return [...groups.entries()];
   };
-  const categoriesWithPlugins = (): Category[] =>
+  // The categories come from settings-rows.ts, which is also where each
+  // row's label, description and value source live. The panel used to carry
+  // its own `categories` array here — a second copy of every label, plus a
+  // `value` field that was fabricated ("Opus 4", "3", "2 个"). Deriving the
+  // list leaves one source of truth, and no place for an invented value to
+  // live.
+  const categoriesWithPlugins = (): CategoryNavItem[] =>
     settingsPanels().length
-      ? [
-          ...categories,
-          {
-            id: "plugin" as CategoryId,
-            label: "插件配置",
-            items: [] as Category["items"],
-          },
-        ]
-      : categories;
+      ? [...SETTINGS_CATEGORIES, { id: "plugin", label: "插件配置" }]
+      : [...SETTINGS_CATEGORIES];
 
   const [runtimeWriteScope, setRuntimeWriteScope] = createSignal(
     props.preferences?.get<string>("runtimeWriteScope") ?? "global",
@@ -560,15 +453,25 @@ export function SettingsPanel(props: {
    * Windows, so host-only rows stay hidden rather than shown on a guess.
    * The filter itself lives in settings-host-rows.ts, tested there.
    */
-  const current = () => {
-    const category =
-      categoriesWithPlugins().find(
-        (category) => category.id === activeCategory(),
-      ) ?? categoriesWithPlugins()[0]!;
+  const current = (): Category => {
+    const active = activeCategory();
+    // The plugin pseudo-category has no rows in SETTINGS_ROWS; its rows come
+    // from the plugin panels themselves.
+    if (active === "plugin") {
+      return { id: "plugin", label: "插件配置", items: [] };
+    }
+    const spec = SETTINGS_CATEGORIES.find((item) => item.id === active);
+    if (!spec)
+      return {
+        id: SETTINGS_CATEGORIES[0]!.id,
+        label: SETTINGS_CATEGORIES[0]!.label,
+        items: [],
+      };
     return {
-      ...category,
+      id: spec.id,
+      label: spec.label,
       items: rowsForHost(
-        category.items,
+        rowsForCategory(spec.id),
         hostFromSegments(props.state?.statusSegments),
       ),
     };
@@ -998,8 +901,17 @@ export function SettingsPanel(props: {
                       // answered the new value, and the row still showed the
                       // old one because nothing re-ran this expression. The
                       // getter re-runs whenever the config it reads changes.
+                      //
+                      // The fallback is "未配置", NOT the category's static
+                      // value. That static value was the defect: a fresh
+                      // install (no config yet) rendered a fabricated "Opus 4"
+                      // for Default Model, a "3" for the concurrency whose real
+                      // default is 4, and a "2 个" for checkpoint dirs that are
+                      // empty by default — all of it indistinguishable from a
+                      // real setting until the runtime's own answer arrived.
+                      // An absent value says so; it does not invent one.
                       const value = () =>
-                        runtimeValue(item.label) ?? item.value;
+                        runtimeValue(item.label) ?? UNSET_VALUE_LABEL;
                       if (
                         item.label === "Providers & Models" &&
                         props.onOpenModels

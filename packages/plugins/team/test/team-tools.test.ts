@@ -7,6 +7,18 @@ import type { SandboxToolService } from "@anthelia/tools";
 import { SubagentRegistry } from "@anthelia/subagents";
 import { createTeamFanoutTool, createTeamReviewTool } from "../src/index";
 
+/**
+ * The validation command, spelled for the HOST's shell: `test -f` is
+ * POSIX and pwsh does not have it, so the POSIX spelling fails the gate
+ * on Windows and the review answers "request-changes" for a reason that
+ * has nothing to do with the PR. See fan-out.test.ts.
+ */
+function fileExistsCheck(file: string): string {
+  return process.platform === "win32"
+    ? `if (Test-Path ${file}) { exit 0 } else { exit 1 }`
+    : `test -f ${file}`;
+}
+
 test("team_fanout + team_review drive a fan-out from a tool context", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-team-tools-"));
   await writeFile(join(root, "base.txt"), "base\n");
@@ -46,7 +58,7 @@ test("team_fanout + team_review drive a fan-out from a tool context", async () =
             sandboxID: prs[0]!.sandboxID,
             // The lead names the command this PR's merge is validated with;
             // the workspace has no marker to detect one from.
-            buildCommand: "test -f output.txt",
+            buildCommand: fileExistsCheck("output.txt"),
           },
         ],
         decisions: [{ id: "battle", decision: "approve" }],
@@ -200,7 +212,7 @@ test("team_review validates with the PR's own command and refuses when none exis
           {
             id: "battle",
             sandboxID: "sb_real",
-            buildCommand: "test -f output.txt",
+            buildCommand: fileExistsCheck("output.txt"),
           },
         ],
         decisions: [{ id: "battle", decision: "approve" }],
@@ -210,6 +222,6 @@ test("team_review validates with the PR's own command and refuses when none exis
   ) as Array<{ decision: string; merged?: string[] }>;
   expect(approved[0]!.decision).toBe("approve");
   expect(approved[0]!.merged).toContain("output.txt");
-  expect(commands).toEqual(["test -f output.txt"]);
+  expect(commands).toEqual([fileExistsCheck("output.txt")]);
   expect(await readFile(join(root, "output.txt"), "utf8")).toBe("from battle");
 });

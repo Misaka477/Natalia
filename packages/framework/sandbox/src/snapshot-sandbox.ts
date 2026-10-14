@@ -23,7 +23,10 @@ import {
   type SandboxChange,
   type SandboxExecutorOptions,
 } from "./workspace-manager";
-import { sharedObjectStore } from "@anthelia/object-store";
+import {
+  releaseSharedObjectStore,
+  sharedObjectStore,
+} from "@anthelia/object-store";
 import { SnapshotStore, type SnapshotIndex } from "./snapshot-store";
 import { linkDependencyRoots } from "./dependency-links";
 
@@ -69,6 +72,21 @@ export class SnapshotSandboxManager extends WorkspaceSandboxManager {
       sharedObjectStore(resolve(hostRoot, ".natalia", "objects")),
       resolve(hostRoot, ".natalia", "snapshots"),
     );
+  }
+
+  /**
+   * The base close, plus the object library this manager opened.
+   *
+   * The library is shared per root (see sharedObjectStore) and this
+   * manager is its opener here, so a caller that closes the manager is
+   * done with the workspace — and on Windows the SQLite index it holds
+   * open keeps that workspace undeletable (EBUSY) until the handle is
+   * gone. Releasing here is what makes the close complete; it is
+   * idempotent, and a root nobody holds is a no-op.
+   */
+  override async close(): Promise<void> {
+    await super.close();
+    releaseSharedObjectStore(resolve(this.hostRoot, ".natalia", "objects"));
   }
 
   /** The backup a promotion leaves, when it left one. */

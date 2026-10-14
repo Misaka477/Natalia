@@ -15,6 +15,21 @@ import {
   type FanOutPR,
 } from "../src/index";
 
+/**
+ * The validation command, spelled for the HOST's shell.
+ *
+ * The review validates a PR by running the lead's command through the
+ * shell seam, so the command is the platform's own: `test -f` is POSIX
+ * and pwsh does not have it — a Windows run of the POSIX spelling fails
+ * the gate and the review answers "request-changes" for a reason that has
+ * nothing to do with the PR.
+ */
+function fileExistsCheck(file: string): string {
+  return process.platform === "win32"
+    ? `if (Test-Path ${file}) { exit 0 } else { exit 1 }`
+    : `test -f ${file}`;
+}
+
 test("a PR's settlement reason is its own table, pure", () => {
   const base: FanOutPR = {
     id: "task",
@@ -110,7 +125,7 @@ test("runFanOut gates each PR with build evidence from the candidate worktree", 
     subagents: registry,
     sandboxes,
     timeoutMs: 10_000,
-    buildCommand: "test -f build-pass",
+    buildCommand: fileExistsCheck("build-pass"),
   });
 
   const passPR = prs.find((pr) => pr.id === "pass-task")!;
@@ -178,7 +193,7 @@ test("reviewPRs promotes approved PRs into the system slot and sends back the re
     // The workspace has no project marker, so the review's validation
     // command is the batch's own: with nothing resolvable the approve is
     // refused instead of validated by a stand-in.
-    buildCommand: "test -f output.txt",
+    buildCommand: fileExistsCheck("output.txt"),
     decide: (pr) =>
       pr.id === "approved"
         ? { id: pr.id, decision: "approve" as const }
@@ -413,7 +428,7 @@ test("an approved PR releases its candidate sandbox", async () => {
     prs,
     sandboxes: tracking as unknown as SandboxToolService,
     workspaceRoot: root,
-    buildCommand: "test -f output.txt",
+    buildCommand: fileExistsCheck("output.txt"),
     decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
   });
 
@@ -566,6 +581,10 @@ test("an approved PR with no diff is accepted, not a failed promotion (user smok
   expect(outcomes[0]!.decision).toBe("accepted-no-changes");
   expect(outcomes[0]!.promotionError).toBeUndefined();
   expect(outcomes[0]!.reason).toContain("no changes to promote");
+  // Close before removing: the manager opened the workspace's object
+  // library, and Windows refuses to delete a directory whose SQLite index
+  // is still open (EBUSY).
+  await sandboxes.close();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -656,9 +675,9 @@ test("a PR's recorded command is the one its promotion validates with", async ()
     sandboxes,
     timeoutMs: 10_000,
     // The fan-out records the command it validated with on the PR.
-    buildCommand: "test -f output.txt",
+    buildCommand: fileExistsCheck("output.txt"),
   });
-  expect(prs[0]!.buildCommand).toBe("test -f output.txt");
+  expect(prs[0]!.buildCommand).toBe(fileExistsCheck("output.txt"));
 
   const outcomes = await reviewPRs({
     prs,
@@ -668,7 +687,7 @@ test("a PR's recorded command is the one its promotion validates with", async ()
   });
 
   expect(outcomes[0]!.decision).toBe("approve");
-  expect(commands).toEqual(["test -f output.txt"]);
+  expect(commands).toEqual([fileExistsCheck("output.txt")]);
   expect(await readFile(join(root, "output.txt"), "utf8")).toBe("from x task");
 });
 
@@ -713,7 +732,7 @@ test("the promotion queue refreshes each candidate against the current head", as
     prs,
     sandboxes,
     workspaceRoot: root,
-    buildCommand: "test -f output.txt",
+    buildCommand: fileExistsCheck("output.txt"),
     decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
   });
 
@@ -757,7 +776,7 @@ test("a candidate the refresh leaves conflicted is reported, not promoted", asyn
     prs,
     sandboxes,
     workspaceRoot: root,
-    buildCommand: "test -f output.txt",
+    buildCommand: fileExistsCheck("output.txt"),
     decide: (pr) => ({ id: pr.id, decision: "approve" as const }),
   });
   expect(promoted).toEqual([]);

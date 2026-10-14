@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import {
   globWorkspaceFilesBounded,
   grepWorkspaceFilesBounded,
   renameWorkspaceFile,
+  runTrashCommand,
   writeWorkspaceFile,
 } from "../src/index";
 
@@ -118,4 +119,120 @@ test(".natalia/plans is searchable; the runtime's internals are not (F7)", async
     ".natalia/plans/my-plan.md",
   );
   await rm(root, { recursive: true, force: true });
+});
+
+// The workspace UI offers delete on directories and files alike, and the
+// Windows trash API is TWO functions: DeleteFile fails on a directory with
+// "could not find the file" (exit 1), which is what made deleting a
+// directory from the workspace silently do nothing on Windows while Linux
+// (gio trash) accepted it. The dispatch and the refusal message are pinned
+// here with the platform and the spawn injected, so the Windows branch is
+// proven from any host.
+describe("deleteWorkspaceFile trash dispatch", () => {
+  const fakeStat = (isDirectory: boolean) => async () => ({
+    isDirectory: () => isDirectory,
+  });
+  const recorder =
+    (calls: string[], fail?: string) =>
+    async (command: string, args: string[]) => {
+      calls.push([command, ...args].join(" "));
+      if (fail && command === fail)
+        throw new Error(command + " is not installed");
+    };
+
+  test("windows: a directory goes to DeleteDirectory, not the file API", async () => {
+    const ws = await tmp("natalia-ws-del-dir-");
+    const calls: string[] = [];
+    const result = await deleteWorkspaceFile({
+      workspaceRoot: ws,
+      path: "src",
+      os: "win32",
+      statPath: fakeStat(true),
+      runTrash: recorder(calls),
+    });
+    expect(result).toEqual({ deleted: true, trash: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("DeleteDirectory");
+    expect(calls[0]).not.toContain("DeleteFile");
+  });
+
+  test("windows: a file goes to DeleteFile", async () => {
+    const ws = await tmp("natalia-ws-del-file-");
+    const calls: string[] = [];
+    await deleteWorkspaceFile({
+      workspaceRoot: ws,
+      path: "src.ts",
+      os: "win32",
+      statPath: fakeStat(false),
+      runTrash: recorder(calls),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("DeleteFile");
+    expect(calls[0]).not.toContain("DeleteDirectory");
+  });
+
+  test("windows: a single quote in the path is escaped, not injected", async () => {
+    const ws = await tmp("natalia-ws-del-quote-");
+    const calls: string[] = [];
+    await deleteWorkspaceFile({
+      workspaceRoot: ws,
+      path: "it's-a-dir",
+      os: "win32",
+      statPath: fakeStat(true),
+      runTrash: recorder(calls),
+    });
+    expect(calls[0]).toContain("it''s-a-dir");
+  });
+
+  test("darwin: the Finder path is unchanged for both types", async () => {
+    const ws = await tmp("natalia-ws-del-darwin-");
+    const calls: string[] = [];
+    await deleteWorkspaceFile({
+      workspaceRoot: ws,
+      path: "src",
+      os: "darwin",
+      statPath: fakeStat(true),
+      runTrash: recorder(calls),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("osascript");
+    expect(calls[0]).toContain("Finder");
+  });
+
+  test("linux: gio first, trash-put as the fallback", async () => {
+    const ws = await tmp("natalia-ws-del-linux-");
+    const calls: string[] = [];
+    await deleteWorkspaceFile({
+      workspaceRoot: ws,
+      path: "src",
+      os: "linux",
+      statPath: fakeStat(true),
+      runTrash: recorder(calls, "gio"),
+    });
+    expect(calls).toEqual([
+      expect.stringContaining("gio trash"),
+      expect.stringContaining("trash-put"),
+    ]);
+  });
+
+  test("a failing trash command surfaces its stderr in the refusal", async () => {
+    // The real runner, driven by a command that exits non-zero and writes
+    // to stderr: the runtime itself running a failing script. The old
+    // message was "failed to move to trash: powershell.exe" — true, and
+    // actionable in no way.
+    await expect(
+      runTrashCommand(process.execPath, [
+        "-e",
+        "console.error('boom'); process.exit(3)",
+      ]),
+    ).rejects.toThrow(/failed to move to trash via .*boom/u);
+  });
+
+  test("a missing trash binary is a refusal, not a raw ENOENT", async () => {
+    await expect(
+      runTrashCommand("natalia-no-such-trash-binary", []),
+    ).rejects.toThrow(
+      /failed to move to trash via natalia-no-such-trash-binary/u,
+    );
+  });
 });

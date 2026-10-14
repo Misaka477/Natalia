@@ -1165,46 +1165,107 @@ export async function renameWorkspaceFile(input: {
   return { renamed: true };
 }
 
+/**
+ * Move a workspace entry to the trash.
+ *
+ * The platform trash commands are not interchangeable across entry types,
+ * and Windows is where that bites: the VisualBasic FileSystem API is TWO
+ * functions — DeleteFile and DeleteDirectory — and the file one fails on a
+ * directory with "could not find the file", exit code 1. The workspace UI
+ * offers delete on directories, so the entry is stat'ed first and the
+ * matching function is chosen. Linux (gio/trash-put) and macOS (Finder)
+ * accept both types unchanged.
+ *
+ * `os`, `statPath` and `runTrash` are injectable so the Windows branch
+ * is testable from any host, following the createSymlink/forceRemove
+ * convention in this package.
+ */
 export async function deleteWorkspaceFile(input: {
   workspaceRoot: string;
   path: string;
+  os?: NodeJS.Platform;
+  statPath?: (path: string) => Promise<{ isDirectory: () => boolean }>;
+  runTrash?: (command: string, args: string[]) => Promise<void>;
 }): Promise<{ deleted: boolean; trash: boolean }> {
   const root = await realpath(input.workspaceRoot);
   const path = await resolveWorkspacePath(root, input.path);
-  await moveToTrash(path);
+  const isDirectory = await (input.statPath ?? stat)(path).then((info) =>
+    info.isDirectory(),
+  );
+  await moveToTrash(path, isDirectory, input);
   invalidateWorkspaceFiles(root);
   return { deleted: true, trash: true };
 }
 
-async function moveToTrash(path: string): Promise<void> {
-  if (process.platform === "win32") {
+async function moveToTrash(
+  path: string,
+  isDirectory: boolean,
+  input: {
+    os?: NodeJS.Platform;
+    runTrash?: (command: string, args: string[]) => Promise<void>;
+  },
+): Promise<void> {
+  const run = input.runTrash ?? runTrashCommand;
+  const platform = input.os ?? process.platform;
+  if (platform === "win32") {
     const quoted = path.replace(/'/gu, "''");
-    const script = `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('${quoted}','OnlyErrorDialogs','SendToRecycleBin')`;
-    await runTrashCommand("powershell.exe", ["-NoProfile", "-Command", script]);
+    // DeleteDirectory for a directory, DeleteFile for a file: the file API
+    // is what made deleting a directory fail silently on Windows.
+    const call = isDirectory
+      ? `[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory('${quoted}','OnlyErrorDialogs','SendToRecycleBin')`
+      : `[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('${quoted}','OnlyErrorDialogs','SendToRecycleBin')`;
+    const script = `Add-Type -AssemblyName Microsoft.VisualBasic; ${call}`;
+    await run("powershell.exe", ["-NoProfile", "-Command", script]);
     return;
   }
-  if (process.platform === "darwin") {
+  if (platform === "darwin") {
     const quoted = path.replace(/'/gu, "'\''");
     const script = `tell application "Finder" to delete POSIX file '${quoted}'`;
-    await runTrashCommand("osascript", ["-e", script]);
+    await run("osascript", ["-e", script]);
     return;
   }
   // Linux: prefer GLib's gio, fall back to trash-put.
   try {
-    await runTrashCommand("gio", ["trash", path]);
+    await run("gio", ["trash", path]);
   } catch {
-    await runTrashCommand("trash-put", [path]);
+    await run("trash-put", [path]);
   }
 }
 
-async function runTrashCommand(command: string, args: string[]) {
-  const child = Bun.spawn([command, ...args], {
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  const code = await child.exited;
-  if (code !== 0)
-    throw new RuntimeRefusal(`failed to move to trash: ${command}`);
+/**
+ * Run one trash command, turning every failure into a refusal that names
+ * the reason. The stderr used to be discarded, which left the operator
+ * with "failed to move to trash: powershell.exe" — true, and actionable
+ * in no way. A missing binary is a refusal for the same reason.
+ *
+ * Exported for the refusal contract: the message format is what the UI
+ * surfaces, so it is pinned by tests rather than left to drift.
+ */
+export async function runTrashCommand(
+  command: string,
+  args: string[],
+): Promise<void> {
+  let child;
+  try {
+    child = Bun.spawn([command, ...args], {
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+  } catch (error) {
+    throw new RuntimeRefusal(
+      `failed to move to trash via ${command}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const [code, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  if (code !== 0) {
+    const detail = stderr.trim().slice(0, 500);
+    throw new RuntimeRefusal(
+      `failed to move to trash via ${command}${detail ? `: ${detail}` : ` (exit ${code})`}`,
+    );
+  }
 }
 async function resolveWorkspacePath(root: string, input: string) {
   // Refusals, not failures: the caller asked for something policy does not allow,

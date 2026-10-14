@@ -30,6 +30,7 @@ export {
   listWorkspaceFiles,
   readWorkspaceFile,
   renameWorkspaceFile,
+  runTrashCommand,
   searchWorkspaceFiles,
   watchWorkspaceFiles,
   writeWorkspaceFile,

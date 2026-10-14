@@ -86,6 +86,12 @@ export type RuntimeHttpServerOptions = {
   tls?: { cert: string; key: string };
   events?: boolean;
   /**
+   * Keepalive period for the SSE stream, in milliseconds. Default 15s —
+   * far inside the 255s idle timeout, and a few bytes every period is
+   * free. Injectable so a test does not have to wait the real period.
+   */
+  sseHeartbeatMs?: number;
+  /**
    * Gates the P0-H terminal write surface (`nativeTerminal.start` /
    * `nativeTerminal.write` / `nativeTerminal.resize`). Default is `false`:
    * without it those three routes answer `-32001 refused` — remote terminal
@@ -169,6 +175,16 @@ export function resolveAuthorization(
 export { credentialSessions } from "./rpc";
 
 const SSE_PREAMBLE = ": natalia runtime events\n\n";
+/**
+ * Keepalive comment. A stream with nothing to say is still a live stream:
+ * without a periodic write the connection sits idle until something cuts
+ * it — the server's own idleTimeout did exactly that on a fresh install,
+ * 255 seconds after the last byte, and the client saw a truncated chunked
+ * response and reconnected into an empty UI. An SSE comment carries no
+ * event, so this warms the connection and changes nothing else.
+ */
+const SSE_HEARTBEAT = ": ping\n\n";
+const SSE_HEARTBEAT_MS = 15_000;
 const TASK_EXECUTION_RECORD_LIMIT = 100;
 const TASK_EXECUTION_EVENT_LIMIT = 500;
 const TASK_EXECUTION_OUTPUT_LIMIT = 500;
@@ -582,6 +598,7 @@ export function createRuntimeHttpServer(
       )
         return Response.json({ error: "forbidden" }, { status: 403 });
       let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
       const subscriber: EventSubscriber = {
         controller:
           null as unknown as ReadableStreamDefaultController<Uint8Array>,
@@ -594,6 +611,13 @@ export function createRuntimeHttpServer(
             subscriber.controller = nextController;
             subscribers.add(subscriber);
             controller.enqueue(encoder.encode(SSE_PREAMBLE));
+            heartbeat = setInterval(() => {
+              try {
+                controller?.enqueue(encoder.encode(SSE_HEARTBEAT));
+              } catch {
+                // The stream is already closed; cancel() clears the timer.
+              }
+            }, options.sseHeartbeatMs ?? SSE_HEARTBEAT_MS);
             const marker =
               request.headers.get("last-event-id") ??
               url.searchParams.get("since");
@@ -636,6 +660,7 @@ export function createRuntimeHttpServer(
             }
           },
           cancel() {
+            if (heartbeat) clearInterval(heartbeat);
             subscribers.delete(subscriber);
           },
         }),

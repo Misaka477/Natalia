@@ -387,6 +387,39 @@ test("native HTTP RPC and SSE transport stays behind RuntimeClient contract", as
   server.stop(true);
 });
 
+test("an idle SSE stream keeps writing, so nothing cuts it", async () => {
+  // A stream with nothing to say used to sit idle until the server's
+  // idleTimeout cut it 255 seconds after the last byte — the client saw a
+  // truncated chunked response and reconnected into an empty UI. The
+  // heartbeat comment now keeps the connection warm. The period is
+  // injected so the test does not wait the real fifteen seconds.
+  const client = {
+    start() {},
+  } as unknown as RuntimeClient;
+  const server = createRuntimeHttpServer({
+    client,
+    token: "secret",
+    sseHeartbeatMs: 20,
+  });
+  const stream = await fetch(`${server.url}/events`, {
+    headers: { authorization: "Bearer secret" },
+  });
+  const reader = stream.body!.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  for (let index = 0; index < 20 && !text.includes(": ping"); index++) {
+    const next = await reader.read();
+    if (next.done) break;
+    text += decoder.decode(next.value);
+  }
+  // The preamble arrived, and the heartbeat followed with no event at all.
+  expect(text).toContain(": natalia runtime events");
+  expect(text).toContain(": ping");
+  expect(text).not.toContain("event: runtime");
+  await reader.cancel();
+  server.stop(true);
+});
+
 function checkpointFixture() {
   return {
     id: "checkpoint_0",

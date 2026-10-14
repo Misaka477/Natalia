@@ -178,22 +178,32 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   expect(script).toContain("usPostUninstall");
   expect(script).toContain("DelTree");
 
-  // BOTH roots the product writes, because deleting one of them is what left
+  // EVERY root the product writes, because deleting one of them is what left
   // `.natalia` behind after a run of the old uninstaller:
-  //   {app}\.natalia           the config home, which is CWD-relative and the
-  //                            launcher starts the runtime with the install
-  //                            folder as CWD, so it lands in the install.
-  //   {userpf}\.natalia         the per-user stores, sessions, logs and vault
-  //                            (store-paths.ts walks from homedir()).
-  //                            NOT {userprofile}: Inno Setup has no such
-  //                            constant and the uninstaller died on it.
-  expect(script).toContain("{app}\\.natalia");
-  expect(script).toContain("{userpf}\\.natalia");
-  // Not the conventional directory: store-paths.ts computes homedir(), and
-  // guessing %APPDATA% here deletes nothing at all, the worst outcome for a
-  // feature whose purpose is honesty.
-  expect(script).not.toContain("{userappdata}");
-  expect(script).not.toContain("{userprofile}");
+  //   {app}\.natalia            the config home, which is CWD-relative and the
+  //                             launcher starts the runtime with the install
+  //                             folder as CWD, so it lands in the install.
+  //   <profile>\.natalia         the per-user stores, sessions, logs and vault
+  //                             (store-paths.ts walks from homedir()).
+  //   {localappdata}\natalia     the state tree: the CEF profile, the
+  //                             ProcessSingleton lock, terminal state.
+  //   {userappdata}\natalia      the roaming config root: global config,
+  //                             workspace registry, skills, UI state.
+  // Verified on the user's machine: the first two exist, the third holds CEF
+  // and wezterm-runtime, the fourth is where globalConfigHome() points.
+  expect(script).toContain("ExpandConstant('{app}') + '\\.natalia'");
+  expect(script).toContain("UserProfileDir + '\\.natalia'");
+  expect(script).toContain("ExpandConstant('{localappdata}') + '\\natalia'");
+  expect(script).toContain("ExpandConstant('{userappdata}') + '\\natalia'");
+  // The profile root is the environment variable, not a constant: the name
+  // this uninstaller used first is not an Inno constant at all (the compiler
+  // rejects it), and the second choice is the per-user program-files
+  // directory, which is not the user's home. Neither may come back as an
+  // ExpandConstant call; the comments may still name them, because that is
+  // what stops the next reader re-introducing them.
+  expect(script).toContain("GetEnv('USERPROFILE')");
+  expect(script).not.toMatch(/ExpandConstant\('\{userprofile\}/u);
+  expect(script).not.toMatch(/ExpandConstant\('\{userpf\}/u);
 
   // Keeping the data must tell the user where it is, or files survive and
   // nobody is told — which reads exactly like a bug.
@@ -275,18 +285,26 @@ test("no ExpandConstant embeds a path fragment after its constant", async () => 
     embedded,
     `ExpandConstant must not embed a path fragment: ${embedded.join(" ; ")}`,
   ).toEqual([]);
-  // And the correct shape is present, so the check above is not passing vacuously.
+  // And the correct shape is present, so the check above is not passing
+  // vacuously. The profile root is not a constant at all — see the next test.
   expect(script).toContain("ExpandConstant('{app}') + '\\.natalia'");
-  expect(script).toContain("ExpandConstant('{userpf}') + '\\.natalia'");
+  expect(script).toContain("UserProfileDir + '\\.natalia'");
 });
 
 test("every ExpandConstant names a constant Inno Setup actually defines", async () => {
-  // THE bug: `{userprofile}` is not an Inno Setup constant, and the uninstaller
-  // died on it at runtime with `Unknown constant "userprofile"` — twice, on
-  // packages that looked correct because the surrounding string shape was right.
-  // Inno's own distribution spells the user profile directory `{userpf}` (its
-  // whatsnew.htm names {usercf}/{userpf}); `{userprofile}` simply does not
-  // exist, and ExpandConstant throws on it.
+  // THE bug: `{userprofile}` is not an Inno Setup constant. The compiler
+  // rejects it — ISCC says `Unknown constant "userprofile"` and the compiler
+  // DLL does not carry the name — so the uninstaller died on it at runtime,
+  // twice, on packages that looked correct because the string shape was right.
+  //
+  // The conclusion drawn from that crash was ALSO wrong: it was recorded here
+  // that Inno spells the user profile directory `{userpf}`. It does not.
+  // `{userpf}` is the user's Program Files (its whatsnew.htm groups it with
+  // {usercf}, and Setup creates it at startup like an install location), so
+  // aiming the profile-data deletion at `{userpf}\\.natalia` named a directory
+  // under Program Files that never existed: DirExists was false, nothing was
+  // attempted, and C:\\Users\\rapid\\.natalia survived every uninstall. The
+  // profile root now comes from GetEnv('USERPROFILE'); see the next test.
   //
   // So the guard is not "the shape is right" but "every name is one Inno
   // defines". The set below is the closed list this script may use.
@@ -305,9 +323,11 @@ test("every ExpandConstant names a constant Inno Setup actually defines", async 
     ),
   );
   // The constants Inno Setup 6/7 define that this script is allowed to name.
+  // {userpf} is deliberately absent: it is a real constant, but it is the
+  // user's Program Files, and naming it for the profile directory is the bug
+  // this test now guards against.
   const DEFINED = new Set([
     "app", // {app}
-    "userpf", // {userpf}  — the user profile directory
     "commonpf", // {commonpf}
     "uninstallexe", // {uninstallexe}
     "srcexe", // {srcexe}
@@ -315,6 +335,7 @@ test("every ExpandConstant names a constant Inno Setup actually defines", async 
     "win", // {win}
     "tmp", // {tmp}
     "localappdata", // {localappdata}
+    "userappdata", // {userappdata} — the roaming config root
     "commonappdata", // {commonappdata}
     "group", // {group}
     "autopf", // {autopf}
@@ -326,9 +347,37 @@ test("every ExpandConstant names a constant Inno Setup actually defines", async 
     `ExpandConstant names Inno does not define: ${unknown.join(", ")} — ` +
       `the uninstaller will die at runtime on them`,
   ).toEqual([]);
-  // And the constant that caused the failure is in the used set, so this test
-  // cannot pass by never exercising it.
-  expect(used.has("userpf")).toBe(true);
+  // And the newly-added targets are in the used set, so this test cannot
+  // pass by never exercising them.
+  expect(used.has("localappdata")).toBe(true);
+  expect(used.has("userappdata")).toBe(true);
+});
+
+test("the uninstaller aims at the real user profile, not Program Files", async () => {
+  // {userprofile} is not an Inno constant (ISCC: Unknown constant; the
+  // compiler DLL does not carry the name) and {userpf} is the user's Program
+  // Files. Both were used here in turn, and both left C:\Users\rapid\.natalia
+  // behind. The profile root now comes from the USERPROFILE environment
+  // variable, which is what the runtime itself uses to place its home data.
+  const release = await fakeWindowsRelease();
+  const result = await buildWindowsInstallerInputs({
+    releaseDir: release,
+    outDir: await mkdtemp(join(tmpdir(), "win-profile-")),
+    version: "9.9.9",
+    icon: "icon.ico",
+    format: "inno",
+  });
+  const script = await Bun.file(result.iss!).text();
+  expect(script).toContain("GetEnv('USERPROFILE')");
+  expect(script).not.toMatch(/ExpandConstant\('\{userprofile\}/u);
+  expect(script).not.toMatch(/ExpandConstant\('\{userpf\}/u);
+  // The state tree under LOCALAPPDATA is cleaned too: the CEF profile and
+  // the ProcessSingleton lock (which outlives its process and hands the
+  // next launch's window to a dead instance), plus terminal runtime state.
+  expect(script).toContain("ExpandConstant('{localappdata}') + '\\natalia'");
+  // And the roaming config root: global config, workspace registry, skills
+  // and UI state, where globalConfigHome() points on Windows.
+  expect(script).toContain("ExpandConstant('{userappdata}') + '\\natalia'");
 });
 
 test("the Pascal section's column one carries only declarations", async () => {

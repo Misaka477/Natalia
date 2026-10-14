@@ -48,6 +48,18 @@ const WEB_PORT = 8791;
 const CEF_EXIT_HANDED_OFF_TO_DE_ELEVATED = 38;
 
 /**
+ * CEF's "I handed this launch to the instance that was already running"
+ * exit code.
+ *
+ * ProcessSingleton found a live instance, forwarded the launch to it and
+ * exited early. The app IS open — in that other process, which (see
+ * SimpleApp::OnAlreadyRunningAppRelaunch) opens a further window for this
+ * launch. Treating 24 as a failure opens a browser tab on top of a window
+ * that has already come up.
+ */
+const CEF_EXIT_HANDED_OFF_TO_EXISTING = 24;
+
+/**
  * The install directory: every shipped executable, library and the web shell sit
  * side by side in it.
  *
@@ -92,6 +104,65 @@ function portIsOpen(port: number): Promise<boolean> {
   });
 }
 
+/**
+ * Whether the port is held by a Natalia runtime of OURS.
+ *
+ * A second launch must not conclude "something else has my port" when the
+ * something is the app's own already-running runtime: one runtime with
+ * several front ends is the correct form — each window does its own thing
+ * against the same sessions. The alternative this replaces was a second
+ * `serve` hitting EADDRINUSE, the failure being swallowed by the
+ * fire-and-forget start, and the window connecting to whichever instance
+ * answered — a second launch that looked like a mystery.
+ *
+ * The signature is the event stream: only our transport answers
+ * text/event-stream on /events. The probe reads the headers and closes at
+ * once, so it never lingers as a subscriber in the running runtime.
+ */
+async function isOurRuntime(port: number): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1_000);
+    const response = await fetch(`http://127.0.0.1:${port}/events`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const ours =
+      response.ok &&
+      (response.headers.get("content-type") ?? "").includes(
+        "text/event-stream",
+      );
+    // Close the probe connection immediately.
+    controller.abort();
+    return ours;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the port is already serving OUR web shell.
+ *
+ * The title is the signature: a static server that happens to hold 8791
+ * is not the app. Read from the body, so a redirect or an error page
+ * cannot pass for it.
+ */
+async function isOurWebShell(port: number): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1_000);
+    const response = await fetch(`http://127.0.0.1:${port}/`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const body = response.ok ? await response.text() : "";
+    controller.abort();
+    return body.includes("<title>Natalia</title>");
+  } catch {
+    return false;
+  }
+}
+
 async function waitForPort(port: number, attempts: number): Promise<boolean> {
   for (let i = 0; i < attempts; i += 1) {
     if (await portIsOpen(port)) return true;
@@ -130,13 +201,35 @@ export async function startApp(): Promise<number> {
     });
   };
 
-  console.error(`[natalia] starting the runtime on ${RUNTIME_PORT}`);
-  startServer(["serve", "--port", String(RUNTIME_PORT)], "runtime");
-  console.error(`[natalia] starting the web server on ${WEB_PORT}`);
-  startServer(
-    ["serve-web", "--root", webRoot, "--port", String(WEB_PORT)],
-    "web server",
-  );
+  // Whose port is it? If ours, this launch JOINS the running runtime
+  // instead of fighting it for the port — see isOurRuntime. A runtime
+  // started by an earlier launch serves this one exactly as it serves the
+  // window that is already open.
+  if (await isOurRuntime(RUNTIME_PORT)) {
+    console.error(
+      `[natalia] a Natalia runtime is already serving ${RUNTIME_PORT}; ` +
+        `this launch uses it — one runtime, several front ends`,
+    );
+  } else {
+    console.error(`[natalia] starting the runtime on ${RUNTIME_PORT}`);
+    startServer(["serve", "--port", String(RUNTIME_PORT)], "runtime");
+  }
+
+  // The web server is per-launch state, not runtime state: a runtime
+  // started on its own (`natalia serve`) has no shell beside it, so the
+  // shell is started whenever it is not already being served.
+  if (await isOurWebShell(WEB_PORT)) {
+    console.error(
+      `[natalia] the web shell is already served on ${WEB_PORT}; ` +
+        `this launch uses it`,
+    );
+  } else {
+    console.error(`[natalia] starting the web server on ${WEB_PORT}`);
+    startServer(
+      ["serve-web", "--root", webRoot, "--port", String(WEB_PORT)],
+      "web server",
+    );
+  }
 
   // BOTH ports, and the runtime FIRST, because that order is the user-visible
   // symptom: the shell (8791) comes up faster than the runtime (8790), so
@@ -204,6 +297,21 @@ export async function startApp(): Promise<number> {
   // spawned returns 38.
   //
   // The rest of the codes are real failures and still fall through.
+  // Exit 24 is NOT a failure either. It is the ProcessSingleton hand-off:
+  // a live instance was found, the launch was forwarded to it, and the
+  // process we spawned exited early — while that instance opens a further
+  // window for this launch (SimpleApp::OnAlreadyRunningAppRelaunch).
+  // Falling back to the browser here would open a SECOND window on top of
+  // the one that just came up.
+  if (hostExit === CEF_EXIT_HANDED_OFF_TO_EXISTING) {
+    console.error(
+      "[natalia] the window host handed its launch to the " +
+        "already-running instance (CEF exit 24); that instance owns the " +
+        "window, so no browser fallback is opened",
+    );
+    return 0;
+  }
+
   if (hostExit === CEF_EXIT_HANDED_OFF_TO_DE_ELEVATED) {
     console.error(
       "[natalia] the window host handed its launch to a de-elevated " +

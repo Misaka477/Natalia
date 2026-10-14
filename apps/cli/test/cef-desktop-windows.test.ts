@@ -262,6 +262,34 @@ test("the tray is Windows-only, self-contained Shell_NotifyIcon, and dies with t
   );
 });
 
+test("a second launch opens another window instead of a second runtime", () => {
+  // The user's stated correct form: one runtime, several front ends, each
+  // window doing its own thing. The launcher joins a runtime that is
+  // already serving 8790 (see start-app-handoff.test.ts), and this is the
+  // other half: the CEF host that receives the handed-off launch must
+  // create a WINDOW for it. Returning false would let CEF open a generic
+  // Chrome window instead.
+  const app = readFileSync(
+    new URL("../../cef-desktop/src/simple_app.cc", import.meta.url),
+    "utf8",
+  );
+  const header = readFileSync(
+    new URL("../../cef-desktop/src/simple_app.h", import.meta.url),
+    "utf8",
+  );
+  expect(header).toContain("OnAlreadyRunningAppRelaunch");
+  // The relaunch builds a window through the same path the first one took,
+  // so the two cannot drift.
+  expect(app).toContain("CreateBrowserWindow(url, runtime_style, handler)");
+  // And it answers true: this launch has been served.
+  const relaunch = app.slice(
+    app.indexOf("bool SimpleApp::OnAlreadyRunningAppRelaunch("),
+    app.indexOf("void SimpleApp::CreateBrowserWindow("),
+  );
+  expect(relaunch).toContain("return true;");
+  expect(relaunch).toContain("several front ends");
+});
+
 /**
  * The tray's own failure path, run as a binary.
  *

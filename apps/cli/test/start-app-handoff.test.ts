@@ -19,6 +19,38 @@ const source = readFileSync(
   "utf8",
 );
 
+test("exit 24 means the launch was handed to the running instance", () => {
+  // The ProcessSingleton hand-off: a live instance was found, the launch was
+  // forwarded to it, and the process we spawned exited early — while that
+  // instance opens a further window for this launch. Treating 24 as a
+  // failure opens a browser tab on top of the window that just came up.
+  expect(source).toContain("CEF_EXIT_HANDED_OFF_TO_EXISTING");
+  expect(source).toContain("= 24");
+  const branch = source.slice(
+    source.indexOf("CEF_EXIT_HANDED_OFF_TO_EXISTING)"),
+    source.indexOf("opening the app in the default browser"),
+  );
+  expect(branch).toContain("return 0");
+  expect(branch.toLowerCase()).toContain("already-running");
+});
+
+test("a port held by our own runtime is joined, not fought for", () => {
+  // The user's stated correct form: one runtime, several front ends. A
+  // second launch used to start a second `serve` (EADDRINUSE, swallowed by
+  // the fire-and-forget start) and open a window against whichever instance
+  // answered. The launcher now asks whose port it is first.
+  expect(source).toContain("isOurRuntime(RUNTIME_PORT)");
+  expect(source).toContain("isOurWebShell(WEB_PORT)");
+  // The signature is the event stream — only our transport answers
+  // text/event-stream on /events — and the probe closes at once so it never
+  // lingers as a subscriber.
+  expect(source).toContain("text/event-stream");
+  expect(source).toContain("controller.abort()");
+  // And the join is said out loud on stderr, because a silent second
+  // launch is what made this look like a mystery.
+  expect(source).toContain("one runtime, several front ends");
+});
+
 test("exit 38 means the launch was handed off, not that it failed", () => {
   // The constant is named, and named for what the code means — not a bare 38.
   expect(source).toContain("CEF_EXIT_HANDED_OFF_TO_DE_ELEVATED");

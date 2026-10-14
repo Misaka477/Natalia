@@ -309,21 +309,59 @@ void SimpleApp::OnContextInitialized() {
 
   // SimpleHandler implements browser-level callbacks.
   CefRefPtr<SimpleHandler> handler(new SimpleHandler(use_alloy_style));
-  // Remembered so GetDefaultClient can answer without building a handler at a
-  // point where building one is illegal (see simple_app.h).
+  // Remembered so GetDefaultClient can answer without building a handler at
+  // a point where building one is illegal (see simple_app.h).
   default_client_ = handler;
+
+  // Check if a "--url=" value was provided via the command-line. If so, use
+  // that instead of the default URL.
+  std::string url = command_line->GetSwitchValue("url");
+  if (url.empty()) {
+    url = "http://127.0.0.1:5178/";
+  }
+
+  CreateBrowserWindow(url, runtime_style, handler);
+}
+
+bool SimpleApp::OnAlreadyRunningAppRelaunch(
+    CefRefPtr<CefCommandLine> command_line,
+    const CefString& current_directory) {
+  CEF_REQUIRE_UI_THREAD();
+  // A second launch while this instance is already running. The runtime it
+  // needs is up — the launcher found it on 8790 and joined it rather than
+  // starting a second one — so what THIS launch is owed is a window: one
+  // runtime, several front ends, each doing its own thing against the same
+  // sessions. Returning true tells CEF the relaunch was served here; the
+  // default (false) would open a generic Chrome window instead.
+  cef_runtime_style_t runtime_style = CEF_RUNTIME_STYLE_DEFAULT;
+  if (command_line->HasSwitch("use-alloy-style")) {
+    runtime_style = CEF_RUNTIME_STYLE_ALLOY;
+  }
+  CefRefPtr<SimpleHandler> handler(
+      new SimpleHandler(runtime_style == CEF_RUNTIME_STYLE_ALLOY));
+  // The first window's client stays the default one: a later Chrome-style
+  // popup must keep finding the client that was there first.
+  if (!default_client_.get()) {
+    default_client_ = handler;
+  }
+  std::string url = command_line->GetSwitchValue("url");
+  if (url.empty()) {
+    url = "http://127.0.0.1:5178/";
+  }
+  CreateBrowserWindow(url, runtime_style, handler);
+  return true;
+}
+
+void SimpleApp::CreateBrowserWindow(const std::string& url,
+                                     cef_runtime_style_t runtime_style,
+                                     CefRefPtr<SimpleHandler> handler) {
+  CEF_REQUIRE_UI_THREAD();
 
   // Specify CEF browser settings here.
   CefBrowserSettings browser_settings;
 
-  std::string url;
-
-  // Check if a "--url=" value was provided via the command-line. If so, use
-  // that instead of the default URL.
-  url = command_line->GetSwitchValue("url");
-  if (url.empty()) {
-    url = "http://127.0.0.1:5178/";
-  }
+  CefRefPtr<CefCommandLine> command_line =
+      CefCommandLine::GetGlobalCommandLine();
 
   // Views is enabled by default (add `--use-native` to disable).
   const bool use_views = !command_line->HasSwitch("use-native");
@@ -369,7 +407,7 @@ void SimpleApp::OnContextInitialized() {
     // fully styled Chrome UI window.
     window_info.runtime_style = runtime_style;
 
-    // Create the first browser window.
+    // Create the browser window.
     CefBrowserHost::CreateBrowser(window_info, handler, url, browser_settings,
                                   nullptr, nullptr);
   }

@@ -241,9 +241,9 @@ async function stampWindowsIcon(
   const work = join(root, ".btmp", "icon-stamp");
   await rm(work, { recursive: true, force: true });
   await mkdir(work, { recursive: true });
-  const iconBin = join(work, "icon.bin");
+  const iconDir = join(work, "icons");
   const groupBin = join(work, "group.bin");
-  await buildIconPayloads(icoPath, iconBin, groupBin);
+  await buildIconPayloads(icoPath, iconDir, groupBin);
 
   const script = join(work, "stamp.ps1");
   await Bun.write(
@@ -262,11 +262,20 @@ async function stampWindowsIcon(
       "  public static extern bool EndUpdateResource(IntPtr hUpdate, bool discardChanges);",
       "}",
       "'@",
-      "$exe = $args[0]; $icon = $args[1]; $group = $args[2]",
+      "$exe = $args[0]; $iconDir = $args[1]; $group = $args[2]",
       "$h = [IconStamper]::BeginUpdateResource($exe, $false)",
       'if ($h -eq [IntPtr]::Zero) { throw "BeginUpdateResource failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
-      "$iconBytes = [System.IO.File]::ReadAllBytes($icon)",
-      'if (-not [IconStamper]::UpdateResource($h, [IntPtr]3, [IntPtr]1, 0x0409, $iconBytes, $iconBytes.Length)) { throw "UpdateResource RT_ICON failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
+      "# Every image the .ico carried, as its own RT_ICON, id = the number in",
+      "# the filename. The group entry names the same id, so a 32px request",
+      "# finds a 32px image instead of falling back to the default mark.",
+      "foreach ($file in (Get-ChildItem -Path $iconDir -Filter '*.bin' | Sort-Object Name)) {",
+      "  $id = [int]($file.BaseName)",
+      "  $bytes = [System.IO.File]::ReadAllBytes($file.FullName)",
+      "  if (-not [IconStamper]::UpdateResource($h, [IntPtr]3, [IntPtr]$id, 0x0409, $bytes, $bytes.Length)) {",
+      '    throw "UpdateResource RT_ICON $($id) failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())"',
+      "  }",
+      '  Write-Host "  RT_ICON $id ($($bytes.Length) bytes)"',
+      "}",
       "$groupBytes = [System.IO.File]::ReadAllBytes($group)",
       'if (-not [IconStamper]::UpdateResource($h, [IntPtr]14, [IntPtr]1, 0x0409, $groupBytes, $groupBytes.Length)) { throw "UpdateResource RT_GROUP_ICON failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
       'if (-not [IconStamper]::EndUpdateResource($h, $false)) { throw "EndUpdateResource failed: $([System.Runtime.InteropServices.Marshal]::GetLastWin32Error())" }',
@@ -286,7 +295,7 @@ async function stampWindowsIcon(
       "-File",
       script,
       exePath,
-      iconBin,
+      iconDir,
       groupBin,
     ],
     { stdout: "pipe", stderr: "pipe" },
@@ -300,24 +309,162 @@ async function stampWindowsIcon(
         `${new TextDecoder().decode(run2.stderr).trim() || `exit ${run2.exitCode}`}`,
     );
   }
+
+  // And then READ IT BACK, because "the API returned true" is not the same
+  // claim as "the icon is ours". The first version of this step wrote one
+  // RT_ICON and a group that declared it — three successful calls, exit 0,
+  // and the exe still showed bun's mark, because the group named the 16px
+  // entry and nothing answered a 32px request. It was caught only by
+  // reading the resource back and pixel-comparing (54.3% differed).
+  //
+  // So the read side is part of the step. The verifier is a small C program
+  // (`scripts/icon-verify.c`) compiled here with whatever MSVC-compatible
+  // toolchain the machine has; a machine without one cannot verify, and
+  // says so rather than silently shipping an unchecked icon.
+  await verifyStampedIcon(exePath, icoPath, work);
 }
 
 /**
- * The two PE payloads a stamped icon needs, from one .ico file.
+ * Read the stamped icon back out of the exe and compare it against the
+ * source, so a wrong icon fails the build instead of the user's screenshot.
  *
- * `iconBin` is the FIRST image's bytes (the one RT_ICON id 1 names — the
- * smallest, which is what a 16x16 shell slot asks for). `groupBin` is the
- * GRPICONDIR + one GRPICONDIRENTRY, whose trailing field is the resource
- * id rather than the file offset the .ico directory carries.
+ * The threshold is 20%, and the number it sits above is measured, not
+ * guessed. Windows resamples on the way through `DrawIconEx` — a 32px PNG
+ * resource drawn into a 32x32 target comes back through a different filter
+ * than Pillow's — so a CORRECT stamp measures 5.6% (57/1024 pixels), and a
+ * WRONG one (a group that declared only the 16px entry, so a 32px request
+ * fell back to bun's default mark) measured 54.3%. The threshold has to sit
+ * between them with room on both sides: 5% rejected the correct icon, and
+ * anything near 50% would wave the wrong one through.
  *
- * A multi-image icon would be nicer, and is deliberately not attempted
- * here: the group format's per-image ids have to line up with the RT_ICON
- * ids, and a mismatch is a silently-wrong icon — the exact failure mode
- * this whole step exists to end. One image, written correctly.
+ * The comparison is coarse on purpose — a pixel is "the same" when each
+ * channel is within 30 — because what it is distinguishing is not
+ * resampling noise but a DIFFERENT PICTURE, which differs by an order of
+ * magnitude more.
+ */
+async function verifyStampedIcon(
+  exePath: string,
+  icoPath: string,
+  work: string,
+): Promise<void> {
+  const verifier = await buildIconVerifier(work);
+  const got = join(work, "got.bmp");
+  const read = Bun.spawnSync([verifier, exePath, got], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (read.exitCode !== 0) {
+    throw new Error(
+      `the icon stamp wrote nothing readable into ${exePath}: ` +
+        `${new TextDecoder().decode(read.stderr).trim() || `exit ${read.exitCode}`} — ` +
+        `the exe still carries bun's default mark`,
+    );
+  }
+  // The comparison needs Pillow, which the icon script itself requires; a
+  // machine without it cannot run that script either, so it is a fair
+  // dependency here.
+  const compare = Bun.spawnSync(
+    [
+      "python",
+      "-c",
+      `from PIL import Image
+import sys
+got = Image.open(sys.argv[1]).convert("RGB")
+ours = Image.open(sys.argv[2]).convert("RGB")
+got = got.resize(ours.size)
+diff = sum(
+    1
+    for x in range(ours.size[0])
+    for y in range(ours.size[1])
+    if sum(abs(a - b) for a, b in zip(got.getpixel((x, y)), ours.getpixel((x, y)))) > 30
+)
+total = ours.size[0] * ours.size[1]
+rate = diff / total
+print(f"{diff}/{total} ({rate * 100:.1f}%)")
+sys.exit(0 if rate < 0.20 else 1)`,
+      got,
+      join(root, "assets", "icons", "icon-32.png"),
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const detail = new TextDecoder().decode(compare.stdout).trim();
+  if (compare.exitCode !== 0) {
+    throw new Error(
+      `the icon stamped into ${exePath} is not the application's: ` +
+        `${detail || "the comparison could not run"} of the pixels differ. ` +
+        `The exe still shows the wrong icon.`,
+    );
+  }
+  console.log(`  icon verified: ${detail} of the pixels differ (resampling)`);
+}
+
+/**
+ * Compile the icon verifier, or return undefined when no toolchain is here.
+ *
+ * `clang-cl` (LLVM) and `cl` (MSVC) both take the same response-file form,
+ * which is also the form that survives a path with spaces in it — a direct
+ * argv made clang-cl treat `user32.lib` as a second source file and refuse
+ * to compile ("cannot specify /Fo when compiling multiple source files").
+ */
+async function buildIconVerifier(work: string): Promise<string> {
+  const out = join(work, "icon-verify.exe");
+  const source = join(root, "scripts", "icon-verify.c");
+  const response = join(work, "icon-verify.rsp");
+  // `_CRT_SECURE_NO_WARNINGS` because the verifier uses fopen, and the
+  // deprecation warning is noise on every compile.
+  await Bun.write(
+    response,
+    [
+      "/nologo",
+      "/O2",
+      "/D_CRT_SECURE_NO_WARNINGS",
+      `/Fe${out}`,
+      source,
+      "/link",
+      "user32.lib",
+      "gdi32.lib",
+      "",
+    ].join("\n"),
+  );
+  const candidates = [
+    "D:\\Software_Development\\LLVM\\bin\\clang-cl.exe",
+    "clang-cl",
+    "cl",
+  ];
+  for (const candidate of candidates) {
+    const run = Bun.spawnSync([candidate, `@${response}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (run.exitCode === 0) return out;
+  }
+  throw new Error(
+    `no MSVC-compatible compiler found (tried LLVM's clang-cl, clang-cl, cl) — ` +
+      `the icon cannot be verified, and an unverified icon is the exact ` +
+      `failure this step exists to prevent. Install LLVM or the Windows SDK ` +
+      `build tools, or set the compiler's location.`,
+  );
+}
+
+/**
+ * The PE payloads a stamped icon needs, from one .ico file.
+ *
+ * EVERY image in the .ico becomes its own RT_ICON (id 1..N), and one
+ * RT_GROUP_ICON binds them: a 6-byte GRPICONDIR header plus a 14-byte
+ * GRPICONDIRENTRY per image. The entry's LAST field is the image's
+ * RESOURCE ID — not the file offset the .ico directory carries — and the
+ * `bytesInRes` field is the image's byte length. A single-image stamp was
+ * the first attempt and it produced a silently-wrong icon: the group
+ * declared the FIRST entry (16px), so `LoadImage(..., "#1", IMAGE_ICON,
+ * 32, 32)` — what Explorer, the taskbar and the file-properties sheet all
+ * ask for — found no 32px image and fell back to the default mark. The
+ * stamp "succeeded" (three Win32 calls returned true) and the exe still
+ * showed bun's icon. Verified by reading the resource back out and
+ * pixel-comparing: 54.3% of the pixels differed.
  */
 async function buildIconPayloads(
   icoPath: string,
-  iconBin: string,
+  iconDir: string,
   groupBin: string,
 ): Promise<void> {
   const ico = await Bun.file(icoPath).arrayBuffer();
@@ -330,35 +477,50 @@ async function buildIconPayloads(
   // images" and the whole stamp step died on its own guard.
   const count = bytes[4] | (bytes[5] << 8);
   if (count < 1) throw new Error(`${icoPath} declares no images`);
-  const first = 6; // the first directory entry
-  const width = bytes[first] === 0 ? 256 : bytes[first];
-  const length =
-    bytes[first + 8] |
-    (bytes[first + 9] << 8) |
-    (bytes[first + 10] << 16) |
-    (bytes[first + 11] << 24);
-  const offset =
-    bytes[first + 12] |
-    (bytes[first + 13] << 8) |
-    (bytes[first + 14] << 16) |
-    (bytes[first + 15] << 24);
-  if (offset + length > bytes.length)
-    throw new Error(`${icoPath}'s first image points outside the file`);
-  // Buffer.from, not the subarray view: `Bun.write(path, view)` rejects a
-  // Uint8Array view sharing an ArrayBuffer ("Expected options to be a
-  // object for 'write'"), while a copied Buffer is the shape it accepts.
-  await Bun.write(
-    iconBin,
-    Buffer.from(bytes.subarray(offset, offset + length)),
-  );
 
-  const group = Buffer.alloc(6 + 14);
-  bytes.subarray(0, 6).forEach((value, index) => (group[index] = value)); // reserved, type=1, count=1
-  bytes
-    .subarray(first, first + 12)
-    .forEach((value, index) => (group[6 + index] = value)); // width..bitcount
-  group[6 + 12] = 1; // the resource id — NOT the file offset
-  group[6 + 13] = 0;
+  await mkdir(iconDir, { recursive: true });
+  const groupEntries: Buffer[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const entry = 6 + index * 16;
+    const width = bytes[entry] === 0 ? 256 : bytes[entry];
+    const length =
+      bytes[entry + 8] |
+      (bytes[entry + 9] << 8) |
+      (bytes[entry + 10] << 16) |
+      (bytes[entry + 11] << 24);
+    const offset =
+      bytes[entry + 12] |
+      (bytes[entry + 13] << 8) |
+      (bytes[entry + 14] << 16) |
+      (bytes[entry + 15] << 24);
+    if (offset + length > bytes.length)
+      throw new Error(`${icoPath}'s image ${width}px points outside the file`);
+    // RT_ICON ids are 1-based, and the group entry names the same id.
+    const resourceID = index + 1;
+    await Bun.write(
+      join(iconDir, `${resourceID}.bin`),
+      // Buffer.from, not the subarray view: `Bun.write(path, view)` rejects
+      // a Uint8Array view sharing an ArrayBuffer ("Expected options to be a
+      // object for 'write'"), while a copied Buffer is the shape it accepts.
+      Buffer.from(bytes.subarray(offset, offset + length)),
+    );
+    // One GRPICONDIRENTRY: width, height, colourCount, reserved, planes,
+    // bitCount, bytesInRes, ID. Copied from the .ico's own directory entry
+    // (first 12 bytes) so the declared dimensions stay true, then the last
+    // two bytes are the resource id rather than the file offset.
+    const groupEntry = Buffer.alloc(14);
+    bytes
+      .subarray(entry, entry + 12)
+      .forEach((value, at) => (groupEntry[at] = value));
+    groupEntry.writeUInt16LE(resourceID, 12);
+    groupEntries.push(groupEntry);
+  }
+
+  // The GRPICONDIR header is the .ico's own first 6 bytes (reserved, type=1,
+  // count) — which is exactly right, since the group mirrors the .ico.
+  const group = Buffer.alloc(6 + 14 * count);
+  bytes.subarray(0, 6).forEach((value, at) => (group[at] = value));
+  groupEntries.forEach((entry, index) => entry.copy(group, 6 + index * 14));
   await Bun.write(groupBin, group);
 }
 /** The command that produces the host for a given release platform. */

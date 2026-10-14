@@ -23,3 +23,9 @@ docs/config-reference.zh-CN.md
 # Reformatting either would break the byte fidelity the adapter tests
 # document.
 packages/tooling/testing/test/fixtures/eval/
+
+# The icon verifier is C, and prettier has no C parser. It is also the one
+# file here that is compiled verbatim by the build's own verify step
+# (scripts/icon-verify.c), so its formatting is the toolchain's business,
+# not this repo's prose gate.
+scripts/icon-verify.c

@@ -309,61 +309,74 @@ test("a second launch opens another window instead of a second runtime", () => {
  * outcome, not the status. And a run with no panel is not a failure, so the probe is
  * asked what it saw instead of being asked to succeed.
  */
-test("the Linux tray probe runs and reports what Create actually did", () => {
-  const probe = resolve(
-    import.meta.dir,
-    "..",
-    "..",
-    "cef-desktop",
-    "build",
-    "natalia-tray-probe",
-  );
-  if (!existsSync(probe)) {
-    // Loud, not silent. CI does not build the CEF host, so on every CI run this test
-    // would find no binary — and returning quietly there means a pass in the summary
-    // and no signal if the probe is later deleted, or stops being built at all. A
-    // guard that cannot be seen failing is the failure this whole file is about, so
-    // the two situations are told apart by the machine rather than assumed: a real
-    // tray machine has libappindicator, and no binary then means it broke.
-    const hasAppIndicator =
-      Bun.spawnSync(["pkg-config", "--exists", "appindicator3-0.1"])
-        .exitCode === 0;
-    if (hasAppIndicator) {
-      throw new Error(
-        "libappindicator is present but natalia-tray-probe was not built: run " +
-          "`cmake --build build --target natalia-tray-probe`. The tray would be " +
-          "unprotected silently otherwise.",
+// Linux-only, and the platform says so rather than the machine guessing.
+// The probe is built inside CMake's appindicator branch — the `else()` of
+// `if(WIN32)` — because it links libappindicator, a Linux system package. On
+// Windows the target does not exist and cannot be built, so its absence there
+// is the expected state, not a broken build; and the check that tells those two
+// situations apart (`pkg-config --exists appindicator3-0.1`) has no Windows
+// spelling either — the spawn throws ENOENT before it can answer, which is the
+// crash this gate replaces. What Windows CAN show about the tray is pinned
+// above: pure Shell_NotifyIcon, message-only window, dies with the window.
+// Skipping here costs the platform nothing it was able to prove.
+test.skipIf(process.platform === "win32")(
+  "the Linux tray probe runs and reports what Create actually did",
+  () => {
+    const probe = resolve(
+      import.meta.dir,
+      "..",
+      "..",
+      "cef-desktop",
+      "build",
+      "natalia-tray-probe",
+    );
+    if (!existsSync(probe)) {
+      // Loud, not silent. CI does not build the CEF host, so on every CI run this test
+      // would find no binary — and returning quietly there means a pass in the summary
+      // and no signal if the probe is later deleted, or stops being built at all. A
+      // guard that cannot be seen failing is the failure this whole file is about, so
+      // the two situations are told apart by the machine rather than assumed: a real
+      // tray machine has libappindicator, and no binary then means it broke.
+      const hasAppIndicator =
+        Bun.spawnSync(["pkg-config", "--exists", "appindicator3-0.1"])
+          .exitCode === 0;
+      if (hasAppIndicator) {
+        throw new Error(
+          "libappindicator is present but natalia-tray-probe was not built: run " +
+            "`cmake --build build --target natalia-tray-probe`. The tray would be " +
+            "unprotected silently otherwise.",
+        );
+      }
+      console.warn(
+        "skipped: no libappindicator on this machine, so the tray is compiled out",
       );
+      return;
     }
-    console.warn(
-      "skipped: no libappindicator on this machine, so the tray is compiled out",
+    const result = Bun.spawnSync([probe], { stderr: "ignore" });
+    const stdout = result.stdout.toString();
+    // Whatever it saw, it said so. An empty report means the probe did not reach its
+    // own print, which is the failure worth catching — not a missing panel.
+    expect(stdout, "the probe must report an outcome").toMatch(
+      /TRAY_CREATED|TRAY_CREATE_RETURNED_NULL/,
     );
-    return;
-  }
-  const result = Bun.spawnSync([probe], { stderr: "ignore" });
-  const stdout = result.stdout.toString();
-  // Whatever it saw, it said so. An empty report means the probe did not reach its
-  // own print, which is the failure worth catching — not a missing panel.
-  expect(stdout, "the probe must report an outcome").toMatch(
-    /TRAY_CREATED|TRAY_CREATE_RETURNED_NULL/,
-  );
-  if (stdout.includes("TRAY_CREATED")) {
-    // Created here means the callbacks were armed and the object disposed — the
-    // lifecycle the comment claimed, now checked rather than remembered.
-    expect(stdout).toContain("CALLBACKS_ARMED show=0 quit=0");
-    // And the exit entry the goal names: the menu the tray built carries both
-    // commands, and activating them — what a click does — fires the callbacks.
-    // A tray whose Quit is missing or un wired would fail HERE rather than at a
-    // user's click, which is the whole point of asking the binary.
-    expect(stdout, "the menu must carry the show and quit entries").toContain(
-      "MENU_ENTRIES_FOUND",
-    );
-    expect(stdout).toContain("SHOW_CALLBACK_FIRED=1");
-    expect(stdout).toContain("QUIT_CALLBACK_FIRED=1");
-    expect(stdout).toContain("PASS");
-    expect(stdout).toContain("DISPOSED_CLEANLY");
-  }
-});
+    if (stdout.includes("TRAY_CREATED")) {
+      // Created here means the callbacks were armed and the object disposed — the
+      // lifecycle the comment claimed, now checked rather than remembered.
+      expect(stdout).toContain("CALLBACKS_ARMED show=0 quit=0");
+      // And the exit entry the goal names: the menu the tray built carries both
+      // commands, and activating them — what a click does — fires the callbacks.
+      // A tray whose Quit is missing or un wired would fail HERE rather than at a
+      // user's click, which is the whole point of asking the binary.
+      expect(stdout, "the menu must carry the show and quit entries").toContain(
+        "MENU_ENTRIES_FOUND",
+      );
+      expect(stdout).toContain("SHOW_CALLBACK_FIRED=1");
+      expect(stdout).toContain("QUIT_CALLBACK_FIRED=1");
+      expect(stdout).toContain("PASS");
+      expect(stdout).toContain("DISPOSED_CLEANLY");
+    }
+  },
+);
 
 test("the Linux tray is a detected system package, never a hard link", () => {
   // What execution established, so the structural pins below are not mistaken for

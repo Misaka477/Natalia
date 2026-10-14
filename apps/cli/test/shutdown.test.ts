@@ -49,41 +49,56 @@ test("settleShutdown swallows a failing step", async () => {
   }
 });
 
-test("waitSignal absorbs a repeated SIGINT so shutdown can finish", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "natalia-signal-"));
-  const helper = resolve(repoRoot, "apps/cli/src/command-helpers.ts");
-  const script = join(dir, "signal-probe.ts");
-  const mark = (name: string) => JSON.stringify(join(dir, name));
-  await writeFile(
-    script,
-    [
-      `import { waitSignal } from ${JSON.stringify(helper)};`,
-      `import { writeFileSync } from "node:fs";`,
-      `writeFileSync(${mark("ready")}, "");`,
-      `await waitSignal();`,
-      `writeFileSync(${mark("shutdown-start")}, "");`,
-      `await Bun.sleep(500);`,
-      `writeFileSync(${mark("shutdown-done")}, "");`,
-      `process.exit(0);`,
-    ].join("\n"),
-  );
-  const child = Bun.spawn(["bun", script], {
-    cwd: repoRoot,
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  try {
-    await waitForFile(join(dir, "ready"));
-    child.kill("SIGINT");
-    await waitForFile(join(dir, "shutdown-start"));
-    // The old `process.once` listener was already removed, so this second
-    // signal used to hit the OS default and abort the shutdown.
-    child.kill("SIGINT");
-    await waitForFile(join(dir, "shutdown-done"));
-    const code = await child.exited;
-    expect(code).toBe(0);
-  } finally {
-    child.kill("SIGKILL");
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+/**
+ * POSIX signals are the whole subject of the test below: the child is driven
+ * by SIGINT delivered twice, and what is proven is that waitSignal absorbs the
+ * repeat while the graceful path finishes instead of letting it hit the OS
+ * default. Windows has no such signal — a spawned process there cannot be made
+ * to raise one, so the child would sit in `await waitSignal()` until the test
+ * timed out, which proves nothing about either side. The Windows shutdown path
+ * is the RPC session shutdown, not a signal, and this drives none of it. So the
+ * test runs where the signal exists and skips, saying why, where it does not.
+ */
+const posixTest = process.platform === "win32" ? test.skip : test;
+
+posixTest(
+  "waitSignal absorbs a repeated SIGINT so shutdown can finish",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "natalia-signal-"));
+    const helper = resolve(repoRoot, "apps/cli/src/command-helpers.ts");
+    const script = join(dir, "signal-probe.ts");
+    const mark = (name: string) => JSON.stringify(join(dir, name));
+    await writeFile(
+      script,
+      [
+        `import { waitSignal } from ${JSON.stringify(helper)};`,
+        `import { writeFileSync } from "node:fs";`,
+        `writeFileSync(${mark("ready")}, "");`,
+        `await waitSignal();`,
+        `writeFileSync(${mark("shutdown-start")}, "");`,
+        `await Bun.sleep(500);`,
+        `writeFileSync(${mark("shutdown-done")}, "");`,
+        `process.exit(0);`,
+      ].join("\n"),
+    );
+    const child = Bun.spawn(["bun", script], {
+      cwd: repoRoot,
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    try {
+      await waitForFile(join(dir, "ready"));
+      child.kill("SIGINT");
+      await waitForFile(join(dir, "shutdown-start"));
+      // The old `process.once` listener was already removed, so this second
+      // signal used to hit the OS default and abort the shutdown.
+      child.kill("SIGINT");
+      await waitForFile(join(dir, "shutdown-done"));
+      const code = await child.exited;
+      expect(code).toBe(0);
+    } finally {
+      child.kill("SIGKILL");
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

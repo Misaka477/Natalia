@@ -605,9 +605,16 @@ test("a clone request that never answers fails on its own", async () => {
   // later postMessage — the message is dropped and the promise never
   // settles — so without a ceiling the renderer awaits forever and the UI
   // freezes on the last projected frame.
-  const { setCloneStateWorkerFactory, cloneStateInWorker } = await import(
-    "../src/clone-state-worker-client"
-  );
+  //
+  // The ceiling is shortened for this test, not waited out: the real 5s sits
+  // exactly on bun's own 5000ms default test timeout, so waiting it failed
+  // by a millisecond — a boundary the test was never meant to touch. The
+  // property under proof is that the promise SETTLES, not how long it takes.
+  const {
+    setCloneStateWorkerFactory,
+    cloneStateInWorker,
+    setCloneTimeoutForTests,
+  } = await import("../src/clone-state-worker-client");
   const silent = {
     addEventListener: () => {},
     postMessage: () => {},
@@ -615,9 +622,8 @@ test("a clone request that never answers fails on its own", async () => {
     unref: () => {},
   } as unknown as Worker;
   setCloneStateWorkerFactory(() => silent);
+  setCloneTimeoutForTests(20);
   try {
-    // The real ceiling is 5s; this only proves the promise SETTLES (rejects)
-    // rather than hanging, which is the property that matters.
     const started = Date.now();
     await expect(
       cloneStateInWorker({} as never).then(
@@ -625,9 +631,12 @@ test("a clone request that never answers fails on its own", async () => {
         () => "rejected",
       ),
     ).resolves.toBe("rejected");
-    expect(Date.now() - started).toBeLessThan(20_000);
+    // Far below the real ceiling, and far below any test budget: the point is
+    // that it settled on its own rather than being cut off by the runner.
+    expect(Date.now() - started).toBeLessThan(1_000);
   } finally {
     setCloneStateWorkerFactory(() => silent);
+    setCloneTimeoutForTests(undefined);
   }
 });
 

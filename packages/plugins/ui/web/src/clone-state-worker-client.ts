@@ -32,6 +32,22 @@ let nextWorker = 0;
  */
 const CLONE_TIMEOUT_MS = 5_000;
 
+/**
+ * The ceiling a caller may ask for instead of the real one.
+ *
+ * Overridable because the property under test is "the promise SETTLES", and
+ * waiting the real 5s to prove it is a 5-second test that sits exactly on
+ * bun's own default 5000ms test timeout — it failed by one millisecond,
+ * which reads as a flake and is really a boundary the test was never meant
+ * to touch. A test hands the pool a short ceiling; production never sets
+ * this and keeps 5s.
+ */
+let cloneTimeoutOverride: number | undefined;
+
+export function setCloneTimeoutForTests(ms: number | undefined): void {
+  cloneTimeoutOverride = ms;
+}
+
 function poolWorker(): Worker {
   const hardwareConcurrency =
     typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
@@ -98,15 +114,14 @@ export function setCloneStateWorkerFactory(factory: () => Worker): void {
 export function cloneStateInWorker(state: AppState): Promise<AppState> {
   const id = nextID++;
   const instance = poolWorker();
+  const timeout = cloneTimeoutOverride ?? CLONE_TIMEOUT_MS;
   return new Promise<AppState>((resolve, reject) => {
     const timer = setTimeout(() => {
       if (!pending.delete(id)) return;
       reject(
-        new Error(
-          `clone-state worker did not answer within ${CLONE_TIMEOUT_MS}ms`,
-        ),
+        new Error(`clone-state worker did not answer within ${timeout}ms`),
       );
-    }, CLONE_TIMEOUT_MS);
+    }, timeout);
     const entry = {
       owner: instance,
       resolve: (value: AppState) => {

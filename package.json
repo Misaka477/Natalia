@@ -66,6 +66,7 @@
     "build:windows": "npm run native:windows && npm run diff:build-wasm && npm run licenses:check && bun scripts/ts-build.ts && npm run refresh:plugin-store && npm run build:web",
     "appimage": "bun scripts/build-appimage.ts",
     "appbundle": "bun scripts/build-app-bundle.ts",
+    "icons": "bun scripts/build-app-icons.ts",
     "package:linux": "npm run desktop:cef:build && npm run build:distribution && npm run build:web && npm run release:build && npm run appimage && npm run package:linux:portable",
     "verify:native": "npm run ts:build && npm run refresh:plugin-store && npm run release:build && bun packages/tooling/testing/bin/object-store-rust-mode.ts",
     "build:everything": "bun scripts/build-everything.ts",
@@ -86,10 +87,12 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "1.3.13",
     "prettier": "3.6.2",
     "solid-js": "1.9.12",
+    "svgo": "4.1.0",
     "typescript": "5.8.2",
     "vite": "^7.1.5",
     "vite-plugin-solid": "^2.11.10"

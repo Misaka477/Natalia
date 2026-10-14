@@ -102,7 +102,7 @@ if(WIN32)
     # know about.
     message(FATAL_ERROR
       "Windows app icon not found at ${NATALIA_APP_ICON_ICO}; "
-      "run 'python3 scripts/build-app-icons.py' first.")
+      "run 'bun scripts/build-app-icons.ts' first.")
   endif()
   configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/natalia.rc.in"

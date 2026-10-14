@@ -284,7 +284,7 @@ async function stampWindowsIcon(exePath: string): Promise<void> {
   );
   const run = Bun.spawnSync(
     [
-      resolvePwshPath(),
+      resolvePwshPath(undefined),
       "-NoProfile",
       "-NonInteractive",
       "-File",

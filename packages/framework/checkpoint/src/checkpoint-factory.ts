@@ -34,6 +34,10 @@ export function createCheckpointFactory(input: {
     },
     {
       close() {
+        // Close each controller's store before dropping it: the clear
+        // alone left every session's object library open, and a
+        // workspace Windows is asked to delete afterwards answers EBUSY.
+        for (const controller of controllers.values()) controller.close();
         controllers.clear();
       },
     },

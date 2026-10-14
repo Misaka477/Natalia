@@ -41,6 +41,11 @@ export type CheckpointWorkLedger = {
 export interface CheckpointController {
   init(): Promise<void>;
   get(): CheckpointStore;
+  /**
+   * Releases the store's open handles. Idempotent, and safe on a
+   * controller whose store was never opened.
+   */
+  close(): void;
   list(): ReturnType<CheckpointStore["list"]>;
   preview(id: string): ReturnType<CheckpointStore["previewRollback"]>;
   rollback(

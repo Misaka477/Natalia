@@ -348,6 +348,29 @@ export class CheckpointStore {
     return this.enabled;
   }
 
+  /**
+   * Releases what this store holds open.
+   *
+   * The object library keeps a SQLite index (and, when the daemon is in
+   * use, a pipe) open for the process's lifetime, and a store is
+   * created per session — so a runtime that has served a session holds
+   * the workspace's object index open forever. POSIX deletes a
+   * directory out from under an open handle without complaint, which
+   * is why nothing here noticed; Windows refuses the delete with
+   * EBUSY, and the workspace (or a test's temp tree) cannot be
+   * removed. The chunk library and the stat cache hold no handles —
+   * they read and write on demand — so closing the object library is
+   * the whole job.
+   */
+  dispose() {
+    try {
+      this.objects.dispose();
+    } catch {
+      // A store that cannot be closed is still better closed than
+      // leaked; the next attempt is the process exiting.
+    }
+  }
+
   async initialize() {
     if (!this.enabled) {
       this.unavailableReason = "disabled_by_config";

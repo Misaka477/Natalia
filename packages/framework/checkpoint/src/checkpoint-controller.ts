@@ -28,6 +28,17 @@ export function createCheckpointController(input: {
   let store: CheckpointStore | undefined;
   let initPromise: Promise<void> | undefined;
 
+  function close() {
+    // The store is per session and the object library it opens is per
+    // workspace: without this, a runtime that served a session holds the
+    // workspace's SQLite index open for the rest of the process, and
+    // Windows refuses every later delete of that workspace with EBUSY.
+    const opened = store;
+    store = undefined;
+    initPromise = undefined;
+    opened?.dispose();
+  }
+
   async function init() {
     initPromise ??= (async () => {
       const checkpoint = input.checkpoint();
@@ -194,6 +205,7 @@ export function createCheckpointController(input: {
   return {
     init,
     get,
+    close,
     list,
     preview,
     rollback,

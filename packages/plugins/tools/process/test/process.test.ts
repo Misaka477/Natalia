@@ -438,16 +438,14 @@ test("managed process IDs and deadlines are isolated by workspace", async () => 
     },
     { workspaceRoot: firstRoot },
   );
-  await tools
-    .get("process_start")!
-    .execute(
-      {
-        id: "proc_same",
-        command: sleepCmd(30),
-        description: "Run the command",
-      },
-      { workspaceRoot: secondRoot },
-    );
+  await tools.get("process_start")!.execute(
+    {
+      id: "proc_same",
+      command: sleepCmd(30),
+      description: "Run the command",
+    },
+    { workspaceRoot: secondRoot },
+  );
   await Bun.sleep(250);
   const first = JSON.parse(
     await tools

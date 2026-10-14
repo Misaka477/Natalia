@@ -118,6 +118,16 @@ const MAX_SIDEBAR_WIDTH = 360;
 const MIN_RIGHT_WIDTH = 440;
 const MAX_RIGHT_WIDTH = 560;
 
+/**
+ * How many times the secondary startup data is fetched, and the pause
+ * between attempts. The first attempt races the runtime's own startup on
+ * a fresh install, so one failure is expected rather than exceptional;
+ * three attempts a second apart covers a runtime that is still loading
+ * without making a genuinely dead one wait four seconds to say so.
+ */
+const SECONDARY_STARTUP_ATTEMPTS = 3;
+const SECONDARY_STARTUP_RETRY_MS = 1_000;
+
 function sessionTurnID(messageID: string) {
   if (!messageID.startsWith("turn_")) return undefined;
   return messageID.replace(/:(?:user|assistant|thinking|system)$/u, "");
@@ -1057,6 +1067,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     { modelID?: string; variant?: string } | undefined
   >(undefined);
   const [config, setConfig] = createSignal<ConfigV4 | undefined>(undefined);
+  /**
+   * Whether the startup data is KNOWN to be missing, as opposed to merely
+   * not arrived yet. The permission dropdown reads it: an empty menu that
+   * says nothing is indistinguishable from "this config has no modes",
+   * and the config always has three (the schema default) — so an empty
+   * dropdown is a delivery failure and has to look like one.
+   */
+  const [startupDataDegraded, setStartupDataDegraded] = createSignal(false);
   const [reasoningEffort, setReasoningEffortSignal] =
     createSignal<string>("medium");
   const [chatProfile, setChatProfile] = createSignal<ChatModelProfile>({});
@@ -2339,40 +2357,146 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
   }
 
+  /**
+   * The startup data that is not needed for the first frame.
+   *
+   * Retried, because the first attempt races the runtime's own startup:
+   * on a fresh install these RPCs are answered while the runtime is still
+   * loading, and a failure there used to be swallowed whole — the
+   * permission dropdown then rendered its empty menu for the rest of the
+   * session, with nothing on screen to say the config had never arrived.
+   * The config on disk always carries its three agent modes (the schema
+   * default), so an empty dropdown is a delivery failure, never real
+   * data, and it now says so.
+   */
+  async function fetchSecondaryStartupData(): Promise<{
+    requirementContext:
+      | Awaited<ReturnType<typeof createUiPanelRequirementContext>>
+      | undefined;
+    catalog:
+      | Awaited<ReturnType<NonNullable<typeof props.ctx.runtime.modelCatalog>>>
+      | undefined;
+    tools:
+      | Awaited<
+          ReturnType<NonNullable<typeof props.ctx.runtime.registeredTools>>
+        >
+      | undefined;
+    nextConfig:
+      | Awaited<ReturnType<NonNullable<typeof props.ctx.runtime.configGet>>>
+      | undefined;
+    plugins:
+      | Awaited<ReturnType<NonNullable<typeof props.ctx.runtime.plugins>>>
+      | undefined;
+    failed: string[];
+  }> {
+    const settle = async <T,>(
+      name: string,
+      work: () => Promise<T> | undefined,
+    ): Promise<{ value: T | undefined; failed: boolean }> => {
+      try {
+        return { value: (await work()) as T | undefined, failed: false };
+      } catch {
+        return { value: undefined, failed: true };
+      }
+    };
+    const [requirementContext, catalog, tools, nextConfig, plugins] =
+      await Promise.all([
+        settle("panelRequirements", () =>
+          createUiPanelRequirementContext(props.ctx.runtime),
+        ),
+        settle("modelCatalog", () => props.ctx.runtime.modelCatalog?.()),
+        settle("registeredTools", () =>
+          props.ctx.runtime.registeredTools?.(
+            selectedSessionID() || state().sessionID,
+          ),
+        ),
+        settle("configGet", () => props.ctx.runtime.configGet?.()),
+        settle("plugins", () => props.ctx.runtime.plugins?.()),
+      ]);
+    const failed = [requirementContext, catalog, tools, nextConfig, plugins]
+      .map((entry, index) => (entry.failed ? index : -1))
+      .filter((index) => index >= 0)
+      .map(
+        (index) =>
+          [
+            "panelRequirements",
+            "modelCatalog",
+            "registeredTools",
+            "configGet",
+            "plugins",
+          ][index]!,
+      );
+    return {
+      requirementContext: requirementContext.value,
+      catalog: catalog.value,
+      tools: tools.value,
+      nextConfig: nextConfig.value,
+      plugins: plugins.value,
+      failed,
+    };
+  }
+
+  // The fetch's own return type, so the applied shape and the fetched
+  // shape cannot drift: a field added to one and not the other is a
+  // compile error rather than a silently dropped startup input.
+  function applySecondaryStartupData(
+    data: Awaited<ReturnType<typeof fetchSecondaryStartupData>>,
+  ): void {
+    const appliedAt = performance.now();
+    batch(() => {
+      if (data.requirementContext)
+        setPanelRequirementContext(data.requirementContext);
+      if (data.catalog) setModelCatalog(data.catalog);
+      if (data.tools) setRegisteredTools(data.tools);
+      if (data.nextConfig) setConfig(data.nextConfig);
+      setInteractiveTerminalAvailable(
+        Boolean(
+          Array.isArray(data.plugins) &&
+            data.plugins.some(
+              (plugin) =>
+                (plugin as { id?: string }).id === "natalia-tool-terminal",
+            ),
+        ),
+      );
+    });
+    perfLog(
+      `[perf] secondary applied +${(performance.now() - appliedAt).toFixed(1)}ms`,
+    );
+  }
+
   function loadSecondaryStartupData() {
     const secondaryStart = performance.now();
     perfLog(
       `[perf] loadSecondaryStartupData start +${(secondaryStart - ((globalThis as unknown as { __nataliaStartupStart?: number }).__nataliaStartupStart ?? secondaryStart)).toFixed(1)}ms`,
     );
     runIdle(() => {
-      void Promise.all([
-        createUiPanelRequirementContext(props.ctx.runtime).catch(
-          () => undefined,
-        ),
-        props.ctx.runtime.modelCatalog?.().catch(() => undefined),
-        props.ctx.runtime
-          .registeredTools?.(selectedSessionID() || state().sessionID)
-          .catch(() => undefined),
-        props.ctx.runtime.configGet?.().catch(() => undefined),
-        props.ctx.runtime.plugins?.().catch(() => undefined),
-      ]).then(([requirementContext, catalog, tools, nextConfig, plugins]) => {
-        const appliedAt = performance.now();
-        batch(() => {
-          if (requirementContext)
-            setPanelRequirementContext(requirementContext);
-          if (catalog) setModelCatalog(catalog);
-          if (tools) setRegisteredTools(tools);
-          if (nextConfig) setConfig(nextConfig);
-          setInteractiveTerminalAvailable(
-            Boolean(
-              plugins?.some((plugin) => plugin.id === "natalia-tool-terminal"),
-            ),
+      void (async () => {
+        for (
+          let attempt = 1;
+          attempt <= SECONDARY_STARTUP_ATTEMPTS;
+          attempt += 1
+        ) {
+          const data = await fetchSecondaryStartupData();
+          applySecondaryStartupData(data);
+          if (data.failed.length === 0) {
+            setStartupDataDegraded(false);
+            return;
+          }
+          if (attempt < SECONDARY_STARTUP_ATTEMPTS) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, SECONDARY_STARTUP_RETRY_MS),
+            );
+            continue;
+          }
+          // Every attempt failed for these sources. The UI says so
+          // instead of rendering an empty state that reads as "no
+          // data exists".
+          console.warn(
+            `[web-runtime] startup data unavailable after ${attempt} attempts: ${data.failed.join(", ")}`,
           );
-        });
-        perfLog(
-          `[perf] secondary all applied catalog=${catalog?.length ?? 0} tools=${tools?.length ?? 0} plugins=${plugins?.length ?? 0} +${(performance.now() - appliedAt).toFixed(1)}ms`,
-        );
-      });
+          setStartupDataDegraded(true);
+        }
+      })();
     });
     runIdle(() => {
       void debouncedRefreshSessions();
@@ -3965,11 +4089,29 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     />
                     <NeuSelect
                       value={config()?.defaultAgentMode ?? "ask"}
-                      options={permissionOptions()}
-                      onChange={(permission) =>
-                        void changePermission(permission)
+                      options={
+                        startupDataDegraded()
+                          ? [
+                              {
+                                value: "__retry",
+                                label: "配置加载失败，点击重试",
+                              },
+                            ]
+                          : permissionOptions()
                       }
-                      placeholder="选择权限"
+                      onChange={(permission) => {
+                        // The degraded entry is the retry, not a mode:
+                        // choosing it re-runs the fetch instead of
+                        // writing a config value that does not exist.
+                        if (permission === "__retry") {
+                          void loadSecondaryStartupData();
+                          return;
+                        }
+                        void changePermission(permission);
+                      }}
+                      placeholder={
+                        startupDataDegraded() ? "配置加载失败" : "选择权限"
+                      }
                       menuPosition="top"
                     />
                   </div>

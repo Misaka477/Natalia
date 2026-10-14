@@ -123,6 +123,34 @@ export const fileEditorStyles =
 .status-added { color: var(--neu-success); }
 .status-deleted { color: var(--neu-error); }
 
+/* The workspace listing failed. It sits where the tree would be, because
+   an unreadable workspace and an empty one must not look the same. */
+.neu-file-list-error {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 8px; padding: 10px 12px;
+  border: 1px solid var(--neu-error);
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  font-size: 12px;
+}
+.neu-file-list-error-title { font-weight: 700; color: var(--neu-error); }
+.neu-file-list-error-detail {
+  color: var(--neu-muted);
+  word-break: break-word;
+  font-family: var(--neu-font-mono);
+}
+.neu-file-list-error-retry {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border: none; border-radius: 8px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+}
+.neu-file-list-error-retry:hover { color: var(--neu-accent); }
+
 .neu-file-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .neu-file-editor-tabs { display: flex; align-items: center; margin-bottom: 8px; }
 .neu-file-editor-tab {

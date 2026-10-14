@@ -221,6 +221,15 @@ export function FileEditor(props: {
   const [preview, setPreview] = createSignal(false);
   const [fileWidth, setFileWidth] = createSignal(140);
   const [tree, setTree] = createSignal<FileNode[]>(initialTree);
+  /**
+   * Why the workspace listing is empty, when it is empty for a reason.
+   * reloadWorkspace used to let a failed listing throw into a void call:
+   * the tree stayed at its initial empty state and the panel looked
+   * exactly like an empty workspace. A workspace that fails to list and a
+   * workspace with nothing in it are different facts, and only one of
+   * them is the user's problem.
+   */
+  const [listError, setListError] = createSignal<string>("");
   const [entries, setEntries] = createSignal<
     Array<{ path: string; type: "file" | "directory" }>
   >([]);
@@ -342,8 +351,22 @@ export function FileEditor(props: {
   }
 
   async function reloadWorkspace() {
-    const page = await props.runtime?.workspaceList?.();
+    let page;
+    try {
+      page = await props.runtime?.workspaceList?.();
+    } catch (error) {
+      // The message names the failure instead of leaving the tree to
+      // imply one. The runtime client reports its own refusals verbatim,
+      // so what reaches here is already actionable.
+      setListError(
+        error instanceof Error && error.message
+          ? error.message
+          : "无法读取工作区文件列表",
+      );
+      return;
+    }
     if (!page) return;
+    setListError("");
     nodeMap.clear();
     rowCache.clear();
     setEntries(page.entries);
@@ -975,6 +998,24 @@ export function FileEditor(props: {
             class="file-tree neu-file-tree"
             onContextMenu={(event) => openContextMenu(event, "")}
           >
+            {/* The failure, where the empty tree would otherwise be. A
+                workspace that cannot be listed is not an empty
+                workspace, and the two must not look identical. */}
+            <Show when={listError()}>
+              <div class="neu-file-list-error" role="alert">
+                <span class="neu-file-list-error-title">
+                  工作区列表读取失败
+                </span>
+                <span class="neu-file-list-error-detail">{listError()}</span>
+                <button
+                  type="button"
+                  class="neu-file-list-error-retry"
+                  onClick={() => void reloadWorkspace()}
+                >
+                  重试
+                </button>
+              </div>
+            </Show>
             {renderTree(tree(), 0)}
           </div>
         </div>

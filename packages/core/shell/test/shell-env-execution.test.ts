@@ -60,19 +60,31 @@ test("a caller's NATALIA_HOME cannot displace the harness's", async () => {
 /**
  * And confinement facts now ride the result: a caller can tell "the command failed"
  * from "the sandbox could not run" without parsing stderr for a signature.
+ *
+ * Linux-only: the wrapper is landlock/bubblewrap, and the confinement
+ * package's header records that the Windows rung is not implemented
+ * (danger-full-access is the honest degradation there), so a
+ * workspace-write request fails closed on Windows exactly like a missing
+ * backend and there is no mode to report.
  */
-test("a confined run reports the mode it ran under, independently of the exit", async () => {
-  const executor = new BashLocalExecutor();
-  const request: ShellExecRequest = {
-    command: "exit 3",
-    env: { PATH: process.env.PATH },
-    confinement: "workspace-write",
-    workspaceRoot: process.cwd(),
-  };
-  const run = await executor.run(executor.resolve(request), request);
+test.skipIf(process.platform === "win32")(
+  "a confined run reports the mode it ran under, independently of the exit",
+  async () => {
+    const executor = new BashLocalExecutor();
+    const request: ShellExecRequest = {
+      command: "exit 3",
+      env: { PATH: process.env.PATH },
+      confinement: "workspace-write",
+      workspaceRoot: process.cwd(),
+    };
+    const run = await executor.run(executor.resolve(request), request);
 
-  // A nonzero exit is the COMMAND's, and the sandbox facts say so.
-  expect(run.exitCode).toBe(3);
-  expect(run.outcome).toBe("exited");
-  expect(run.sandbox).toEqual({ mode: "workspace-write", runnerFailed: false });
-});
+    // A nonzero exit is the COMMAND's, and the sandbox facts say so.
+    expect(run.exitCode).toBe(3);
+    expect(run.outcome).toBe("exited");
+    expect(run.sandbox).toEqual({
+      mode: "workspace-write",
+      runnerFailed: false,
+    });
+  },
+);

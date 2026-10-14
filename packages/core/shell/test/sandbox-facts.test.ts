@@ -15,12 +15,26 @@ import {
  * and it is what `sandbox.runnerFailed` reports.
  */
 
+/**
+ * A request confined by the REAL backend.
+ *
+ * Linux-only, and the platform says so rather than the assertion lying:
+ * the wrapper is landlock/bubblewrap, a Linux syscall family, and the
+ * confinement package's own header records that the Windows rung is not
+ * implemented — `danger-full-access` is the honest Windows degradation.
+ * A workspace-write request on Windows therefore fails closed exactly
+ * like the missing-backend case below, and the three tests that need a
+ * wrapper that actually RUNS have nothing to observe there. The
+ * missing-backend and unconfined tests keep running on both.
+ */
 const confined = (command: string): ShellExecRequest => ({
   command,
   env: { PATH: process.env.PATH },
   confinement: "workspace-write",
   workspaceRoot: process.cwd(),
 });
+
+const linuxOnly = process.platform === "win32" ? test.skip : test;
 
 /**
  * A request whose confinement backend cannot be found.
@@ -38,7 +52,7 @@ const withoutBackend = (command: string): ShellExecRequest => ({
   confinementBinaryPath: "/nonexistent/confinement-exec",
 });
 
-test("a command's own exit 2 stays the command's", async () => {
+linuxOnly("a command's own exit 2 stays the command's", async () => {
   // The whole point of the change: exit 2 alone is not a refusal.
   const bash = new BashLocalExecutor();
   const request = confined("exit 2");
@@ -50,36 +64,45 @@ test("a command's own exit 2 stays the command's", async () => {
   expect(run.confinementRefusal).toBeUndefined();
 });
 
-test("a command that prints the wrapper's signature still exits as itself", async () => {
-  // The other half: the signature alone is not a refusal either. A command is free
-  // to print anything, so believing the text without the code would take a real
-  // exit away from a real command.
-  const bash = new BashLocalExecutor();
-  const request = confined(
-    `echo '${WRAPPER_FAILURE_SIGNATURE} something convincing' >&2; exit 7`,
-  );
-  const run = await bash.run(bash.resolve(request), request);
+linuxOnly(
+  "a command that prints the wrapper's signature still exits as itself",
+  async () => {
+    // The other half: the signature alone is not a refusal either. A command is free
+    // to print anything, so believing the text without the code would take a real
+    // exit away from a real command.
+    const bash = new BashLocalExecutor();
+    const request = confined(
+      `echo '${WRAPPER_FAILURE_SIGNATURE} something convincing' >&2; exit 7`,
+    );
+    const run = await bash.run(bash.resolve(request), request);
 
-  expect(run.exitCode).toBe(7);
-  expect(run.outcome).toBe("exited");
-  expect(run.sandbox?.runnerFailed).toBe(false);
-  expect(run.confinementRefusal).toBeUndefined();
-});
+    expect(run.exitCode).toBe(7);
+    expect(run.outcome).toBe("exited");
+    expect(run.sandbox?.runnerFailed).toBe(false);
+    expect(run.confinementRefusal).toBeUndefined();
+  },
+);
 
-test("a wrapper refusal is reported as a sandbox failure, not a command exit", async () => {
-  // What a refusal looks like to this seam: the wrapper's exit code and its
-  // signature together. The command never ran, so there is no exit code for it.
-  const bash = new BashLocalExecutor();
-  const request = confined(
-    `echo '${WRAPPER_FAILURE_SIGNATURE} landlock ABI 0: no backend' >&2; exit ${WRAPPER_REFUSAL_EXIT}`,
-  );
-  const run = await bash.run(bash.resolve(request), request);
+linuxOnly(
+  "a wrapper refusal is reported as a sandbox failure, not a command exit",
+  async () => {
+    // What a refusal looks like to this seam: the wrapper's exit code and its
+    // signature together. The command never ran, so there is no exit code for it.
+    const bash = new BashLocalExecutor();
+    const request = confined(
+      `echo '${WRAPPER_FAILURE_SIGNATURE} landlock ABI 0: no backend' >&2; exit ${WRAPPER_REFUSAL_EXIT}`,
+    );
+    const run = await bash.run(bash.resolve(request), request);
 
-  expect(run.outcome).toBe("spawn-failed");
-  expect(run.exitCode).toBeNull();
-  expect(run.confinementRefusal).toContain("landlock");
-  expect(run.sandbox).toEqual({ mode: "workspace-write", runnerFailed: true });
-});
+    expect(run.outcome).toBe("spawn-failed");
+    expect(run.exitCode).toBeNull();
+    expect(run.confinementRefusal).toContain("landlock");
+    expect(run.sandbox).toEqual({
+      mode: "workspace-write",
+      runnerFailed: true,
+    });
+  },
+);
 
 test("an unconfined run carries no sandbox facts", async () => {
   // Absent, not `{mode: ..., runnerFailed: false}` on a run that was never

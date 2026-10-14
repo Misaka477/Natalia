@@ -16,6 +16,7 @@ import {
   type ShellExecRequest,
   type ShellExecSpec,
 } from "@anthelia/shell";
+import { resolveBashExecutable } from "@anthelia/platform";
 
 /**
  * The seam's own tests: the split between shell-specific and shared.
@@ -88,17 +89,20 @@ test("a timeout resolves as a timeout and the process is actually gone", async (
   // The tree-kill sends SIGTERM and escalates to SIGKILL after a two-second
   // grace, so this waits past that window before asserting the tree is gone.
   //
-  // `kill -0`, not `ps`: in a sandbox a process can be alive while `ps` will not
-  // list it, which reads as a survivor that is not one. `kill -0` asks the kernel
-  // about the one pid, which is the only thing being asserted.
+  // An existence check against the one pid, not a listing: `ps` can miss a
+  // live process in a sandbox, which reads as a survivor that is not one.
+  // `kill -0` is the cross-platform spelling of that question — spawning
+  // `sh -c "kill -0 ..."` assumed a POSIX shell on the PATH, which Windows
+  // does not have.
   await Bun.sleep(2_600);
-  const alive =
-    Bun.spawnSync(
-      ["sh", "-c", `kill -0 ${childPid} 2>/dev/null && echo yes || echo no`],
-      { stdout: "pipe" },
-    )
-      .stdout.toString()
-      .trim() === "yes";
+  const alive = (() => {
+    try {
+      process.kill(childPid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
   expect(alive, `pid ${childPid} outlived its timeout`).toBe(false);
 });
 
@@ -142,7 +146,12 @@ test("a second shell inherits every policy without touching the seam", async () 
   class FixedExecutor extends ShellExecutor {
     resolve(request: ShellExecRequest): ShellExecSpec {
       return {
-        command: "sh",
+        // The platform's own shell, resolved the way the real executors
+        // resolve it. A bare "sh" is not on a Windows PATH, and the
+        // point of this test is the policy that lives ABOVE the seam —
+        // the timeout, the abort, the capture, the classification —
+        // not which shell happens to answer.
+        command: resolveBashExecutable({ os: request.os }) ?? "sh",
         args: ["-c", request.command],
         cwd: request.workdir ?? process.cwd(),
         timeoutMs: clampTimeout(request.timeoutMs),
@@ -191,10 +200,23 @@ test("the caller's environment reaches the child, and an executor's overrides do
 
 test("a caller that passes no environment inherits, exactly as before", async () => {
   const bash = new BashLocalExecutor();
-  const run = await bash.run(bash.resolve({ command: "echo $HOME" }));
   // Inherited, not replaced with an empty object: spawn(env=undefined) is what
   // the pre-seam code did by not passing env at all.
-  expect(run.stdout.trim()).toBe(String(process.env.HOME));
+  //
+  // The marker is a variable THIS test sets, not $HOME: Windows has no HOME
+  // in the process environment (USERPROFILE is its spelling), while the bash
+  // child computes its own — so the POSIX variable asserted the wrong thing
+  // there. A marker asks the same inheritance question on every platform.
+  const marker = "NATALIA_TEST_INHERITED_MARKER";
+  const previous = process.env[marker];
+  process.env[marker] = "inherited";
+  try {
+    const run = await bash.run(bash.resolve({ command: "echo $" + marker }));
+    expect(run.stdout.trim()).toBe("inherited");
+  } finally {
+    if (previous === undefined) delete process.env[marker];
+    else process.env[marker] = previous;
+  }
 });
 
 test("the platform mirror: pwsh on win32, zsh on darwin, bash elsewhere", () => {

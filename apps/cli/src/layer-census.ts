@@ -130,6 +130,15 @@ export async function layerCensus(
     }),
     resolve(dirname(process.execPath), ".."),
     process.cwd(),
+    // The CLI package directory itself: its node_modules holds the
+    // workspace links. Bun's linker hoists those links to the workspace
+    // ROOT on POSIX — already covered by the cwd candidate — but on
+    // Windows the isolated layout keeps them beside the CONSUMER
+    // (apps/cli/node_modules here), where nothing above can see them.
+    // Reading the package directory is the same live-scope census; where
+    // the root already carries the links it has no node_modules and
+    // contributes nothing.
+    resolve(import.meta.dir, ".."),
   ],
 ): Promise<LayerCensus> {
   // 1. The build manifest (installed context): names baked at release time.

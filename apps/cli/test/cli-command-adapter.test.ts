@@ -58,14 +58,16 @@ test("recognized host commands initialize official plugins in the distribution s
     ).toBe(true);
   }
   expect(calls).toHaveLength(3);
+  // The distribution tail is composed with the platform's own separator:
+  // "dist/ts/plugin-store" on POSIX, "dist\ts\plugin-store" on Windows.
   expect(
     calls.every(({ pluginStoreRoot }) =>
-      pluginStoreRoot.endsWith("dist/ts/plugin-store"),
+      pluginStoreRoot.endsWith(join("dist", "ts", "plugin-store")),
     ),
   ).toBe(true);
   expect(
     calls.every(({ distributionRoot }) =>
-      distributionRoot.endsWith("dist/ts/plugins"),
+      distributionRoot.endsWith(join("dist", "ts", "plugins")),
     ),
   ).toBe(true);
   expect(
@@ -132,8 +134,12 @@ test("official reinstall has explicit parsing and lifecycle routing", async () =
   expect(routed).toMatchObject({
     pluginID: "natalia-tool-ask",
   });
-  expect(routed!.distributionRoot.endsWith("dist/ts/plugins")).toBe(true);
-  expect(routed!.pluginStoreRoot.endsWith("dist/ts/plugin-store")).toBe(true);
+  expect(routed!.distributionRoot.endsWith(join("dist", "ts", "plugins"))).toBe(
+    true,
+  );
+  expect(
+    routed!.pluginStoreRoot.endsWith(join("dist", "ts", "plugin-store")),
+  ).toBe(true);
   expect(routed!.pluginStoreRoot).toBe(
     join(routed!.distributionRoot, "..", "plugin-store"),
   );

@@ -1,3 +1,4 @@
+import { executableName } from "@anthelia/platform";
 import {
   initializeOfficialPlugins,
   loadNataliaLock,
@@ -6,7 +7,7 @@ import {
   type OfficialPluginID,
 } from "@natalia/installer";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
@@ -35,6 +36,21 @@ export function isRecognizedHostCommand(argv: readonly string[]) {
 }
 
 /**
+ * Whether a path lives inside Bun's embedded filesystem, where a
+ * standalone bundle mounts its own program read-only: `/$bunfs` on
+ * POSIX, `B:\\~BUN\\` on Windows (the same two roots start-app and the
+ * native-terminal bridge discovery record). A path there describes no
+ * real install — accepting one puts the plugin store on a read-only
+ * filesystem and kills every host command with EROFS. The check is the
+ * platform's own, decided at runtime; the POSIX spelling is unchanged.
+ */
+function isBunEmbeddedPath(path: string): boolean {
+  if (process.platform === "win32")
+    return path.toLowerCase().includes("\\~bun\\");
+  return path.startsWith("/$bunfs");
+}
+
+/**
  * The INSTALLED layout's distribution root, for a STANDALONE-EXECUTABLE
  * bundle: inside one, `process.execPath` AND `import.meta.dir` both live
  * in the read-only VFS (`/$bunfs/...` — proven by the crash stack
@@ -55,9 +71,9 @@ export function isRecognizedHostCommand(argv: readonly string[]) {
  * Linux (/proc/self/exe — immune to bun's argv0/execPath rewriting
  * inside the single-executable VFS), then argv0 (symlinks resolved —
  * the installer's bin/natalia lands on versions/<v>), then a PATH scan.
- * Anything under /$bunfs is rejected outright: the VFS lies about
- * location. One source of truth — the plugin distribution AND the
- * doctor's layer census both ask this question.
+ * Anything inside the embedded filesystem is rejected outright: the VFS
+ * lies about location. One source of truth — the plugin distribution
+ * AND the doctor's layer census both ask this question.
  */
 export function realExecutableDirs(input: {
   argv0?: string;
@@ -66,7 +82,7 @@ export function realExecutableDirs(input: {
 }): string[] {
   const roots: string[] = [];
   const push = (p: string | undefined) => {
-    if (p && !p.startsWith("/$bunfs")) roots.push(p);
+    if (p && !isBunEmbeddedPath(p)) roots.push(p);
   };
   try {
     push(dirname(realpathSync("/proc/self/exe")));
@@ -78,17 +94,23 @@ export function realExecutableDirs(input: {
   } catch {
     /* bare name or missing: next candidate */
   }
-  if (!input.execPath.startsWith("/$bunfs")) {
+  if (!isBunEmbeddedPath(input.execPath)) {
     try {
       push(dirname(realpathSync(input.execPath)));
     } catch {
       /* dev-style paths fall through to the caller's default */
     }
   }
-  for (const dir of (input.pathEnv ?? process.env.PATH ?? "").split(":")) {
+  // The separator is the platform's own (":" on POSIX, ";" on Windows)
+  // and the binary carries the platform's suffix: a Windows install is
+  // found as natalia.exe on a ";"-separated PATH, which the POSIX
+  // spelling never matched — the whole scan was dead there.
+  for (const dir of (input.pathEnv ?? process.env.PATH ?? "").split(
+    delimiter,
+  )) {
     if (!dir) continue;
     try {
-      push(dirname(realpathSync(join(dir, "natalia"))));
+      push(dirname(realpathSync(join(dir, executableName("natalia")))));
     } catch {
       /* not there */
     }
@@ -228,7 +250,7 @@ export function writableStoreRoot(
   resolved: string,
   input: { env?: NodeJS.ProcessEnv; home?: string } = {},
 ): string {
-  if (!resolved.startsWith("/$bunfs")) return resolved;
+  if (!isBunEmbeddedPath(resolved)) return resolved;
   const env = input.env ?? process.env;
   const anchor = env.NATALIA_HOME
     ? resolve(env.NATALIA_HOME)

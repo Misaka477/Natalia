@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { executableName } from "@anthelia/platform";
 import {
   installedPluginDistributionRoot,
   installedPluginDistributionRoots,
@@ -25,17 +26,37 @@ import {
 
 const base = mkdtempSync(join(tmpdir(), "official-layout-"));
 
+/**
+ * The embedded filesystem a standalone bundle mounts its own program
+ * from: `/$bunfs` on POSIX, `B:\~BUN\` on Windows (the same two roots
+ * start-app and the native-terminal bridge discovery record). Every
+ * fixture below is composed from the platform's own shape at runtime —
+ * never baked — so each proof is the platform's real one.
+ */
+const vfsRoot =
+  process.platform === "win32" ? "B:\\~BUN\\root" : "/$bunfs/root";
+const vfsProgram = join(vfsRoot, executableName("natalia"));
+
 test("argv0 resolution finds plugins beside the real executable", () => {
   const execDir = join(base, "versions", "1.0.0");
   mkdirSync(join(execDir, "plugins"), { recursive: true });
-  writeFileSync(join(execDir, "natalia"), "");
-  // A symlinked bin (the installer's bin/natalia) resolves to the real dir.
+  const binary = executableName("natalia");
+  writeFileSync(join(execDir, binary), "");
+  // A linked bin (the installer's bin/natalia) resolves to the real dir.
+  // POSIX links the executable itself; an unprivileged Windows process
+  // cannot create a file symlink (EPERM), so the bin DIRECTORY is a
+  // junction there — realpathSync resolves a junction exactly like a
+  // symlink, which is the behavior under test.
   const binDir = join(base, "bin");
-  mkdirSync(binDir, { recursive: true });
-  symlinkSync(join(execDir, "natalia"), join(binDir, "natalia"));
+  if (process.platform === "win32") {
+    symlinkSync(execDir, binDir, "junction");
+  } else {
+    mkdirSync(binDir, { recursive: true });
+    symlinkSync(join(execDir, binary), join(binDir, binary));
+  }
   const root = installedPluginDistributionRoot({
-    argv0: join(binDir, "natalia"),
-    execPath: "/$bunfs/root/natalia",
+    argv0: join(binDir, binary),
+    execPath: vfsProgram,
     pathEnv: "",
   });
   expect(root).toBe(join(execDir, "plugins"));
@@ -46,17 +67,17 @@ test("argv0 resolution finds plugins beside the real executable", () => {
 test("PATH scan is the fallback when argv0 is a bare name", () => {
   const execDir = join(base, "versions", "2.0.0");
   mkdirSync(join(execDir, "plugins"), { recursive: true });
-  writeFileSync(join(execDir, "natalia"), "");
+  writeFileSync(join(execDir, executableName("natalia")), "");
   const roots = installedPluginDistributionRoots({
     argv0: "natalia",
-    execPath: "/$bunfs/root/natalia",
+    execPath: vfsProgram,
     pathEnv: execDir,
   });
   expect(roots).toContain(execDir);
   expect(
     installedPluginDistributionRoot({
       argv0: "natalia",
-      execPath: "/$bunfs/root/natalia",
+      execPath: vfsProgram,
       pathEnv: execDir,
     }),
   ).toBe(join(execDir, "plugins"));
@@ -66,7 +87,7 @@ test("no candidates with plugins/: the branch stays out", () => {
   expect(
     installedPluginDistributionRoot({
       argv0: join(base, "void", "natalia"),
-      execPath: "/$bunfs/root/natalia",
+      execPath: vfsProgram,
       pathEnv: join(base, "empty-path"),
     }),
   ).toBeUndefined();
@@ -85,18 +106,22 @@ test("VFS candidates never win, and the store falls back to the home anchor", as
   // them (kernel-exe candidates without a plugins/ dir never win).
   expect(
     installedPluginDistributionRoot({
-      argv0: "/$bunfs/root/natalia",
-      execPath: "/$bunfs/root/natalia",
+      argv0: vfsProgram,
+      execPath: vfsProgram,
       pathEnv: "",
     }),
   ).toBeUndefined();
-  // A derived store under the VFS anchors to the user home instead.
+  // A derived store under the VFS anchors to the user home instead. The
+  // home fixture carries the platform's own shape: resolving a POSIX
+  // absolute path on Windows would anchor it to the current drive, which
+  // is not what an installed Windows host reports.
+  const home = process.platform === "win32" ? "C:\\Users\\u" : "/home/u";
   expect(
-    writableStoreRoot("/$bunfs/root/dist/ts/plugin-store", {
-      env: { NATALIA_HOME: "/home/u/.natalia" },
-      home: "/home/u",
+    writableStoreRoot(join(vfsRoot, "dist", "ts", "plugin-store"), {
+      env: { NATALIA_HOME: join(home, ".natalia") },
+      home,
     }),
-  ).toBe("/home/u/.natalia/plugin-store");
+  ).toBe(join(home, ".natalia", "plugin-store"));
   expect(writableStoreRoot("/elsewhere/plugin-store", { env: {} })).toBe(
     "/elsewhere/plugin-store",
   ); // non-VFS keeps the sibling rule

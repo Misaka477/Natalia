@@ -133,3 +133,8 @@ apps/cef-desktop/build/
 # `git add` swept into history on 2026-10-04 and cost two megabytes of binary
 # cache in the tree. Ignore it by name so the same sweep cannot repeat.
 .bttmp/
+
+# The Windows distribution test report. Removed from the repository at the
+# user's request (2026-10-15) but kept as a local-only working file, so it is
+# ignored by name rather than left as permanent untracked clutter.
+/WINDOWS-DIST-TEST-REPORT.zh-CN.md

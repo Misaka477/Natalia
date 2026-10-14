@@ -97,6 +97,10 @@ test("storing identical content yields the identical id", async () => {
       "natalia-team",
     ]);
   } finally {
+    // The store's own SQLite handle first: Windows refuses to delete a
+    // directory whose database is still open (EBUSY), and this object
+    // library belongs to the test.
+    store.dispose();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -129,6 +133,10 @@ test("a changed config is a different generation", async () => {
     expect(await store.has(first)).toBe(true);
     expect(await store.has(second)).toBe(true);
   } finally {
+    // The store's own SQLite handle first: Windows refuses to delete a
+    // directory whose database is still open (EBUSY), and this object
+    // library belongs to the test.
+    store.dispose();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -257,6 +265,10 @@ test("a changed prompt hash is a different generation", async () => {
     // old prompts.
     expect(second).not.toBe(first);
   } finally {
+    // The store's own SQLite handle first: Windows refuses to delete a
+    // directory whose database is still open (EBUSY), and this object
+    // library belongs to the test.
+    store.dispose();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -286,6 +298,10 @@ test("a changed adapter selection is a different generation", async () => {
     );
     expect(second).not.toBe(first);
   } finally {
+    // The store's own SQLite handle first: Windows refuses to delete a
+    // directory whose database is still open (EBUSY), and this object
+    // library belongs to the test.
+    store.dispose();
     await rm(root, { recursive: true, force: true });
   }
 });

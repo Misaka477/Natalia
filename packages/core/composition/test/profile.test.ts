@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import {
+  linkSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -225,7 +226,14 @@ test("a symlinked drop-in loads (dotfiles repos symlink their .d entries)", asyn
     linked,
     envelope([{ id: "anthelia.sandbox", config: { mode: "read-only" } }]),
   );
-  symlinkSync(linked, join(wsDir, "10-link.json"));
+  // A hard link on Windows: an unprivileged process cannot create a FILE
+  // symlink there (EPERM; a junction is directories only), and a hard link
+  // is the same fact to a reader — the drop-in names a file whose content
+  // lives elsewhere, which is what dotfiles repos do with their .d
+  // entries.
+  if (process.platform === "win32")
+    linkSync(linked, join(wsDir, "10-link.json"));
+  else symlinkSync(linked, join(wsDir, "10-link.json"));
   const profile = await loadCompositionProfile({
     baseFile,
     workspaceDir: wsDir,

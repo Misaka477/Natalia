@@ -208,7 +208,23 @@ export function providerCompactor(
           lastError = error;
         }
       }
-      throw lastError;
+      // The failure is DETERMINISTIC — the same span produced the same
+      // contract failure twice — so it must not be retried by the outer
+      // retry loop. That loop classifies any unknown error as
+      // `connection` (retryable) and the compaction policy inherits
+      // `maxAttemptsPerStep: null` ("retry until success"), which turned a
+      // bad summary into an infinite retry: measured, a turn hung for its
+      // whole 180s budget on a provider that could not write a valid
+      // summary. `invalid_request` is the non-retryable spelling, and the
+      // original error rides as the cause so the words survive.
+      throw providerError({
+        kind: "invalid_request",
+        message:
+          lastError instanceof Error
+            ? lastError.message
+            : "provider compactor failed the summary contract",
+        cause: lastError,
+      });
     },
   };
 }
@@ -240,6 +256,29 @@ export type CompactionOptions = {
   retry?: RetryRunnerOptions;
 };
 
+/**
+ * Whether an overflow relief has any HISTORY to reduce.
+ *
+ * The overflow path bypasses the retained-tail policy, which on a fresh
+ * turn leaves only the standing context blocks (the environment snapshot)
+ * in the compactable region — the current user request is preserved by the
+ * tail's user-message floor. Folding those blocks spends two provider
+ * calls to produce a summary the NEXT step re-injects anyway, so the
+ * relief reduces nothing durable: measured, a fresh turn's context-limit
+ * recovery burned a summarizer call pair and still reported
+ * `compacted: false`. The relief targets the exchange history the tail was
+ * protecting; with no assistant/tool/summary entry in range there is
+ * nothing to force, and "nothing to compact" stays an honest answer.
+ */
+function hasHistoryToReduce(compactable: readonly { role: string }[]): boolean {
+  return compactable.some(
+    (entry) =>
+      entry.role === "assistant" ||
+      entry.role === "tool" ||
+      entry.role === "summary",
+  );
+}
+
 export async function compactContext(
   ledger: ContextLedger,
   compactor: Compactor,
@@ -265,6 +304,12 @@ export async function compactContext(
     recentMessages: options.overflow ? 0 : options.preservedRecentMessages,
   });
   if (!hasRange)
+    return { compacted: false, skipped: "nothing_to_compact" as const };
+  // The overflow relief's own "nothing to force" case: see
+  // {@link hasHistoryToReduce}. The pressure triggers keep the ordinary
+  // short-circuit above (a range of standing blocks is still a range for
+  // them — the threshold was exceeded and the blocks are what exceeded it).
+  if (options.overflow && !hasHistoryToReduce(compactedEntries))
     return { compacted: false, skipped: "nothing_to_compact" as const };
   const retained = preserved.filter((entry) => entry.role !== "resource");
   const beforeTokens = options.beforeTokens ?? ledger.effectiveTokens();

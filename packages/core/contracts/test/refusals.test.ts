@@ -94,6 +94,10 @@ test("the members whose refusal must be a value are named, and each names its fi
     "sessionArchive",
     "sessionNew",
     "setDefaultModel",
+    // The live verbosity valve (audit 缺口 6): an empty spec answers
+    // {ok:false, reason} rather than applying an empty table (which would
+    // silence every named logger).
+    "setLogVerbosity",
     "shutdown",
     "updateConfig",
     "updateConstitutionDocRule",

@@ -20,8 +20,15 @@ const HIGH_RISK = [
 
 /** The risk tier of one changed path. */
 export function riskTierForPath(path: string): SandboxRiskTier {
-  if (HIGH_RISK.some((pattern) => pattern.test(path))) return "high";
-  if (/\.(ts|tsx|js|mjs|cjs)$/u.test(path)) return "medium";
+  // The tier patterns are forward-slash vocabulary; a change record's path
+  // arrives in the HOST's spelling (the workspace backend derives it with
+  // `relative()` — backslash on Windows). Normalize once, or a change to
+  // the tool contract reads as "medium" on Windows and the high-risk
+  // promotion gate never fires there (the one gate that protects the
+  // contract the whole tool surface is compiled against).
+  const normalized = path.replaceAll("\\", "/");
+  if (HIGH_RISK.some((pattern) => pattern.test(normalized))) return "high";
+  if (/\.(ts|tsx|js|mjs|cjs)$/u.test(normalized)) return "medium";
   return "low";
 }
 

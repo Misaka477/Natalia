@@ -442,7 +442,7 @@ test("a recorded validation reaches the context faces through the real runtime (
               arguments: JSON.stringify({
                 taskID: "task_rina",
                 objective: "the artifact wiring proof runs green",
-                command: "true",
+                command: "exit 0",
               }),
             },
           ],

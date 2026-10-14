@@ -131,11 +131,16 @@ test("a candidate that fails validation is refused promotion with its build outp
   await git(sandbox.root, ["add", "."]);
   await git(sandbox.root, ["commit", "-m", "broken candidate"]);
   // The build evidence gate: a candidate that does not pass validation must
-  // not reach the system slot.
+  // not reach the system slot. The command is spelled for the host's own
+  // shell — `test -f` is POSIX — AND the spelling must exit NON-ZERO when
+  // the marker is absent: pwsh's `Test-Path` prints False and exits 0,
+  // which would have let every failing candidate through the gate.
+  const failingGate =
+    process.platform === "win32"
+      ? "if (Test-Path build-pass-marker) { exit 0 } else { exit 1 }"
+      : "test -f build-pass-marker";
   await expect(
-    manager.promoteWithValidation("sbx.6", {
-      command: "test -f build-pass-marker",
-    }),
+    manager.promoteWithValidation("sbx.6", { command: failingGate }),
   ).rejects.toThrow(/failed validation/u);
   // The system slot is untouched.
   expect(await readFile(join(root, "file.txt"), "utf8")).toBe("base\n");

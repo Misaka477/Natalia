@@ -224,7 +224,7 @@ test("sandbox executes a real command inside its workspace target", async () => 
   const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-base-"));
   const manager = new WorkspaceSandboxManager(base);
   await manager.create("box");
-  const result = await manager.execute("box", "pwd; printf sandbox-ok");
+  const result = await manager.execute("box", "$PWD; Write-Output sandbox-ok");
   expect(result.exitCode).toBe(0);
   expect(result.output).toContain("sandbox-ok");
   // Git Bash reports the MSYS-translated path on Windows (/tmp/...), so the
@@ -242,7 +242,7 @@ test("sandbox tracks running resources with output and stop lifecycle", async ()
   await manager.create("box");
   const resource = await manager.startResource(
     "box",
-    "printf resource-ok; sleep 30",
+    "Write-Output resource-ok; Start-Sleep 30",
     "res_1",
   );
   expect(resource).toMatchObject({ id: "res_1", status: "running" });
@@ -262,10 +262,14 @@ test("sandbox manager close stops every running resource", async () => {
   const manager = new WorkspaceSandboxManager(base);
   await manager.create("first");
   await manager.create("second");
-  const first = await manager.startResource("first", "sleep 30", "res_first");
+  const first = await manager.startResource(
+    "first",
+    "Start-Sleep 30",
+    "res_first",
+  );
   const second = await manager.startResource(
     "second",
-    "sleep 30",
+    "Start-Sleep 30",
     "res_second",
   );
 
@@ -283,7 +287,11 @@ test("sandbox manifests restore changes but never falsely recover processes", as
   const first = new WorkspaceSandboxManager(base);
   await first.create("box");
   await first.write("box", "draft.txt", "persisted");
-  await first.startResource("box", "sleep 0.1", "custom_resource");
+  await first.startResource(
+    "box",
+    "Start-Sleep -Milliseconds 100",
+    "custom_resource",
+  );
   await Bun.sleep(150);
   const reopened = new WorkspaceSandboxManager(base);
   await reopened.initialize();

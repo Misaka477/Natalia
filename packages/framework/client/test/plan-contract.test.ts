@@ -779,7 +779,7 @@ test("record_validation runs a command and writes evidence", async () => {
               arguments: JSON.stringify({
                 taskID: "plan:1:s1",
                 objective: "the runtime package typechecks",
-                command: "true",
+                command: "exit 0",
               }),
             },
           ],

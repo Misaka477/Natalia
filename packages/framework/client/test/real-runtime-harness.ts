@@ -152,7 +152,7 @@ test("sandbox merge retains manifest path authorization", async () => {
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
       defaultAgent: "review",
       agents: {
         review: {

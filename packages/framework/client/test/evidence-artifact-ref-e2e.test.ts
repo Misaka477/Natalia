@@ -80,7 +80,7 @@ test("record_validation returns the evidenceID a completion card can cite (T-02)
             arguments: {
               taskID: "task_cited",
               objective: "prove the id round-trips",
-              command: "true",
+              command: "exit 0",
             },
           }),
         },

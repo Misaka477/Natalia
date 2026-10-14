@@ -26,10 +26,25 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import type { SandboxDiffKind } from "@anthelia/contracts";
 import type { SandboxChange } from "./workspace-manager";
+
+/**
+ * A relative path in the STORE's vocabulary: forward slashes, always.
+ *
+ * `relative()` speaks the host — backslash on Windows — and the store's
+ * keys, the diff's `path` fields and every consumer's prefix match
+ * (governance tiers, the restart-required announcement, the change-record
+ * renderers) are forward-slash vocabulary. This used to be spelled
+ * `.split("/").join("/")` — a no-op that silently passed every test on
+ * POSIX and delivered `packages\core\...` on Windows, which is how the
+ * high-risk promotion gate came to not fire there. One helper, one place.
+ */
+function relPath(root: string, target: string): string {
+  return relative(root, target).split(sep).join("/");
+}
 import { DiffCache, ObjectStore } from "@anthelia/object-store";
 import { diffTextAsync, type TextDiffResult } from "./diff";
 import { mergeConflictReason, mergeTexts } from "./merge";
@@ -53,7 +68,7 @@ async function walkFiles(
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const path = join(dir, entry.name);
-      const rel = relative(root, path).split("/").join("/");
+      const rel = relPath(root, path);
       if (ignore?.(rel, entry.isDirectory())) continue;
       if (entry.isDirectory()) stack.push(path);
       else if (entry.isFile()) files.push(path);
@@ -144,7 +159,7 @@ export class SnapshotStore {
   ): Promise<SnapshotIndex> {
     const index: SnapshotIndex = new Map();
     for (const path of await walkFiles(root, ignore)) {
-      const rel = relative(root, path).split("/").join("/");
+      const rel = relPath(root, path);
       const info = await stat(path);
       const prior = previous?.get(rel);
       if (
@@ -551,7 +566,7 @@ export class SnapshotStore {
     // the most that can be done, since which paths were additions is not
     // recoverable from an empty backup.
     for (const path of await walkFiles(lkgDir)) {
-      const rel = relative(lkgDir, path).split("/").join("/");
+      const rel = relPath(lkgDir, path);
       await this.restoreFromBackup(lkgDir, hostRoot, rel);
     }
     return true;

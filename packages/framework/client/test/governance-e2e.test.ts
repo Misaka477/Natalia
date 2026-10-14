@@ -57,7 +57,7 @@ test("Phase 0 E2E: record tools land journal facts that agree across projections
             arguments: {
               taskID: "plan:e2e:s1",
               objective: "the e2e workspace validation runner is wired",
-              command: "true",
+              command: "exit 0",
             },
           },
         },
@@ -71,7 +71,7 @@ test("Phase 0 E2E: record tools land journal facts that agree across projections
               changeSummary: "wired record_decision/validation/completion",
               validations: [
                 {
-                  command: "true",
+                  command: "exit 0",
                   result: "passed",
                   safeSummary: "the validation runner returned success",
                 },

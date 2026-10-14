@@ -129,21 +129,42 @@ export function createCompactionService(input: {
             compacted: false,
             reason: "context_limit",
           });
-          const outcome = await compact(operation, "context_limit", {
-            force: true,
-            overflow: true,
-          });
-          if (outcome.compacted === true)
-            await operation.onCompacted?.(outcome);
+          // A compaction that FAILS is reported, not fatal: the provider
+          // refused the request, the relief attempt could not be made, and
+          // the retry is still worth one more request — the refusal may be
+          // transient, and the retry's own failure is the error the turn
+          // should end on. Letting the compaction's throw escape here used
+          // to take the turn down with the auxiliary call's error while the
+          // real one (the provider's refusal) went unreported.
+          let compacted = false;
+          try {
+            const outcome = await compact(operation, "context_limit", {
+              force: true,
+              overflow: true,
+            });
+            compacted = outcome.compacted === true;
+            if (compacted) await operation.onCompacted?.(outcome);
+          } catch (compactionError) {
+            operation.onEvent?.({
+              type: "compaction.end",
+              id: operation.id,
+              trigger: "context_limit",
+              success: false,
+              error:
+                compactionError instanceof Error
+                  ? compactionError.message
+                  : String(compactionError),
+            });
+          }
           operation.onEvent?.({
             type: "context.limit.recovery",
             id: operation.id,
             step: operation.step,
             attempted: true,
-            compacted: outcome.compacted,
+            compacted,
             reason: "context_limit",
           });
-          await operation.beforeRetry?.(outcome);
+          await operation.beforeRetry?.({ compacted });
         }
       }
     },

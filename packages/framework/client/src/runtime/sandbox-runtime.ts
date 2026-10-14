@@ -597,7 +597,14 @@ function evidenceChangeType(
 }
 
 async function announcePromotionFollowUp(ctx: RuntimeContext, paths: string[]) {
-  const frameworkTouched = paths.some(
+  // The vocabulary is forward-slash, but a change record's path arrives in
+  // the HOST's own spelling — the workspace backend derives it with
+  // `relative()`, which is backslash on Windows. Normalize once here, or
+  // every prefix match below silently misses (measured: a framework
+  // promotion on Windows published no restart_required at all, and the
+  // hot-reload path for a tools promotion was dead for the same reason).
+  const normalized = paths.map((path) => path.replaceAll("\\", "/"));
+  const frameworkTouched = normalized.some(
     (path) =>
       path.startsWith("packages/framework/") || path.startsWith("apps/cli/"),
   );
@@ -610,7 +617,7 @@ async function announcePromotionFollowUp(ctx: RuntimeContext, paths: string[]) {
     return;
   }
   const families = new Set(
-    paths
+    normalized
       .map((path) => {
         const match = /^packages\/plugins\/tools\/([^/]+)\//u.exec(path);
         return match?.[1];

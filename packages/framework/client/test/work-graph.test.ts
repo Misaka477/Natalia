@@ -637,7 +637,7 @@ test("a sandbox merge records only successfully landed paths", async () => {
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
     }),
   );
   const events: RuntimeEvent[] = [];

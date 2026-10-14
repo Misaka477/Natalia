@@ -10,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import type {
   ExecutionTarget,
   RuntimeEvent,
@@ -72,6 +73,38 @@ export type SandboxExecutorOptions = {
 const SANDBOX_COMMAND_TIMEOUT_MS = 600_000;
 
 export type IsolationLevel = "workspace" | "container" | "vm";
+
+/**
+ * Kill a resource's whole process tree.
+ *
+ * The launcher is `cmd /c pwsh …` on Windows (a console app under
+ * DETACHED_PROCESS needs the cmd wrapper to survive — the same lesson the
+ * platform layer's detach already applies), so the pid the manager recorded
+ * is the WRAPPER's. `process.kill(pid)` on Windows signals only that
+ * process: the pwsh worker and its own children survive as orphans holding
+ * the candidate's files open, which is what made every sandbox delete on
+ * Windows fail with EBUSY (measured). The tree kill is the Windows spelling
+ * of "stop the resource"; POSIX keeps the plain signal, which the process
+ * group already delivers.
+ */
+function killResourceTree(pid: number) {
+  if (process.platform !== "win32") {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone: a stop of an exited resource is not a failure */
+    }
+    return;
+  }
+  try {
+    spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+  } catch {
+    /* taskkill absent or the tree already gone: best effort, as before */
+  }
+}
 
 export type SandboxManifest = {
   id: string;
@@ -454,7 +487,7 @@ export class WorkspaceSandboxManager
     await this.initialize();
     const manifest = this.mustGet(id);
     const resource = this.mustResource(resourceID);
-    if (resource.status === "running") process.kill(resource.pid, "SIGTERM");
+    if (resource.status === "running") killResourceTree(resource.pid);
     resource.status = "stopped";
     resource.endedAt = new Date().toISOString();
     manifest.runningResources = manifest.runningResources.filter(

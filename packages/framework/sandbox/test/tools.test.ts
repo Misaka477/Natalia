@@ -163,10 +163,20 @@ test("sandbox tools create execute diff and merge through the registry", async (
   };
   const tools = new Map(sandboxTools().map((tool) => [tool.name, tool]));
   await tools.get("sandbox_create")!.execute({ id: "box" }, context);
+  // The command is spelled for the host's own shell (the executor picks it
+  // per platform): `printf` is not a PowerShell cmdlet, and the executor
+  // now really runs the command on Windows.
   expect(
-    await tools
-      .get("sandbox_execute")!
-      .execute({ id: "box", command: "printf sandbox-tool-ok" }, context),
+    await tools.get("sandbox_execute")!.execute(
+      {
+        id: "box",
+        command:
+          process.platform === "win32"
+            ? "Write-Output sandbox-tool-ok"
+            : "printf sandbox-tool-ok",
+      },
+      context,
+    ),
   ).toContain("sandbox-tool-ok");
   await tools
     .get("sandbox_write")!
@@ -187,7 +197,7 @@ test("sandbox tools create execute diff and merge through the registry", async (
       {
         id: "box",
         resourceID: "resource_tool",
-        command: "printf tool-resource; sleep 30",
+        command: "Write-Output tool-resource; Start-Sleep 30",
       },
       context,
     ),
@@ -357,7 +367,9 @@ test("sandbox_merge validates with the marker's command, the config's, or refuse
 
   await tools.get("sandbox_merge")!.execute(
     { id: "sb.2" },
-    contextFor(() => ({ sandbox: { promoteCommand: "  true  " } })),
+    // The gate command is spelled for the host's shell: `true` is not a
+    // PowerShell command, and the executor now really runs it on Windows.
+    contextFor(() => ({ sandbox: { promoteCommand: "  exit 0  " } })),
   );
   // The configured command wins over the marker (and its whitespace is trimmed).
   expect(commands[1]).toBe("exit 0");
@@ -722,9 +734,14 @@ test("a validation command's own output is never merged into the host (F1)", asy
     sandboxes: manager,
     runtimeConfig: () => ({
       // A path `.nataliaignore` does NOT cover — the audit's `.cmake-verify/`
-      // was exactly that, which is why it reached the host.
+      // was exactly that, which is why it reached the host. The command is
+      // spelled for the host's own shell: `&&` is not a PowerShell
+      // separator, and the executor now really runs the command on Windows.
       sandbox: {
-        promoteCommand: "mkdir -p verify-out && echo x > verify-out/cache.txt",
+        promoteCommand:
+          process.platform === "win32"
+            ? "New-Item -ItemType Directory -Force verify-out; Set-Content verify-out/cache.txt x"
+            : "mkdir -p verify-out && echo x > verify-out/cache.txt",
       },
     }),
     onSandboxEvent: () => undefined,

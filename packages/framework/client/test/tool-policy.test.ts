@@ -870,7 +870,7 @@ test("sandbox merge preflight rejects every denied manifest path atomically", as
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
       defaultAgent: "review",
       agents: {
         review: {
@@ -935,7 +935,7 @@ test("sandbox merge preflight permits a manifest when every path is allowed", as
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
     }),
   );
   const sandboxes = new WorkspaceSandboxManager(

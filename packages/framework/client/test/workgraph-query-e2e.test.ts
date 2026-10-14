@@ -515,7 +515,7 @@ test("goal, plan and validation nodes exist in the graph (the 2026-10-07 gap pas
                   arguments: JSON.stringify({
                     taskID: "task_gap",
                     objective: "the graph gap closes green",
-                    command: "true",
+                    command: "exit 0",
                   }),
                 },
               ],

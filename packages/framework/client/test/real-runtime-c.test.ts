@@ -2153,7 +2153,13 @@ test("recordValidation redacts secrets from the recorded summary", async () => {
   await client.recordValidation?.({
     taskID: "task_secret",
     objective: "a validation that prints a secret",
-    command: 'printf "api_key=supersecretvalue\\n"; exit 0',
+    // The command is spelled for the HOST's shell (the executor picks it
+    // per platform): `printf` is not a PowerShell cmdlet, and the command
+    // now actually runs on Windows.
+    command:
+      process.platform === "win32"
+        ? 'Write-Output "api_key=supersecretvalue"; exit 0'
+        : 'printf "api_key=supersecretvalue\\n"; exit 0',
   });
   const records = await client.evidenceRecords!();
   const summary = records.items[0]?.validations[0]?.safeSummary ?? "";
@@ -2169,7 +2175,7 @@ test("promoting framework sources emits restart_required", async () => {
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
     }),
   );
   const kernel = new CapabilityRegistry();
@@ -2203,7 +2209,7 @@ test("promote records evidence when validation passes", async () => {
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      sandbox: { promoteCommand: "true" },
+      sandbox: { promoteCommand: "exit 0" },
     }),
   );
   const kernel = new CapabilityRegistry();
@@ -2231,7 +2237,7 @@ test("promote records evidence when validation passes", async () => {
       taskID: "sandbox:box",
       status: "promoted",
       validations: [
-        expect.objectContaining({ command: "true", result: "passed" }),
+        expect.objectContaining({ command: "exit 0", result: "passed" }),
       ],
     }),
   );
@@ -2253,7 +2259,7 @@ test("a high-risk promotion requires a multi-stage user confirmation (E5 R3/R4)"
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "exit 0" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];
@@ -2296,7 +2302,7 @@ test("a rejected high-risk promotion leaves the host unchanged and records faile
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "exit 0" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];
@@ -2363,7 +2369,7 @@ test("a low-risk promotion skips the multi-stage confirmation (E5)", async () =>
   await mkdir(join(root, ".natalia"), { recursive: true });
   await writeFile(
     join(root, ".natalia", "config.json"),
-    JSON.stringify({ version: 4, sandbox: { promoteCommand: "true" } }),
+    JSON.stringify({ version: 4, sandbox: { promoteCommand: "exit 0" } }),
   );
   const kernel = new CapabilityRegistry();
   const events: RuntimeEvent[] = [];

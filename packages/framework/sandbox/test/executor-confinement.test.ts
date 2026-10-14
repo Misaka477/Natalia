@@ -48,7 +48,7 @@ floorTest(
 
     const inside = await manager.execute(
       "box.1",
-      "echo made > inside.txt && cat inside.txt",
+      "Set-Content inside.txt made; Get-Content inside.txt",
     );
     expect(inside.exitCode).toBe(0);
     expect(inside.output).toContain("made");
@@ -63,7 +63,10 @@ floorTest(
     // A write OUTSIDE the candidate is refused by the kernel, not by the
     // command: the exit code is the shell's, and the file never appears.
     const escaped = join(outside, "escaped.txt");
-    const escape = await manager.execute("box.1", `echo pwned > ${escaped}`);
+    const escape = await manager.execute(
+      "box.1",
+      `Set-Content ${escaped} pwned`,
+    );
     expect(escape.exitCode).not.toBe(0);
     expect(existsSync(escaped)).toBe(false);
     await rm(outside, { recursive: true, force: true }).catch(() => undefined);
@@ -88,7 +91,7 @@ floorTest(
 
     const run = await manager.execute(
       "box.1",
-      "cat node_modules/fixture-pkg/package.json && echo read-ok",
+      "Get-Content node_modules/fixture-pkg/package.json; Write-Output read-ok",
     );
     expect(run.exitCode).toBe(0);
     expect(run.output).toContain("fixture-pkg");
@@ -108,9 +111,9 @@ test("a missing confinement backend fails CLOSED, never unconfined", async () =>
   });
   await manager.initialize();
   await manager.create("box.1");
-  await expect(manager.execute("box.1", "echo should-not-run")).rejects.toThrow(
-    /confinement-exec backend was found/u,
-  );
+  await expect(
+    manager.execute("box.1", "Write-Output should-not-run"),
+  ).rejects.toThrow(/confinement-exec backend was found/u);
   // The promotion gate's command fails closed the same way.
   await expect(manager.validate("box.1", "exit 0")).rejects.toThrow(
     /confinement-exec backend was found/u,
@@ -127,7 +130,7 @@ test("a resource start fails closed too, not just the foreground executor", asyn
   await manager.create("box.1");
   // The long-running surface is the one a hole would hide in: it refuses
   // with the same sentence rather than starting unconfined.
-  await expect(manager.startResource("box.1", "sleep 1")).rejects.toThrow(
+  await expect(manager.startResource("box.1", "Start-Sleep 1")).rejects.toThrow(
     /confinement-exec backend was found/u,
   );
 });

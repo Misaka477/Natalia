@@ -769,9 +769,6 @@ export function createRuntimeHttpServer(
   // Bun's default idle timeout is 10s, which would kill an SSE subscription
   // that goes quiet — the runtime's default is to stay silent until it has
   // something to say. A quiet event stream must outlive a quiet terminal.
-  // Bun's default idle timeout is 10s, which would kill an SSE subscription
-  // that goes quiet — the runtime's default is to stay silent until it has
-  // something to say. A quiet event stream must outlive a quiet terminal.
   // `idleTimeout` exists at runtime (Bun 1.3.14) but is missing from the
   // published bun-types; the cast carries it without losing the rest.
   const serveOptions = (base: Parameters<typeof Bun.serve>[0]) =>

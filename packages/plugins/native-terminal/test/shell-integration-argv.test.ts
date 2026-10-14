@@ -134,6 +134,23 @@ describe("the pinned pane contract", () => {
     expect(argv).toEqual(["/bin/sh", "-lc", "sh -lc 'echo hi'"]);
   });
 
+  // A bare shell name on Windows must resolve to a real executable, not
+  // ride on PATH: Git for Windows' bash is not on PATH by default, and a
+  // pty bridge handed a bare name it cannot place dies on its first
+  // command. The platform layer's own finders answer, which is why this is
+  // win32-only — on POSIX the /bin sweep below is the same job.
+  test.skipIf(process.platform !== "win32")(
+    "a bare pwsh on Windows resolves to a real executable",
+    () => {
+      const argv = nativeTerminalPaneCommand("pwsh", "win32");
+      expect(argv[0]).not.toBe("pwsh");
+      expect(argv[0].toLowerCase()).toContain("powershell");
+      expect(argv.some((arg) => arg.includes("shell-integration-pwsh.ps1"))).toBe(
+        true,
+      );
+    },
+  );
+
   test("an interactive bash pane now carries the integration", () => {
     const argv = nativeTerminalPaneCommand("bash", "linux");
     // Two halves, and only the first is platform-independent: the pane IS

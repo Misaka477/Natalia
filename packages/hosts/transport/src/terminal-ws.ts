@@ -99,7 +99,15 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
         }
         if (!session) {
           session = await client.nativeTerminalStart({
-            command: ws.data.command || process.env.SHELL || "bash",
+            // The host's own shell when the pane names none. POSIX
+            // answers through SHELL; Windows has no such variable and its
+            // interactive shell is pwsh, which every install has — a bare
+            // "bash" there is a Git-for-Windows dependency the pane should
+            // not inherit by default.
+            command:
+              ws.data.command ||
+              process.env.SHELL ||
+              (process.platform === "win32" ? "pwsh" : "bash"),
             id: terminalID,
             sessionID,
           });

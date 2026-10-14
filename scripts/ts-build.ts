@@ -190,14 +190,25 @@ for (const root of pluginRoots) {
     // never staged, so the verification covered the source tree and not a release.
     // They ride the release regardless of NATALIA_BUILD_SKIP_NATIVE: that flag
     // stages the pty bridges, not the text files a pane sources.
+    //
+    // Staged means LISTED: the manifest's files is the release bundle's truth
+    // (see the bridge tier below), and a script staged but not listed is a
+    // script the store copy drops. That is the second half of this defect —
+    // the scripts were copied here and then omitted from files, so the
+    // installed plugin had no rcfile to point at. Verified on the user's
+    // machine: the store copy carried pty-bridge/ and none of the three.
+    // The pwsh script rides too: its SCRIPTS entry existed while the file was
+    // never staged at all, so a pwsh pane on an installed copy was silent.
     for (const script of [
       "shell-integration-bash.sh",
       "shell-integration-zsh.sh",
+      "shell-integration-pwsh.ps1",
     ]) {
       const from = join(root, "src", script);
       if (!(await Bun.file(from).exists()))
         throw new Error(`${root}: missing shell integration script ${script}`);
       await cp(from, join(packageOutdir, script));
+      releaseFiles.push(script);
     }
     // Our own natives ride their OWN directory, staged per platform from the
     // prebuilt drop the build scripts write: the Rust PTY bridge on POSIX

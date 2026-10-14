@@ -24,6 +24,10 @@ test("the release stages the shell-integration rc scripts", () => {
   for (const script of [
     "shell-integration-bash.sh",
     "shell-integration-zsh.sh",
+    // The pwsh script rides too: its SCRIPTS entry existed while the file
+    // was never staged at all, so a pwsh pane on an installed copy was
+    // silent.
+    "shell-integration-pwsh.ps1",
   ]) {
     expect(source, `${script} must be staged into the release`).toContain(
       script,
@@ -42,6 +46,12 @@ test("the release stages the shell-integration rc scripts", () => {
   // it is what a slice- or position-based check cannot see.
   const staging = source.slice(source.indexOf('"shell-integration-bash.sh"'));
   expect(staging).toContain("join(packageOutdir, script)");
+  // Staged means LISTED. The manifest's files is the release bundle's truth,
+  // and a script staged but not listed is a script the store copy drops —
+  // which is the second half of this defect: the scripts were copied here and
+  // then omitted from files, so the installed plugin carried pty-bridge/ and
+  // no rcfile to point at. Verified on the user's machine before the fix.
+  expect(staging).toContain("releaseFiles.push(script)");
   // Staged for the release, not only for a dev build: `build:distribution` always
   // sets NATALIA_BUILD_SKIP_NATIVE, so if the copy sat inside that branch a release
   // would carry no integration at all.

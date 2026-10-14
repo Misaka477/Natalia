@@ -16,6 +16,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { resolveBashExecutable, resolvePwshPath } from "@anthelia/platform";
 
 /**
  * The integration script bundled with this package, by shell basename.
@@ -214,7 +215,7 @@ export function interactiveShellArgv(
     // to the word-shaped candidate; a whole-path candidate already carries all.
     const rest = candidate === trimmed ? [] : words.slice(1);
     return [
-      ...resolveShellPath(integrated.argv[0]!),
+      ...resolveShellPath(integrated.argv[0]!, os),
       ...integrated.argv.slice(1),
       ...rest,
     ];
@@ -229,9 +230,27 @@ export function interactiveShellArgv(
  * bare name depends on PATH — which works, but only if the child inherits one. An
  * absolute path is checked in the ordinary places and falls back to the bare name
  * rather than inventing one.
+ *
+ * On Windows the ordinary places are the ones the PLATFORM layer already
+ * knows: Git for Windows' bash is not on PATH by default (it is a deliberate
+ * opt-in during its install), and pwsh 7 lives under Program Files. Resolving
+ * through the platform's own finders is what keeps a Windows pane from dying
+ * on its first command with a bare name CreateProcess cannot place.
  */
-function resolveShellPath(word: string): string[] {
-  if (word.includes("/")) return [word];
+function resolveShellPath(word: string, os?: NodeJS.Platform): string[] {
+  if (word.includes("/") || word.includes("\\")) return [word];
+  if (os === "win32") {
+    const name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+    if (name === "bash") {
+      const found = resolveBashExecutable({ os: "win32" });
+      if (found) return [found];
+    }
+    if (name === "pwsh" || name === "powershell") {
+      const found = resolvePwshPath(undefined, undefined, "win32");
+      if (found) return [found];
+    }
+    return [word];
+  }
   for (const dir of ["/bin", "/usr/bin", "/usr/local/bin"]) {
     const candidate = join(dir, word);
     if (existsSync(candidate)) return [candidate];

@@ -11,8 +11,19 @@ import {
   withShellIntegration,
 } from "./shell-integration-argv";
 
-// The shell that owns the pane command's spelling. Stateless, so one per module.
-const shell = selectExecutor();
+/**
+ * The shell that owns the pane command's spelling, selected PER CALL.
+ *
+ * The caller's `os` says which platform the command is FOR, and the executor
+ * must follow it: a Windows host deriving a Linux workspace's pane command has
+ * to get the POSIX spelling. Selecting once at module load answered with the
+ * HOST's executor whatever the caller asked for — which is how the pinned
+ * contract ("sh -lc" stays /bin/sh -lc) broke the moment it ran on Windows,
+ * and why CI, which only ever runs it on Linux, never saw it.
+ */
+function shellFor(os?: NodeJS.Platform): ReturnType<typeof selectExecutor> {
+  return selectExecutor(process.env, os ?? process.platform);
+}
 
 export function nativeTerminalPaneCommand(
   command: string,
@@ -30,7 +41,7 @@ export function nativeTerminalPaneCommand(
   // here keeps the wrapper for real commands and drops it for a real shell.
   const integrated = interactiveShellArgv(command, os);
   if (integrated) return integrated;
-  const spec = shell.resolve({
+  const spec = shellFor(os).resolve({
     command,
     loginShell: true,
     os,

@@ -43,43 +43,52 @@ describe("startDetachedProcess", () => {
     },
   );
 
-  test("locates the shell through the host environment, not the child env", async () => {
-    // The child environment is an allowlist that excludes ProgramFiles and
-    // LOCALAPPDATA, so shell discovery must not consult it.
-    const root = await mkdtemp(join(tmpdir(), "natalia-detached-win-"));
-    const outputPath = join(root, "out.log");
-    // The Windows branch is `cmd /c pwsh -Command …` with the worker script
-    // on an env var: a console app under DETACHED_PROCESS exits 0 without
-    // running its command, so cmd.exe is the survivor that carries it. The
-    // fixture therefore points the host at the pwsh the resolver honours
-    // (NATALIA_PWSH_EXECUTABLE), and the PID must be a REAL Windows one —
-    // not a pid echoed by the launcher script, which the env-var design
-    // makes impossible.
-    const pwsh =
-      process.platform === "win32"
-        ? resolvePwshPath(undefined, process.env)
-        : "pwsh";
-    const { pid } = await startDetachedProcess({
-      command: "Write-Output windows-branch",
-      posixScript: "echo 999999999",
-      cwd: root,
-      outputPath,
-      os: "win32",
-      env: { PATH: process.env.PATH },
-      hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
-    });
-    expect(pid).not.toBe(999999999);
-    expect(Number.isInteger(pid)).toBe(true);
-    expect(pid).toBeGreaterThan(0);
-    // Redirection is performed natively (the .NET AppendAllText path), not
-    // by the shell script — and the bytes are UTF-8 with no BOM, which is
-    // what a reader on any platform gets. Polled, because the detached
-    // worker starts asynchronously.
-    const raw = await waitForOutputRaw(outputPath);
-    expect(raw[0]).not.toBe(0xff);
-    expect(raw[1]).not.toBe(0xfe);
-    expect(new TextDecoder().decode(raw)).toContain("windows-branch");
-  });
+  // The Windows branch spawns cmd.exe, which exists only on Windows. The
+  // proof below drives it deliberately (`os: "win32"`), so it can only run
+  // where that spawn is real — on a POSIX host it would fail with ENOENT
+  // for a reason that has nothing to do with what it asserts.
+  const windowsTest = test.skipIf(process.platform !== "win32");
+
+  windowsTest(
+    "locates the shell through the host environment, not the child env",
+    async () => {
+      // The child environment is an allowlist that excludes ProgramFiles and
+      // LOCALAPPDATA, so shell discovery must not consult it.
+      const root = await mkdtemp(join(tmpdir(), "natalia-detached-win-"));
+      const outputPath = join(root, "out.log");
+      // The Windows branch is `cmd /c pwsh -Command …` with the worker script
+      // on an env var: a console app under DETACHED_PROCESS exits 0 without
+      // running its command, so cmd.exe is the survivor that carries it. The
+      // fixture therefore points the host at the pwsh the resolver honours
+      // (NATALIA_PWSH_EXECUTABLE), and the PID must be a REAL Windows one —
+      // not a pid echoed by the launcher script, which the env-var design
+      // makes impossible.
+      const pwsh =
+        process.platform === "win32"
+          ? resolvePwshPath(undefined, process.env)
+          : "pwsh";
+      const { pid } = await startDetachedProcess({
+        command: "Write-Output windows-branch",
+        posixScript: "echo 999999999",
+        cwd: root,
+        outputPath,
+        os: "win32",
+        env: { PATH: process.env.PATH },
+        hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
+      });
+      expect(pid).not.toBe(999999999);
+      expect(Number.isInteger(pid)).toBe(true);
+      expect(pid).toBeGreaterThan(0);
+      // Redirection is performed natively (the .NET AppendAllText path), not
+      // by the shell script — and the bytes are UTF-8 with no BOM, which is
+      // what a reader on any platform gets. Polled, because the detached
+      // worker starts asynchronously.
+      const raw = await waitForOutputRaw(outputPath);
+      expect(raw[0]).not.toBe(0xff);
+      expect(raw[1]).not.toBe(0xfe);
+      expect(new TextDecoder().decode(raw)).toContain("windows-branch");
+    },
+  );
 
   test("refuses when no PowerShell is resolvable on Windows", async () => {
     // The one shell the Windows branch needs is PowerShell: the launcher is

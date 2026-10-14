@@ -282,6 +282,15 @@ export async function startDetachedProcess(input: {
   posixShell?: string;
   os?: NodeJS.Platform;
   exists?: (path: string) => boolean;
+  /**
+   * The pwsh resolution, injectable so a test can reach the fail-closed
+   * branch (no PowerShell) without unsetting anything on the host it runs
+   * on. Production never passes it: the resolver's own discovery order
+   * applies.
+   */
+  resolvePwsh?: (
+    ...args: Parameters<typeof resolvePwshPath>
+  ) => string | undefined;
 }): Promise<{ pid: number }> {
   // The child environment is deliberately allowlisted and secret-scrubbed, so
   // the shell itself must be located through the host environment instead.
@@ -292,6 +301,18 @@ export async function startDetachedProcess(input: {
     exists: input.exists,
   };
   if (isWindows(input.os)) {
+    // The one shell this branch needs, resolved BEFORE the spawn so a host
+    // with no PowerShell fails CLOSED with a sentence instead of spawning a
+    // chain that exits 0 without running the command.
+    const pwsh = (input.resolvePwsh ?? resolvePwshPath)(
+      undefined,
+      input.env,
+      input.os,
+    );
+    if (!pwsh)
+      throw new Error(
+        "startDetachedProcess on Windows requires PowerShell: no pwsh was found on this host (set NATALIA_PWSH_EXECUTABLE to point at one).",
+      );
     // The detach itself cannot be the shell's own process: DETACHED_PROCESS
     // gives the child no console, and a console app that tries to initialize
     // one exits 0 WITHOUT running its command — measured on pwsh 7.4
@@ -327,7 +348,7 @@ export async function startDetachedProcess(input: {
       "cmd.exe",
       [
         "/c",
-        resolvePwshPath(undefined, input.env, input.os),
+        pwsh,
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",
@@ -338,6 +359,15 @@ export async function startDetachedProcess(input: {
         cwd: input.cwd,
         env: {
           ...(input.env ?? process.env),
+          // cmd.exe locates its own system directory through SystemRoot and
+          // itself through COMSPEC. A caller's allowlisted child environment
+          // (the sandbox resource allowlist is PATH/HOME/LANG/TERM) carries
+          // neither, and the launcher then fails with ERROR_CANT_ACCESS_FILE
+          // — measured, 0x800700e8 on every detached resource start. These
+          // two entries are the launcher's own needs, not the worker's, so
+          // they are added here rather than demanded of every caller.
+          SystemRoot: input.hostEnv?.SystemRoot ?? process.env.SystemRoot,
+          COMSPEC: input.hostEnv?.COMSPEC ?? process.env.COMSPEC,
           NATALIA_DETACHED_SCRIPT: workerScript,
         },
         detached: true,

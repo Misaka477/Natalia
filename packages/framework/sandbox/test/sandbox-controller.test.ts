@@ -135,7 +135,10 @@ test("the controller passes the resolved confinement mode to its manager", async
   });
   await controller.init();
   await controller.create("box");
-  const run = await controller.execute("box", "Write-Output confined");
+  const run = await controller.execute(
+    "box",
+    process.platform === "win32" ? "Write-Output confined" : "echo confined",
+  );
   expect(run.exitCode).toBe(0);
   // The run reports the mode it ran under, from the manager the controller
   // built with the mode it was given.

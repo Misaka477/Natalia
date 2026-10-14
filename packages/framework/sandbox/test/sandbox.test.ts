@@ -224,7 +224,12 @@ test("sandbox executes a real command inside its workspace target", async () => 
   const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-base-"));
   const manager = new WorkspaceSandboxManager(base);
   await manager.create("box");
-  const result = await manager.execute("box", "$PWD; Write-Output sandbox-ok");
+  const result = await manager.execute(
+    "box",
+    process.platform === "win32"
+      ? "$PWD; Write-Output sandbox-ok"
+      : "pwd; printf sandbox-ok",
+  );
   expect(result.exitCode).toBe(0);
   expect(result.output).toContain("sandbox-ok");
   // Git Bash reports the MSYS-translated path on Windows (/tmp/...), so the
@@ -242,7 +247,9 @@ test("sandbox tracks running resources with output and stop lifecycle", async ()
   await manager.create("box");
   const resource = await manager.startResource(
     "box",
-    "Write-Output resource-ok; Start-Sleep 30",
+    process.platform === "win32"
+      ? "Write-Output resource-ok; Start-Sleep 30"
+      : "printf resource-ok; sleep 30",
     "res_1",
   );
   expect(resource).toMatchObject({ id: "res_1", status: "running" });
@@ -264,12 +271,12 @@ test("sandbox manager close stops every running resource", async () => {
   await manager.create("second");
   const first = await manager.startResource(
     "first",
-    "Start-Sleep 30",
+    process.platform === "win32" ? "Start-Sleep 30" : "sleep 30",
     "res_first",
   );
   const second = await manager.startResource(
     "second",
-    "Start-Sleep 30",
+    process.platform === "win32" ? "Start-Sleep 30" : "sleep 30",
     "res_second",
   );
 
@@ -289,7 +296,9 @@ test("sandbox manifests restore changes but never falsely recover processes", as
   await first.write("box", "draft.txt", "persisted");
   await first.startResource(
     "box",
-    "Start-Sleep -Milliseconds 100",
+    process.platform === "win32"
+      ? "Start-Sleep -Milliseconds 100"
+      : "sleep 0.1",
     "custom_resource",
   );
   await Bun.sleep(150);

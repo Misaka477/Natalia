@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, win32 } from "node:path";
-import { resolveBashExecutable, startDetachedProcess } from "../src/index";
+import { join } from "node:path";
+import { resolvePwshPath, startDetachedProcess } from "../src/index";
 
 describe("startDetachedProcess", () => {
   // The posixScript launcher semantics are exercised only where they run:
@@ -48,44 +48,57 @@ describe("startDetachedProcess", () => {
     // LOCALAPPDATA, so shell discovery must not consult it.
     const root = await mkdtemp(join(tmpdir(), "natalia-detached-win-"));
     const outputPath = join(root, "out.log");
-    // The fixture points the host at a real bash: `/bin/bash` exists on POSIX,
-    // and Windows resolves through the platform resolver, which honours
-    // NATALIA_BASH_EXECUTABLE and the Git for Windows install paths. A bare
-    // `which bash` is deliberately avoided: it resolves the WSL shim on
-    // Windows, which spawns a pid but never runs the script without a distro.
-    const bash =
+    // The Windows branch is `cmd /c pwsh -Command …` with the worker script
+    // on an env var: a console app under DETACHED_PROCESS exits 0 without
+    // running its command, so cmd.exe is the survivor that carries it. The
+    // fixture therefore points the host at the pwsh the resolver honours
+    // (NATALIA_PWSH_EXECUTABLE), and the PID must be a REAL Windows one —
+    // not a pid echoed by the launcher script, which the env-var design
+    // makes impossible.
+    const pwsh =
       process.platform === "win32"
-        ? resolveBashExecutable({ env: process.env })
-        : "/bin/bash";
+        ? resolvePwshPath({ env: process.env })
+        : "pwsh";
     const { pid } = await startDetachedProcess({
-      command: "printf windows-branch",
+      command: "Write-Output windows-branch",
       posixScript: "echo 999999999",
       cwd: root,
       outputPath,
       os: "win32",
       env: { PATH: process.env.PATH },
-      hostEnv: { NATALIA_BASH_EXECUTABLE: bash },
+      hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
     });
     expect(pid).not.toBe(999999999);
     expect(Number.isInteger(pid)).toBe(true);
     expect(pid).toBeGreaterThan(0);
-    // Redirection is performed natively rather than by the shell script.
-    expect(await waitForOutput(outputPath)).toContain("windows-branch");
+    // Redirection is performed natively (the .NET AppendAllText path), not
+    // by the shell script — and the bytes are UTF-8 with no BOM, which is
+    // what a reader on any platform gets. Polled, because the detached
+    // worker starts asynchronously.
+    const raw = await waitForOutputRaw(outputPath);
+    expect(raw[0]).not.toBe(0xff);
+    expect(raw[1]).not.toBe(0xfe);
+    expect(new TextDecoder().decode(raw)).toContain("windows-branch");
   });
 
-  test("requires a bash-compatible shell on Windows", async () => {
-    const root = await mkdtemp(join(tmpdir(), "natalia-detached-nobash-"));
+  test("refuses when no PowerShell is resolvable on Windows", async () => {
+    // The one shell the Windows branch needs is PowerShell: the launcher is
+    // `cmd /c pwsh`. A host with none fails CLOSED rather than spawning a
+    // chain that would exit 0 without running the command — the silent
+    // success that made every detached worker a no-op.
+    const root = await mkdtemp(join(tmpdir(), "natalia-detached-nopwsh-"));
     await expect(
       startDetachedProcess({
-        command: "printf hi",
+        command: "Write-Output hi",
         posixScript: "echo 1",
         cwd: root,
         outputPath: join(root, "out.log"),
         os: "win32",
-        hostEnv: { ProgramFiles: win32.join("C:", "Program Files") },
+        hostEnv: {},
         exists: () => false,
+        resolvePwsh: () => undefined,
       }),
-    ).rejects.toThrow(/bash-compatible shell is unavailable/u);
+    ).rejects.toThrow(/PowerShell/u);
   });
 });
 
@@ -101,4 +114,19 @@ async function waitForOutput(path: string, timeoutMs = 15_000) {
     await Bun.sleep(100);
   }
   return "";
+}
+
+/** The same poll, in bytes: the BOM check needs the raw encoding. */
+async function waitForOutputRaw(path: string, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const raw = await readFile(path);
+      if (raw.length) return raw;
+    } catch {
+      /* not created yet */
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error(`the detached worker never wrote ${path}`);
 }

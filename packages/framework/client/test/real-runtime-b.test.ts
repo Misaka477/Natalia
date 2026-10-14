@@ -17,7 +17,10 @@ import type {
   ProviderStreamRequest,
   StreamingProvider,
 } from "@anthelia/runtime";
-import { providerError } from "@anthelia/runtime";
+import {
+  providerError,
+  MISSING_FINAL_RESPONSE_FALLBACK,
+} from "@anthelia/runtime";
 import { CapabilityRegistry } from "@anthelia/capability";
 import { createToolRegistry } from "@anthelia/tools";
 import { fingerprintFile, recordTrust, resolveConfig } from "@anthelia/config";
@@ -2608,5 +2611,5 @@ test("tool turns emit fallback text when the model omits its final response", as
       .filter((event) => event.type === "content.delta")
       .map((event) => event.text)
       .join(""),
-  ).toContain("Tool execution completed");
+  ).toContain(MISSING_FINAL_RESPONSE_FALLBACK);
 });

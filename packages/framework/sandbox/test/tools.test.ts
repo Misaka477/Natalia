@@ -197,7 +197,10 @@ test("sandbox tools create execute diff and merge through the registry", async (
       {
         id: "box",
         resourceID: "resource_tool",
-        command: "Write-Output tool-resource; Start-Sleep 30",
+        command:
+          process.platform === "win32"
+            ? "Write-Output tool-resource; Start-Sleep 30"
+            : "printf tool-resource; sleep 30",
       },
       context,
     ),

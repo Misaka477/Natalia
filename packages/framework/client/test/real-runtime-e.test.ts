@@ -15,7 +15,10 @@ import type {
   ProviderStreamRequest,
   StreamingProvider,
 } from "@anthelia/runtime";
-import { providerError } from "@anthelia/runtime";
+import {
+  MISSING_FINAL_RESPONSE_FALLBACK,
+  providerError,
+} from "@anthelia/runtime";
 import { CapabilityRegistry } from "@anthelia/capability";
 import { createToolRegistry } from "@anthelia/tools";
 import { fingerprintFile, recordTrust, resolveConfig } from "@anthelia/config";
@@ -1067,7 +1070,7 @@ test("chat ignores structured calls on its final step and emits fallback text", 
     false,
   );
   expect((await client.naviChat!.messages!()).at(-1)?.text).toContain(
-    "Tool execution completed",
+    MISSING_FINAL_RESPONSE_FALLBACK,
   );
   await client.dispose?.();
 });

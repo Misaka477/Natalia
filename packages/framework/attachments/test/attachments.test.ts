@@ -64,7 +64,11 @@ test("attachment store accepts an in-workspace name that starts with '..'", asyn
 test("attachment store accepts a workspace reached through a symlink", async () => {
   const real = await mkdtemp(join(tmpdir(), "natalia-attachment-real-"));
   const link = `${real}-link`;
-  await symlink(real, link);
+  // A junction on Windows: an unprivileged process cannot create a
+  // directory symlink there (EPERM), and realpath resolves a junction the
+  // same way — the property under test is the canonical source, not the
+  // link kind.
+  await symlink(real, link, process.platform === "win32" ? "junction" : "dir");
   try {
     await writeFile(join(real, "image.png"), pngBytes());
     // The source is realpath'd, so the root must be too; comparing a lexical

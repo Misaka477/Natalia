@@ -1067,14 +1067,20 @@ const repositoryRoot = resolve(import.meta.dir, "../../../..");
 async function installSdkLinks(root: string) {
   const scoped = join(root, "node_modules", "@natalia");
   await mkdir(scoped, { recursive: true });
+  // `core/` is part of the path: @natalia/plugin and @natalia/contracts
+  // live under packages/core. Spelling it without the segment built a
+  // DANGLING symlink on POSIX — which succeeds there, so nothing
+  // noticed — while the Windows fallback (no symlink privilege) copies
+  // from the same missing path and answers ENOENT.
   for (const pkg of ["plugin", "contracts"]) {
     const target = join(scoped, pkg);
+    const source = join(repositoryRoot, "packages", "core", pkg);
     try {
-      await symlink(join(repositoryRoot, "packages", pkg), target, "dir");
+      await symlink(source, target, "dir");
     } catch {
-      await cp(join(repositoryRoot, "packages", pkg), target, {
+      await cp(source, target, {
         recursive: true,
-        filter: (source) => !source.includes(`${sep}node_modules${sep}`),
+        filter: (from) => !from.includes(`${sep}node_modules${sep}`),
       });
     }
   }

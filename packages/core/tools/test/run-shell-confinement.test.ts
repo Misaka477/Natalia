@@ -106,10 +106,22 @@ test("a capped command's result carries its truncation note", async () => {
   // The note is the whole point of the bound: without it the model mistakes
   // the tail for the whole output and acts on a page it was never told was a
   // page. The command produces far more than the 20KB bound.
-  const output = await runShell("printf 'y%.0s' $(seq 1 60000)", context(), 30);
+  //
+  // Spelled for the host's shell: `printf` and `seq` are POSIX and pwsh
+  // has neither, so the POSIX spelling failed the command itself on
+  // Windows rather than exercising the bound.
+  const flood =
+    process.platform === "win32"
+      ? '"y" * 60000'
+      : "printf 'y%.0s' $(seq 1 60000)";
+  const output = await runShell(flood, context(), 30);
   expect(output).toContain("exit=0");
+  // The byte COUNT is not pinned: pwsh's output ends with a CRLF, so the
+  // same flood is 60002 bytes there and 60000 on POSIX. The note's
+  // shape — a total, a window, and the instruction to re-run narrower —
+  // is the contract.
   expect(output).toMatch(
-    /\[stdout truncated: showing the last \d+ of 60000 bytes; re-run narrower to see the rest\]/u,
+    /\[stdout truncated: showing the last \d+ of \d+ bytes; re-run narrower to see the rest\]/u,
   );
   // A command inside the bound says nothing about truncation.
   const small = await runShell("echo tiny", context(), 30);

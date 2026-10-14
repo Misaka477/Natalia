@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { resolve } from "node:path";
 import {
   assertPluginCacheKind,
   createPluginCachePort,
@@ -204,8 +205,14 @@ test("plugin skill dirs resolve from the catalog, per package", async () => {
       } as never,
     },
   ]);
-  expect(dirs.sort()).toEqual([
-    "/store/node_modules/@natalia/plugin-a/skills",
-    "/store/node_modules/@natalia/plugin-b/agent/skills",
-  ]);
+  // The expectation is spelled with the same resolve() the product uses
+  // — an absolute filesystem path carries the host separator, and the
+  // POSIX spelling pinned "/store/..." as a literal, which is a
+  // different string on Windows.
+  expect(dirs.sort()).toEqual(
+    [
+      resolve("/store/node_modules/@natalia/plugin-a", "skills"),
+      resolve("/store/node_modules/@natalia/plugin-b", "agent/skills"),
+    ].sort(),
+  );
 });

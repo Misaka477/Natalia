@@ -1,5 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ToolFamily } from "@anthelia/tools";
 
@@ -174,7 +174,12 @@ export async function watchLocalToolFamilies(input: {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const watchers = entries.map(({ familyID, dir, entryPath }) =>
     watch(dir, (_event, filename) => {
-      if (filename?.toString() !== entryPath.split("/").pop()) return;
+      // basename(), not a "/" split: the entry path carries the HOST
+      // separator, and splitting a Windows path on "/" yields the whole
+      // path — which the event's filename (a bare name) never equals, so
+      // the change was silently dropped there and the family never
+      // reloaded.
+      if (filename?.toString() !== basename(entryPath)) return;
       const existing = timers.get(familyID);
       if (existing) clearTimeout(existing);
       timers.set(

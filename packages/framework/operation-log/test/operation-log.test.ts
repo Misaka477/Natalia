@@ -137,21 +137,29 @@ test("rotation keeps a bounded tail", async () => {
   await log.close();
 });
 
-test("an unwritable directory disables telemetry without throwing", async () => {
-  const path = dir("readonly");
-  chmodSync(path, 0o500);
-  try {
-    const log = createOperationLog({ dir: join(path, "nested") });
-    log.component("x").error("must not throw");
-    await log.flush();
-    const stats = log.stats();
-    expect(stats.written).toBe(0);
-    expect(stats.disabledReason).toBeTruthy();
-    await log.close();
-  } finally {
-    chmodSync(path, 0o700);
-  }
-});
+// POSIX-only: the fixture makes the directory unwritable with chmod 0500,
+// and Windows has no such bit — the owning process keeps writing through
+// the ACL it is allowed by, so the log writes where the test expects it to
+// degrade. The product's degrade is real (a read-only mount, a restricted
+// container); the Windows spelling of the fixture would be an ACL denial.
+test.skipIf(process.platform === "win32")(
+  "an unwritable directory disables telemetry without throwing",
+  async () => {
+    const path = dir("readonly");
+    chmodSync(path, 0o500);
+    try {
+      const log = createOperationLog({ dir: join(path, "nested") });
+      log.component("x").error("must not throw");
+      await log.flush();
+      const stats = log.stats();
+      expect(stats.written).toBe(0);
+      expect(stats.disabledReason).toBeTruthy();
+      await log.close();
+    } finally {
+      chmodSync(path, 0o700);
+    }
+  },
+);
 
 test("redaction is the single exit — fields pass through it too", async () => {
   const path = dir("redact");

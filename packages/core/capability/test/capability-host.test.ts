@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { CapabilityHost } from "../src";
 
 const registration = (id: string) => ({
@@ -10,9 +11,12 @@ const registration = (id: string) => ({
 });
 
 test("workspace hosts canonicalize roots", () => {
+  // The canonical form is the platform's own: resolve() collapses the
+  // ".." and, on Windows, spells the answer drive-absolute — so the
+  // expectation is built the same way rather than pinned to "/srv/...".
   expect(
     new CapabilityHost({ workspaceRoot: "/srv/work/../project" }).workspaceRoot,
-  ).toBe("/srv/project");
+  ).toBe(resolve("/srv/work/../project"));
 });
 
 test("host leases execution without running owner cleanup", () => {

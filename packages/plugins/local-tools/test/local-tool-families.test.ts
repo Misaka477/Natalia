@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { fingerprintFile } from "@anthelia/config";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -208,8 +208,16 @@ test("discoverLocalToolFamilies follows a symlinked installed package", async ()
   await writeFile(join(actual, "index.ts"), "export default {};");
   // npm links local file: specs as symlinks; Dirent.isDirectory() is false for
   // them, so the scan must follow.
+  //
+  // The link is made with node:fs rather than a shell `ln -s`, which is a
+  // POSIX binary Windows does not have — and it is a junction there,
+  // where an unprivileged process cannot create a directory symlink.
   await mkdir(join(root, "node_modules", "@natalia"), { recursive: true });
-  await Bun.$`ln -s ${actual} ${join(root, "node_modules", "@natalia", "tool-fixture")}`.quiet();
+  await symlink(
+    actual,
+    join(root, "node_modules", "@natalia", "tool-fixture"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   const discovered = await discoverLocalToolFamilies(root);
   expect(discovered.map((entry) => entry.path)).toContain(
     join(actual, "natalia.tool.json"),

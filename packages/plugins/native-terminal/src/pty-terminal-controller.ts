@@ -1337,7 +1337,17 @@ export function createPtyTerminalController(
 
     // argv and env: a zsh pane is integrated through ZDOTDIR, which is not an
     // argument, so taking only the argv would leave it silently unintegrated.
-    const spawnSpec = nativeTerminalPaneSpawn(startInput.command);
+    //
+    // The HOST's platform, because the pane runs here. Leaving it unset
+    // sent every pane down the POSIX branch of the shell resolution —
+    // resolveShellPath's Windows finders (Git bash, pwsh) were dead code
+    // for panes — so a bare "bash" rode PATH to WSL's bash.exe, and a
+    // Windows-path --rcfile under ConPTY produced the mute pane: no
+    // prompt, no markers, no output, while atPrompt sat true.
+    const spawnSpec = nativeTerminalPaneSpawn(
+      startInput.command,
+      process.platform,
+    );
     const argv = spawnSpec.argv;
     const file = argv[0] ?? "/bin/sh";
     const args = argv.slice(1);

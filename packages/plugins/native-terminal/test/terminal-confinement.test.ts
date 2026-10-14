@@ -95,7 +95,19 @@ test("a workspace-write pane spawns THROUGH the confinement wrapper", async () =
   expect(spawn.file).toContain("confinement-exec");
   expect(spawn.args).toContain("--read-write");
   expect(spawn.args).toContain(root);
-  expect(spawn.args.at(-1)).toBe("cat");
+  // The pane's command rides LAST — but its SPELLING is the platform's, so
+  // the last element is only exactly `cat` where the derivation is POSIX.
+  // Windows derives through PowerShell: one `-Command` script whose tail is
+  // the command itself (the UTF-8 encoding preamble rides in front of it),
+  // so the command is the tail of the last argv element rather than its own
+  // element. The confinement shape under test — the wrapper in front, the
+  // pane's command last — is the same on both; asserting the POSIX spelling
+  // unconditionally is what made this red on Windows.
+  if (process.platform === "win32") {
+    expect(spawn.args.at(-1)?.endsWith("cat")).toBe(true);
+  } else {
+    expect(spawn.args.at(-1)).toBe("cat");
+  }
   await controller.close();
 });
 

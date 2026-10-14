@@ -45,7 +45,15 @@ export function nativeTerminalPaneCommand(
     command,
     loginShell: true,
     os,
-    shellExecutable: "/bin/sh",
+    // The POSIX seam's own shell. On Windows the executor is pwsh and a
+    // "/bin/sh" valve would be trusted verbatim — resolvePwshPath returns
+    // a configured value as-is — deriving ["/bin/sh", "-NoLogo", ...],
+    // an argv no Windows host can spawn. Leaving the valve unset lets the
+    // executor resolve its own executable there; the POSIX spelling is
+    // unchanged.
+    ...((os ?? process.platform) === "win32"
+      ? {}
+      : { shellExecutable: "/bin/sh" }),
   });
   return withShellIntegration([spec.command, ...spec.args]).argv;
 }

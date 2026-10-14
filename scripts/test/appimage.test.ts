@@ -17,7 +17,13 @@ import {
  * `.desktop` entry, an icon and an executable the entry points at. The pins
  * below are what a launcher actually consumes, so a regression here is a
  * regression in "the app appears in my app list and starts when I click it".
+ *
+ * The executable-bit proofs are POSIX-shaped: an AppRun carries `0o111`, and
+ * Windows has no such bit (`chmod` there moves the read-only flag only), so
+ * those two tests skip there rather than assert a behavior that platform
+ * cannot show.
  */
+const posixTest = process.platform === "win32" ? test.skip : test;
 
 async function fakeRelease(extra: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "natalia-release-"));
@@ -62,7 +68,7 @@ test("the AppDir carries the release's binaries and the desktop entry", async ()
   expect(entry["StartupWMClass"]).toBeTruthy();
 });
 
-test("the entry points at AppRun, and AppRun is executable", async () => {
+posixTest("the entry points at AppRun, and AppRun is executable", async () => {
   const release = await fakeRelease();
   const out = await mkdtemp(join(tmpdir(), "natalia-appimage-"));
   const result = await buildAppImage({

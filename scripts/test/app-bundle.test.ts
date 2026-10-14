@@ -17,7 +17,14 @@ import {
  * reads) and an `.icns` in Resources. Without the plist the bundle looks like an
  * application and behaves like a folder — the Finder shows a folder icon and
  * double-clicking lists files. These pins are what keep that from shipping.
+ *
+ * macOS-ONLY: the shape being pinned (`Contents/MacOS`, `Contents/Resources`,
+ * `Info.plist`) is what `buildAppBundle` writes, so the pins themselves would
+ * pass anywhere — but the executable-bit proof needs `0o111`, and Windows has
+ * no such bit (`chmod` there moves the read-only flag only). The bundle test
+ * that asserts it skips there.
  */
+const posixTest = process.platform === "win32" ? test.skip : test;
 
 async function fakeRelease(extra: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "natalia-darwin-release-"));
@@ -71,24 +78,27 @@ test("Info.plist states the identity the Finder and Launch Services read", async
   expect(plist["LSBackgroundOnly"]).toBe("false");
 });
 
-test("the executables are executable and the release's bookkeeping stays out", async () => {
-  const release = await fakeRelease();
-  const out = await mkdtemp(join(tmpdir(), "natalia-appbundle-"));
-  const result = await buildAppBundle({ releaseDir: release, outDir: out });
-  // A checksum manifest and the shell installers must not land inside a bundle
-  // any more than inside an AppDir: their presence implies the user should run
-  // something.
-  expect(existsSync(join(result.resourcesDir, "SHA256SUMS"))).toBe(false);
-  expect(existsSync(join(result.resourcesDir, "install.sh"))).toBe(false);
-  // The app's data does belong there.
-  expect(existsSync(join(result.resourcesDir, "resources"))).toBe(true);
-  expect(existsSync(join(result.resourcesDir, "composition.base.json"))).toBe(
-    true,
-  );
-  const { statSync } = await import("node:fs");
-  const mode = statSync(join(result.macOsDir, "natalia-cef-desktop")).mode;
-  expect(mode & 0o111).toBe(0o111);
-});
+posixTest(
+  "the executables are executable and the release's bookkeeping stays out",
+  async () => {
+    const release = await fakeRelease();
+    const out = await mkdtemp(join(tmpdir(), "natalia-appbundle-"));
+    const result = await buildAppBundle({ releaseDir: release, outDir: out });
+    // A checksum manifest and the shell installers must not land inside a bundle
+    // any more than inside an AppDir: their presence implies the user should run
+    // something.
+    expect(existsSync(join(result.resourcesDir, "SHA256SUMS"))).toBe(false);
+    expect(existsSync(join(result.resourcesDir, "install.sh"))).toBe(false);
+    // The app's data does belong there.
+    expect(existsSync(join(result.resourcesDir, "resources"))).toBe(true);
+    expect(existsSync(join(result.resourcesDir, "composition.base.json"))).toBe(
+      true,
+    );
+    const { statSync } = await import("node:fs");
+    const mode = statSync(join(result.macOsDir, "natalia-cef-desktop")).mode;
+    expect(mode & 0o111).toBe(0o111);
+  },
+);
 
 test("the icon ships as the iconset iconutil consumes", async () => {
   const release = await fakeRelease();

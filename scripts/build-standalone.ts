@@ -545,6 +545,18 @@ for (const target of targets) {
         "--outfile",
         join(outDir, "natalia"),
         ...(triple === `bun-${hostTarget}` ? [] : [`--target=${triple}`]),
+        // The compiled binary's OWN icon — the one Explorer, the taskbar and
+        // the shortcut show for natalia.exe. `bun build --compile` embeds
+        // bun's stock mark when this is absent, so a shipped install showed
+        // a generic circle where the app's icon should be (measured on the
+        // m13 installer: the shortcut picked up icon.ico from the install
+        // root, but the exe itself — and everything that resolves the exe's
+        // own icon, including the running window before the CEF host loads —
+        // still carried bun's). Only accepted for windows targets; passing it
+        // on a POSIX compile is an error, hence the guard.
+        ...(platformDir.startsWith("windows")
+          ? [`--windows-icon=${join(root, "assets", "icons", "icon.ico")}`]
+          : []),
       ],
       root,
     );

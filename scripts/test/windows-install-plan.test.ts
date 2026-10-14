@@ -84,9 +84,17 @@ test("the uninstall entry is something the shell can read", async () => {
   expect(uninstall.publisher).toBe("Misaka477");
   // A real size, not 0 — the shell shows "unknown size" otherwise.
   expect(uninstall.estimatedSizeKB).toBeGreaterThan(0);
-  // Both forms, so a silent uninstall is possible.
-  expect(uninstall.uninstallString).toContain("uninstall.exe");
+  // Both forms, so a silent uninstall is possible. The uninstaller is named
+  // through Inno's `{uninstallexe}` constant rather than a spelled path:
+  // `uninstall.exe` beside a hardcoded `%ProgramFiles%\Natalia` points at a
+  // directory that does not exist the moment the user chooses their own,
+  // and the entry then removes nothing while claiming to.
+  expect(uninstall.uninstallString).toContain("{uninstallexe}");
   expect(uninstall.quietUninstallString).toContain("/S");
+  // And the install location is the installer's own answer for where it
+  // actually landed — `{app}` — never a path this code picked.
+  expect(uninstall.installLocation).toBe("{app}");
+  expect(uninstall.installLocation).not.toContain("ProgramFiles");
 });
 
 test("the upgrade code is stable across versions", async () => {

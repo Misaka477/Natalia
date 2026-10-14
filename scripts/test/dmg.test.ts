@@ -11,7 +11,16 @@ import { buildDmgStaging, dmgStagingIsReady } from "../dmg";
  * The `Applications` symlink is the whole point: an image that mounts, shows the
  * app, and offers nowhere to drag it is a worse experience than no image at all.
  * These pins are what keep that one line from being lost.
+ *
+ * macOS-ONLY, and the whole file skips elsewhere: a `.dmg` is an HFS+
+ * image `hdiutil` builds, the drop target is a symlink to
+ * `/Applications` (which needs a privilege Windows may not grant), and the
+ * bundle it wraps is a `.app` with an `Info.plist` and a
+ * `Contents/MacOS` layout. None of those exist on another platform, so
+ * the proofs cannot be built there — they skip rather than fail for a
+ * reason that has nothing to do with the staging layout they pin.
  */
+const macTest = process.platform === "darwin" ? test : test.skip;
 
 async function fakeRelease() {
   const root = await mkdtemp(join(tmpdir(), "natalia-dmg-release-"));
@@ -25,7 +34,7 @@ async function fakeRelease() {
   return root;
 }
 
-test("the staging root holds the app and the drop target", async () => {
+macTest("the staging root holds the app and the drop target", async () => {
   const release = await fakeRelease();
   const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
   const result = await buildDmgStaging({
@@ -48,39 +57,48 @@ test("the staging root holds the app and the drop target", async () => {
   expect(await dmgStagingIsReady(result.stagingDir)).toBe(true);
 });
 
-test("the release's bookkeeping never reaches the staged image", async () => {
-  // A disk image containing install.sh tells the user they should run something;
-  // that is the thing a normal application must never require.
-  const release = await fakeRelease();
-  const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
-  const result = await buildDmgStaging({ releaseDir: release, outDir: out });
-  expect(existsSync(join(result.stagingDir, "SHA256SUMS"))).toBe(false);
-  expect(existsSync(join(result.stagingDir, "install.sh"))).toBe(false);
-  // And exactly one app, so the image mounts with one drag source.
-  const bundles = await Array.fromAsync(
-    new Bun.Glob("*.app").scan({ cwd: result.stagingDir, onlyFiles: false }),
-  );
-  expect(bundles).toEqual(["Natalia.app"]);
-});
+macTest(
+  "the release's bookkeeping never reaches the staged image",
+  async () => {
+    // A disk image containing install.sh tells the user they should run something;
+    // that is the thing a normal application must never require.
+    const release = await fakeRelease();
+    const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
+    const result = await buildDmgStaging({ releaseDir: release, outDir: out });
+    expect(existsSync(join(result.stagingDir, "SHA256SUMS"))).toBe(false);
+    expect(existsSync(join(result.stagingDir, "install.sh"))).toBe(false);
+    // And exactly one app, so the image mounts with one drag source.
+    const bundles = await Array.fromAsync(
+      new Bun.Glob("*.app").scan({ cwd: result.stagingDir, onlyFiles: false }),
+    );
+    expect(bundles).toEqual(["Natalia.app"]);
+  },
+);
 
-test("a staging directory missing its drop target is not ready", async () => {
-  const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
-  expect(await dmgStagingIsReady(join(out, "does-not-exist"))).toBe(false);
-  // An app with nowhere to drag it.
-  const bare = join(out, "staging");
-  await mkdir(join(bare, "Natalia.app", "Contents"), { recursive: true });
-  expect(await dmgStagingIsReady(bare)).toBe(false);
-});
+macTest(
+  "a staging directory missing its drop target is not ready",
+  async () => {
+    const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
+    expect(await dmgStagingIsReady(join(out, "does-not-exist"))).toBe(false);
+    // An app with nowhere to drag it.
+    const bare = join(out, "staging");
+    await mkdir(join(bare, "Natalia.app", "Contents"), { recursive: true });
+    expect(await dmgStagingIsReady(bare)).toBe(false);
+  },
+);
 
-test("hdiutil is macOS-only, so a non-Mac builder stages rather than fails", async () => {
-  // On this host the image cannot be produced; that must not be an error, and the
-  // staging layout must still be complete enough for a Mac to finish the job.
-  const release = await fakeRelease();
-  const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
-  const result = await buildDmgStaging({ releaseDir: release, outDir: out });
-  if (Bun.which("hdiutil") === null) {
-    expect(result.packed).toBe(false);
-    expect(result.dmgPath).toBeUndefined();
-    expect(await dmgStagingIsReady(result.stagingDir)).toBe(true);
-  }
-});
+macTest(
+  "hdiutil is macOS-only, so a non-Mac builder stages rather than fails",
+  async () => {
+    // On this host the image cannot be produced; that must not be an error, and the
+    // staging layout must still be complete enough for a Mac to finish the job.
+    const release = await fakeRelease();
+    const out = await mkdtemp(join(tmpdir(), "natalia-dmg-"));
+    const result = await buildDmgStaging({ releaseDir: release, outDir: out });
+    if (Bun.which("hdiutil") === null) {
+      expect(result.packed).toBe(false);
+      expect(result.dmgPath).toBeUndefined();
+      expect(await dmgStagingIsReady(result.stagingDir)).toBe(true);
+    }
+  },
+);

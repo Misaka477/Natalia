@@ -33,7 +33,6 @@ export type BuildWindowsInstallerOptions = {
   appName?: string;
   publisher?: string;
   version?: string;
-  installDirName?: string;
   icon?: string;
   /** The format to render. `both` writes one of each. */
   format?: "inno" | "wix" | "both";
@@ -69,15 +68,36 @@ function innoPragmas(plan: WindowsInstallPlan, signTool?: string): string[] {
     `#define MyAppVersion "${plan.version}"`,
     `#define MyAppPublisher "${plan.publisher}"`,
     `#define MyAppExeName "${plan.shortcut.targetRelative}"`,
-    `#define MyAppInstallDir "${plan.installDirName}"`,
     "",
     "[Setup]",
     `AppId={{${plan.uninstall.upgradeCode}}`,
     `AppName={#MyAppName}`,
     `AppVersion={#MyAppVersion}`,
     `AppPublisher={#MyAppPublisher}`,
-    `DefaultDirName={autopf}\\{#MyAppInstallDir}`,
+    // The DEFAULT the wizard offers, expressed only in Inno's own constants:
+    // `{autopf}` is "this system's Program Files", resolved at install time
+    // on the machine that is installing. There is deliberately no
+    // `#define MyAppInstallDir` and no spelled path — a folder name written
+    // here is a folder the user cannot change, and the m13 build shipped
+    // exactly that (the wizard had no directory page at all).
+    "DefaultDirName={autopf}",
     `DefaultGroupName={#MyAppName}`,
+    // The wizard's directory page and Start Menu page, EXPLICITLY enabled.
+    //
+    // Both used to be missing from this script entirely, which reads as
+    // harmless — Inno's defaults are `no` — and is not: combined with
+    // `PrivilegesRequired=admin` below, Inno takes the "already elevated,
+    // installing for everyone" path and SKIPS the directory page, so the
+    // user got a welcome page and then an install with no chance to say
+    // WHERE. Measured on the m13 build: the wizard went straight to
+    // installing, and the only way to change the directory was to edit the
+    // registry before running it.
+    //
+    // Saying it out loud is the fix. It also pins the intent against a
+    // future edit that "tidies" the line away: a user must always be able
+    // to choose where the program is installed.
+    "DisableDirPage=no",
+    "DisableProgramGroupPage=no",
     // An uninstaller the shell can find: without it "Apps & features" has a row
     // with no way out.
     "Uninstallable=yes",
@@ -98,9 +118,14 @@ function innoPragmas(plan: WindowsInstallPlan, signTool?: string): string[] {
     "Compression=lzma2",
     "SolidCompression=yes",
     "WizardStyle=modern",
-    // Per-machine by default: the app lands in Program Files for every user of
-    // the machine, which is what a normal application does.
-    "PrivilegesRequired=admin",
+    // `lowest`, NOT `admin`. This is the line that made the install
+    // directory unchangeable: under `admin` Inno assumes an elevated,
+    // machine-wide install and skips the directory page entirely, so the
+    // wizard went straight to installing. Under `lowest` the wizard runs
+    // unelevated, SHOWS the directory page, and re-launches elevated by
+    // itself if the chosen path needs it (Program Files does) — the user
+    // gets the choice and the install still works.
+    "PrivilegesRequired=lowest",
     // Inno substitutes $f with each file it signs. A missing line is the honest
     // default: this project has no certificate, and a build that pretended
     // otherwise would fail on a machine that does.
@@ -350,8 +375,12 @@ export function renderWixFragment(plan: WindowsInstallPlan): string {
     '    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />',
     '    <MediaTemplate EmbedCab="yes" />',
     `    <Directory Id="TARGETDIR" Name="SourceDir">`,
+    // WiX's own Program Files folder, resolved on the installing machine.
+    // `INSTALLFOLDER`'s name is the app's name — the same default Inno's
+    // `{autopf}` resolves to — and WiX's directory browser lets the user
+    // change it, because nothing here pins a drive or an absolute path.
     `      <Directory Id="ProgramFiles64Folder">`,
-    `        <Directory Id="INSTALLFOLDER" Name="${plan.installDirName}">`,
+    `        <Directory Id="INSTALLFOLDER" Name="${plan.appName}">`,
     '          <Component Id="MainComponent" Guid="*">',
     componentLines,
     "            <!-- The Start Menu entry, and the Apps & features row. -->",
@@ -386,7 +415,6 @@ export async function buildWindowsInstallerInputs(
       appName: options.appName,
       publisher: options.publisher,
       version: options.version,
-      installDirName: options.installDirName,
       icon: options.icon,
     }));
 
@@ -403,12 +431,12 @@ export async function buildWindowsInstallerInputs(
   // failed with "Source file does not exist" on the very Windows host the
   // message told to compile it. The COMPILED installer is what lands in outDir.
   if (format === "inno" || format === "both") {
-    const iss = join(options.releaseDir, `${plan.installDirName}.iss`);
+    const iss = join(options.releaseDir, `${plan.appName}.iss`);
     await writeFile(iss, renderInnoScript(plan, options.signTool), "utf8");
     result.iss = iss;
   }
   if (format === "wix" || format === "both") {
-    const wxs = join(options.releaseDir, `${plan.installDirName}.wxs`);
+    const wxs = join(options.releaseDir, `${plan.appName}.wxs`);
     await writeFile(wxs, renderWixFragment(plan), "utf8");
     result.wxs = wxs;
   }
@@ -432,7 +460,7 @@ export async function buildWindowsInstallerInputs(
   }
   const candle = Bun.which("candle") ?? resolveEnvCompiler("NATALIA_CANDLE");
   if (candle && result.wxs) {
-    const obj = join(outDir, `${plan.installDirName}.wixobj`);
+    const obj = join(outDir, `${plan.appName}.wixobj`);
     const run = Bun.spawnSync([candle, result.wxs, "-o", obj, "-arch", "x64"], {
       stdout: "inherit",
       stderr: "inherit",

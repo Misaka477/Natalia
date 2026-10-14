@@ -35,8 +35,6 @@ export type WindowsInstallOptions = {
   publisher?: string;
   /** The version, which the uninstall entry and the upgrade code use. */
   version?: string;
-  /** The install root's Program Files subdirectory. */
-  installDirName?: string;
   /** The compiled runtime's name (the release's `natalia`). */
   runtimeBinary?: string;
   /** The CEF host binary's name (the release's `natalia-cef-desktop`). */
@@ -63,9 +61,6 @@ export type WindowsInstallPlan = {
   appName: string;
   publisher: string;
   version: string;
-  installDirName: string;
-  /** The install root, e.g. `%ProgramFiles%\Natalia`. */
-  installRoot: string;
   files: InstallerFile[];
   shortcut: {
     /** The Start Menu entry's path relative to the Programs folder. */
@@ -144,23 +139,21 @@ function excludedTarget(target: string): boolean {
 
 /**
  * The upgrade code: a stable identity for "this product", independent of
- * version, so 1.2 upgrades 1.1 instead of installing beside it. Derived from the
- * app name so it cannot drift between versions, and a stable string is what an
- * installer needs (a random one per build would make every release a stranger to
- * the last).
+ * version, so 1.2 upgrades 1.1 instead of installing beside it.
+ *
+ * A FIXED, HAND-WRITTEN GUID — not a derived one. This used to be an FNV-1a
+ * hash of the app name padded into GUID shape (`12d8a919-12d8-4a91-a12d-…`,
+ * four repeating groups), which is the tell of a string nobody chose: it
+ * reads as a UUID but its version and variant bits are literals, so it is a
+ * hash wearing a GUID's clothes. Windows only needs a stable string here, so
+ * the honest move is a real GUID, written down once, that means "Natalia".
+ *
+ * It must never be regenerated per build: a new code makes every release a
+ * stranger to the last, and the upgrade path (m12 → m13 replacing rather
+ * than paralleling) silently dies. Changing it is a one-time, deliberate
+ * act — a product that wants to be a different product.
  */
-function upgradeCodeFor(appName: string): string {
-  // A fixed, readable GUID derived from the name: Windows wants 8-4-4-4-12 hex.
-  const seed = `natalia:${appName}`;
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  const hex = hash.toString(16).padStart(8, "0");
-  const tail = `${hex}${hex}`.slice(0, 12);
-  return `${hex}-${hex.slice(0, 4)}-4${hex.slice(4, 7)}-a${hex.slice(0, 3)}-${tail}`;
-}
+const UPGRADE_CODE = "6f3a1c2e-9b47-4d58-a815-2a7c9f0b3d41";
 
 export async function planWindowsInstall(
   options: WindowsInstallOptions,
@@ -169,7 +162,6 @@ export async function planWindowsInstall(
   const appName = options.appName ?? DEFAULT_NAME;
   const publisher = options.publisher ?? DEFAULT_PUBLISHER;
   const version = options.version ?? "0.0.0";
-  const installDirName = options.installDirName ?? appName;
   const runtimeBinary = options.runtimeBinary ?? DEFAULT_RUNTIME;
   const cefBinary = options.cefBinary ?? DEFAULT_CEF;
 
@@ -213,8 +205,6 @@ export async function planWindowsInstall(
     appName,
     publisher,
     version,
-    installDirName,
-    installRoot: `%ProgramFiles%\\${installDirName}`,
     files,
     shortcut: {
       name: appName,
@@ -244,11 +234,19 @@ export async function planWindowsInstall(
       displayVersion: version,
       publisher,
       ...(options.icon ? { displayIcon: options.icon } : {}),
-      installLocation: `%ProgramFiles%\\${installDirName}`,
+      // The INSTALL ROOT as the installer knows it, never a spelled path.
+      // `%ProgramFiles%\Natalia` used to be written here literally, which is
+      // a hardcoded install path twice over: it names the drive, and it names
+      // the folder, so a user who changed the directory during the wizard got
+      // an "Apps & features" row pointing at a directory that does not exist
+      // and an uninstall string that removes nothing. `{app}` is what Inno
+      // substitutes with wherever the install actually landed, and it is the
+      // only spelling that stays true when the user chooses their own path.
+      installLocation: "{app}",
       estimatedSizeKB: Math.max(1, Math.round(bytes / 1024)),
-      uninstallString: `"%ProgramFiles%\\${installDirName}\\uninstall.exe"`,
-      quietUninstallString: `"%ProgramFiles%\\${installDirName}\\uninstall.exe" /S`,
-      upgradeCode: upgradeCodeFor(appName),
+      uninstallString: '"{uninstallexe}"',
+      quietUninstallString: '"{uninstallexe}" /S',
+      upgradeCode: UPGRADE_CODE,
     },
   };
 }

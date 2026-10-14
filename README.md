@@ -6,84 +6,106 @@
 
 ## English
 
-Natalia is a local-first coding-agent runtime built with TypeScript and Bun. It ships two front ends:
+Natalia is a local-first coding-agent runtime written in TypeScript and Bun.
+Three front ends share one runtime:
 
 - **CLI** (`apps/cli`)
 - **Web shell** (`apps/web`, package `@natalia/web-shell`)
+- **Desktop app** (`apps/cef-desktop`), the CEF shell the packaged
+  application opens
 
-Both use the same `RuntimeClient`, event model, and plugin registry.
+### What the desktop app starts
+
+`natalia.exe` with no arguments starts the application:
+
+1. `natalia serve --port 8790` — the runtime API, in the same process.
+2. `natalia serve-web --root <install>/web --port 8791` — the web shell, in
+   the same process.
+3. `natalia-cef-desktop.exe --url=http://127.0.0.1:8791/` — the only child
+   process it spawns.
+4. If CEF cannot start, the default browser opens instead.
+
+The ports are fixed. The web shell bakes `http://127.0.0.1:8790` in at build
+time, so an additional front end connects to the runtime that is already
+running instead of starting a second one.
 
 ### Highlights
 
-- Durable local sessions backed by JSON or SQLite, with history, context compaction, recovery, and session forks.
-- Multi-workspace support in one host process; each workspace owns its own runtime and session store.
-- Three agents with distinct jobs: **Natalia** (娜塔莉娅) works in the workspace, **Navi** (娜薇) is the live-chat collaborator, and **Nia** (妮娅) is the read-only auditor whose findings are independent, not suggestions.
-- Streaming provider adapters for OpenAI-compatible APIs, Anthropic, and Gemini.
-- Typed tool execution through schema validation, policy, conditional approval, audit, and secret-redaction boundaries.
-- Checkpoint creation, preview, dry-run rollback, and confirmed rollback with safety checkpoints.
-- Managed processes and PTYs, sandboxes, MCP servers, skills, workflows, and trusted in-process plugins.
-- One plugin registry and lifecycle for tools, commands, events, services, resources, projections, workflows, settings, adapters, and scheduler jobs.
-- Authenticated local HTTP/RPC, SSE, WebSocket, Unix-socket, and TLS transports, plus a typed SDK and daemon controls.
+- Durable local sessions on JSON or SQLite: history, context compaction,
+  recovery, and session forks.
+- Multiple workspaces in one host process; each workspace owns its runtime
+  and session store.
+- Three agents with distinct jobs: **Natalia** works in the workspace,
+  **Navi** is the live-chat collaborator, and **Nia** is the read-only
+  auditor whose findings are independent.
+- Streaming provider adapters for OpenAI-compatible APIs, Anthropic, and
+  Gemini.
+- Typed tool execution through schema validation, policy, conditional
+  approval, audit, and secret redaction.
+- Checkpoints: create, preview, dry-run rollback, and confirmed rollback
+  with safety checkpoints.
+- Managed processes and PTYs (ConPTY on Windows), sandboxes, MCP servers,
+  skills, workflows, and trusted in-process plugins.
+- One plugin registry and lifecycle for tools, commands, events, services,
+  resources, projections, workflows, settings, adapters, and scheduler jobs.
+- Authenticated local HTTP/RPC, SSE, WebSocket, Unix-socket, and TLS
+  transports, with a typed SDK and daemon controls.
 
-Natalia is local-first. It does not provide cloud accounts, organization management, billing, browser login, OAuth login, or hosted synchronization.
+Natalia is local-first. It provides no cloud accounts, organization
+management, billing, browser login, OAuth login, or hosted synchronization.
 
 ### Architecture
 
-Natalia has three layers: **kernel + framework + plugin**.
+Three layers: kernel, framework, plugin.
 
-- The kernel provides generic registry, lifecycle, ownership, event, and storage mechanisms.
-- The framework composes product internals: sessions, providers, policy, checkpoints, workspaces, and runtime composition.
-- Product features use one trusted in-process plugin system; official plugins and user-installed packages have the same permissions and lifecycle.
+- The kernel provides the generic registry, lifecycle, ownership, event, and
+  storage mechanisms.
+- The framework composes product internals: sessions, providers, policy,
+  checkpoints, workspaces, and runtime composition.
+- Product features are trusted in-process plugins. Official plugins and
+  user-installed packages share one permission model and lifecycle.
 - The CLI is the authoritative maintenance entry point.
-- The CLI and the web shell are entry points over the same `RuntimeClient`, event stream, workspace manager, and command catalog.
+- Every front end is an entry point over the same `RuntimeClient`, event
+  stream, workspace manager, and command catalog.
 
 ### Requirements
 
-- Bun and Node-compatible npm tooling.
+- Bun 1.4.0 exactly. Other 1.4.x minors break the build or the test suite.
+- Node-compatible npm tooling.
 - A configured provider credential for live model turns.
-- The Natalia Browser Bridge extension for browser tools (see `packages/plugins/browser/README.md`).
-- On Windows, Git for Windows and the Windows build of the managed WezTerm fork for interactive terminals.
+- Windows: Git for Windows. Interactive terminals use the ConPTY bridge
+  (`natalia-conpty-bridge.exe`), which ships prebuilt under
+  `packages/plugins/native-terminal/prebuilt/windows-x64/`.
+- Native components (confinement, object store) need the Rust toolchain; see
+  `npm run native:all`.
 
-### Quick Start
+### Quick start
 
-#### CLI
+CLI:
 
 ```bash
 export NATALIA_API_KEY="..."
 export NATALIA_MODEL="your-model-id"
 npm run ts:cli -- run "List the repository files"
-npm run ts:cli -- run --json "List the repository files"
 ```
-
-Configure a provider through environment variables or `.natalia/config.json`.
 
 Never commit API keys.
 
-#### Web shell
+Web shell in development:
 
 ```bash
 npm run ts:ui
 ```
 
-This starts a local runtime and the Vite dev server for `@natalia/web-shell`.
+Windows package (release tree plus Inno Setup installer):
 
-### Documentation
+```powershell
+npm run package:windows
+```
 
-Every doc below is bilingual in a single file (English + Chinese).
-
-- [Getting started](docs/getting-started.md) — install, provider setup, CLI/web shell, workspaces and sessions.
-- [API reference](docs/api-reference.md) — the stable HTTP/RPC protocol: auth, failure kinds, events, the write surface.
-- [Types reference](docs/types-reference.md) — complete field shapes of every result type, nested objects expanded.
-- [Config reference](docs/config-reference.md) — the full `.natalia/config.json` shape (types, optionality, defaults).
-- [Plugin guide](docs/plugin-guide.md) — from-zero plugin authoring, installation, diagnostics, publishing, and plugin API.
-- [UI guide](docs/ui-guide.md) — building and mounting UI adapter plugins.
-- [Provider guide](docs/provider-guide.md) — writing a provider adapter.
-- [CLI commands](docs/commands.md) — runtime, session, filesystem, plugin, UI, daemon, diagnostics, and recording commands.
-
-### CLI And Local Transport
+### CLI and local transport
 
 ```bash
-npm run ts:cli -- run "Reply exactly: pong"
 npm run ts:cli -- run --json "Reply exactly: pong"
 printf '%s\n' '{"prompt":"Reply exactly: pong"}' | npm run ts:cli -- eval
 
@@ -91,144 +113,172 @@ NATALIA_TRANSPORT_TOKEN="local-token" npm run ts:cli -- serve 8787
 npm run ts:cli -- daemon 8787
 npm run ts:cli -- daemon-status
 npm run ts:cli -- daemon-stop
-
-npm run ts:cli -- plugin create ./my-plugin --id yourco.plugin --package @yourco/natalia-plugin
-npm run ts:cli -- plugin create ./my-ui --id yourco.web --template ui
-npm run ts:cli -- plugin create ./my-ts --id yourco.ts --language ts
-npm run ts:cli -- plugin install ./my-plugin
-npm run ts:cli -- ui ui.yourco.web
-npm run ts:cli -- plugin list
-npm run ts:cli -- plugin disable yourco.plugin
-npm run ts:cli -- plugin enable yourco.plugin
-npm run ts:cli -- plugin doctor
-npm run ts:cli -- plugin reconcile
-npm run ts:cli -- plugin uninstall yourco.plugin
 ```
 
-The local transport supports authenticated HTTP/RPC/SSE, WebSocket, Unix sockets, and TLS. Keep transport tokens and certificates outside the repository.
+The local transport supports authenticated HTTP/RPC/SSE, WebSocket, Unix
+sockets, and TLS. Keep transport tokens and certificates outside the
+repository. The full command list is in
+[docs/commands.md](docs/commands.md).
 
-### Sessions And Workspaces
+### Sessions and workspaces
 
-Sessions persist under `<workspace>/.natalia/sessions/`. Context checkpoints, settled tool results, approvals/questions, and workspace state allow a user to reopen a session and continue.
+Sessions persist under `<workspace>/.natalia/sessions/`. Context
+checkpoints, settled tool results, approvals and questions, and workspace
+state let a user reopen a session and continue.
 
-The host supports multiple workspaces in one process. Each workspace has its own runtime client and session store; the web shell renders a workspace -> session tree from projected runtime state.
-
-CLI session commands:
+The host runs multiple workspaces in one process. Each workspace has its own
+runtime client and session store; the web shell renders a workspace to
+session tree from projected runtime state.
 
 ```bash
 npm run ts:cli -- session list
 npm run ts:cli -- session show <id>
-npm run ts:cli -- session rename <id> "New title"
-npm run ts:cli -- session pin <id>
-npm run ts:cli -- session delete <id>
 ```
 
-### Configuration
+Configuration lives in `.natalia/config.json` per workspace, with global
+config in the platform config directory (`~/.config/natalia/` on Linux,
+`%USERPROFILE%\.natalia\` on Windows). Use `NATALIA_CONFIG` and
+`NATALIA_WORKSPACES_FILE` to override paths.
 
-Configuration lives in `.natalia/config.json` per workspace, with global config at `~/.config/natalia/config.json`. Use `NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE` to override paths.
+### Documentation
 
-### Safety Notes
+- [Getting started](docs/getting-started.md) — install, provider setup,
+  front ends, workspaces, and sessions.
+- [API reference](docs/api-reference.md) — the stable HTTP/RPC protocol:
+  auth, failure kinds, events, the write surface.
+- [Types reference](docs/types-reference.md) — the field shapes of every
+  result type.
+- [Config reference](docs/config-reference.md) — the full
+  `.natalia/config.json` shape.
+- [Plugin guide](docs/plugin-guide.md) — plugin authoring, installation,
+  diagnostics, and publishing.
+- [UI guide](docs/ui-guide.md) — building and mounting UI adapter plugins.
+- [Provider guide](docs/provider-guide.md) — writing a provider adapter.
+- [CLI commands](docs/commands.md) — every command group.
+- [Build and install](docs/build-and-install.zh-CN.md) — the Windows build,
+  the installer, and uninstall behavior.
+- [Reverse verification](docs/reverse-verification.zh-CN.md) — how fixes
+  were verified against the running product.
 
-- Never commit API keys or place them in prompts, diagnostics, screenshots, or session files.
-- Browser tools require the Natalia Browser Bridge extension; they only connect to `127.0.0.1:18765`.
+New documentation is bilingual in a single file: the English section first,
+then the Chinese section. The three generated references above ship as
+separate `.zh-CN.md` files until their generator changes.
+
+### Working on this repository
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — the engineering standards, including
+  the commit message format.
+- [AGENTS.md](AGENTS.md) — the rules for AI agents working in this
+  repository.
+
+`npm run verify` is the definition of "this change is done". CI runs
+exactly that command.
+
+### Safety notes
+
+- Never commit API keys or place them in prompts, diagnostics, screenshots,
+  or session files.
+- Browser tools require the Natalia Browser Bridge extension and only
+  connect to `127.0.0.1:18765`.
 - Local transport tokens and certificates are secret.
-- Plugins are trusted in-process code; install only packages you wrote or audited.
+- Plugins are trusted in-process code. Install only packages you wrote or
+  audited.
 
-### Development
+### License
 
-Repository checks:
-
-```bash
-npm run format
-npm run typecheck
-npm run test
-npm run guard:imports
-npm run licenses:check
-npx bun scripts/ts-build.ts
-```
+Apache-2.0.
 
 <a id="chinese"></a>
 
 ## 中文
 
-Natalia 是使用 TypeScript 和 Bun 构建的 local-first coding-agent runtime。它提供三个前端：
+Natalia 是一个用 TypeScript 和 Bun 编写的 local-first coding-agent runtime。
+三个前端共用同一份 runtime：
 
 - **CLI**（`apps/cli`）
 - **Web shell**（`apps/web`，包名 `@natalia/web-shell`）
+- **桌面端**（`apps/cef-desktop`），打包后的应用打开的 CEF 外壳
 
-两者共用同一套 `RuntimeClient`、事件模型和插件注册表。
+### 桌面端启动链
+
+`natalia.exe` 不带参数启动应用：
+
+1. `natalia serve --port 8790` —— runtime API，同进程。
+2. `natalia serve-web --root <install>/web --port 8791` —— web shell，同进程。
+3. `natalia-cef-desktop.exe --url=http://127.0.0.1:8791/` —— 唯一 spawn 的子进程。
+4. CEF 起不来时 fallback 到默认浏览器。
+
+端口固定：web shell 在编译期把 `http://127.0.0.1:8790` 写死，因此新增的前端会
+直连已在运行的 runtime，不会再起第二个。
 
 ### 主要能力
 
-- 基于 JSON 或 SQLite 的持久化会话，支持历史、上下文压缩、恢复和会话分支。
-- 一个 host 进程内支持多 workspace；每个 workspace 有自己的 runtime 和 session store。
-- 每个 workspace 支持多个并发 session，Web shell 以 workspace -> session 树展示。
-- 支持 OpenAI-compatible、Anthropic、Gemini 的流式 provider adapter。
-- 类型化工具执行，带 schema 校验、策略、条件审批、审计和 secret 脱敏边界。
-- Checkpoint 创建、预览、dry-run 回滚、确认回滚与安全 checkpoint。
-- 托管进程与 PTY、sandbox、MCP server、skill、workflow 和可信进程内插件。
-- 统一插件注册表与生命周期，覆盖 tools、commands、events、services、resources、projections、workflows、settings、adapters、scheduler jobs。
-- 本地鉴权 HTTP/RPC、SSE、WebSocket、Unix socket、TLS transport，以及类型化 SDK 和 daemon 控制。
+- 基于 JSON 或 SQLite 的持久化会话：历史、上下文压缩、恢复、会话分支。
+- 一个宿主进程内多个 workspace；每个 workspace 有自己的 runtime 和 session store。
+- 三个 agent 分工明确：**Natalia** 在 workspace 里干活，**Navi** 是实时对话协作者，
+  **Nia** 是只读审计员，其结论独立。
+- 流式 provider adapter：OpenAI 兼容接口、Anthropic、Gemini。
+- 类型化工具执行：schema 校验、策略、条件审批、审计、secret 脱敏。
+- Checkpoint：创建、预览、dry-run 回滚、带安全 checkpoint 的确认回滚。
+- 托管进程与 PTY（Windows 上为 ConPTY）、sandbox、MCP server、skill、workflow，
+  以及可信的进程内插件。
+- 一套插件注册表与生命周期，覆盖 tools、commands、events、services、resources、
+  projections、workflows、settings、adapters、scheduler jobs。
+- 带鉴权的本地 HTTP/RPC、SSE、WebSocket、Unix socket、TLS transport，以及类型化
+  SDK 和 daemon 控制。
 
-Natalia 是 local-first，不提供云账号、组织管理、账单、browser login、OAuth login 或 hosted synchronization。
+Natalia 是 local-first，不提供云账号、组织管理、账单、浏览器登录、OAuth 登录或
+托管同步。
 
 ### 架构
 
-Natalia 分三层：**kernel + framework + plugin**。
+三层：kernel、framework、plugin。
 
-- kernel 提供通用 registry、lifecycle、ownership、event、storage。
-- framework 组合产品内部能力：session、provider、policy、checkpoint、workspace、runtime composition。
-- 产品能力走同一套可信进程内插件系统；官方插件与用户安装包权限和生命周期相同。
-- CLI 是权威维护入口。
-- CLI 和 Web shell 是基于同一 `RuntimeClient`、事件流、workspace manager 和 command catalog 的入口。
+- kernel 提供通用的 registry、lifecycle、ownership、event、storage 机制。
+- framework 组合产品内部能力：session、provider、policy、checkpoint、workspace、
+  runtime composition。
+- 产品能力是可信的进程内插件；官方插件与用户安装的包共用同一套权限模型和生命周期。
+- CLI 是权威的维护入口。
+- 每个前端都是同一份 `RuntimeClient`、事件流、workspace manager 和 command
+  catalog 之上的入口。
 
 ### 环境要求
 
-- Bun 与兼容 Node 的 npm 工具链。
-- live model turn 需要 provider credential。
-- 浏览器工具需要 Natalia Browser Bridge 扩展（见 `packages/plugins/browser/README.md`）。
-- Windows 上需要 Git for Windows 与 Windows 版 managed WezTerm fork（使用交互式终端时）。
+- Bun 必须恰好是 1.4.0。其他 1.4.x 小版本会破坏构建或测试套件。
+- 兼容 Node 的 npm 工具链。
+- live model turn 需要已配置的 provider credential。
+- Windows：Git for Windows。交互式终端使用 ConPTY 桥
+  （`natalia-conpty-bridge.exe`），预编译产物位于
+  `packages/plugins/native-terminal/prebuilt/windows-x64/`。
+- 原生组件（confinement、object store）需要 Rust 工具链，见 `npm run native:all`。
 
 ### 快速开始
 
-#### CLI
+CLI：
 
 ```bash
 export NATALIA_API_KEY="..."
 export NATALIA_MODEL="your-model-id"
 npm run ts:cli -- run "List the repository files"
-npm run ts:cli -- run --json "List the repository files"
 ```
 
-可以通过环境变量或 `.natalia/config.json` 配置 provider。
+不要把 API key 提交进仓库。
 
-不要把 API key 提交到仓库。
-
-#### Web shell
+Web shell 开发模式：
 
 ```bash
 npm run ts:ui
 ```
 
-这会启动本地 runtime 和 `@natalia/web-shell` 的 Vite dev server。
+Windows 打包（release 树加 Inno Setup 安装包）：
 
-### 文档
+```powershell
+npm run package:windows
+```
 
-以下每份文档都是单文件双语（English + 中文）。
-
-- [快速开始](docs/getting-started.md) — 安装、provider 配置、CLI/Web shell、workspace 与 session。
-- [API 参考](docs/api-reference.md) — 稳定 HTTP/RPC 协议：鉴权、失败分类、事件流、写面。
-- [类型参考](docs/types-reference.md) — 每个结果类型的完整字段形状，嵌套对象已展开。
-- [配置参考](docs/config-reference.md) — `.natalia/config.json` 的完整形状（类型、可选性、默认值）。
-- [插件指南](docs/plugin-guide.md) — 从零开发插件，以及打包、安装、诊断与发布。
-- [UI 指南](docs/ui-guide.md) — 构建与挂载 UI adapter 插件。
-- [Provider 指南](docs/provider-guide.md) — 编写 provider adapter。
-- [CLI 命令参考](docs/commands.md) — runtime、session、filesystem、plugin、UI、daemon、diagnostics 与 recording 命令。
-
-### CLI 与本地 Transport
+### CLI 与本地 transport
 
 ```bash
-npm run ts:cli -- run "Reply exactly: pong"
 npm run ts:cli -- run --json "Reply exactly: pong"
 printf '%s\n' '{"prompt":"Reply exactly: pong"}' | npm run ts:cli -- eval
 
@@ -236,66 +286,59 @@ NATALIA_TRANSPORT_TOKEN="local-token" npm run ts:cli -- serve 8787
 npm run ts:cli -- daemon 8787
 npm run ts:cli -- daemon-status
 npm run ts:cli -- daemon-stop
-
-npm run ts:cli -- plugin create ./my-plugin --id yourco.plugin --package @yourco/natalia-plugin
-npm run ts:cli -- plugin create ./my-ui --id yourco.web --template ui
-npm run ts:cli -- plugin create ./my-ts --id yourco.ts --language ts
-npm run ts:cli -- plugin install ./my-plugin
-npm run ts:cli -- ui ui.yourco.web
-npm run ts:cli -- plugin list
-npm run ts:cli -- plugin disable yourco.plugin
-npm run ts:cli -- plugin enable yourco.plugin
-npm run ts:cli -- plugin doctor
-npm run ts:cli -- plugin reconcile
-npm run ts:cli -- plugin uninstall yourco.plugin
 ```
 
-本地 transport 支持鉴权 HTTP/RPC/SSE、WebSocket、Unix socket 和 TLS。transport token 和证书不要放进仓库。
+本地 transport 支持带鉴权的 HTTP/RPC/SSE、WebSocket、Unix socket 和 TLS。
+transport token 和证书不要放进仓库。完整命令列表见
+[docs/commands.md](docs/commands.md)。
 
-### 会话与 Workspace
+### 会话与 workspace
 
-Session 保存在 `<workspace>/.natalia/sessions/`。checkpoint、已结算工具结果、审批/提问和 workspace 状态允许用户重新打开会话继续。
+Session 持久化在 `<workspace>/.natalia/sessions/`。上下文 checkpoint、已结算的
+工具结果、审批与提问、workspace 状态，让用户可以重新打开会话继续。
 
-宿主支持一个进程内多 workspace。每个 workspace 有自己的 runtime client 和 session store；Web shell 从同一份 projection 渲染 workspace -> session 树。
-
-CLI session 命令：
+宿主在一个进程内运行多个 workspace。每个 workspace 有自己的 runtime client 和
+session store；web shell 从投影出的 runtime 状态渲染 workspace 到 session 的树。
 
 ```bash
 npm run ts:cli -- session list
 npm run ts:cli -- session show <id>
-npm run ts:cli -- session rename <id> "New title"
-npm run ts:cli -- session pin <id>
-npm run ts:cli -- session delete <id>
 ```
 
-### 配置
+workspace 级配置在 `.natalia/config.json`，全局配置在平台配置目录（Linux 为
+`~/.config/natalia/`，Windows 为 `%USERPROFILE%\.natalia\`）。可用
+`NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖路径。
 
-workspace 配置在 `.natalia/config.json`，global 配置在 `~/.config/natalia/config.json`。可用 `NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖路径。
+### 文档
+
+- [快速开始](docs/getting-started.md) — 安装、provider 配置、前端、workspace 与 session。
+- [API 参考](docs/api-reference.md) — 稳定的 HTTP/RPC 协议：鉴权、失败分类、事件流、写面。
+- [类型参考](docs/types-reference.md) — 每个结果类型的完整字段形状。
+- [配置参考](docs/config-reference.md) — `.natalia/config.json` 的完整形状。
+- [插件指南](docs/plugin-guide.md) — 插件开发、安装、诊断与发布。
+- [UI 指南](docs/ui-guide.md) — 构建与挂载 UI adapter 插件。
+- [Provider 指南](docs/provider-guide.md) — 编写 provider adapter。
+- [CLI 命令](docs/commands.md) — 所有命令组。
+- [构建与安装](docs/build-and-install.zh-CN.md) — Windows 构建、安装包与卸载行为。
+- [反向验证](docs/reverse-verification.zh-CN.md) — 修复是如何对着运行中的产品验证的。
+
+新文档一律双语合在一个文件里：英文段在前，中文段在后。上面三份生成出来的参考文档
+在其生成器支持之前，仍是独立的 `.zh-CN.md` 文件。
+
+### 参与本仓库开发
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — 工程标准，含 commit 信息格式。
+- [AGENTS.md](AGENTS.md) — AI agent 在本仓库工作的规则。
+
+`npm run verify` 即「这个改动做完了」的定义。CI 跑的就是这一条命令。
 
 ### 安全说明
 
-- 不要把 API key 写入仓库、prompt、diagnostic fixture、截图或 session 文件。
-- 浏览器工具需要 Natalia Browser Bridge 扩展，只连接 `127.0.0.1:18765`。
+- 不要把 API key 提交进仓库，也不要写进 prompt、diagnostic fixture、截图或 session 文件。
+- 浏览器工具需要 Natalia Browser Bridge 扩展，且只连接 `127.0.0.1:18765`。
 - 本地 transport token 和证书是秘密。
-- 插件是可信进程内代码；只安装自己编写或审计过的包。
+- 插件是可信的进程内代码，只安装自己编写或审计过的包。
 
-### 开发
+### 许可
 
-仓库检查命令：
-
-```bash
-npm run format
-npm run typecheck
-npm run test
-npm run guard:imports
-npm run licenses:check
-npx bun scripts/ts-build.ts
-```
-
-## License / 许可
-
-Apache-2.0
-
-## Contact / 联系方式
-
-See the repository history and issue tracker.
+Apache-2.0。

@@ -33,6 +33,7 @@
  */
 import { lstat, mkdir, symlink } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { isWindows } from "@anthelia/platform";
 
 /**
  * The roots a candidate links from its host, after the declaration is
@@ -110,7 +111,14 @@ export async function linkDependencyRoots(input: {
     }
     if (existing) continue; // the candidate already holds this path
     await mkdir(resolve(input.candidateRoot, root, ".."), { recursive: true });
-    await symlink(source, target, "dir");
+    // A directory JUNCTION on Windows, a symlink everywhere else. A junction
+    // is the same link for a directory and needs no SeCreateSymbolicLink
+    // privilege, so an unprivileged user can link a dependency root — a
+    // symlink there fails with EPERM, which made every candidate on a
+    // stock Windows host unusable (measured: sandbox creation itself
+    // threw, not just the link step). `junction` is accepted only for
+    // directories, which is the only thing this links.
+    await symlink(source, target, isWindows() ? "junction" : "dir");
     linked.push(root);
   }
   return linked;

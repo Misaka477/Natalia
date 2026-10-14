@@ -57,7 +57,7 @@ describe("startDetachedProcess", () => {
     // makes impossible.
     const pwsh =
       process.platform === "win32"
-        ? resolvePwshPath({ env: process.env })
+        ? resolvePwshPath(undefined, process.env)
         : "pwsh";
     const { pid } = await startDetachedProcess({
       command: "Write-Output windows-branch",

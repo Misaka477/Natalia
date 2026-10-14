@@ -59,6 +59,11 @@ test("sandbox tools run through the worktree backend (create/write/merge)", asyn
   await git(root, ["init", "-b", "main"]);
   await git(root, ["config", "user.email", "test@natalia"]);
   await git(root, ["config", "user.name", "Natalia Test"]);
+  // The repo's own line-ending policy, set explicitly: a Windows git with
+  // autocrlf on checks candidates out with CRLF, and every assertion in
+  // this file reads back the bytes it wrote. The sandbox backend's content
+  // is what is under test, not the platform's checkout preference.
+  await git(root, ["config", "core.autocrlf", "false"]);
   await writeFile(join(root, "file.txt"), "base\n");
   await git(root, ["add", "."]);
   await git(root, ["commit", "-m", "base"]);

@@ -308,6 +308,7 @@ export class WorkspaceSandboxManager
    */
   private confinedScript(script: string, workspaceRoot: string): string {
     if (this.confinementMode === "danger-full-access") return script;
+    this.assertConfinementAvailable();
     const wrapped = wrapConfinedCommand({
       mode: this.confinementMode,
       workspaceRoot,
@@ -326,6 +327,35 @@ export class WorkspaceSandboxManager
           `sandbox_permissions=danger-full-access.`,
       );
     return [wrapped.command, ...wrapped.args.map(shellQuote)].join(" ");
+  }
+
+  /**
+   * The fail-closed rule, on its own so every command surface shares it.
+   *
+   * A confined mode with no usable backend REFUSES rather than degrading to
+   * an unconstrained spawn: a silent passthrough is the one thing the floor
+   * must never do, and the resource path (the long-running surface) needs
+   * the same check the foreground executor gets.
+   */
+  private assertConfinementAvailable() {
+    if (this.confinementMode === "danger-full-access") return;
+    const probe = wrapConfinedCommand({
+      mode: this.confinementMode,
+      workspaceRoot: this.baseRoot,
+      command: "true",
+      args: [],
+      ...(this.confinementBinaryPath
+        ? { binaryPath: this.confinementBinaryPath }
+        : {}),
+    });
+    if (!probe)
+      throw new Error(
+        `the ${this.confinementMode} sandbox could not start this resource: no ` +
+          `usable confinement-exec backend was found on this host, and the ` +
+          `sandbox refuses to run a command unconfined. Build the backend ` +
+          `(bun run native:confinement) or run this call under ` +
+          `sandbox_permissions=danger-full-access.`,
+      );
   }
 
   /**
@@ -411,9 +441,17 @@ export class WorkspaceSandboxManager
     // handshake intact while the command itself lands under the same floor
     // as every other candidate command. Without this, a resource — the one
     // long-running surface — would be the hole the floor claims to close.
-    // Windows has no POSIX launcher: the platform layer detaches natively
-    // (and the pwsh executor cannot spell `setsid`/`$!` at all), so the
-    // script — and its confinement wrapper — is built only where it runs.
+    //
+    // Windows has no POSIX launcher (the pwsh executor cannot spell
+    // `setsid`/`$!`), so the platform layer detaches natively and the script
+    // is not built there. The FLOOR still applies: the fail-closed rule (no
+    // usable backend → refuse) is checked on BOTH paths. Skipping it on
+    // Windows let every resource start UNCONFINED while the tool surface
+    // advertised a sandbox — measured, the fail-closed proof resolved
+    // instead of rejecting. The bash WRAP is POSIX-only (the platform
+    // layer's native detach is the Windows spelling), so only the refusal
+    // check is shared.
+    if (isWindows()) this.assertConfinementAvailable();
     const posixScript = isWindows()
       ? undefined
       : this.confinedScript(

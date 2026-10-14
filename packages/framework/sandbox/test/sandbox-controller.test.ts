@@ -3,7 +3,17 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { confinementBinary } from "@anthelia/confinement";
 import { createSandboxController } from "../src/sandbox-controller";
+
+/**
+ * The confinement floor is a Linux landlock syscall family. A host without
+ * the backend (every stock Windows) degrades the confined modes to
+ * `danger-full-access` — the documented platform degradation — and there is
+ * no floor to prove. The proofs below need it, so they SKIP there rather
+ * than assert a behavior that machine cannot show.
+ */
+const floorTest = confinementBinary() ? test : test.skip;
 
 test("sandbox controller initializes lazily and refuses before init", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-controller-"));
@@ -120,30 +130,33 @@ test("the enforcement fact names the backend's promises", async () => {
   expect(forced.enforcement()).toBe("partial");
 });
 
-test("the controller passes the resolved confinement mode to its manager", async () => {
-  // The production path: the client resolves the effective mode (composition
-  // default, config fallback, schema default, then the platform gate) and
-  // hands it to the controller. A manager that never received it would run
-  // every candidate command unconfined while the tool surface advertised a
-  // sandbox — the wiring is the whole of T2-4's second half.
-  const root = await mkdtemp(
-    join(tmpdir(), "natalia-sandbox-controller-floor-"),
-  );
-  const controller = createSandboxController({
-    workspaceRoot: root,
-    confinement: () => "workspace-write",
-  });
-  await controller.init();
-  await controller.create("box");
-  const run = await controller.execute(
-    "box",
-    process.platform === "win32" ? "Write-Output confined" : "echo confined",
-  );
-  expect(run.exitCode).toBe(0);
-  // The run reports the mode it ran under, from the manager the controller
-  // built with the mode it was given.
-  expect(run.sandbox?.mode).toBe("workspace-write");
-});
+floorTest(
+  "the controller passes the resolved confinement mode to its manager",
+  async () => {
+    // The production path: the client resolves the effective mode (composition
+    // default, config fallback, schema default, then the platform gate) and
+    // hands it to the controller. A manager that never received it would run
+    // every candidate command unconfined while the tool surface advertised a
+    // sandbox — the wiring is the whole of T2-4's second half.
+    const root = await mkdtemp(
+      join(tmpdir(), "natalia-sandbox-controller-floor-"),
+    );
+    const controller = createSandboxController({
+      workspaceRoot: root,
+      confinement: () => "workspace-write",
+    });
+    await controller.init();
+    await controller.create("box");
+    const run = await controller.execute(
+      "box",
+      process.platform === "win32" ? "Write-Output confined" : "echo confined",
+    );
+    expect(run.exitCode).toBe(0);
+    // The run reports the mode it ran under, from the manager the controller
+    // built with the mode it was given.
+    expect(run.sandbox?.mode).toBe("workspace-write");
+  },
+);
 
 test("the controller links the declared dependency roots into its candidates", async () => {
   const root = await mkdtemp(

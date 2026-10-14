@@ -68,34 +68,25 @@ function innoPragmas(plan: WindowsInstallPlan, signTool?: string): string[] {
     `#define MyAppVersion "${plan.version}"`,
     `#define MyAppPublisher "${plan.publisher}"`,
     `#define MyAppExeName "${plan.shortcut.targetRelative}"`,
+    // The product's NAME as a directory name. Not a hardcoded path: Inno's
+    // `{autopf}` below resolves to this system's Program Files on the
+    // machine that installs, and the wizard's directory page lets the user
+    // change the whole thing. What this buys is the standard default
+    // `C:\Program Files\Natalia` instead of the app sitting loose in
+    // Program Files with no folder of its own.
+    `#define MyAppInstallDir "${plan.appName}"`,
     "",
     "[Setup]",
     `AppId={{${plan.uninstall.upgradeCode}}`,
     `AppName={#MyAppName}`,
     `AppVersion={#MyAppVersion}`,
     `AppPublisher={#MyAppPublisher}`,
-    // The DEFAULT the wizard offers, expressed only in Inno's own constants:
-    // `{autopf}` is "this system's Program Files", resolved at install time
-    // on the machine that is installing. There is deliberately no
-    // `#define MyAppInstallDir` and no spelled path — a folder name written
-    // here is a folder the user cannot change, and the m13 build shipped
-    // exactly that (the wizard had no directory page at all).
-    "DefaultDirName={autopf}",
+    `DefaultDirName={autopf}\\{#MyAppInstallDir}`,
     `DefaultGroupName={#MyAppName}`,
-    // The wizard's directory page and Start Menu page, EXPLICITLY enabled.
-    //
-    // Both used to be missing from this script entirely, which reads as
-    // harmless — Inno's defaults are `no` — and is not: combined with
-    // `PrivilegesRequired=admin` below, Inno takes the "already elevated,
-    // installing for everyone" path and SKIPS the directory page, so the
-    // user got a welcome page and then an install with no chance to say
-    // WHERE. Measured on the m13 build: the wizard went straight to
-    // installing, and the only way to change the directory was to edit the
-    // registry before running it.
-    //
-    // Saying it out loud is the fix. It also pins the intent against a
-    // future edit that "tidies" the line away: a user must always be able
-    // to choose where the program is installed.
+    // The wizard's directory page, SAID rather than left to a default that a
+    // future edit could flip. `DisableDirPage=no` is Inno's default; writing
+    // it is what keeps "a user must always be able to choose where the
+    // program is installed" from being an unstated assumption.
     "DisableDirPage=no",
     "DisableProgramGroupPage=no",
     // An uninstaller the shell can find: without it "Apps & features" has a row
@@ -118,14 +109,19 @@ function innoPragmas(plan: WindowsInstallPlan, signTool?: string): string[] {
     "Compression=lzma2",
     "SolidCompression=yes",
     "WizardStyle=modern",
-    // `lowest`, NOT `admin`. This is the line that made the install
-    // directory unchangeable: under `admin` Inno assumes an elevated,
-    // machine-wide install and skips the directory page entirely, so the
-    // wizard went straight to installing. Under `lowest` the wizard runs
-    // unelevated, SHOWS the directory page, and re-launches elevated by
-    // itself if the chosen path needs it (Program Files does) — the user
-    // gets the choice and the install still works.
-    "PrivilegesRequired=lowest",
+    // `admin`, the per-machine standard: the app lands in Program Files for
+    // every user of the machine. It is ALSO what makes `{autopf}` resolve to
+    // the REAL Program Files — under `lowest` the same constant resolves to
+    // `%LOCALAPPDATA%\Programs`, because an unelevated process cannot write
+    // the system one, and the default then silently drops to a per-user
+    // folder (measured: m13 offered `…\AppData\Local\Programs`, with no
+    // `Natalia` in it either).
+    //
+    // `lowest` was tried as a fix for a missing directory page and was the
+    // wrong diagnosis: the page was missing because an older build was being
+    // run, not because of this line. `DisableDirPage=no` above is what keeps
+    // the page, and it is independent of the privilege level.
+    "PrivilegesRequired=admin",
     // Inno substitutes $f with each file it signs. A missing line is the honest
     // default: this project has no certificate, and a build that pretended
     // otherwise would fail on a machine that does.

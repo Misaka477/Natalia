@@ -466,11 +466,14 @@ test("the wizard offers the install directory — the page exists, not just the 
   // DisableDirPage (or the silent-only pragmas that skip every page) would
   // take the choice away from the user who installs by hand.
   //
-  // `PrivilegesRequired=admin` is the third way to lose the page, and it is
-  // the one that actually shipped: under `admin` Inno assumes an elevated
-  // machine-wide install and skips the directory page entirely. The m13
-  // build went straight from "welcome" to "installing" with no way to say
-  // where. So the pin is on the value, not just the absence of a disable.
+  // Two wrong diagnoses are recorded here so they are not repeated:
+  //   - "admin skips the directory page" — it does not. The page that went
+  //     missing in m13 was a STALE BUILD being run, not this line.
+  //   - "lowest fixes it" — it does, but it also drops `{autopf}` to
+  //     `%LOCALAPPDATA%\Programs`, so the default silently became a
+  //     per-user folder with no product name in it. Wrong trade.
+  // The page is kept by `DisableDirPage=no`; the privilege level is chosen
+  // for the DEFAULT PATH, which is a separate question.
   const release = await fakeWindowsRelease();
   const plan = await planWindowsInstall({
     releaseDir: release,
@@ -479,23 +482,27 @@ test("the wizard offers the install directory — the page exists, not just the 
   const script = renderInnoScript(plan);
   expect(script).toContain("WizardStyle=modern");
   // The default is this system's Program Files, named through Inno's own
-  // constant — never a spelled drive or folder, which the user could not
-  // change.
-  expect(script).toContain("DefaultDirName={autopf}");
-  // The directory page is not merely left enabled by default; it is SAID,
-  // and the privilege level that would take it away is not present.
+  // constant plus the product's NAME — never a spelled drive or folder,
+  // which the user could not change. `{autopf}\{#MyAppInstallDir}` is what
+  // makes the default `C:\Program Files\Natalia` rather than the app
+  // sitting loose in Program Files.
+  expect(script).toContain("DefaultDirName={autopf}\\{#MyAppInstallDir}");
+  expect(script).toContain('#define MyAppInstallDir "Natalia"');
+  // The directory page is not merely left enabled by default; it is SAID.
   expect(script).toContain("DisableDirPage=no");
   expect(script).not.toContain("DisableDirPage=yes");
-  expect(script).toContain("PrivilegesRequired=lowest");
-  expect(script).not.toContain("PrivilegesRequired=admin");
+  // Per-machine, which is also what resolves `{autopf}` to the real
+  // Program Files instead of the per-user one.
+  expect(script).toContain("PrivilegesRequired=admin");
   // Nothing suppresses any page: the directory page, the ready page, and the
   // finished page all belong to the user installing by hand.
   expect(script).not.toContain("DisableReadyPage");
   expect(script).not.toContain("DisableFinishedPage");
   expect(script).not.toContain("DisableWelcomePage");
   // And no install path is spelled anywhere: no drive letter, no
-  // %ProgramFiles% literal, no `MyAppInstallDir` define to carry one.
-  expect(script).not.toMatch(/[A-Z]:\\\\/u);
+  // %ProgramFiles% literal, no `C:\Program Files`. The NAME is allowed; a
+  // PATH is not.
+  expect(script).not.toMatch(/[A-Z]:\\/u);
   expect(script).not.toContain("%ProgramFiles%");
-  expect(script).not.toContain("MyAppInstallDir");
+  expect(script).not.toContain("Program Files");
 });

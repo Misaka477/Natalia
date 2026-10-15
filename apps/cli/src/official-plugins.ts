@@ -1,4 +1,4 @@
-import { executableName } from "@anthelia/platform";
+import { executableName, nataliaHomeJoin } from "@anthelia/platform";
 import {
   initializeOfficialPlugins,
   loadNataliaLock,
@@ -136,9 +136,37 @@ export function installedPluginDistributionRoot(
   return undefined;
 }
 
-/** The store follows its distribution root (sibling), both contexts alike. */
-export function pluginStoreRootFrom(distributionRoot: string): string {
-  return resolve(distributionRoot, "..", "plugin-store");
+/**
+ * The plugin store: the ONE user-data home's, in every context.
+ *
+ * It used to be a SIBLING of the distribution root — `<install>/plugin-store`,
+ * `<repo>/dist/ts/plugin-store` — with a special case that re-anchored it to
+ * the home when the distribution root lived inside the read-only VFS
+ * (`isBunEmbeddedPath`). Both halves were wrong for the product. Downloaded
+ * plugins are USER data living inside the install tree, which is the tree the
+ * uninstaller deletes: removing the program took the user's plugins with it.
+ * And "dev" and "installed" disagreed about where the same store was, so
+ * `refresh:plugin-store` populated one directory while a runtime read another.
+ *
+ * Deriving it from the home deletes the special case outright: a path that is
+ * never derived from the distribution root cannot land in the VFS. A dev or
+ * test flow that needs its own store says so with `NATALIA_PLUGIN_STORE` —
+ * an explicit injection, not a second rule.
+ */
+export const NATALIA_PLUGIN_STORE_ENV = "NATALIA_PLUGIN_STORE";
+
+export function resolvePluginStoreRoot(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const explicit = env[NATALIA_PLUGIN_STORE_ENV]?.trim();
+  // `nataliaHomeJoin`, not `nataliaHomePath`: the latter reads `process.env`
+  // itself, so a caller that injects an environment would silently get the
+  // ambient home — which is what a test asserting the injected one catches.
+  return explicit ? resolve(explicit) : nataliaHomeJoin({ env }, "plugin-store");
+}
+
+export function pluginStoreRoot() {
+  return resolvePluginStoreRoot();
 }
 
 export function officialPluginDistributionRoot() {
@@ -238,30 +266,6 @@ async function syncDevOfficialPlugins() {
     };
     await saveNataliaLock(storeRoot, lock);
   }
-}
-
-/**
- * A store path must be WRITABLE: inside the bundle every derived path
- * lives under the read-only VFS, so the store falls back to the
- * user home anchor (NATALIA_HOME respected — the same layout purge and
- * install reason about). Dev/installed paths keep the sibling rule.
- */
-export function writableStoreRoot(
-  resolved: string,
-  input: { env?: NodeJS.ProcessEnv; home?: string } = {},
-): string {
-  if (!isBunEmbeddedPath(resolved)) return resolved;
-  const env = input.env ?? process.env;
-  const anchor = env.NATALIA_HOME
-    ? resolve(env.NATALIA_HOME)
-    : resolve(input.home ?? homedir(), ".natalia");
-  return join(anchor, "plugin-store");
-}
-
-export function pluginStoreRoot() {
-  return writableStoreRoot(
-    pluginStoreRootFrom(officialPluginDistributionRoot()),
-  );
 }
 
 export async function initializeCliOfficialPlugins(

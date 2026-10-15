@@ -12,7 +12,7 @@ import { executableName } from "@anthelia/platform";
 import {
   installedPluginDistributionRoot,
   installedPluginDistributionRoots,
-  pluginStoreRootFrom,
+  resolvePluginStoreRoot,
 } from "../src/official-plugins";
 
 /**
@@ -60,8 +60,15 @@ test("argv0 resolution finds plugins beside the real executable", () => {
     pathEnv: "",
   });
   expect(root).toBe(join(execDir, "plugins"));
-  // …and the store is the WRITABLE sibling.
-  expect(pluginStoreRootFrom(root!)).toBe(join(execDir, "plugin-store"));
+  // The store is NOT this directory's sibling any more. It used to be, and the
+  // consequence was that downloaded plugins — user data — lived inside the
+  // install tree, which is the tree the uninstaller deletes.
+  expect(resolvePluginStoreRoot({ NATALIA_HOME: join(base, "home") })).toBe(
+    join(base, "home", "plugin-store"),
+  );
+  expect(
+    resolvePluginStoreRoot({ NATALIA_HOME: join(base, "home") }),
+  ).not.toContain(execDir);
 });
 
 test("PATH scan is the fallback when argv0 is a bare name", () => {
@@ -97,13 +104,10 @@ afterAll(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-test("VFS candidates never win, and the store falls back to the home anchor", async () => {
-  const { writableStoreRoot, installedPluginDistributionRoots } = await import(
-    "../src/official-plugins"
-  );
-  // A VFS-shaped argv0 is rejected outright.
-  // VFS-shaped argv0/execPath contribute nothing with plugins/ beside
-  // them (kernel-exe candidates without a plugins/ dir never win).
+test("VFS candidates never win, and the store is the home's in every context", () => {
+  // A VFS-shaped argv0 is rejected outright. VFS-shaped argv0/execPath
+  // contribute nothing with plugins/ beside them (kernel-exe candidates
+  // without a plugins/ dir never win).
   expect(
     installedPluginDistributionRoot({
       argv0: vfsProgram,
@@ -111,20 +115,30 @@ test("VFS candidates never win, and the store falls back to the home anchor", as
       pathEnv: "",
     }),
   ).toBeUndefined();
-  // A derived store under the VFS anchors to the user home instead. The
-  // home fixture carries the platform's own shape: resolving a POSIX
-  // absolute path on Windows would anchor it to the current drive, which
-  // is not what an installed Windows host reports.
+  // The store is the one home's — and because it is no longer derived from the
+  // distribution root, there is no read-only-VFS case left to special-case.
+  // That special case (`writableStoreRoot`) existed only to re-anchor a path
+  // derived from `/$bunfs`, and this change deletes the derivation instead.
+  // The home fixture carries the platform's own shape: a POSIX absolute path
+  // resolved on Windows anchors to the current drive, which is not what an
+  // installed Windows host reports.
   const home = process.platform === "win32" ? "C:\\Users\\u" : "/home/u";
   expect(
-    writableStoreRoot(join(vfsRoot, "dist", "ts", "plugin-store"), {
-      env: { NATALIA_HOME: join(home, ".natalia") },
-      home,
+    resolvePluginStoreRoot({ NATALIA_HOME: join(home, ".natalia") }),
+  ).toBe(join(home, ".natalia", "plugin-store"));
+  // A dev or test flow that needs its own store injects one. The override is
+  // absolute on purpose: a relative value would resolve against the working
+  // directory, which is the class of bug this whole change removes.
+  expect(
+    resolvePluginStoreRoot({ NATALIA_PLUGIN_STORE: join(home, "shared") }),
+  ).toBe(join(home, "shared"));
+  // A blank override is unset, so it cannot silently mean "here".
+  expect(
+    resolvePluginStoreRoot({
+      NATALIA_HOME: join(home, ".natalia"),
+      NATALIA_PLUGIN_STORE: "   ",
     }),
   ).toBe(join(home, ".natalia", "plugin-store"));
-  expect(writableStoreRoot("/elsewhere/plugin-store", { env: {} })).toBe(
-    "/elsewhere/plugin-store",
-  ); // non-VFS keeps the sibling rule
 });
 
 test("a throwing plugin bootstrap degrades with a warning, never a crash", async () => {

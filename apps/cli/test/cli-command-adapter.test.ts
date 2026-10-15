@@ -7,7 +7,10 @@ import {
   parsePluginMaintenanceArgs,
   runPluginMaintenanceCommand,
 } from "../src/plugin-maintenance";
-import { initializeOfficialPluginsForHostCommand } from "../src/official-plugins";
+import {
+  initializeOfficialPluginsForHostCommand,
+  resolvePluginStoreRoot,
+} from "../src/official-plugins";
 
 test("CLI adapter host owns one idempotent instance", async () => {
   let starts = 0;
@@ -39,7 +42,7 @@ test("CLI adapter startup failure is surfaced without disposal", async () => {
   expect(starts).toBe(1);
 });
 
-test("recognized host commands initialize official plugins in the distribution sibling store", async () => {
+test("recognized host commands initialize official plugins in the one home's store", async () => {
   const calls: Array<{
     pluginStoreRoot: string;
     distributionRoot: string;
@@ -59,21 +62,30 @@ test("recognized host commands initialize official plugins in the distribution s
   }
   expect(calls).toHaveLength(3);
   // The distribution tail is composed with the platform's own separator:
-  // "dist/ts/plugin-store" on POSIX, "dist\ts\plugin-store" on Windows.
-  expect(
-    calls.every(({ pluginStoreRoot }) =>
-      pluginStoreRoot.endsWith(join("dist", "ts", "plugin-store")),
-    ),
-  ).toBe(true);
+  // "dist/ts/plugins" on POSIX, "dist\ts\plugins" on Windows. That is install
+  // content and stays where the build put it.
   expect(
     calls.every(({ distributionRoot }) =>
       distributionRoot.endsWith(join("dist", "ts", "plugins")),
     ),
   ).toBe(true);
+  // The STORE is not the distribution's sibling any more, and this test used
+  // to pin that it was. Downloaded plugins are user data: inside the install
+  // tree they are deleted with the program, and "dev" and "installed" ended up
+  // reading different directories for the same store. It is the one home's
+  // `plugin-store` in every context, and the preload points NATALIA_HOME at a
+  // temp directory, so this is also the isolation the suite wants.
+  expect(
+    calls.every(
+      ({ pluginStoreRoot }) =>
+        resolvePluginStoreRoot() === pluginStoreRoot &&
+        pluginStoreRoot.endsWith("plugin-store"),
+    ),
+  ).toBe(true);
   expect(
     calls.every(
       ({ pluginStoreRoot, distributionRoot }) =>
-        pluginStoreRoot === join(distributionRoot, "..", "plugin-store"),
+        pluginStoreRoot !== join(distributionRoot, "..", "plugin-store"),
     ),
   ).toBe(true);
   expect(
@@ -137,10 +149,12 @@ test("official reinstall has explicit parsing and lifecycle routing", async () =
   expect(routed!.distributionRoot.endsWith(join("dist", "ts", "plugins"))).toBe(
     true,
   );
-  expect(
-    routed!.pluginStoreRoot.endsWith(join("dist", "ts", "plugin-store")),
-  ).toBe(true);
-  expect(routed!.pluginStoreRoot).toBe(
+  // The store is the one home's, not the distribution's sibling: a reinstall
+  // replaces the PLUGIN inside the user's own store rather than writing into
+  // the install tree.
+  expect(routed!.pluginStoreRoot).toBe(resolvePluginStoreRoot());
+  expect(routed!.pluginStoreRoot.endsWith("plugin-store")).toBe(true);
+  expect(routed!.pluginStoreRoot).not.toBe(
     join(routed!.distributionRoot, "..", "plugin-store"),
   );
   expect(routed!.pluginStoreRoot).not.toContain("/workspace");

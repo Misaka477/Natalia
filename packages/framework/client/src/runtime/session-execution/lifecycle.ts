@@ -86,11 +86,24 @@ export function createLifecycleSurface(
       await ctx.ports.getReady();
       const config = ctx.ports.getTsRuntimeConfig();
       if (!config) throw new Error("runtime configuration is not initialized");
-      try {
-        return await cloneConfigInWorker(config);
-      } catch {
+      // The worker round trip is an optimisation for a large config, not the
+      // answer. In a packaged build the worker module is not a file on disk
+      // — the bundler inlines it and `import.meta.url` resolves into the
+      // runtime's own embedded paths — so `new Worker(...)` there fails
+      // without settling anything, and this await never returns. `config.get`
+      // is the first request the web shell makes, which is why a packaged
+      // Windows copy spun on its loading surface forever while every other
+      // endpoint answered correctly. structuredClone is the same copy without
+      // the round trip; the log names the path that ran, because a user whose
+      // settings are slow to load deserves to know it was the fallback.
+      return await cloneConfigInWorker(config).catch((error) => {
+        console.warn(
+          `[runtime] config clone worker unavailable, using structuredClone: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
         return structuredClone(config);
-      }
+      });
     },
     /**
      * D3b step 1: wait until no execution carries an active turn. The

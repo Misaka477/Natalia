@@ -6,6 +6,7 @@ import type {
 import {
   createRuntimeWorkerPool,
   defaultRuntimeWorkerPoolSize,
+  runtimeWorkerTaskTimeoutMs,
 } from "@anthelia/substrate";
 
 let nextID = 1;
@@ -52,11 +53,34 @@ type SecondaryWorkerTask =
 
 async function run<T>(request: SecondaryWorkerTask): Promise<T> {
   const id = nextID++;
+  // Bounded, for the reason the session-project pool's run() is: a worker
+  // that never comes up left this promise pending forever. This one is on the
+  // critical path — `config.get` waits on `cloneConfigInWorker` before it
+  // answers anything, so an unbounded worker here is why the window spun on
+  // its loading surface with the runtime answering every other request
+  // correctly. The deadline is the shared one, so one number governs both
+  // pools.
   const instance = pool.worker();
   return new Promise<T>((resolve, reject) => {
+    const timeoutMs = runtimeWorkerTaskTimeoutMs();
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(
+        new Error(
+          `secondary worker did not answer ${request.op} within ${timeoutMs}ms`,
+        ),
+      );
+    }, timeoutMs);
+    timer.unref?.();
     pending.set(id, {
-      resolve: (value) => resolve(value as T),
-      reject,
+      resolve: (value) => {
+        clearTimeout(timer);
+        resolve(value as T);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
     });
     instance.postMessage({ ...request, id } as SecondaryWorkerRequest);
   });

@@ -202,6 +202,7 @@ test("the store asks the daemon first when one is injected, and its own index ot
   // nothing was asked because no daemon exists).
   asked.length = 0;
   const plain = new ObjectStore(root);
+  stores.push(plain);
   expect((await plain.get(id)).equals(payload)).toBe(true);
   expect(asked).toEqual([]);
 
@@ -215,5 +216,6 @@ test("the store asks the daemon first when one is injected, and its own index ot
       close: () => {},
     }),
   });
+  stores.push(missing);
   expect((await missing.get(id)).equals(payload)).toBe(true);
 }, 30_000);

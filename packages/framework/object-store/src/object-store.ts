@@ -159,6 +159,20 @@ export class ObjectStore {
     } catch {
       /* already closed */
     }
+    // The native pack indexes hold the `.idx` files open — a mapping per
+    // pack, opened by loadPackIndexes and released only when a pack is
+    // dropped or reloaded. POSIX unlinks tolerate that; on Windows an open
+    // mapping keeps the store's root undeletable, so the rm fails EBUSY and
+    // surfaces as an unhandled error between tests. Releasing them here is
+    // what makes `dispose` mean "every OS-level holder is gone".
+    for (const native of this.nativeIndexes.values()) {
+      try {
+        native.free();
+      } catch {
+        /* already freed */
+      }
+    }
+    this.nativeIndexes.clear();
   }
 
   constructor(

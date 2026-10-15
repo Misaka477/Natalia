@@ -1,6 +1,5 @@
 import { resolve, join, dirname } from "node:path";
-import { homedir } from "node:os";
-import { access } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import {
   mkdir,
   readFile,
@@ -10,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { globalConfigHome, LEGACY_STATE_DIR_NAMES } from "@anthelia/platform";
+import { nataliaHomeJoin, resolveNataliaPath } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import { createLocalSessionService } from "@anthelia/session-store";
 import {
@@ -142,71 +141,29 @@ function workspaceRegistryPath() {
   return process.env.NATALIA_WORKSPACES_FILE ?? liveWorkspaceRegistryPath();
 }
 
-/** The explicit override wins outright — a legacy fallback never applies. */
-function explicitWorkspaceRegistryPath(): string | undefined {
-  return process.env.NATALIA_WORKSPACES_FILE;
-}
-
-/** The live state directory — where writes go. */
+/** The live home — where writes go. */
 export function liveWorkspaceRegistryPath() {
-  // The same tree the global config lives in, not a POSIX-shaped path hard
-  // coded beside it. `.config` under the home directory is the XDG layout;
-  // on Windows it resolved to `C:\Users\<name>\.config\natalia`, which is a
-  // directory nothing else in the product writes to and that a user will
-  // never find — while the roaming config root is `%APPDATA%\natalia`.
-  // Two conventions for two pieces of the same user state is what let a
-  // workspace registry exist in a place the uninstaller does not clean and
-  // the settings panel does not name.
-  return join(globalConfigHome(), "natalia", "workspaces.json");
-}
-
-/** The legacy `natalia-cli` location an existing install already wrote. */
-function legacyWorkspaceRegistryPaths() {
-  return LEGACY_STATE_DIR_NAMES.map((name) =>
-    join(homedir(), ".config", name, "workspaces.json"),
-  );
+  // The one home, beside the configuration and the stores. It used to be a
+  // hand-spelled `<config-home>/natalia/workspaces.json`: a fourth directory
+  // nothing else in the product wrote to, that the uninstaller did not know
+  // about, and that needed its own legacy list — which then managed to name
+  // `<config-home>/natalia-cli` while missing `%APPDATA%\natalia` entirely.
+  return nataliaHomeJoin({}, "workspaces.json");
 }
 
 /**
- * The registry the previous Windows builds wrote, which was the same XDG
- * path the POSIX layout uses.
+ * The registry to READ: the explicit override, else the one home's copy, else
+ * the same file under a legacy root an older install wrote.
  *
- * It is a read candidate, never a write target: an install that already
- * registered its workspaces keeps them, and the next write lands on the
- * live name above. Without this entry a Windows upgrade would forget every
- * workspace the user had — the registry exists, the new code simply did not
- * look there.
- */
-function previousWindowsWorkspaceRegistryPath() {
-  return join(homedir(), ".config", "natalia", "workspaces.json");
-}
-
-/**
- * The registry to READ: the live path if it exists, else the first legacy
- * path that does. An existing install's registry is honored; nothing is
- * copied or deleted, and the next write lands on the live name.
+ * The candidates are the SHARED list (`legacyNataliaRoots`), not a second
+ * hand-rolled set — the duplication is what produced the gap above, and a
+ * fallback list that disagrees with the others is worse than no fallback,
+ * because it silently reports "no workspaces".
  */
 async function readWorkspaceRegistryPath() {
-  const explicit = explicitWorkspaceRegistryPath();
+  const explicit = process.env.NATALIA_WORKSPACES_FILE;
   if (explicit) return explicit;
-  const live = liveWorkspaceRegistryPath();
-  try {
-    await access(live);
-    return live;
-  } catch {
-    // fall through to the legacy candidates
-  }
-  for (const candidate of [
-    ...legacyWorkspaceRegistryPaths(),
-    previousWindowsWorkspaceRegistryPath(),
-  ])
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // keep looking
-    }
-  return live;
+  return resolveNataliaPath({}, existsSync, "workspaces.json").path;
 }
 
 type WorkspaceRegistryEntry = {

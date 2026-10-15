@@ -1,20 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { join, win32 } from "node:path";
 import {
-  LEGACY_STATE_DIR_NAMES,
-  STATE_DIR_NAME,
   configureBashExecutable,
   detachedShellPrefix,
   executableName,
   globalConfigHome,
   isWindows,
+  legacyNataliaRoots,
   profileShellCommand,
   isolatedShellCommand,
   platformJoin,
   processTreeKillCommand,
   resolveBashExecutable,
-  resolveStatePath,
-  statePath,
+  resolveNataliaHome,
   userRuntimeHome,
   userStateHome,
 } from "../src/index";
@@ -333,56 +331,21 @@ describe("the configured bash path (the settings UI's Git Bash row)", () => {
 });
 
 describe("the state directory's live name and its legacy fallback", () => {
-  // The state path is a real filesystem path, so it carries the HOST's
-  // separator: join() builds "/root/natalia/config.json" on POSIX and
-  // "\root\natalia\config.json" on Windows. The expectations are spelled
-  // with the same join, so they assert the property — writes land under
-  // the live name — rather than one platform's spelling of it.
-  const livePath = join("/root", STATE_DIR_NAME, "config.json");
-  const legacyPath = join("/root", "natalia-cli", "config.json");
-
-  test("writes go to the live name", () => {
-    expect(statePath("/home/demo/.config", "config.json")).toBe(
-      join("/home/demo/.config", STATE_DIR_NAME, "config.json"),
-    );
-  });
-
-  test("a reader prefers the live path", () => {
-    const resolved = resolveStatePath(
-      "/root",
-      (path) => path === livePath,
-      "config.json",
-    );
-    expect(resolved).toEqual({
-      path: livePath,
-      legacy: false,
-    });
-  });
-
-  test("a reader falls back to the legacy location an existing install wrote", () => {
-    const resolved = resolveStatePath(
-      "/root",
-      (path) => path === legacyPath,
-      "config.json",
-    );
-    expect(resolved).toEqual({
-      path: legacyPath,
-      legacy: true,
-    });
-  });
-
-  test("neither existing still answers with the live path, so writes land there", () => {
-    const resolved = resolveStatePath("/root", () => false, "config.json");
-    expect(resolved).toEqual({
-      path: livePath,
-      legacy: false,
-    });
-  });
-
-  test("the legacy names are enumerable, and the live name is never among them", () => {
-    const legacy: readonly string[] = LEGACY_STATE_DIR_NAMES;
-    expect(legacy.includes(STATE_DIR_NAME)).toBe(false);
-    const names: readonly string[] = LEGACY_STATE_DIR_NAMES;
-    expect(names.includes("natalia-cli")).toBe(true);
+  // This block used to exercise `statePath`/`resolveStatePath`/
+  // `LEGACY_STATE_DIR_NAMES`, which took the state ROOT as a parameter and
+  // lived in this barrel. They are gone with the five global roots they
+  // produced: a resolver that accepts the root cannot notice that its callers
+  // disagree about the root, and `<config-home>/natalia` is exactly where that
+  // disagreement put the config, the workspace registry, the TUI state and the
+  // skills. The one home and its fallbacks are covered by
+  // `home-paths.test.ts`, which asserts relationships rather than spellings —
+  // so what is left here is the entry that used to be missing entirely: the
+  // pair of roots the preload and the environment actually name.
+  test("the live root is not one of the legacy candidates", () => {
+    const roots = legacyNataliaRoots({ os: "linux", env: { HOME: "/home/demo" } });
+    expect(roots).not.toContain(resolveNataliaHome(undefined, {
+      os: "linux",
+      env: { HOME: "/home/demo" },
+    }));
   });
 });

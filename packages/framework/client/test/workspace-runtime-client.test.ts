@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { resolveWorkspaceJsonSessionsDir } from "@anthelia/platform";
 import {
@@ -904,20 +904,38 @@ test("load restores the persisted active workspace", async () => {
   }
 });
 
-test("the workspace registry lives in the same tree the global config does", async () => {
-  // Every case above sets NATALIA_WORKSPACES_FILE, which is why this was
-  // never covered: the default path was only ever exercised by whatever the
-  // runner's home happened to be. On Windows it resolved to
-  // `C:\Users\<name>\.config\natalia` — the XDG layout — while the roaming
-  // config root is `%APPDATA%\natalia`. Two conventions for two pieces of
-  // the same user state is how a registry ended up where the uninstaller
-  // does not clean and the settings panel does not name.
+test("the workspace registry lives beside the global config, in one home", async () => {
+  // Every case above sets NATALIA_WORKSPACES_FILE, which is why this was never
+  // covered: the default path was only ever exercised by whatever the runner's
+  // home happened to be. On Windows it resolved to
+  // `C:\Users\<name>\.config\natalia` — the XDG layout — while the global
+  // config lived at `%APPDATA%\natalia`, and a THIRD spelling
+  // (`<cwd>/.natalia/global-config.json`) was what the GUI actually used. Two
+  // conventions for two pieces of the same user state is how a registry ended
+  // up where the uninstaller does not clean and the settings panel does not
+  // name.
+  //
+  // The assertion is the RELATIONSHIP, not a path: the registry is the global
+  // config's directory plus `workspaces.json`. A hardcoded location would have
+  // to be rewritten by the next move, and would pass while the two drifted
+  // apart — which is the defect.
+  const previousRegistry = process.env.NATALIA_WORKSPACES_FILE;
   delete process.env.NATALIA_WORKSPACES_FILE;
-  const { globalConfigHome } = await import("@anthelia/platform");
-  const { liveWorkspaceRegistryPath } = await import(
-    "../src/workspace-manager"
-  );
-  expect(liveWorkspaceRegistryPath()).toBe(
-    join(globalConfigHome(), "natalia", "workspaces.json"),
-  );
+  try {
+    const { defaultGlobalConfigPath } = await import("@anthelia/config");
+    const { resolveNataliaHome } = await import("@anthelia/platform");
+    const { liveWorkspaceRegistryPath } = await import(
+      "../src/workspace-manager"
+    );
+    const registry = liveWorkspaceRegistryPath();
+    expect(registry).toBe(
+      join(dirname(defaultGlobalConfigPath()), "workspaces.json"),
+    );
+    // And the pair sits in the ONE home, not in a config home of its own.
+    expect(registry).toBe(join(resolveNataliaHome(), "workspaces.json"));
+  } finally {
+    if (previousRegistry === undefined)
+      delete process.env.NATALIA_WORKSPACES_FILE;
+    else process.env.NATALIA_WORKSPACES_FILE = previousRegistry;
+  }
 });

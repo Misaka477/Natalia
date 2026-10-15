@@ -1,5 +1,4 @@
-import { resolve } from "node:path";
-import { userStateHome } from "@anthelia/platform";
+import { nataliaHomePath } from "@anthelia/platform";
 
 export function valueAfter(argv: string[], flag: string, offset = 0) {
   const index = argv.indexOf(flag);
@@ -12,11 +11,7 @@ export function withoutOption(argv: string[], flag: string) {
 }
 
 export function daemonDir() {
-  // Derived state (sockets and pid files), not user data: renaming it
-  // strands at most a stale directory from a previous install, which the
-  // daemon's own stale-socket handling already copes with. No migration
-  // is owed here.
-  return resolve(userStateHome(), "natalia", "daemon");
+  return nataliaHomePath("run");
 }
 
 function positiveEnvNumber(name: string, fallback: number): number {

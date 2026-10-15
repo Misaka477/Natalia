@@ -80,6 +80,7 @@ import {
   findWorkspaceFiles,
   listWorkspaceFilePaths,
   migrateLegacyWorkspaceStore,
+  nataliaHomePath,
   operationLogsDir,
   contextVaultDir,
   searchWorkspaceFiles,
@@ -608,14 +609,15 @@ export async function wireFrameworkServices(
         done();
       }
     })();
-    const profileHome = ctx.ports.getUserRuntimeHome();
     const activeProfile = await (() => {
       const done = slow(`loadCompositionProfile ${baseFile}`);
       return loadCompositionProfile({
         baseFile,
-        globalDir: profileHome
-          ? join(profileHome, ".natalia", "composition.d")
-          : undefined,
+        // The ONE home's drop-in, beside every other piece of user data. It
+        // rode the EPHEMERAL runtime home, which on Linux is cleared at logout
+        // — so a user's global composition silently vanished between sessions
+        // — and on Windows was a fifth directory nothing else wrote to.
+        globalDir: nataliaHomePath("composition.d"),
         workspaceDir: join(workspaceRoot, ".natalia", "composition.d"),
         registry: profileRegistry,
       }).finally(done);

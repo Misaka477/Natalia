@@ -3,6 +3,7 @@ import type {
   SecondaryWorkerRequest,
   SecondaryWorkerResponse,
 } from "./secondary.worker";
+import { locateRuntimeWorker } from "@anthelia/platform";
 import {
   createRuntimeWorkerPool,
   defaultRuntimeWorkerPoolSize,
@@ -34,8 +35,10 @@ function onWorkerError() {
 }
 
 const pool = createRuntimeWorkerPool(() => {
+  // The staged bundle when the runtime is packaged, the source module when it
+  // is a checkout — see packages/hosts/platform/src/runtime-worker.ts.
   const instance = new Worker(
-    new URL("./secondary.worker.ts", import.meta.url),
+    locateRuntimeWorker(new URL("./secondary.worker.ts", import.meta.url)).url,
     { type: "module" },
   );
   instance.addEventListener("message", onMessage);
@@ -64,11 +67,9 @@ async function run<T>(request: SecondaryWorkerTask): Promise<T> {
     try {
       return pool.worker();
     } catch (error) {
-      // No worker came up at all — a packaged build inlines the worker
-      // module, so `new URL("./…worker.ts", import.meta.url)` points at a
-      // path that is not on disk. Waiting the deadline out would only make
-      // every caller pay 15 seconds for an answer the pool already knows it
-      // cannot give.
+      // The pool knows why no worker came up, and it is not going to change.
+      // Waiting the deadline out would only make every caller pay 15 seconds
+      // for an answer that can never arrive.
       throw new Error(
         `secondary worker unavailable for ${request.op}: ${
           error instanceof Error ? error.message : String(error)

@@ -5,6 +5,7 @@ import type {
   SessionProjectWorkerRequest,
   SessionProjectWorkerResponse,
 } from "./session-project.worker";
+import { locateRuntimeWorker } from "@anthelia/platform";
 import {
   createRuntimeWorkerPool,
   defaultRuntimeWorkerPoolSize,
@@ -104,8 +105,13 @@ function onWorkerError() {
 }
 
 const pool = createRuntimeWorkerPool(() => {
+  // The staged bundle when the runtime is packaged, the source module when it
+  // is a checkout — see packages/hosts/platform/src/runtime-worker.ts for why a
+  // compiled executable cannot load a worker through `import.meta.url`.
   const instance = new Worker(
-    new URL("./session-project.worker.ts", import.meta.url),
+    locateRuntimeWorker(
+      new URL("./session-project.worker.ts", import.meta.url),
+    ).url,
     { type: "module" },
   );
   instance.addEventListener("message", onMessage);
@@ -127,11 +133,11 @@ async function run<T>(request: SessionProjectTask): Promise<T> {
     try {
       return pool.worker();
     } catch (error) {
-      // No worker came up at all — a packaged build inlines the worker
-      // module, so `new URL("./…worker.ts", import.meta.url)` points at a
-      // path that is not on disk. Waiting the deadline out would only make
-      // every caller pay 15 seconds for an answer the pool already knows it
-      // cannot give.
+      // The pool knows why no worker came up, and it is not going to change:
+      // either the staged bundle is missing (the resolver names every path it
+      // tried) or the constructor failed outright. Waiting the deadline out
+      // would only make every caller pay 15 seconds for an answer that can
+      // never arrive.
       throw new Error(
         `session-project worker unavailable for ${request.op}: ${
           error instanceof Error ? error.message : String(error)

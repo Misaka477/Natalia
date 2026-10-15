@@ -9,6 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@anthelia/contracts": "workspace:*"
+    "@anthelia/contracts": "workspace:*",
+    "@anthelia/platform": "workspace:*"
   }
 }

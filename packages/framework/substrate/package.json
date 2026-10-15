@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthelia/agent": "workspace:*",
     "@anthelia/checkpoint": "workspace:*",
+    "@anthelia/platform": "workspace:*",
     "@anthelia/provider-model": "workspace:*",
     "@anthelia/session": "workspace:*",
     "@anthelia/session-store": "workspace:*",

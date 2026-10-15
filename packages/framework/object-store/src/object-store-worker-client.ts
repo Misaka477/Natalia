@@ -1,3 +1,4 @@
+import { locateRuntimeWorker } from "@anthelia/platform";
 import type {
   MaintenanceWorkerRequest,
   MaintenanceWorkerResponse,
@@ -24,7 +25,9 @@ function poolWorker(): Worker {
   const size = Math.max(2, Math.min(4, cpus));
   while (workers.length < size) {
     const instance = new Worker(
-      new URL("./maintenance.worker.ts", import.meta.url),
+      locateRuntimeWorker(
+        new URL("./maintenance.worker.ts", import.meta.url),
+      ).url,
       { type: "module" },
     );
     instance.addEventListener(
@@ -50,7 +53,15 @@ function poolWorker(): Worker {
   return workers[nextWorker++ % workers.length]!;
 }
 
-export function runObjectStoreMaintenance<T>(
+/**
+ * Runs one maintenance request on an object-store worker.
+ *
+ * `async` on purpose: the pool resolves a worker BEFORE the promise below
+ * exists, so a failure to locate the worker bundle would throw SYNCHRONOUSLY
+ * out of a function whose callers only ever attach `.catch()`. `async` makes
+ * that throw a rejection, which is what every caller already handles.
+ */
+export async function runObjectStoreMaintenance<T>(
   request: Omit<MaintenanceWorkerRequest, "id">,
 ): Promise<T> {
   const id = nextID++;

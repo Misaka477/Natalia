@@ -1,7 +1,8 @@
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import solid from "vite-plugin-solid";
+import { RUNTIME_WORKERS_DIR } from "../packages/hosts/platform/src/runtime-worker";
 
 /**
  * Two modes, one script:
@@ -297,6 +298,87 @@ for (const root of pluginRoots) {
     pluginOutputs.push(resolve(packageOutdir, entry));
 }
 
+/**
+ * The runtime's Worker threads, as REAL FILES.
+ *
+ * Every server-side pool builds its worker with
+ * `new Worker(new URL("./thing.worker.ts", import.meta.url))`. `bun build
+ * --compile` does NOT treat that argument as an entry point — its own log line
+ * for the whole binary is `bundle 1 modules` — so the worker module was never
+ * inside the executable. At runtime `import.meta.url` is
+ * `file:///B:/~BUN/root/natalia.exe` (Bun's EMBEDDED filesystem), the URL
+ * resolved to `B:\~BUN\root\thing.worker.ts`, and the worker's bootstrap died
+ * with `BuildMessage: ModuleNotFound resolving "B:\~BUN\root\thing.worker.ts"`.
+ *
+ * The interesting part is HOW it failed: as an asynchronous `error` EVENT, not
+ * a constructor throw. `new Worker(...)` looked like it had succeeded, nothing
+ * was logged, and every task posted to the pool simply waited out its deadline.
+ * Measured on bun 1.4.0 with the same source run as the control (it answered
+ * its first message), and on a fresh install, whose log said:
+ *
+ *   [runtime] config clone worker unavailable, using structuredClone: secondary worker failed
+ *   [runtime] model catalog worker unavailable … did not answer modelCatalog within 15000ms
+ *
+ * There is no embedding option for workers, so the answer is the one the
+ * release already uses for its tree-sitter WASM files: SHIP THE MODULE AS A
+ * FILE beside the executable and load it from disk.
+ * `packages/hosts/platform/src/runtime-worker.ts` is the resolver that finds
+ * these; the release builder copies `dist/ts/*` into the release root, so
+ * `workers/` lands beside `natalia.exe` with no further staging step. Linux gets
+ * the identical layout — this is a single-file-executable problem, not a
+ * Windows one, and a Windows-only fix would leave the Linux release loading the
+ * embedded path that does not exist there either.
+ */
+const workerSources = [
+  "packages/framework/diff/src/runtime/diff-parse.worker.ts",
+  "packages/framework/object-store/src/maintenance.worker.ts",
+  "packages/framework/substrate/src/session-project.worker.ts",
+  "packages/framework/client/src/runtime/ast-compute.worker.ts",
+  "packages/framework/client/src/runtime/secondary.worker.ts",
+  "packages/framework/session-store/src/session-load.worker.ts",
+  "packages/framework/session-store/src/session-messages.worker.ts",
+] as const;
+const workersOutdir = resolve(outdir, RUNTIME_WORKERS_DIR);
+await rm(workersOutdir, { recursive: true, force: true });
+const workersBuild = await Bun.build({
+  entrypoints: [...workerSources],
+  outdir: workersOutdir,
+  target: "bun",
+  format: "esm",
+  // Flat, because the consumers ask for a flat name: the resolver derives it
+  // from the source module's own basename. The seven names are distinct, so
+  // flattening cannot collide.
+  naming: "[name].js",
+  packages: "bundle",
+});
+if (!workersBuild.success) {
+  for (const log of workersBuild.logs) console.error(log);
+  throw new Error("the runtime worker build failed");
+}
+// Every worker either ships or the build says so. A missing one is not a missing
+// optimisation — its pool's callers wait out a deadline for an answer that can
+// never come, which is exactly what the packaged runtime did. And a worker that
+// still imports a bare specifier would die on load in a release, where there is
+// no node_modules beside the executable.
+for (const source of workerSources) {
+  const name = `${basename(source).replace(/\.ts$/u, "")}.js`;
+  const emitted = join(workersOutdir, name);
+  if (!(await Bun.file(emitted).exists()))
+    throw new Error(`${source}: no worker bundle was emitted at ${emitted}`);
+  const text = await Bun.file(emitted).text();
+  if (/["']@anthelia\//u.test(text))
+    throw new Error(
+      `${name}: the worker bundle still imports a workspace package — a release ` +
+        `has no node_modules beside its executable, so the worker would die on load`,
+    );
+}
+console.log(
+  `staged ${workerSources.length} runtime workers in ${workersOutdir}`,
+);
+const workerOutputs = workerSources.map((source) =>
+  resolve(workersOutdir, `${basename(source).replace(/\.ts$/u, "")}.js`),
+);
+
 if (pluginRoots.length !== 16)
   throw new Error(`expected 16 release plugins, got ${pluginRoots.length}`);
 for (const artifact of [
@@ -317,6 +399,7 @@ console.log(
       outputs: [
         ...result.outputs.map((output) => output.path),
         ...pluginOutputs,
+        ...workerOutputs,
         ...[
           "LICENSE",
           "NOTICE",

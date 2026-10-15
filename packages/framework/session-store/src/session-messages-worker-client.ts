@@ -1,3 +1,4 @@
+import { locateRuntimeWorker } from "@anthelia/platform";
 import type { RuntimeMessagePage } from "@anthelia/contracts";
 import type {
   SessionMessagesWorkerRequest,
@@ -23,7 +24,9 @@ function poolWorker(): Worker {
   );
   while (workers.length < size) {
     const instance = new Worker(
-      new URL("./session-messages.worker.ts", import.meta.url),
+      locateRuntimeWorker(
+        new URL("./session-messages.worker.ts", import.meta.url),
+      ).url,
       { type: "module" },
     );
     instance.addEventListener(
@@ -49,7 +52,15 @@ function poolWorker(): Worker {
   return workers[nextWorker++ % workers.length]!;
 }
 
-export function projectSessionMessagesInWorker(
+/**
+ * Projects a session's messages on a worker.
+ *
+ * `async` on purpose, for the reason the object-store client's runner is: the
+ * pool resolves a worker BEFORE the promise below exists, so a failure to
+ * locate the worker bundle would throw synchronously out of a function whose
+ * callers can only attach `.catch()`.
+ */
+export async function projectSessionMessagesInWorker(
   session: import("@anthelia/session").SessionRecord,
   options: { limit?: number; order?: "asc" | "desc"; cursor?: string },
 ): Promise<RuntimeMessagePage> {

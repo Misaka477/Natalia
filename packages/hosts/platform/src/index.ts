@@ -1,4 +1,5 @@
 export * from "./hash-tree";
+export * from "./runtime-worker";
 export * from "./store-paths";
 export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
 import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";

@@ -16,6 +16,7 @@ type AstComputeTask =
       source: string;
       language: string;
     };
+import { locateRuntimeWorker } from "@anthelia/platform";
 import {
   createRuntimeWorkerPool,
   defaultRuntimeWorkerPoolSize,
@@ -36,9 +37,12 @@ function ensurePool(): RuntimeWorkerPool<Worker> {
   if (pool) return pool;
   pool = createRuntimeWorkerPool(
     () =>
-      new Worker(new URL("./ast-compute.worker.ts", import.meta.url), {
-        type: "module",
-      }),
+      new Worker(
+        locateRuntimeWorker(
+          new URL("./ast-compute.worker.ts", import.meta.url),
+        ).url,
+        { type: "module" },
+      ),
     defaultRuntimeWorkerPoolSize(),
   );
   for (const worker of pool.all()) {

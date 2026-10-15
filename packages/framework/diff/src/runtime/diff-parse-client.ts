@@ -1,3 +1,4 @@
+import { locateRuntimeWorker } from "@anthelia/platform";
 import type {
   DiffParseWorkerRequest,
   DiffParseWorkerResponse,
@@ -26,7 +27,9 @@ function poolWorker(): Worker {
   );
   while (workers.length < size) {
     const instance = new Worker(
-      new URL("./diff-parse.worker.ts", import.meta.url),
+      locateRuntimeWorker(
+        new URL("./diff-parse.worker.ts", import.meta.url),
+      ).url,
       { type: "module" },
     );
     instance.addEventListener(

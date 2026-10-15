@@ -1473,9 +1473,6 @@ export function createProviderRunner(input: ProviderRunnerInput) {
           attachment.mediaType === "image/webp" ||
           attachment.mediaType === "image/gif",
       );
-      const pdfAttachments = attachments.filter(
-        (attachment) => (attachment.mediaType as string) === "application/pdf",
-      );
       const videoAttachments = attachments.filter(
         (attachment) =>
           attachment.mediaType === "video/mp4" ||
@@ -1504,14 +1501,6 @@ export function createProviderRunner(input: ProviderRunnerInput) {
       } else {
         user.images = imageAttachments;
       }
-
-      if (pdfAttachments.length)
-        input.publish({
-          type: "diagnostic",
-          level: "warning",
-          message: `PDF attachments are no longer supported and were ignored: ${pdfAttachments.map((attachment) => attachment.filename).join(", ")}`,
-          code: "attachments_pdf_ignored",
-        });
 
       const videoSupported =
         activeModelCapabilities.videoInput && activeProvider.videoInput;

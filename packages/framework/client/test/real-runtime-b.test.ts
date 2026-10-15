@@ -2169,25 +2169,6 @@ test("runtime injects a UTF-8 text attachment into the active provider turn", as
   }
 });
 
-test("runtime rejects a PDF attachment before provider dispatch", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-pdf-attachment-"));
-  await mkdir(join(root, ".natalia"), { recursive: true });
-  await writeFile(join(root, "report.pdf"), "%PDF-1.7\n");
-  const client = createRealRuntimeClient({
-    workspaceRoot: root,
-    sessionID: "ses_pdf_attachment",
-    provider: scriptedProvider("ok"),
-  });
-  client.start(() => undefined);
-  await expect(
-    client.submitAndWait!({
-      text: "read",
-      attachments: ["report.pdf"],
-    }),
-  ).rejects.toThrow(/unsupported/u);
-  await client.dispose?.();
-});
-
 test("agent MCP server scope limits provider-visible MCP tools", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-agent-mcp-scope-"));
   await mkdir(join(root, ".natalia"), { recursive: true });

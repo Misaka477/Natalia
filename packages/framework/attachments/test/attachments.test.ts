@@ -122,13 +122,22 @@ test("local attachment store derives a private data URL from validated bytes", a
   );
 });
 
-test("local attachment store rejects PDF attachments", async () => {
-  const root = await mkdtemp(join(tmpdir(), "natalia-attachment-pdf-"));
-  await writeFile(join(root, "doc.pdf"), "%PDF-1.7 fake");
+test("local attachment store rejects a file whose type it cannot recognise", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-attachment-unknown-"));
+  // The store takes text, images and video; anything else is refused at
+  // intake. This case used to be written with a PDF, which made a generic
+  // file-type whitelist read as a rule ABOUT PDFs — and then as a promise
+  // that PDF is forbidden. It is not: the only decision ever taken was that
+  // PDF earns no dedicated tool, and a whitelist's example should not be a
+  // policy nobody made.
+  await writeFile(
+    join(root, "blob.bin"),
+    Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe]),
+  );
   await expect(
     storeLocalAttachments({
       workspaceRoot: root,
-      paths: ["doc.pdf"],
+      paths: ["blob.bin"],
     }),
   ).rejects.toThrow(/unsupported/u);
 });

@@ -397,30 +397,36 @@ test("Navi and Nia busy submits store the same attachments in their pending queu
   }
 });
 
-test("chat PDF attachments are diagnosed and never reach the provider", async () => {
+test("a media type the chat layer does not handle is diagnosed, not silently dropped", async () => {
+  // Retargeted from a PDF. The case pins the GENERIC branch in
+  // chat-turn-common: text goes into the content, image and video go into
+  // their own fields (or a text marker when the model cannot take them), and
+  // anything else is reported by media type. Written with a PDF it read as
+  // the product's PDF policy, and there is no PDF policy — the decision was
+  // that PDF earns no dedicated tool.
   const harness = await makeHarness({ imageInput: true, videoInput: true });
-  const pdf = {
-    id: "att_pdf",
-    path: ".natalia/attachments/att_pdf-report.pdf",
-    filename: "report.pdf",
-    mediaType: "application/pdf",
+  const blob = {
+    id: "att_blob",
+    path: ".natalia/attachments/att_blob-archive.bin",
+    filename: "archive.bin",
+    mediaType: "application/x-unknown-archive",
     byteLength: 4,
-    sha256: "pdf-hash",
+    sha256: "blob-hash",
   } as unknown as LocalAttachment;
   await runChannel("navi", harness, {
     text: "read",
-    responseMessageID: "navi-pdf",
-    attachments: [pdf],
+    responseMessageID: "navi-blob",
+    attachments: [blob],
   });
   const user = lastUser(harness.requests[0]!);
   expect(user?.images).toBeUndefined();
   expect(user?.videos).toBeUndefined();
-  expect(user?.content).not.toContain("report.pdf");
+  expect(user?.content).not.toContain("archive.bin");
   expect(
     harness.events.some(
       (event) =>
         event.type === "diagnostic" &&
-        event.message.includes("Unsupported attachment report.pdf"),
+        event.message.includes("Unsupported attachment archive.bin"),
     ),
   ).toBe(true);
 });

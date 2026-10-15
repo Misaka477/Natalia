@@ -15,6 +15,7 @@ import {
   daemonDir,
   waitSignal,
   settleShutdown,
+  exitAfterShutdown,
 } from "./command-helpers";
 
 export async function handleDaemonCommands(argv: string[]) {
@@ -66,6 +67,7 @@ export async function handleDaemonCommands(argv: string[]) {
       } finally {
         await settleShutdown("daemon transport close", () => transport.close());
         await settleShutdown("daemon client dispose", () => client.dispose?.());
+        exitAfterShutdown();
       }
       break;
     }

@@ -581,3 +581,30 @@ test("CLI config migrate rewrites an old config in place with a backup", async (
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("the serve command ends the process once its shutdown steps are done", async () => {
+  // Reported behaviour, and the whole reason for this case: one Ctrl+C ran
+  // every shutdown step, the handle probe answered "resources=[] handles=[]",
+  // and the process then sat there until the 20s hard watchdog killed it —
+  // with nothing printed in between, so the person at the terminal could not
+  // tell a clean dispose from a hang. `serve` now ends the process itself and
+  // says so, so the wait is bounded by the steps rather than by a watchdog.
+  //
+  // The assertion runs in a CHILD process on purpose: `exitAfterShutdown`
+  // calls process.exit, and asserting it in-process would take the whole test
+  // runner down with it — which is the very defect this case is about.
+  const helper = join(import.meta.dir, "..", "src", "command-helpers.ts");
+  const child = Bun.spawnSync(
+    [
+      process.execPath,
+      "-e",
+      `import(${JSON.stringify(helper)}).then((m) => m.exitAfterShutdown(0));`,
+    ],
+    { cwd: join(import.meta.dir, "..", "..", ".."), stderr: "pipe" },
+  );
+  const stderr = new TextDecoder().decode(child.stderr);
+  expect(stderr).toContain("everything disposed; exiting with code 0");
+  // And it really left: a hang would be a spawnSync that never returns, so the
+  // exit code is the second half of the claim, not decoration.
+  expect(child.exitCode).toBe(0);
+}, 30_000);

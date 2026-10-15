@@ -134,3 +134,30 @@ export function logActiveHandles(label = "post-shutdown"): void {
     );
   }
 }
+
+/**
+ * Ends the process, or explains why it cannot.
+ *
+ * The graceful sequence has run and every step has reported its own result, so
+ * the only thing left is to actually go. A process that stays alive after a
+ * clean dispose is indistinguishable from a hang to the person at the
+ * terminal, and the only signal they get is the hard watchdog firing 20
+ * seconds later with no reason — which is exactly what the reported behaviour
+ * was: one Ctrl+C, a long silence, then an exit nobody could attribute.
+ *
+ * So this does the thing the sequence was for, says it, and if the exit does
+ * not take effect says THAT with what is still alive. The exit itself is
+ * last: a printed line that reaches the user before the process goes is the
+ * whole point.
+ */
+export function exitAfterShutdown(code = 0): void {
+  logActiveHandles();
+  console.warn(
+    `[shutdown] everything disposed; exiting with code ${code}` +
+      (code === 0 ? "" : " (an earlier step failed)"),
+  );
+  // Let the write reach stdout before the process goes. A plain
+  // process.exit() can truncate a buffered line on a redirected console,
+  // which is how "the last thing it printed" becomes nothing.
+  setTimeout(() => process.exit(code), 50);
+}

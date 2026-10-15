@@ -16,7 +16,7 @@ import {
   valueAfter,
   waitSignal,
   settleShutdown,
-  logActiveHandles,
+  exitAfterShutdown,
   withoutOption,
 } from "./command-helpers";
 import { pluginStoreRoot } from "./official-plugins";
@@ -119,7 +119,13 @@ export async function handleRuntimeCommand(argv: string[]) {
     await waitSignal();
     await settleShutdown("runtime transport close", () => transport.close());
     await settleShutdown("runtime manager dispose", () => manager.dispose());
-    logActiveHandles();
+    // Exit here rather than falling off the end: every step above reports
+    // its own result, and the only thing left is to go. Without this the
+    // process stays alive after a clean dispose and the person at the
+    // terminal gets no signal at all until the hard watchdog fires 20
+    // seconds later — which is how one Ctrl+C became a long silence and an
+    // exit nobody could attribute.
+    exitAfterShutdown();
     return true;
   }
   if (command === "run" || command === "--once") {
@@ -230,6 +236,7 @@ export async function handleRuntimeCommand(argv: string[]) {
     await waitSignal();
     await settleShutdown("record transport close", () => transport.close());
     await settleShutdown("record client dispose", () => client.dispose?.());
+    exitAfterShutdown();
     return true;
   }
   return false;

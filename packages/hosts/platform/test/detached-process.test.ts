@@ -109,6 +109,68 @@ describe("startDetachedProcess", () => {
       }),
     ).rejects.toThrow(/PowerShell/u);
   });
+
+  windowsTest("refuses when there is no command to run", async () => {
+    // An empty command produced a worker script whose script block was
+    // `& { }`: the detached chain started, the pid was reported, and the log
+    // stayed empty for the whole run — measured on this host. Nothing to run
+    // is a refusal, not a spawn that looks like a success.
+    const root = await mkdtemp(join(tmpdir(), "natalia-detached-nocmd-"));
+    const pwsh = resolvePwshPath(undefined, process.env);
+    for (const command of ["", "   "]) {
+      await expect(
+        startDetachedProcess({
+          command,
+          posixScript: "echo 1",
+          cwd: root,
+          outputPath: join(root, "out.log"),
+          os: "win32",
+          env: { PATH: process.env.PATH },
+          hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
+        }),
+      ).rejects.toThrow(/requires a command to run/u);
+    }
+  });
+
+  windowsTest(
+    "a script that never arrives is reported, not silently dropped",
+    async () => {
+      // The worker rides an env var, so `Invoke-Expression $env:…` on an empty
+      // entry fails with "Cannot bind argument to parameter 'Command'" — and
+      // under DETACHED_PROCESS with every stdio ignored, that message is all
+      // the operator ever sees. The user's screenshot was exactly that. The
+      // launcher now guards the read and writes the reason into the log the
+      // caller already polls, so the failure is diagnosable.
+      const root = await mkdtemp(join(tmpdir(), "natalia-detached-noscript-"));
+      const outputPath = join(root, "out.log");
+      const pwsh = resolvePwshPath(undefined, process.env);
+      // The env var is set to an empty string, which is the shape the field
+      // took: the entry exists and carries nothing.
+      const child = Bun.spawnSync(
+        [
+          "cmd.exe",
+          "/c",
+          pwsh,
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `$s = $env:NATALIA_DETACHED_SCRIPT; ` +
+            `if (-not $s) { ` +
+            `[System.IO.File]::AppendAllText('${outputPath.replace(/'/gu, "''")}', ` +
+            `"the detached worker script was not delivered ` +
+            `(NATALIA_DETACHED_SCRIPT is empty)" + [Environment]::NewLine, ` +
+            `[System.Text.UTF8Encoding]::new($false)); exit 1 }; ` +
+            `Invoke-Expression $s`,
+        ],
+        { cwd: root, env: { ...process.env, NATALIA_DETACHED_SCRIPT: "" } },
+      );
+      expect(child.exitCode).toBe(1);
+      expect(await waitForOutput(outputPath)).toContain(
+        "the detached worker script was not delivered",
+      );
+    },
+  );
 });
 
 /**

@@ -340,11 +340,37 @@ export async function startDetachedProcess(input: {
     // mojibake (measured). AppendAllText with an explicit no-BOM UTF-8
     // encoding is the one spelling both 5.1 and 7 honour, and it streams.
     const logPath = pwshQuote(input.outputPath);
+    const command = input.command.trim();
+    // Nothing to run is a refusal, not a spawn. An empty command produced a
+    // worker script whose script block was `& { }`: the detached chain
+    // started, the pid was reported, and the log stayed empty for the life of
+    // the run — the silent no-op this branch's fail-closed rule exists to
+    // prevent. Measured on this host (pid returned, log "").
+    if (!command)
+      throw new Error(
+        "startDetachedProcess on Windows requires a command to run",
+      );
     const workerScript =
       `${ENCODING_PREAMBLE}` +
       `[System.IO.File]::WriteAllText(${logPath}, '', [System.Text.UTF8Encoding]::new($false)); ` +
-      `& { ${input.command} } 2>&1 | ForEach-Object { ` +
+      `& { ${command} } 2>&1 | ForEach-Object { ` +
       `[System.IO.File]::AppendAllText(${logPath}, "$_" + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }`;
+    // The worker rides an ENVIRONMENT VARIABLE, so the launcher must not hand
+    // pwsh an empty one. `Invoke-Expression $null` fails with "Cannot bind
+    // argument to parameter 'Command' because it is null", and under
+    // DETACHED_PROCESS with every stdio ignored that message is the ONLY
+    // thing the operator ever sees — the user's own screenshot was exactly
+    // this, from a launcher whose script entry never arrived. The guard
+    // writes the reason into the log the caller already reads, so the
+    // failure is diagnosable instead of a detached worker that never ran.
+    const launcher =
+      `$s = $env:NATALIA_DETACHED_SCRIPT; ` +
+      `if (-not $s) { ` +
+      `[System.IO.File]::AppendAllText(${logPath}, ` +
+      `"the detached worker script was not delivered ` +
+      `(NATALIA_DETACHED_SCRIPT is empty)" + [Environment]::NewLine, ` +
+      `[System.Text.UTF8Encoding]::new($false)); exit 1 }; ` +
+      `Invoke-Expression $s`;
     const child = spawn(
       "cmd.exe",
       [
@@ -354,7 +380,7 @@ export async function startDetachedProcess(input: {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "Invoke-Expression $env:NATALIA_DETACHED_SCRIPT",
+        launcher,
       ],
       {
         cwd: input.cwd,

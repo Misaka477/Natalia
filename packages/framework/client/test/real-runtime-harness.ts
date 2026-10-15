@@ -301,6 +301,19 @@ export function singleToolProvider(
   };
 }
 
+/**
+ * The command a fixture pane runs.
+ *
+ * `cat` is a POSIX binary; on Windows it is not one, and the pane shell the
+ * host derives is pwsh, so the pane would be a PowerShell that cannot find
+ * the command and exits before the test can observe it. The host's own
+ * interactive shell is the equivalent long-running pane on both platforms:
+ * it starts, it stays up, and it echoes what is written to it.
+ */
+export function fixturePaneCommand(): string {
+  return process.platform === "win32" ? "pwsh" : "cat";
+}
+
 export function interactiveTerminalProvider(): StreamingProvider {
   return {
     provider: "scripted-interactive-terminal",
@@ -315,7 +328,7 @@ export function interactiveTerminalProvider(): StreamingProvider {
               name: "interactive_terminal_start",
               arguments: JSON.stringify({
                 id: "tty_management",
-                command: "cat",
+                command: fixturePaneCommand(),
               }),
             },
           ],

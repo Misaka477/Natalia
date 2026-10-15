@@ -64,6 +64,7 @@ import {
   TEAM_PLUGIN_ID,
   TODO_PLUGIN_ID,
   createRealRuntimeClient,
+  fixturePaneCommand,
   scriptedProvider,
   singleToolProvider,
   interactiveTerminalProvider,
@@ -389,7 +390,7 @@ test("runtime executes canonical interactive Terminal tools on one native pane",
                   name: "interactive_terminal_start",
                   arguments: JSON.stringify({
                     id: "tty_runtime",
-                    command: "cat",
+                    command: fixturePaneCommand(),
                   }),
                 }
               : text === "write terminal"
@@ -399,7 +400,6 @@ test("runtime executes canonical interactive Terminal tools on one native pane",
                     arguments: JSON.stringify({
                       id: "tty_runtime",
                       input: "secret",
-                      sensitive: true,
                     }),
                   }
                 : {
@@ -975,6 +975,22 @@ test("security.redactToolOutput drives redaction when no agent overrides it", as
   expect(await runWithSetting(undefined)).not.toContain("supersecretvalue");
 });
 
+/**
+ * A command that prints a `token=` line and the boundary secret, in the host
+ * shell's own spelling.
+ *
+ * `printf` is a POSIX binary. On Windows the shell tool runs pwsh, where it is
+ * not a cmdlet, so the call failed before producing any output and the
+ * redaction boundary was never exercised here at all — the assertion failed on
+ * "printf is not recognized", not on a leaked secret. The redaction seam under
+ * test is the `key=value` pattern, which both spellings produce.
+ */
+function boundaryEchoCommand() {
+  return process.platform === "win32"
+    ? '"token=visible"; "secret=$env:NATALIA_AGENT_BOUNDARY_SECRET"'
+    : "printf 'token=visible\\nsecret=$NATALIA_AGENT_BOUNDARY_SECRET'";
+}
+
 test("agent permissions apply network, environment, and output redaction boundaries", async () => {
   const root = await mkdtemp(
     join(tmpdir(), "natalia-agent-boundary-permissions-"),
@@ -1020,8 +1036,7 @@ test("agent permissions apply network, environment, and output redaction boundar
                 id: "shell",
                 name: "run_shell",
                 arguments: JSON.stringify({
-                  command:
-                    "printf 'token=visible\\nsecret=$NATALIA_AGENT_BOUNDARY_SECRET'",
+                  command: boundaryEchoCommand(),
                   description: "Print the boundary secret",
                 }),
               },

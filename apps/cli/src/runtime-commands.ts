@@ -20,7 +20,10 @@ import {
   exitAfterShutdown,
   withoutOption,
 } from "./command-helpers";
-import { pluginStoreRoot } from "./official-plugins";
+import {
+  officialPluginDistributionRoot,
+  pluginStoreRoot,
+} from "./official-plugins";
 import { perfLog } from "@anthelia/runtime-services";
 import { nataliaCachePath } from "@anthelia/platform";
 
@@ -68,6 +71,11 @@ export async function handleRuntimeCommand(argv: string[]) {
     console.log("[serve] globalConfigPath", globalConfigPath);
     const manager = createWorkspaceManager({
       pluginStoreRoot: pluginStoreRoot(),
+      // Where the official plugins are installed FROM. The store lives in the
+      // one home, so it is no longer a sibling of the distribution — deriving
+      // it from the store pointed at `<home>/plugins`, which does not exist,
+      // and installing an official plugin from the shell failed there.
+      pluginDistributionRoot: officialPluginDistributionRoot(),
       globalConfigPath,
       sessionDir: resolve(process.cwd(), ".natalia", "workspace-sessions"),
       checkpointDir: resolve(

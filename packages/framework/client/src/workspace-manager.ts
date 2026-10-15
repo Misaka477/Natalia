@@ -44,6 +44,7 @@ function sameRootPath(left: string, right: string): boolean {
 export type WorkspaceManagerOptions = Pick<
   RealRuntimeClientOptions,
   | "pluginStoreRoot"
+  | "pluginDistributionRoot"
   | "globalConfigPath"
   | "useSqliteStore"
   | "sessionDir"
@@ -543,6 +544,7 @@ export function createWorkspaceManager(
     const client = createRealRuntimeClient({
       workspaceRoot: root,
       pluginStoreRoot: options.pluginStoreRoot,
+      pluginDistributionRoot: options.pluginDistributionRoot,
       globalConfigPath: options.globalConfigPath,
       useSqliteStore: options.useSqliteStore,
       contextWindowCachePath: options.contextWindowCachePath,

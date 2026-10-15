@@ -122,6 +122,8 @@ export type RuntimeState = {
   initialize: InitializeDependencies;
   workspaceRoot: string;
   pluginStoreRoot?: string;
+  /** See {@link RealRuntimeClientOptions.pluginDistributionRoot}. */
+  pluginDistributionRoot?: string;
   sessionID: SessionID;
   provider?: StreamingProvider;
   /** Immutable host/test provider injection for the independent chat streams. */

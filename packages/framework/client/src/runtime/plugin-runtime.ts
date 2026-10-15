@@ -18,10 +18,18 @@ type OfficialPlugin = (typeof OFFICIAL_PLUGIN_PACKAGES)[number];
 
 async function installOfficialLocal(
   pluginStoreRoot: string,
+  distributionRoot: string | undefined,
   official: OfficialPlugin,
 ) {
-  const distributionRoot = resolve(pluginStoreRoot, "..", "plugins");
-  const sourceDir = resolve(distributionRoot, official.directory);
+  // The sibling derivation was the layout when the store sat BESIDE the
+  // distribution. The store now lives in the one home, so that derivation
+  // points at `<home>/plugins`, which does not exist — and installing an
+  // official plugin from the shell failed there with ENOENT. A host that
+  // knows its distribution passes it; the sibling stays as the answer for a
+  // store that really does sit beside one (the dev store does).
+  const resolved =
+    distributionRoot ?? resolve(pluginStoreRoot, "..", "plugins");
+  const sourceDir = resolve(resolved, official.directory);
   const packagesDir = resolve(pluginStoreRoot, "node_modules");
   const packageRoot = resolve(packagesDir, ...official.packageName.split("/"));
   await mkdir(packagesDir, { recursive: true });
@@ -105,7 +113,11 @@ export function createPluginRuntime(
         (plugin) => plugin.packageName === input.spec,
       );
       const result = official
-        ? await installOfficialLocal(pluginStoreRoot, official)
+        ? await installOfficialLocal(
+            pluginStoreRoot,
+            ctx.state.pluginDistributionRoot,
+            official,
+          )
         : await installPlugin({
             pluginStoreRoot,
             spec: input.spec,

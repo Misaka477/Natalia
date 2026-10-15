@@ -41,6 +41,9 @@ export function createCompositionContext(
     pluginStoreRoot: options.pluginStoreRoot
       ? resolve(options.pluginStoreRoot)
       : undefined,
+    pluginDistributionRoot: options.pluginDistributionRoot
+      ? resolve(options.pluginDistributionRoot)
+      : undefined,
     provider: options.provider,
     chatDefaultProvider: options.provider,
     providerSource: options.provider ? "explicit" : "unconfigured",

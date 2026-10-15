@@ -15,6 +15,18 @@ export type RealRuntimeClientOptions = {
   workspaceRoot?: string;
   /** Natalia instance plugin store. Hosts resolve this once; workspaces never own it. */
   pluginStoreRoot?: string;
+  /**
+   * The distribution the official plugins are installed FROM.
+   *
+   * Deriving it from the store (`<store>/../plugins`) was the layout when the
+   * store was a SIBLING of the distribution; the store now lives in the one
+   * home, so that derivation points at `<home>/plugins`, which does not exist,
+   * and installing an official plugin from the shell failed with ENOENT on an
+   * installed machine. A host that knows where its distribution is says so;
+   * the sibling derivation stays as the fallback for a store that really does
+   * sit beside one (the dev store does).
+   */
+  pluginDistributionRoot?: string;
   /** Override the user-level config path, primarily for isolated hosts/tests. */
   globalConfigPath?: string;
   sessionDir?: string;

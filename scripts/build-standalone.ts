@@ -170,6 +170,28 @@ async function stageTerminalNatives(
   await cp(join(prebuilt, bridgeName), join(bridgeDir, bridgeName));
 }
 
+/** The newest modification time in a tree, or 0 when it has no files at all. */
+async function newestMtime(dir: string): Promise<number> {
+  let newest = 0;
+  const walk = async (current: string): Promise<void> => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      const stats = await stat(full);
+      if (stats.mtimeMs > newest) newest = stats.mtimeMs;
+    }
+  };
+  try {
+    await walk(dir);
+  } catch {
+    return 0;
+  }
+  return newest;
+}
+
 /**
  * Assemble the web shell the CEF window loads.
  *
@@ -179,6 +201,17 @@ async function stageTerminalNatives(
  * a connection the static server could not answer — a blank window in an
  * otherwise complete install. The runtime serves this directory, so shipping it
  * is what makes the window show anything.
+ *
+ * STALE, not only missing. The existence check below was the whole guard, and
+ * it let a seven-hour-old shell into a release: this script COPIES
+ * `apps/web/dist` and never rebuilds it (`npm run build:web` is chained by
+ * `package:windows`, not by `release:build`). The install then carried a UI
+ * without the fixes just written into its sources, so every observation made
+ * on it was an observation of the PREVIOUS build — which is exactly how a
+ * "the terminal tab is still missing" report came to be made against code that
+ * had already been changed to fix it. A guard that only asks whether an
+ * artifact EXISTS cannot tell "we built it" from "it was already sitting
+ * there".
  */
 async function stageWebShell(outDir: string): Promise<void> {
   const built = join(root, "apps", "web", "dist");
@@ -187,6 +220,21 @@ async function stageWebShell(outDir: string): Promise<void> {
       "the web shell is not built — run \`npm run build:web\` before packaging " +
         "(its output is apps/web/dist and no release step produces it)",
     );
+  const shellBuiltAt = await newestMtime(built);
+  for (const source of [
+    "apps/web/src",
+    "packages/plugins/ui/web/src",
+    "packages/hosts/ui-model/src",
+  ]) {
+    const sourceAt = await newestMtime(join(root, source));
+    if (sourceAt > shellBuiltAt)
+      throw new Error(
+        `the web shell is STALE: ${source} is newer than ${built} ` +
+          `(${new Date(sourceAt).toISOString()} > ` +
+          `${new Date(shellBuiltAt).toISOString()}) — run \`npm run build:web\` ` +
+          `first, or the release ships the previous UI`,
+      );
+  }
   const target = join(outDir, "web");
   await rm(target, { recursive: true, force: true });
   await cp(built, target, { recursive: true });

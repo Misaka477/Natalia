@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -139,6 +140,52 @@ test("VFS candidates never win, and the store is the home's in every context", (
       NATALIA_PLUGIN_STORE: "   ",
     }),
   ).toBe(join(home, ".natalia", "plugin-store"));
+});
+
+test("an install's old plugin store is carried into the one home, once", async () => {
+  const { migrateLegacyPluginStore } = await import("../src/official-plugins");
+  const legacy = join(base, "legacy-install", "plugin-store");
+  const home = join(base, "home-store");
+  const thirdParty = join(legacy, "node_modules", "@user", "my-plugin");
+  mkdirSync(thirdParty, { recursive: true });
+  writeFileSync(join(thirdParty, "index.js"), "// a package the user added\n");
+  writeFileSync(join(legacy, "natalia.lock"), '{"version":1,"plugins":{}}\n');
+
+  // First run after the store moved: the home has none, the install does. The
+  // sixteen official plugins are re-created from the distribution either way —
+  // a package the USER installed exists only here, and "reinstall your
+  // plugins" is not a migration.
+  expect(
+    await migrateLegacyPluginStore({ storeRoot: home, legacyRoot: legacy }),
+  ).toEqual({ migrated: true, from: legacy });
+  expect(existsSync(join(home, "natalia.lock"))).toBe(true);
+  expect(existsSync(join(home, "node_modules", "@user", "my-plugin", "index.js"))).toBe(
+    true,
+  );
+  // Copied, not moved: the old directory belongs to the install that wrote it,
+  // and removing it is the uninstaller's business.
+  expect(existsSync(join(legacy, "natalia.lock"))).toBe(true);
+
+  // Second run: the home store exists, so nothing is copied over it.
+  writeFileSync(join(home, "sentinel"), "kept\n");
+  expect(
+    await migrateLegacyPluginStore({ storeRoot: home, legacyRoot: legacy }),
+  ).toEqual({ migrated: false });
+  expect(existsSync(join(home, "sentinel"))).toBe(true);
+
+  // A store that IS the legacy path is not copied onto itself — which is what
+  // a `NATALIA_PLUGIN_STORE` naming the old location would otherwise do.
+  expect(
+    await migrateLegacyPluginStore({ storeRoot: legacy, legacyRoot: legacy }),
+  ).toEqual({ migrated: false });
+
+  // Nothing to carry from an install that never had a store.
+  expect(
+    await migrateLegacyPluginStore({
+      storeRoot: join(base, "fresh"),
+      legacyRoot: join(base, "no-such-install", "plugin-store"),
+    }),
+  ).toEqual({ migrated: false });
 });
 
 test("a throwing plugin bootstrap degrades with a warning, never a crash", async () => {

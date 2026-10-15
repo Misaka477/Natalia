@@ -268,9 +268,64 @@ async function syncDevOfficialPlugins() {
   }
 }
 
+/**
+ * Carry an existing install's plugin store into the one home, once.
+ *
+ * The store used to be a sibling of the distribution root, so an install that
+ * ran before that moved keeps its plugins — including any THIRD-PARTY one the
+ * user installed — in `<install>/plugin-store`. The sixteen official plugins
+ * are re-created from the distribution on the next run, but a package the user
+ * added is only in the old directory, and "reinstall your plugins" is not a
+ * migration.
+ *
+ * A COPY, not a move: the old directory belongs to the install it was written
+ * by, and removing it is the uninstaller's business. It runs only when the
+ * home store is ABSENT, so it can never overwrite what the new location
+ * already holds — the two roots are also compared resolved, because a
+ * `NATALIA_PLUGIN_STORE` that points at the legacy path must not copy a
+ * directory onto itself.
+ */
+export async function migrateLegacyPluginStore(
+  input: { storeRoot?: string; legacyRoot?: string } = {},
+): Promise<{ migrated: boolean; from?: string }> {
+  const storeRoot = resolve(input.storeRoot ?? pluginStoreRoot());
+  let legacyRoot: string;
+  if (input.legacyRoot !== undefined) {
+    legacyRoot = resolve(input.legacyRoot);
+  } else {
+    // Only an INSTALLED distribution has a legacy store to carry, and the
+    // distinction is not cosmetic: a checkout's sibling is the DEV store that
+    // `refresh:plugin-store` writes on purpose, so copying it into the home
+    // once would freeze it — the next refresh writes the repository copy and
+    // the runtime would keep reading the stale one. This asks the same
+    // resolver the distribution root itself uses, so "installed" means what it
+    // means everywhere else here.
+    const installed = installedPluginDistributionRoot({
+      argv0: process.argv0,
+      execPath: process.execPath,
+    });
+    if (!installed) return { migrated: false };
+    legacyRoot = resolve(join(dirname(installed), "plugin-store"));
+  }
+  if (storeRoot === legacyRoot) return { migrated: false };
+  if (await pathExists(storeRoot)) return { migrated: false };
+  if (!(await pathExists(legacyRoot))) return { migrated: false };
+  await cp(legacyRoot, storeRoot, { recursive: true });
+  return { migrated: true, from: legacyRoot };
+}
+
 export async function initializeCliOfficialPlugins(
   initialize: typeof initializeOfficialPlugins = initializeOfficialPlugins,
 ) {
+  // Before initialization, so the migrated store is what initialization then
+  // finds (and so it does not re-install from the distribution over a store
+  // the user already had).
+  const migration = await migrateLegacyPluginStore();
+  if (migration.migrated)
+    console.warn(
+      `[official-plugins] carried the plugin store into ${pluginStoreRoot()} ` +
+        `from ${migration.from}; the old directory was left in place`,
+    );
   const result = await initialize({
     pluginStoreRoot: pluginStoreRoot(),
     distributionRoot: officialPluginDistributionRoot(),

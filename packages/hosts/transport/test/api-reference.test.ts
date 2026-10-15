@@ -33,9 +33,9 @@ import {
  *   - `bun test packages/hosts/transport/test/api-reference.test.ts` — assert mode:
  *     the committed document must contain the generated block byte for byte.
  *     Any table change, or any hand edit inside the block, turns the gate red.
- *   - `npm run docs:api-reference` — write mode (`API_REFERENCE_WRITE=1 bun run
- *     packages/hosts/transport/test/api-reference.test.ts`): replaces the block
- *     between the markers in place and reports the path.
+ *   - `npm run docs:api-reference` — write mode (`bun run
+ *     packages/hosts/transport/test/api-reference.test.ts --write`): replaces
+ *     the block between the markers in place and reports the path.
  */
 
 const API_REFERENCE_PATH = join(process.cwd(), "docs", "api-reference.md");
@@ -1768,7 +1768,15 @@ export function writeApiReference(): void {
   }
 }
 
-if (!process.env.API_REFERENCE_WRITE) {
+// The flag is read from argv as well as from the environment because
+// `API_REFERENCE_WRITE=1 bun run …` is a POSIX env prefix: cmd.exe (which
+// `npm run` uses on Windows) rejects it outright, so `npm run
+// docs:api-reference` could not run there. A flag is spelled the same way in
+// every shell, and the env var keeps working for a caller that already sets it.
+const writeMode =
+  process.argv.includes("--write") || Boolean(process.env.API_REFERENCE_WRITE);
+
+if (!writeMode) {
   test("docs/api-reference.md generated block matches the source tables", () => {
     const full = readFileSync(API_REFERENCE_PATH, "utf8");
     const block = `${GEN_BEGIN}\n${renderGeneratedSections()}${GEN_END}`;
@@ -1831,32 +1839,35 @@ if (!process.env.API_REFERENCE_WRITE) {
     expect(documented).toContain("issueTargetConfigSchema.token");
     expect(documented).toContain("dataSourceConfigSchema.timestampField");
   });
+  // Inside the assert-mode guard, like the cases above: `bun run` (write
+  // mode) executes this file as a script, where `test()` throws "Cannot use
+  // test outside of the test runner" — so a regeneration crashed before it
+  // wrote anything. It registers under `bun test` exactly as before.
+  test("the agent tool surfaces section names the drifted audit names (P2-20)", () => {
+    // The 2026-10-08 audit's P2-20: names from earlier audits
+    // (`diff_workspace`, `mailbox_send`, `plan_doc_write`, `plan_generation`,
+    // `audit_report`) were a mixture of live tools, per-channel tools and a name
+    // that does not exist, and nothing said which was which. The generated
+    // section now states the surface AND resolves the confusion.
+    const lines = agentToolSurfaceLines().join("\n");
+    expect(lines).toContain("### Agent tool surfaces");
+    expect(lines).toContain("Main agent");
+    expect(lines).toContain("Navi (live work chat)");
+    expect(lines).toContain("Nia (audit)");
+    expect(lines).toContain("Subagent");
+    // The real per-channel sets are in it.
+    expect(lines).toContain("`plan_propose`");
+    expect(lines).toContain("`work_contract_read`");
+    // And the drifted names are resolved rather than left ambiguous.
+    expect(lines).toContain("`plan_generation`");
+    expect(lines).toContain("`propose_generation`");
+    expect(lines).toContain("belong to the chat surfaces above");
+  });
 }
 
-if (process.env.API_REFERENCE_WRITE && import.meta.main) {
+if (writeMode && import.meta.main) {
   writeApiReference();
   console.log(
     `updated ${API_REFERENCE_PATH}, ${API_REFERENCE_ZH_PATH}, ${TYPES_REFERENCE_PATH}, ${TYPES_REFERENCE_ZH_PATH}, ${CONFIG_REFERENCE_PATH}, ${CONFIG_REFERENCE_ZH_PATH}`,
   );
 }
-
-test("the agent tool surfaces section names the drifted audit names (P2-20)", () => {
-  // The 2026-10-08 audit's P2-20: names from earlier audits
-  // (`diff_workspace`, `mailbox_send`, `plan_doc_write`, `plan_generation`,
-  // `audit_report`) were a mixture of live tools, per-channel tools and a name
-  // that does not exist, and nothing said which was which. The generated
-  // section now states the surface AND resolves the confusion.
-  const lines = agentToolSurfaceLines().join("\n");
-  expect(lines).toContain("### Agent tool surfaces");
-  expect(lines).toContain("Main agent");
-  expect(lines).toContain("Navi (live work chat)");
-  expect(lines).toContain("Nia (audit)");
-  expect(lines).toContain("Subagent");
-  // The real per-channel sets are in it.
-  expect(lines).toContain("`plan_propose`");
-  expect(lines).toContain("`work_contract_read`");
-  // And the drifted names are resolved rather than left ambiguous.
-  expect(lines).toContain("`plan_generation`");
-  expect(lines).toContain("`propose_generation`");
-  expect(lines).toContain("belong to the chat surfaces above");
-});

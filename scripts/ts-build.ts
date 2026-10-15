@@ -12,14 +12,23 @@ import solid from "vite-plugin-solid";
  *   (`native-terminal:build-conpty:windows` / `:build-pty-bridge`). A checkout
  *   without them (CI, a fresh clone) fails loudly here rather than shipping a
  *   plugin distribution whose terminal cannot start.
- * - `NATALIA_BUILD_SKIP_NATIVE=1` (the distribution mode, `npm run
- *   build:distribution`): everything the TEST SUITE needs — the CLI bundle
- *   and the 16-plugin official distribution — with the native staging
- *   skipped. This is what makes a fresh CI checkout verifiable: the client
- *   tests read `dist/ts/plugins`, and producing it must not require a
+ * - the distribution mode (`bun scripts/ts-build.ts --skip-native`, what
+ *   `npm run build:distribution` runs): everything the TEST SUITE needs — the
+ *   CLI bundle and the 16-plugin official distribution — with the native
+ *   staging skipped. This is what makes a fresh CI checkout verifiable: the
+ *   client tests read `dist/ts/plugins`, and producing it must not require a
  *   containerized native build.
+ *
+ * The flag is read from argv as well as from the environment because
+ * `NATALIA_BUILD_SKIP_NATIVE=1 bun scripts/ts-build.ts` is a POSIX env
+ * prefix: cmd.exe (which `npm run` uses on Windows) rejects it outright with
+ * "'NATALIA_BUILD_SKIP_NATIVE' is not recognized", so `npm run verify` could
+ * not complete on Windows at all. A flag is spelled the same way in every
+ * shell, and the env var keeps working for a caller that already sets it.
  */
-const skipNative = process.env.NATALIA_BUILD_SKIP_NATIVE === "1";
+const skipNative =
+  process.argv.includes("--skip-native") ||
+  process.env.NATALIA_BUILD_SKIP_NATIVE === "1";
 if (skipNative)
   console.log(
     "distribution mode: native executable staging skipped " +

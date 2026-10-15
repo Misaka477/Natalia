@@ -165,16 +165,26 @@ test("a read-only state home never breaks the status read (stale cleanup is best
       createdAt: "2020-01-01T00:00:00.000Z",
     }),
   );
-  chmodSync(dir, 0o555); // EROFS/EACCES on any unlink inside
+  // Whether this host can refuse the courtesy cleanup at all. A read-only
+  // directory is the POSIX answer, and it is the real deployment shape. It
+  // is NOT expressible on Windows: chmod is a no-op there, and rm's `force`
+  // strips the read-only attribute off the file before unlinking — both
+  // measured, with the file deleted either way. What must hold on EVERY
+  // host is the regression this case exists for: the status READ answers
+  // instead of throwing. So the host that can refuse the unlink also gets
+  // the "the record survives" half, and the host that cannot gets the read
+  // answering with the record gone.
+  const refusesUnlink = process.platform !== "win32";
+  if (refusesUnlink) chmodSync(dir, 0o555); // EROFS/EACCES on any unlink inside
   try {
     const status = await runtimeDaemonStatus(store);
     // the state is REPORTED even when the courtesy cleanup cannot run —
     // before the fix this rm threw and every caller (the update
     // command) crashed before doing anything.
     expect(status.state).toBe("stale");
-    expect(existsSync(store.registrationPath)).toBe(true);
+    expect(existsSync(store.registrationPath)).toBe(refusesUnlink);
   } finally {
-    chmodSync(dir, 0o755);
+    if (refusesUnlink) chmodSync(dir, 0o755);
     rmSync(root, { recursive: true, force: true });
   }
 });

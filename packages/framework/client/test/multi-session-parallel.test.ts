@@ -138,6 +138,12 @@ test("fifty sessions submit and finish concurrently without cross-cancel", async
   await client.dispose?.();
 });
 
+// The load tests below the fifty-session one carry an explicit budget, the
+// same way the five-hundred one does: N concurrent sessions is seconds of
+// real admission work, and bun's 5s default is not a budget for it. Measured
+// on a loaded Windows host — 5462ms for a hundred and 5717ms for two hundred,
+// against a clean-tree baseline that also ran past the default — so the
+// budget is headroom over the measurement, not a tuned-to-pass number.
 test("hundred sessions submit and finish concurrently without cross-cancel", async () => {
   const workspaceRoot = await officialPluginWorkspace(
     "multi-session-parallel-100",
@@ -169,7 +175,7 @@ test("hundred sessions submit and finish concurrently without cross-cancel", asy
   expect(results.length).toBe(100);
   for (const result of results) expect(result?.id).toBeTruthy();
   await client.dispose?.();
-});
+}, 30_000);
 
 test("two sessions chat concurrently without cross-channel mixing", async () => {
   const workspaceRoot = await officialPluginWorkspace(
@@ -479,7 +485,7 @@ test("two hundred sessions submit and finish concurrently without cross-cancel",
   expect(results.length).toBe(200);
   for (const result of results) expect(result?.id).toBeTruthy();
   await client.dispose?.();
-});
+}, 30_000);
 
 // 500 concurrent durable turns: the whole point of the test is that the
 // admission path holds under real load, which is seconds of work by

@@ -356,21 +356,23 @@ export async function startDetachedProcess(input: {
       `& { ${command} } 2>&1 | ForEach-Object { ` +
       `[System.IO.File]::AppendAllText(${logPath}, "$_" + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }`;
     // The worker rides an ENVIRONMENT VARIABLE, so the launcher must not hand
-    // pwsh an empty one. `Invoke-Expression $null` fails with "Cannot bind
+    // pwsh an empty one: `Invoke-Expression $null` fails with "Cannot bind
     // argument to parameter 'Command' because it is null", and under
     // DETACHED_PROCESS with every stdio ignored that message is the ONLY
-    // thing the operator ever sees — the user's own screenshot was exactly
-    // this, from a launcher whose script entry never arrived. The guard
-    // writes the reason into the log the caller already reads, so the
-    // failure is diagnosable instead of a detached worker that never ran.
+    // thing the operator ever sees. The user's screenshots were exactly this,
+    // from a launcher whose script entry never arrived.
+    //
+    // The spelling is deliberately SHORT and free of double quotes and
+    // parentheses. This argument travels as one element of a command line that
+    // `cmd.exe /c` parses itself, and cmd's `/c` quote rules are the fragile
+    // part: an embedded `"` has to survive the spawn's escaping AND cmd's
+    // stripping, and a mismatch surfaces as 0x800700e8 — a launch failure that
+    // names the whole command line and nothing about the cause. `$`, `=`, `;`,
+    // `{` and `}` are inert to cmd, so this form cannot be mangled by it. The
+    // reason a delivery failed is reported by the caller, which polls the log
+    // and finds it empty.
     const launcher =
-      `$s = $env:NATALIA_DETACHED_SCRIPT; ` +
-      `if (-not $s) { ` +
-      `[System.IO.File]::AppendAllText(${logPath}, ` +
-      `"the detached worker script was not delivered ` +
-      `(NATALIA_DETACHED_SCRIPT is empty)" + [Environment]::NewLine, ` +
-      `[System.Text.UTF8Encoding]::new($false)); exit 1 }; ` +
-      `Invoke-Expression $s`;
+      "$s=$env:NATALIA_DETACHED_SCRIPT;if($s){Invoke-Expression $s}else{exit 1}";
     const child = spawn(
       "cmd.exe",
       [

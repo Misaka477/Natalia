@@ -48,9 +48,20 @@ export function zFillCmd(totalBytes: number): string {
  * A command that spawns a long-running CHILD, writes the child's pid to
  * `child.pid`, and waits for it. The POSIX spelling is the job-control one;
  * pwsh has no `$!`, so the child is started explicitly and waited on.
+ *
+ * `-NoNewWindow` is load-bearing, not decoration. Without it `Start-Process`
+ * defaults to `UseShellExecute = true`, so the child is launched through the
+ * Windows Shell broker. This worker runs under `DETACHED_PROCESS` with every
+ * stdio ignored — the exact context where that broker cannot complete the
+ * launch: the failure surfaces as 0x800700e8 (ERROR_NO_DATA, "the pipe is
+ * being closed"), reported against the whole command line while the outer
+ * managed process never writes its child.pid at all. `-NoNewWindow` is the
+ * PowerShell spelling of `UseShellExecute = false` — a plain CreateProcess,
+ * no broker, no console required, which is what the POSIX branch's `&`
+ * already is.
  */
 export const groupWithChildCmd = onWindows
-  ? `$c = Start-Process pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep 30' -PassThru; $c.Id > child.pid; Wait-Process -Id $c.Id`
+  ? `$c = Start-Process pwsh -NoNewWindow -ArgumentList '-NoProfile','-Command','Start-Sleep 30' -PassThru; $c.Id > child.pid; Wait-Process -Id $c.Id`
   : `sleep 30 & echo $! > child.pid; wait`;
 
 /** argv for a directly-spawned long-lived child — no shell in between. */

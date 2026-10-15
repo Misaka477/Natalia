@@ -4,6 +4,16 @@ export * from "./runtime-worker";
 export * from "./store-paths";
 export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
 export {
+  FIRST_USE_WORKSPACE_DECLINED_FILE,
+  FIRST_USE_WORKSPACE_DIR_NAME,
+  FIRST_USE_WORKSPACE_PARENT,
+  documentsDirectory,
+  firstUseWorkspaceDeclined,
+  firstUseWorkspaceDeclinedPath,
+  firstUseWorkspacePath,
+  type DocumentsDirectoryInput,
+} from "./first-use-workspace";
+export {
   defaultPaneCommand,
   discoverDefaultShell,
   shellInvocation,

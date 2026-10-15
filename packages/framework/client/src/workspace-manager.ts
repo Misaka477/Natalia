@@ -9,7 +9,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { nataliaHomeJoin, resolveNataliaPath } from "@anthelia/platform";
+import {
+  firstUseWorkspaceDeclinedPath,
+  firstUseWorkspacePath,
+  nataliaHomeJoin,
+  resolveNataliaPath,
+} from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import { createLocalSessionService } from "@anthelia/session-store";
 import {
@@ -21,6 +26,20 @@ import {
 } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "./runtime/main";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
+
+/**
+ * Whether two workspace roots name the same directory on this host.
+ *
+ * Windows paths are case-insensitive and a string comparison is not, so
+ * `E:\Natalia` and `E:\natalia` are one workspace there — and a first-use
+ * workspace recorded in one spelling must not be missed in the other. A POSIX
+ * host compares as written, where the two are different directories.
+ */
+function sameRootPath(left: string, right: string): boolean {
+  if (process.platform === "win32")
+    return resolve(left).toLowerCase() === resolve(right).toLowerCase();
+  return resolve(left) === resolve(right);
+}
 
 export type WorkspaceManagerOptions = Pick<
   RealRuntimeClientOptions,
@@ -570,6 +589,21 @@ export function createWorkspaceManager(
     await ws.client.dispose?.();
     runtimes.delete(workspaceID);
     invalidateSessionCache(workspaceID);
+    // Deleting the FIRST-USE workspace is the user declining it, and the
+    // record belongs in the one home: the next launch offers the empty state
+    // (which carries the add-workspace entry point) instead of re-creating the
+    // directory they just removed. Best-effort — a home that cannot be written
+    // is a different problem, and failing the removal over it would be worse
+    // than offering the workspace once more.
+    const firstUse = firstUseWorkspacePath({ exists: existsSync });
+    if (firstUse && sameRootPath(firstUse, ws.root))
+      await writeFile(
+        firstUseWorkspaceDeclinedPath(),
+        "deleted by the user\n",
+        {
+          mode: 0o600,
+        },
+      ).catch(() => undefined);
     if (activeWorkspaceID === workspaceID) {
       const next = runtimes.values().next().value;
       activeWorkspaceID = next?.workspaceID;

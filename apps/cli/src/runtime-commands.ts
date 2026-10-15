@@ -1,4 +1,4 @@
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   createRealRuntimeClient,
   createUiAdapterHost,
@@ -9,6 +9,7 @@ import {
 import { createRecordedFetch } from "@natalia/transport";
 import { createHttpTransportHost } from "./transport-host";
 import { createPluginUiResolver } from "./plugin-ui";
+import { ensureFirstUseWorkspace } from "./first-use-workspace";
 import { serveStaticDirectory } from "./serve-web";
 import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 import { promptArguments } from "./index";
@@ -86,16 +87,15 @@ export async function handleRuntimeCommand(argv: string[]) {
     });
     await manager.load();
     // A fresh install has no workspace registry, and every runtime face
-    // resolves through the manager's ACTIVE workspace — with none active
-    // the whole surface is undefined (the UI parks on its startup page
-    // with `pluginCatalog` "not supported"). Seed the working directory
-    // as the default workspace in that case.
-    if (!manager.getActive()) {
-      await manager.workspaceAdd({
-        path: process.cwd(),
-        title: basename(process.cwd()),
-      });
-    }
+    // resolves through the manager's ACTIVE workspace. The first workspace is
+    // the OS Documents one — a fixed path, whatever the process was started
+    // from — so the INSTALL tree can never become a workspace: its
+    // `<workspace>/.natalia` would sit inside the tree the uninstaller
+    // deletes. Deleting that workspace records the refusal, and a later
+    // launch does not create it again. A host with no Documents directory
+    // gets no workspace at all, and the shell shows its empty state — which
+    // carries the add-workspace entry point.
+    if (!manager.getActive()) await ensureFirstUseWorkspace(manager);
     perfLog(
       `[perf] runtime manager loaded +${(performance.now() - commandStart).toFixed(1)}ms`,
     );

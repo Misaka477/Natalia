@@ -100,6 +100,49 @@ async function installSharedPluginStore(): Promise<void> {
     distributionRoot: officialPluginDistribution,
     runPackageManager: installPrebuiltPackage,
   });
+  await stageNativeTerminalBridge();
+}
+
+/**
+ * Put the Windows ConPTY bridge where the terminal plugin looks for it.
+ *
+ * The store is assembled from `dist/ts/plugins`, and `build:distribution`
+ * — the build the whole suite runs on — sets NATALIA_BUILD_SKIP_NATIVE, so
+ * ts-build stages no bridge at all. A store-loaded plugin on Windows has no
+ * second answer: the POSIX Python fallback needs the POSIX pty module, so
+ * every pane died with "the ConPTY bridge is not built" naming a path inside
+ * the store that nothing had written. Measured: `interactive_terminal_start`
+ * failed with exactly that message, and `nativeTerminalList()` returned [].
+ *
+ * The checkout's own prebuilt drop (`native-terminal:build-conpty:windows`)
+ * is what a release stages beside its executable, so it is copied to the
+ * tier the resolver reads — inside the plugin package, which is the one
+ * candidate that resolves out of a store.
+ *
+ * Windows only, and only when the drop exists: on POSIX the Python bridge is
+ * the tested default and staging the Rust one would silently switch which
+ * backend the suite measures. A missing drop leaves the plugin's own loud
+ * error naming the build command, which is the designed behaviour.
+ */
+async function stageNativeTerminalBridge(): Promise<void> {
+  if (process.platform !== "win32") return;
+  const triple = `windows-${process.arch === "x64" ? "x64" : process.arch}`;
+  const bridge = resolve(
+    import.meta.dir,
+    "../../../../packages/plugins/native-terminal/prebuilt",
+    triple,
+    "natalia-conpty-bridge.exe",
+  );
+  if (!(await Bun.file(bridge).exists())) return;
+  const target = join(
+    sharedPluginStoreRoot,
+    "node_modules",
+    "@natalia",
+    "plugin-native-terminal",
+    "pty-bridge",
+  );
+  await mkdir(target, { recursive: true });
+  await cp(bridge, join(target, "natalia-conpty-bridge.exe"));
 }
 
 async function newestFileMtime(root: string): Promise<number> {

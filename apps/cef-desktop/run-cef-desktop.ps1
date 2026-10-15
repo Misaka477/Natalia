@@ -136,11 +136,18 @@ try {
 $runtime = $null
 $web = $null
 try {
+  # `-NoNewWindow` is load-bearing, not decoration: without it Start-Process
+  # goes through the Shell broker (`UseShellExecute = true`), which fails with
+  # 0x800700e8 (ERROR_NO_DATA) when the parent has no console to hand over —
+  # measured, and recorded beside the same rule in
+  # packages/plugins/tools/process/test/fixtures.ts. The window host below
+  # needs no such flag: specifying a redirect already forces
+  # `UseShellExecute = false`.
   Write-Output "[cef-desktop] starting runtime on 127.0.0.1:$runtimePort"
-  $runtime = Start-Process -FilePath "bun" -ArgumentList "apps\cli\src\main.ts","serve","$runtimePort" -PassThru
+  $runtime = Start-Process -FilePath "bun" -NoNewWindow -ArgumentList "apps\cli\src\main.ts","serve","$runtimePort" -PassThru
 
   Write-Output "[cef-desktop] starting web server on 127.0.0.1:$webPort"
-  $web = Start-Process -FilePath "bun" -ArgumentList "apps\cef-desktop\serve-web.ts" -PassThru
+  $web = Start-Process -FilePath "bun" -NoNewWindow -ArgumentList "apps\cef-desktop\serve-web.ts" -PassThru
 
   [NataliaJob]::Add($job, $runtime.Id)
   [NataliaJob]::Add($job, $web.Id)

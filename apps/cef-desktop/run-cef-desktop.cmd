@@ -47,11 +47,11 @@ REM waiting past the runtime's own shutdown watchdog before escalating. This
 REM is the same shape: Start-Process -PassThru gives the real PID (a /b child
 REM has no window title a WINDOWTITLE filter can match, which is why the old
 REM title-based cleanup never matched anything and left the servers running).
-for /f "usebackq tokens=*" %%p in (`powershell -NoProfile -Command "Start-Process -FilePath 'bun' -ArgumentList 'apps\cli\src\main.ts','serve','%RUNTIME_PORT%' -PassThru | Select-Object -ExpandProperty Id"`) do set RUNTIME_PID=%%p
+for /f "usebackq tokens=*" %%p in (`powershell -NoProfile -Command "Start-Process -FilePath 'bun' -NoNewWindow -ArgumentList 'apps\cli\src\main.ts','serve','%RUNTIME_PORT%' -PassThru | Select-Object -ExpandProperty Id"`) do set RUNTIME_PID=%%p
 echo [cef-desktop] runtime pid %RUNTIME_PID%
 
 echo [cef-desktop] starting web server on 127.0.0.1:%WEB_PORT%
-for /f "usebackq tokens=*" %%p in (`powershell -NoProfile -Command "Start-Process -FilePath 'bun' -ArgumentList 'apps\cef-desktop\serve-web.ts' -PassThru | Select-Object -ExpandProperty Id"`) do set WEB_PID=%%p
+for /f "usebackq tokens=*" %%p in (`powershell -NoProfile -Command "Start-Process -FilePath 'bun' -NoNewWindow -ArgumentList 'apps\cef-desktop\serve-web.ts' -PassThru | Select-Object -ExpandProperty Id"`) do set WEB_PID=%%p
 echo [cef-desktop] web pid %WEB_PID%
 
 REM Wait for both servers the way the Linux script does.

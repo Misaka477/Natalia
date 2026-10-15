@@ -4083,46 +4083,25 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     </span>
                   </div>
                   <div class="neu-main-toolbar">
-                    <Show
-                      when={modelOptions().length > 0}
-                      fallback={
-                        // No model to choose yet. The select used to render
-                        // anyway and open an EMPTY menu — a control that
-                        // advertises options which do not exist (AGENTS.md §6),
-                        // and the strip in the screenshot is exactly that. The
-                        // permission select one element down already answers
-                        // this the same way: with one honest entry rather than
-                        // an empty list.
-                        //
-                        // A label, not a button: there is nothing to click
-                        // until a provider is configured, so nothing here
-                        // pretends otherwise. It reuses the toolbar's muted
-                        // label style instead of adding a one-off rule.
-                        <span class="neu-activity-label">
-                          未配置模型 · 在设置里添加 provider 后即可切换
-                        </span>
-                      }
-                    >
-                      <NeuSelect
-                        value={modelSelectionSignal()?.modelID ?? ""}
-                        options={modelOptions()}
-                        onChange={(modelID) => {
-                          const sessionID =
-                            selectedSessionID() || state().sessionID;
-                          setModelSelectionSignal({
-                            modelID,
-                            variant: undefined,
-                          });
-                          void props.ctx.runtime.selectModel?.(
-                            modelID,
-                            undefined,
-                            sessionID,
-                          );
-                        }}
-                        placeholder="选择模型"
-                        menuPosition="top"
-                      />
-                    </Show>
+                    <NeuSelect
+                      value={modelSelectionSignal()?.modelID ?? ""}
+                      options={modelOptions()}
+                      onChange={(modelID) => {
+                        const sessionID =
+                          selectedSessionID() || state().sessionID;
+                        setModelSelectionSignal({
+                          modelID,
+                          variant: undefined,
+                        });
+                        void props.ctx.runtime.selectModel?.(
+                          modelID,
+                          undefined,
+                          sessionID,
+                        );
+                      }}
+                      placeholder="选择模型"
+                      menuPosition="top"
+                    />
                     <NeuSelect
                       value={reasoningEffort()}
                       options={[

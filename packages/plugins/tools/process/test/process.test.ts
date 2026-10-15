@@ -96,10 +96,17 @@ function processAlive(pid: number) {
 async function waitForFile(path: string) {
   for (let index = 0; index < 50; index++) {
     try {
-      return await readFile(path, "utf8");
+      const content = (await readFile(path, "utf8")).trim();
+      // The file is created BEFORE the pid is written into it, so an empty
+      // read is a half-written file, not a value. `Number("")` is 0, and
+      // `process.kill(0, 0)` answers "alive" forever — which is how a
+      // correct group kill came to be reported as a leaked child under
+      // load, while the same case passed alone.
+      if (content) return content;
     } catch {
-      await Bun.sleep(20);
+      /* not created yet */
     }
+    await Bun.sleep(20);
   }
   throw new Error(`timed out waiting for ${path}`);
 }
@@ -107,13 +114,11 @@ async function waitForFile(path: string) {
 /**
  * Waits, bounded, for every pid to be gone.
  *
- * The Windows group kill is `taskkill /PID <pid> /T /F` — forceful and
- * correct, and the case passes alone. What a fixed window cannot survive is
- * a loaded host: measured under the full suite's 4-way concurrency, the child
- * was still alive after a 1000ms wait and the stop case failed at 2300ms,
- * while the same case took ~1150ms alone. The liveness sweep that observes
- * the death runs on its own cadence, which stretches under load, so the
- * window has to outlive the sweep rather than the kill.
+ * The Windows group kill is `taskkill /PID <pid> /T /F`, and measured the
+ * child is gone ~500ms after the stop returns — so a fixed 100ms sleep
+ * asserted the kill had happened before it had. The liveness sweep that
+ * reaps runs on a cadence that stretches under load, so the window has to
+ * outlive the sweep rather than the kill.
  */
 async function waitForDeath(pids: number[], timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
@@ -283,9 +288,8 @@ test("managed process stop terminates the owned process group", async () => {
     .get("process_stop")!
     .execute({ id: "proc_group" }, { workspaceRoot: root });
   // A bounded wait for both deaths, not a fixed sleep: the group kill is
-  // forceful but the child is the last to go, and the liveness sweep that
-  // observes it runs on a cadence that stretches under load. See
-  // waitForDeath.
+  // forceful but the child is the last to go, ~500ms after the stop
+  // returns. See waitForDeath.
   await waitForDeath([started.pid!, childPID]);
   expect(processAlive(started.pid!)).toBe(false);
   expect(processAlive(childPID)).toBe(false);

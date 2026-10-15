@@ -45,16 +45,17 @@ natalia doctor          # 首跑体检
 /opt/natalia/bin/natalia uninstall
 ```
 
-**安装位置 ≠ 状态位置。** 上一步装的是程序本身。你的状态在**两个**根下，
-卸载都不动它们：
+**安装位置 ≠ 状态位置。** 上一步装的是程序本身。你的状态在**一个**根下，
+卸载时不勾"删除配置"就不动它：
 
-| 根     | POSIX                | Windows                   | 装什么                                                      |
-| ------ | -------------------- | ------------------------- | ----------------------------------------------------------- |
-| 配置根 | `~/.config/natalia/` | `%APPDATA%\natalia\`      | config、workspace 注册表、技能、UI 状态                     |
-| 状态根 | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | `logs/`（操作日志）、`stores/`（SQLite 会话日志）、`vault/` |
+| 根       | POSIX                | Windows                   | 装什么                                                                                     |
+| -------- | -------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| 全局主目录 | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | config、workspace 注册表、技能、UI 状态、插件店、缓存、`logs/`、`stores/`（SQLite 会话日志）、`vault/` |
 
-**状态根是大的那个**——会话日志按工作区哈希分库，长年累月可以到 GB 级。
-换机器/迁移数据时，两个根都要带走。
+**这个目录就是大的那个**——会话日志按工作区哈希分库，长年累月可以到 GB 级。
+换机器/迁移数据时带走它一个就够。`NATALIA_HOME` 可以整体迁移它。旧版本把
+config 放在 `~/.config/natalia/`、Windows 上 `%APPDATA%\natalia\`，那些位置
+**仍会被读取**，但不再写入。
 
 ### Windows
 
@@ -329,16 +330,18 @@ natalia doctor                        # the first-run health report
 ```
 
 **Where it installs is not where your data lives.** The command above puts
-the program in place. Your state lives under TWO roots, and uninstalling
-touches neither:
+the program in place. Your state lives under ONE root, and an uninstall that
+does not tick "delete the configuration" leaves it alone:
 
-| Root        | POSIX                | Windows                   | Holds                                          |
-| ----------- | -------------------- | ------------------------- | ---------------------------------------------- |
-| config root | `~/.config/natalia/` | `%APPDATA%\natalia\`      | config, workspace registry, skills, UI state   |
-| state root  | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | `logs/`, `stores/` (SQLite journals), `vault/` |
+| Root        | POSIX         | Windows                   | Holds                                                                                                        |
+| ----------- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| global home | `~/.natalia/` | `%USERPROFILE%\.natalia\` | config, workspace registry, skills, UI state, plugin store, caches, `logs/`, `stores/` (SQLite journals), `vault/` |
 
-The STATE root is the big one — journals are per-workspace SQLite files and
-grow to GBs over time. Carry both when migrating a machine.
+That home IS the big one — journals are per-workspace SQLite files and grow to
+GBs over time — and it is the only one to carry when migrating a machine.
+`NATALIA_HOME` relocates it whole. Older releases kept the config in
+`~/.config/natalia/` (POSIX) and `%APPDATA%\natalia\` (Windows); those are
+still READ, and no longer written.
 
 Windows (PowerShell):
 

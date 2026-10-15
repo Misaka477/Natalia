@@ -151,10 +151,19 @@ npm run ts:cli -- session delete <id>
 | Data                                    | Location                            |
 | --------------------------------------- | ----------------------------------- |
 | Workspace config, sessions, checkpoints | `<workspace>/.natalia/`             |
-| Global config                           | `~/.config/natalia/config.json`     |
-| Workspace registry                      | `~/.config/natalia/workspaces.json` |
+| Everything global                       | `~/.natalia/`                       |
 
-Override global paths with `NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE`.
+The global home is ONE directory: `$HOME/.natalia` on Linux and macOS,
+`%USERPROFILE%\.natalia\` on Windows. It holds the global `config.json`, the
+workspace registry (`workspaces.json`), TUI state, skills, the plugin store,
+caches, operation logs and the object store — which is why an uninstall that
+keeps it and a reinstall afterwards come back to the same state.
+
+Relocate the whole home with `NATALIA_HOME`; override single files with
+`NATALIA_CONFIG` and `NATALIA_WORKSPACES_FILE`. The locations older releases
+used (`~/.config/natalia/`, `%APPDATA%\natalia\`, a `.natalia/` beside the
+install) are still READ as a fallback, so an existing install keeps its
+settings — nothing writes them any more.
 
 ## 9. Troubleshooting
 
@@ -296,13 +305,20 @@ npm run ts:cli -- session delete <id>
 
 ## 8. 数据存放位置
 
-| 数据                                | 位置                                |
-| ----------------------------------- | ----------------------------------- |
-| workspace 配置、session、checkpoint | `<workspace>/.natalia/`             |
-| global 配置                         | `~/.config/natalia/config.json`     |
-| workspace registry                  | `~/.config/natalia/workspaces.json` |
+| 数据                                | 位置                    |
+| ----------------------------------- | ----------------------- |
+| workspace 配置、session、checkpoint | `<workspace>/.natalia/` |
+| 所有全局数据                        | `~/.natalia/`           |
 
-可用 `NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖全局路径。
+全局主目录只有**一个**：Linux 与 macOS 为 `$HOME/.natalia`，Windows 为
+`%USERPROFILE%\.natalia\`。全局 `config.json`、workspace 注册表
+（`workspaces.json`）、TUI 状态、技能、插件店、缓存、操作日志与对象存储都在
+里面——这也是为什么卸载时选择保留、之后重新安装就能回到原来的状态。
+
+用 `NATALIA_HOME` 可以整体迁移主目录；用 `NATALIA_CONFIG` /
+`NATALIA_WORKSPACES_FILE` 覆盖单个文件。旧版本用过的位置
+（`~/.config/natalia/`、`%APPDATA%\natalia\`、安装目录旁的 `.natalia/`）
+**仍会被读取**作为回退，已有安装的设置不会丢——但不会再写入这些位置。
 
 ## 9. 故障排查
 

@@ -135,10 +135,14 @@ npm run ts:cli -- session list
 npm run ts:cli -- session show <id>
 ```
 
-Configuration lives in `.natalia/config.json` per workspace, with global
-config in the platform config directory (`~/.config/natalia/` on Linux,
-`%USERPROFILE%\.natalia\` on Windows). Use `NATALIA_CONFIG` and
-`NATALIA_WORKSPACES_FILE` to override paths.
+Configuration lives in `.natalia/config.json` per workspace, with all user data
+in ONE global home: `~/.natalia/` — `$HOME/.natalia` on Linux and macOS,
+`%USERPROFILE%\.natalia\` on Windows. That folder holds the global
+`config.json`, the workspace registry, TUI state, skills, the plugin store,
+caches, operation logs and the object store. Use `NATALIA_HOME` to relocate it
+and `NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` to override single files;
+older locations (`~/.config/natalia/`, `%APPDATA%\natalia\`) are still read,
+never written.
 
 ### Documentation
 
@@ -305,9 +309,12 @@ npm run ts:cli -- session list
 npm run ts:cli -- session show <id>
 ```
 
-workspace 级配置在 `.natalia/config.json`，全局配置在平台配置目录（Linux 为
-`~/.config/natalia/`，Windows 为 `%USERPROFILE%\.natalia\`）。可用
-`NATALIA_CONFIG` 和 `NATALIA_WORKSPACES_FILE` 覆盖路径。
+workspace 级配置在 `.natalia/config.json`，**所有用户数据只有一个全局主目录**：
+`~/.natalia/` —— Linux 与 macOS 为 `$HOME/.natalia`，Windows 为
+`%USERPROFILE%\.natalia\`。全局 `config.json`、workspace 注册表、TUI 状态、
+技能、插件店、缓存、操作日志与对象存储都在这个目录里。用 `NATALIA_HOME`
+可以整体迁移它，用 `NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` 覆盖单个文件；
+旧位置（`~/.config/natalia/`、`%APPDATA%\natalia\`）**仍会被读取，但不再写入**。
 
 ### 文档
 

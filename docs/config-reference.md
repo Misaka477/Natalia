@@ -311,9 +311,13 @@ The theme, keybindings and other interface preferences live in `tui.json`,
 written atomically with mode 0600:
 
 - **Project scope**: `.natalia/tui.json`
-- **Global scope**: `$HOME/.config/natalia/tui.json` (POSIX) /
-  > The directory was renamed from `natalia-cli` to `natalia`. The legacy location (`$HOME/.config/natalia-cli/`) is still READ — an existing install needs no migration — while writes always land on the new name. The doctor's source list names the directory a config actually came from.
-  `%APPDATA%\natalia\tui.json` (Windows)
+- **Global scope**: `~/.natalia/tui.json`, in the same home as every other
+  piece of user data (`$HOME/.natalia` on POSIX, `%USERPROFILE%\.natalia\` on
+  Windows; relocate the whole home with `NATALIA_HOME`). The older locations
+  (`$HOME/.config/natalia/`, `$HOME/.config/natalia-cli/`, `%APPDATA%\natalia\`)
+  are still READ — an existing install needs no migration — while writes always
+  land in the one home, and the doctor's source list names the root a value
+  actually came from.
 
 Resolution is defaults → global → project (project wins). The full schema is
 `tuiConfigSchema` in `@anthelia/config`; the fields are:
@@ -604,8 +608,12 @@ atomically, and announces the change with a `settings.updated` event
 主题、键位等界面偏好存放在 `tui.json`，以 0600 权限原子写入：
 
 - **项目作用域**：`.natalia/tui.json`
-- **全局作用域**：`$HOME/.config/natalia/tui.json`（POSIX）/
-  `%APPDATA%\natalia\tui.json`（Windows）
+- **全局作用域**：`~/.natalia/tui.json`，与其他所有用户数据在同一个主目录里
+  （POSIX 为 `$HOME/.natalia`，Windows 为 `%USERPROFILE%\.natalia\`；用
+  `NATALIA_HOME` 可以整体迁移）。旧位置（`$HOME/.config/natalia/`、
+  `$HOME/.config/natalia-cli/`、`%APPDATA%\natalia\`）**仍会被读取**——已有安装
+  无需迁移——但写入一律进入唯一主目录，doctor 的来源列表会如实标出配置实际
+  来自哪一个根。
 
 解析顺序为 defaults → global → project（project 优先）。完整 schema 见
 `@anthelia/config` 的 `tuiConfigSchema`；字段如下：

@@ -9,6 +9,7 @@
  */
 export {
   createRuntimeHttpServer,
+  SSE_IDLE_TIMEOUT_SECONDS,
   type RuntimeHttpServerOptions,
   type RuntimeHttpServer,
   type TaskDeliveryRequest,

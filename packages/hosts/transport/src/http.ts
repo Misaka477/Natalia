@@ -185,6 +185,32 @@ const SSE_PREAMBLE = ": natalia runtime events\n\n";
  */
 const SSE_HEARTBEAT = ": ping\n\n";
 const SSE_HEARTBEAT_MS = 15_000;
+/**
+ * Bun's per-connection idle timeout is measured on INCOMING bytes, so a
+ * heartbeat the server writes does not keep the connection alive — and a
+ * front-end subscribed to `/events` sends nothing at all. The value used to be
+ * 255, which is Bun's maximum, so a subscription was cut every 255 seconds no
+ * matter how faithfully the heartbeat wrote; a browser reports that cut as
+ * ERR_INCOMPLETE_CHUNKED_ENCODING, and the client reconnected into a UI that
+ * looked like it had lost its stream.
+ *
+ * Reproduced outside the product with a 3-second timeout and a 1-second
+ * heartbeat, against a client that only reads (`.btmp/probe-idle-timeout.ts`):
+ *
+ *   PROBE chunk 1 at +4ms     ": preamble"
+ *   PROBE chunk 2 at +1005ms  ": ping"
+ *   PROBE chunk 3 at +2006ms  ": ping"
+ *   PROBE chunk 4 at +3008ms  ": ping"
+ *   PROBE stream ended at +4006ms — read rejected: TypeError: The socket
+ *   connection was closed unexpectedly.
+ *
+ * Three heartbeats were delivered and the socket was closed anyway. With
+ * `idleTimeout: 0` the same stream ran past the whole 12-second window. `0`
+ * disables the timeout, which is what a stream that must outlive silence
+ * needs; the transport binds loopback (or a unix socket) by default, and the
+ * request/response surface carries its own deadlines.
+ */
+export const SSE_IDLE_TIMEOUT_SECONDS = 0;
 const TASK_EXECUTION_RECORD_LIMIT = 100;
 const TASK_EXECUTION_EVENT_LIMIT = 500;
 const TASK_EXECUTION_OUTPUT_LIMIT = 500;
@@ -205,6 +231,10 @@ type EventSubscriber = {
   controller: ReadableStreamDefaultController<Uint8Array>;
   /** Session the subscriber asked for; undefined = all sessions (as credentialed). */
   session?: string;
+  /** Set once the stream is gone, so a late writer cannot enqueue into it. */
+  retired: boolean;
+  /** Cleanup that belongs to the subscription (the keepalive timer). */
+  onRetire?: () => void;
 };
 
 /**
@@ -242,16 +272,61 @@ export function createRuntimeHttpServer(
   >();
   let taskExecutionReservations = 0;
   let nextEventID = 1;
+
+  /** Drop a subscription: out of the fanout, its timer cleared, once. */
+  function retireSubscriber(subscriber: EventSubscriber) {
+    if (subscriber.retired) return;
+    subscriber.retired = true;
+    subscribers.delete(subscriber);
+    subscriber.onRetire?.();
+  }
+
+  /**
+   * The one writer for a subscription's stream.
+   *
+   * The fanout below runs inside the runtime's own publish path, so an
+   * exception escaping it would abort unrelated work for every other
+   * front-end — a dead client must cost that client its stream and nothing
+   * else. Bun 1.4.0 silently drops a write into a cancelled stream (measured:
+   * cancel a reader mid-replay and neither the live publish nor the replay
+   * write throws, `.btmp/probe-sse-cancel.test.ts`), so this is hardening
+   * rather than the cause of a defect; it is also the one place that can tell
+   * a subscription is dead and take it out of the set, which is what keeps a
+   * disconnected front-end from being written to for the rest of the session.
+   */
+  function send(
+    subscriber: EventSubscriber,
+    bytes: Uint8Array,
+    reason?: string,
+  ): boolean {
+    if (subscriber.retired) return false;
+    try {
+      subscriber.controller.enqueue(bytes);
+      return true;
+    } catch (error) {
+      log.info(
+        `sse write failed${reason ? ` (${reason})` : ""}, dropping the subscription: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      retireSubscriber(subscriber);
+      return false;
+    }
+  }
+
   if (options.events !== false)
     options.client.start((event) => {
       const id = nextEventID++;
-      for (const subscriber of subscribers) {
+      // A copy: a failing write retires its subscriber, and mutating the set
+      // while iterating it would skip the next front-end in line.
+      for (const subscriber of [...subscribers]) {
         // Session filtering happens here, server-side: a subscriber that asked
         // for session A never sees an event carrying session B, not even its
         // count or type (the acceptance criterion for P0-D).
         if (!eventInSession(event, subscriber)) continue;
-        subscriber.controller.enqueue(
+        send(
+          subscriber,
           encodeSSE(encoder, id, event, runtimeEventSessionSeq(event)),
+          "live event",
         );
       }
     });
@@ -597,27 +672,26 @@ export function createRuntimeHttpServer(
         !allowedSessions.has(requestedSession)
       )
         return Response.json({ error: "forbidden" }, { status: 403 });
-      let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       const subscriber: EventSubscriber = {
         controller:
           null as unknown as ReadableStreamDefaultController<Uint8Array>,
         session: requestedSession,
+        retired: false,
+        onRetire: () => {
+          if (heartbeat) clearInterval(heartbeat);
+        },
       };
       return new Response(
         new ReadableStream({
           start(nextController) {
-            controller = nextController;
             subscriber.controller = nextController;
             subscribers.add(subscriber);
-            controller.enqueue(encoder.encode(SSE_PREAMBLE));
-            heartbeat = setInterval(() => {
-              try {
-                controller?.enqueue(encoder.encode(SSE_HEARTBEAT));
-              } catch {
-                // The stream is already closed; cancel() clears the timer.
-              }
-            }, options.sseHeartbeatMs ?? SSE_HEARTBEAT_MS);
+            send(subscriber, encoder.encode(SSE_PREAMBLE), "preamble");
+            heartbeat = setInterval(
+              () => send(subscriber, encoder.encode(SSE_HEARTBEAT), "ping"),
+              options.sseHeartbeatMs ?? SSE_HEARTBEAT_MS,
+            );
             const marker =
               request.headers.get("last-event-id") ??
               url.searchParams.get("since");
@@ -629,12 +703,14 @@ export function createRuntimeHttpServer(
             ) => {
               for (const item of items) {
                 if (!eventInSession(item.event, subscriber)) continue;
-                controller?.enqueue(
+                send(
+                  subscriber,
                   encodeSSE(
                     encoder,
                     "seq" in item ? item.seq : item.id,
                     item.event,
                   ),
+                  "replay",
                 );
               }
             };
@@ -648,20 +724,21 @@ export function createRuntimeHttpServer(
                 .history({ after: since, limit: 500 })
                 .then((history) => replay(history.events))
                 .catch((error) => {
-                  controller?.enqueue(
+                  send(
+                    subscriber,
                     encodeSSE(encoder, 0, {
                       type: "diagnostic",
                       level: "warning",
                       message: `event history replay failed: ${error instanceof Error ? error.message : String(error)}`,
                     }),
+                    "replay failure",
                   );
                 });
               return;
             }
           },
           cancel() {
-            if (heartbeat) clearInterval(heartbeat);
-            subscribers.delete(subscriber);
+            retireSubscriber(subscriber);
           },
         }),
         {
@@ -791,13 +868,11 @@ export function createRuntimeHttpServer(
       headers,
     });
   };
-  // Bun's default idle timeout is 10s, which would kill an SSE subscription
-  // that goes quiet — the runtime's default is to stay silent until it has
-  // something to say. A quiet event stream must outlive a quiet terminal.
-  // `idleTimeout` exists at runtime (Bun 1.3.14) but is missing from the
-  // published bun-types; the cast carries it without losing the rest.
   const serveOptions = (base: Parameters<typeof Bun.serve>[0]) =>
-    ({ ...base, idleTimeout: 255 }) as Parameters<typeof Bun.serve>[0];
+    ({
+      ...base,
+      idleTimeout: SSE_IDLE_TIMEOUT_SECONDS,
+    }) as Parameters<typeof Bun.serve>[0];
   const websocket = {
     open: terminalWs.open,
     message: terminalWs.message,

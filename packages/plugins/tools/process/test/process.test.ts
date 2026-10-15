@@ -103,6 +103,26 @@ async function waitForFile(path: string) {
   }
   throw new Error(`timed out waiting for ${path}`);
 }
+
+/**
+ * Waits, bounded, for every pid to be gone.
+ *
+ * The Windows group kill is `taskkill /PID <pid> /T /F` — forceful and
+ * correct, and the case passes alone. What a fixed window cannot survive is
+ * a loaded host: measured under the full suite's 4-way concurrency, the child
+ * was still alive after a 1000ms wait and the stop case failed at 2300ms,
+ * while the same case took ~1150ms alone. The liveness sweep that observes
+ * the death runs on its own cadence, which stretches under load, so the
+ * window has to outlive the sweep rather than the kill.
+ */
+async function waitForDeath(pids: number[], timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (pids.every((pid) => !processAlive(pid))) return;
+    if (Date.now() >= deadline) return;
+    await Bun.sleep(20);
+  }
+}
 test("default process tools execute real commands", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-"));
   const tools = processRegistryTools();
@@ -263,19 +283,16 @@ test("managed process stop terminates the owned process group", async () => {
     .get("process_stop")!
     .execute({ id: "proc_group" }, { workspaceRoot: root });
   // A bounded wait for both deaths, not a fixed sleep: the group kill is
-  // asynchronous and the child is the last to go, so a 100ms sleep asserted
-  // "the child is dead" on a loaded host before it was — measured, the full
-  // suite's 4-way concurrency lost that race while the same case passed
-  // alone. The file already waits this way for the other death assertions.
-  for (
-    let attempt = 0;
-    attempt < 50 && (processAlive(started.pid!) || processAlive(childPID));
-    attempt += 1
-  )
-    await Bun.sleep(20);
+  // forceful but the child is the last to go, and the liveness sweep that
+  // observes it runs on a cadence that stretches under load. See
+  // waitForDeath.
+  await waitForDeath([started.pid!, childPID]);
   expect(processAlive(started.pid!)).toBe(false);
   expect(processAlive(childPID)).toBe(false);
-});
+  // The budget must exceed waitForDeath's: this case ran on bun's 5s
+  // default, so the bounded wait was killed by the harness before it could
+  // observe a death that was only slow, not absent.
+}, 30_000);
 
 test("managed process output uses a UTF-8 byte budget", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-output-"));
@@ -344,6 +361,7 @@ test("managed process max runtime stops the owned process group", async () => {
       .execute({ id: "proc_deadline" }, { workspaceRoot: root }),
   ) as { status: string };
   expect(["stopped", "exited"]).toContain(status.status);
+  await waitForDeath([childPID]);
   expect(processAlive(childPID)).toBe(false);
 }, 30_000);
 

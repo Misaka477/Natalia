@@ -115,9 +115,12 @@ test("the native build chain skips only wezterm, and says so", () => {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
     scripts: Record<string, string>;
   };
-  expect(pkg.scripts["build:distribution"]).toContain(
-    "NATALIA_BUILD_SKIP_NATIVE=1",
-  );
+  // The distribution build is the ONE that skips the native tier. It asks
+  // for the skip as a FLAG rather than a POSIX env prefix: cmd.exe — which
+  // `npm run` uses on Windows — rejects `VAR=value cmd` outright, so the env
+  // spelling made `npm run verify` fail there before it reached the tests.
+  // ts-build honours both spellings; this pins the one the script uses.
+  expect(pkg.scripts["build:distribution"]).toContain("--skip-native");
   // The full chain exists and does NOT skip.
   expect(pkg.scripts["native:all"]).toContain("native:confinement");
   expect(pkg.scripts["native:all"]).toContain("native:object-store");

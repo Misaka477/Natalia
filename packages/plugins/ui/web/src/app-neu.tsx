@@ -4454,18 +4454,31 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     </span>
                   </div>
                   <div class="neu-main-toolbar">
-                    <NeuSelect
-                      value={chatProfile().normal?.modelID ?? ""}
-                      options={modelOptions()}
-                      onChange={(modelID) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          normal: { ...chatProfile().normal, modelID },
-                        })
+                    <Show
+                      when={modelOptions().length > 0}
+                      fallback={
+                        <button
+                          type="button"
+                          class="neu-topbar-btn"
+                          onClick={() => setSettingsOpen(true)}
+                        >
+                          Chat 模型 · 去设置
+                        </button>
                       }
-                      placeholder="Chat 模型"
-                      menuPosition="top"
-                    />
+                    >
+                      <NeuSelect
+                        value={chatProfile().normal?.modelID ?? ""}
+                        options={modelOptions()}
+                        onChange={(modelID) =>
+                          void updateChatProfile({
+                            ...chatProfile(),
+                            normal: { ...chatProfile().normal, modelID },
+                          })
+                        }
+                        placeholder="Chat 模型"
+                        menuPosition="top"
+                      />
+                    </Show>
                     <NeuSelect
                       value={chatProfile().normal?.reasoningEffort ?? "medium"}
                       options={[
@@ -4492,18 +4505,31 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       placeholder="Chat 推理"
                       menuPosition="top"
                     />
-                    <NeuSelect
-                      value={chatProfile().expert?.modelID ?? ""}
-                      options={modelOptions()}
-                      onChange={(modelID) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          expert: { ...chatProfile().expert, modelID },
-                        })
+                    <Show
+                      when={modelOptions().length > 0}
+                      fallback={
+                        <button
+                          type="button"
+                          class="neu-topbar-btn"
+                          onClick={() => setSettingsOpen(true)}
+                        >
+                          专家模型 · 去设置
+                        </button>
                       }
-                      placeholder="专家模型"
-                      menuPosition="top"
-                    />
+                    >
+                      <NeuSelect
+                        value={chatProfile().expert?.modelID ?? ""}
+                        options={modelOptions()}
+                        onChange={(modelID) =>
+                          void updateChatProfile({
+                            ...chatProfile(),
+                            expert: { ...chatProfile().expert, modelID },
+                          })
+                        }
+                        placeholder="专家模型"
+                        menuPosition="top"
+                      />
+                    </Show>
                     <NeuSelect
                       value={chatProfile().expert?.reasoningEffort ?? "medium"}
                       options={[

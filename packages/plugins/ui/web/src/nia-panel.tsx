@@ -33,6 +33,12 @@ export function NiaPanel(props: {
   suspendVirtualization?: boolean;
   paging?: PagedTranscriptState;
   onLoadOlder?: () => void;
+  /**
+   * Open the settings surface. Injected rather than reached for: the panel is
+   * a separate component from the shell that owns the settings signal, and the
+   * model control below needs somewhere to send a user who has no model yet.
+   */
+  onOpenSettings?: () => void;
 }) {
   const [draft, setDraft] = createSignal("");
   const [attachments, setAttachments] = createSignal<ComposerAttachment[]>([]);
@@ -353,16 +359,33 @@ export function NiaPanel(props: {
           <span class="neu-activity-label">{activityLabel()}</span>
         </div>
         <div class="neu-main-toolbar">
-          <NeuSelect
-            value={modelID()}
-            options={modelOptions()}
-            placeholder="Nia 模型"
-            onChange={(next) => {
-              setModelID(next);
-              void saveProfile({ modelID: next });
-            }}
-            menuPosition="top"
-          />
+          {/* No model configured: the same position carries a short button
+              that opens Settings in one click, instead of a select whose menu
+              is empty (AGENTS.md §6). With a model configured the picker
+              takes the place back and switches models as before. */}
+          <Show
+            when={modelOptions().length > 0}
+            fallback={
+              <button
+                type="button"
+                class="neu-topbar-btn"
+                onClick={() => props.onOpenSettings?.()}
+              >
+                Nia 模型 · 去设置
+              </button>
+            }
+          >
+            <NeuSelect
+              value={modelID()}
+              options={modelOptions()}
+              placeholder="Nia 模型"
+              onChange={(next) => {
+                setModelID(next);
+                void saveProfile({ modelID: next });
+              }}
+              menuPosition="top"
+            />
+          </Show>
           <NeuSelect
             value={reasoning()}
             options={[

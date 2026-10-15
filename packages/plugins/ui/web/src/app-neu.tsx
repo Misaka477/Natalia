@@ -4702,6 +4702,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                   keyed
                 >
                   <NiaPanel
+                    onOpenSettings={() => setSettingsOpen(true)}
                     state={state()}
                     runtime={props.ctx.runtime}
                     catalog={modelCatalog()}

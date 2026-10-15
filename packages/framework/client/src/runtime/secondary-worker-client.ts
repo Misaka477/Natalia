@@ -60,7 +60,22 @@ async function run<T>(request: SecondaryWorkerTask): Promise<T> {
   // its loading surface with the runtime answering every other request
   // correctly. The deadline is the shared one, so one number governs both
   // pools.
-  const instance = pool.worker();
+  const instance = (() => {
+    try {
+      return pool.worker();
+    } catch (error) {
+      // No worker came up at all — a packaged build inlines the worker
+      // module, so `new URL("./…worker.ts", import.meta.url)` points at a
+      // path that is not on disk. Waiting the deadline out would only make
+      // every caller pay 15 seconds for an answer the pool already knows it
+      // cannot give.
+      throw new Error(
+        `secondary worker unavailable for ${request.op}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  })();
   return new Promise<T>((resolve, reject) => {
     const timeoutMs = runtimeWorkerTaskTimeoutMs();
     const timer = setTimeout(() => {

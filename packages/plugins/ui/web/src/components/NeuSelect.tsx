@@ -8,11 +8,24 @@ export type NeuSelectOption = {
 export function NeuSelect(props: {
   value: string;
   options: NeuSelectOption[];
-  onChange: (value: string) => void;
+  /** Required only when the control actually has options to choose from. */
+  onChange?: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
   class?: string;
   menuPosition?: "top" | "bottom";
+  /**
+   * What the trigger does INSTEAD of opening the menu.
+   *
+   * For a control that has nothing to choose yet: it keeps this component's
+   * exact appearance — the same box, the same value line, the same chevron the
+   * user already recognises in that position — and sends the click somewhere
+   * useful. The alternative, opening a menu with no options in it, is a
+   * control advertising choices that do not exist; substituting a different
+   * widget in its place changes a toolbar the user has learned to read. Both
+   * were tried on the model pickers and both were wrong.
+   */
+  onActivate?: () => void;
 }) {
   const [open, setOpen] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
@@ -36,7 +49,13 @@ export function NeuSelect(props: {
         type="button"
         class="neu-select-trigger"
         disabled={props.disabled}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (props.onActivate) {
+            props.onActivate();
+            return;
+          }
+          setOpen((value) => !value);
+        }}
       >
         <span class="neu-select-value">
           {selected()?.label ?? props.placeholder ?? props.value}
@@ -67,7 +86,7 @@ export function NeuSelect(props: {
                 class="neu-select-option"
                 data-active={option.value === props.value}
                 onClick={() => {
-                  props.onChange(option.value);
+                  props.onChange?.(option.value);
                   setOpen(false);
                 }}
               >

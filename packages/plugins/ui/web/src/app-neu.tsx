@@ -4095,25 +4095,24 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     </span>
                   </div>
                   <div class="neu-main-toolbar">
-                    {/* No model configured: the SAME position carries a
-                        button that goes to Settings, one click, no menu. The
-                        picker used to render unconditionally and open an EMPTY
-                        menu (a control advertising options that do not exist,
-                        AGENTS.md §6); hiding it was also wrong, because the
-                        control belongs where the user will look for it and its
-                        absence moves the two controls beside it. Once a model
-                        is configured the picker takes this place back and
-                        switches models as before. */}
                     <Show
                       when={modelOptions().length > 0}
                       fallback={
-                        <button
-                          type="button"
-                          class="neu-topbar-btn"
-                          onClick={() => setSettingsOpen(true)}
-                        >
-                          未配置模型 · 去设置
-                        </button>
+                        // No model to choose yet. The select used to render
+                        // anyway and open an EMPTY menu — a control that
+                        // advertises options which do not exist (AGENTS.md §6),
+                        // and the strip in the screenshot is exactly that. The
+                        // permission select one element down already answers
+                        // this the same way: with one honest entry rather than
+                        // an empty list.
+                        //
+                        // A label, not a button: there is nothing to click
+                        // until a provider is configured, so nothing here
+                        // pretends otherwise. It reuses the toolbar's muted
+                        // label style instead of adding a one-off rule.
+                        <span class="neu-activity-label">
+                          未配置模型 · 在设置里添加 provider 后即可切换
+                        </span>
                       }
                     >
                       <NeuSelect
@@ -4454,31 +4453,18 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     </span>
                   </div>
                   <div class="neu-main-toolbar">
-                    <Show
-                      when={modelOptions().length > 0}
-                      fallback={
-                        <button
-                          type="button"
-                          class="neu-topbar-btn"
-                          onClick={() => setSettingsOpen(true)}
-                        >
-                          Chat 模型 · 去设置
-                        </button>
+                    <NeuSelect
+                      value={chatProfile().normal?.modelID ?? ""}
+                      options={modelOptions()}
+                      onChange={(modelID) =>
+                        void updateChatProfile({
+                          ...chatProfile(),
+                          normal: { ...chatProfile().normal, modelID },
+                        })
                       }
-                    >
-                      <NeuSelect
-                        value={chatProfile().normal?.modelID ?? ""}
-                        options={modelOptions()}
-                        onChange={(modelID) =>
-                          void updateChatProfile({
-                            ...chatProfile(),
-                            normal: { ...chatProfile().normal, modelID },
-                          })
-                        }
-                        placeholder="Chat 模型"
-                        menuPosition="top"
-                      />
-                    </Show>
+                      placeholder="Chat 模型"
+                      menuPosition="top"
+                    />
                     <NeuSelect
                       value={chatProfile().normal?.reasoningEffort ?? "medium"}
                       options={[
@@ -4505,31 +4491,18 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       placeholder="Chat 推理"
                       menuPosition="top"
                     />
-                    <Show
-                      when={modelOptions().length > 0}
-                      fallback={
-                        <button
-                          type="button"
-                          class="neu-topbar-btn"
-                          onClick={() => setSettingsOpen(true)}
-                        >
-                          专家模型 · 去设置
-                        </button>
+                    <NeuSelect
+                      value={chatProfile().expert?.modelID ?? ""}
+                      options={modelOptions()}
+                      onChange={(modelID) =>
+                        void updateChatProfile({
+                          ...chatProfile(),
+                          expert: { ...chatProfile().expert, modelID },
+                        })
                       }
-                    >
-                      <NeuSelect
-                        value={chatProfile().expert?.modelID ?? ""}
-                        options={modelOptions()}
-                        onChange={(modelID) =>
-                          void updateChatProfile({
-                            ...chatProfile(),
-                            expert: { ...chatProfile().expert, modelID },
-                          })
-                        }
-                        placeholder="专家模型"
-                        menuPosition="top"
-                      />
-                    </Show>
+                      placeholder="专家模型"
+                      menuPosition="top"
+                    />
                     <NeuSelect
                       value={chatProfile().expert?.reasoningEffort ?? "medium"}
                       options={[
@@ -4702,7 +4675,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                   keyed
                 >
                   <NiaPanel
-                    onOpenSettings={() => setSettingsOpen(true)}
                     state={state()}
                     runtime={props.ctx.runtime}
                     catalog={modelCatalog()}

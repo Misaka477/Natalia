@@ -1,4 +1,4 @@
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { access } from "node:fs/promises";
 import {
@@ -233,7 +233,13 @@ async function readWorkspaceRegistry(): Promise<WorkspaceRegistryEntry[]> {
 
 async function writeWorkspaceRegistry(entries: WorkspaceRegistryEntry[]) {
   const path = workspaceRegistryPath();
-  await mkdir(join(homedir(), ".config", "natalia"), {
+  // The PARENT OF THE PATH, not a second spelling of it. The directory was
+  // hardcoded beside the resolver, which matched while both said
+  // `~/.config/natalia` and stopped matching the moment the resolver moved
+  // with the platform — the write then landed in a directory nothing had
+  // created and the runtime died on ENOENT before any workspace answered.
+  // One path, one parent, whichever one the resolver chose.
+  await mkdir(dirname(path), {
     recursive: true,
     mode: 0o700,
   });

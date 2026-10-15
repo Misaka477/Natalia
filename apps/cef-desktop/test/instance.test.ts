@@ -1,17 +1,26 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   acquireSingleInstance,
   requestExit,
   requestShow,
 } from "../src/instance";
-import { resolve } from "node:path";
 
-/** Absolute path to the module under test, for the child process. */
+/**
+ * Absolute path to the module under test, for the child process.
+ *
+ * `URL.pathname` is NOT a path: on Windows it spells "/E:/..." (a
+ * leading slash in front of the drive letter), and an `import()` of
+ * that string fails — the child died before it could take the lock,
+ * so the socket the test waits for never appeared and the wait loop
+ * burned the whole per-test budget. fileURLToPath is the one
+ * conversion that answers a real path on every platform.
+ */
 function resolveSourcePath(): string {
-  return new URL("../src/instance.ts", import.meta.url).pathname;
+  return fileURLToPath(new URL("../src/instance.ts", import.meta.url));
 }
 
 function freshState(): string {
@@ -99,7 +108,18 @@ test("a live foreign pid is not mistaken for this app's own dead lock", async ()
   // A real, live process that is not this app. The takeover path looks at pid
   // liveness to decide whether a socket-less record is litter, and it must not
   // conclude "dead" about a pid that exists.
-  const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  //
+  // The process is spelled for the host: `sleep` is a POSIX binary that does
+  // not exist on Windows, so the spawn itself threw ENOENT and the test never
+  // reached the behaviour it names. The runtime's own executable running a
+  // sleep loop is live on every platform and is certainly not this app.
+  const child =
+    process.platform === "win32"
+      ? spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], {
+          detached: true,
+          stdio: "ignore",
+        })
+      : spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
   child.unref();
   const pid = child.pid!;
   writeFileSync(join(state, "natalia.instance.pid"), `${pid}\n`);
@@ -131,7 +151,7 @@ test("a live foreign pid is not mistaken for this app's own dead lock", async ()
 function CRASH_PROGRAM(state: string): string {
   return `
     const { acquireSingleInstance } = await import(${JSON.stringify(
-      new URL("../src/instance.ts", import.meta.url).pathname,
+      resolveSourcePath(),
     )});
     const handle = await acquireSingleInstance({ stateDir: ${JSON.stringify(state)} });
     console.log("READY");

@@ -1,7 +1,19 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+
+/**
+ * A directory link that exists on this host.
+ *
+ * An unprivileged Windows process cannot create a directory symlink
+ * (EPERM), and realpath resolves a junction identically — so the
+ * containment judgement under test is the same one either way. What is
+ * NOT the same is the link kind, and asserting the escape through a
+ * link the host refuses to make tests nothing.
+ */
+const link = (target: string, path: string) =>
+  symlink(target, path, process.platform === "win32" ? "junction" : "dir");
 import {
   pathWithinDomains,
   relativeToRoot,
@@ -56,7 +68,7 @@ test("a symlink inside the root pointing outside is refused", async () => {
   const outside = await mkdtemp(join(tmpdir(), "natalia-outside-"));
   await mkdir(join(root, "allowed"), { recursive: true });
   await writeFile(join(outside, "secret.txt"), "s");
-  await symlink(outside, join(root, "allowed", "link"), "dir");
+  await link(outside, join(root, "allowed", "link"));
   expect(
     pathWithinDomains({
       path: join(root, "allowed", "link", "secret.txt"),
@@ -95,7 +107,7 @@ test("a not-yet-existing file under an out-pointing symlink is refused", async (
   const root = await mkdtemp(join(tmpdir(), "natalia-domain-symlink-"));
   const outside = await mkdtemp(join(tmpdir(), "natalia-domain-out-"));
   await mkdir(join(root, "allowed"), { recursive: true });
-  await symlink(outside, join(root, "allowed", "link"), "dir");
+  await link(outside, join(root, "allowed", "link"));
   expect(
     pathWithinDomains({
       path: join(root, "allowed", "link", "brand-new.txt"),
@@ -125,7 +137,7 @@ test("isInsideRoot judges where the write lands, not how it spells", async () =>
   const outside = await mkdtemp(join(tmpdir(), "natalia-inside-out-"));
   await mkdir(join(root, "allowed"), { recursive: true });
   await writeFile(join(root, "allowed", "inside.txt"), "x");
-  await symlink(outside, join(root, "allowed", "link"), "dir");
+  await link(outside, join(root, "allowed", "link"));
   expect(isInsideRoot(join(root, "allowed", "inside.txt"), root)).toBe(true);
   // A file that does not exist yet, inside: allowed (the write creates it).
   expect(isInsideRoot(join(root, "allowed", "new.txt"), root)).toBe(true);
@@ -176,10 +188,17 @@ import {
   type SandboxPolicySources,
 } from "../src/runtime/sandbox-policy";
 
+// `os: "linux"` is the default on purpose: these tests are about the
+// policy's PRECEDENCE and root law, and the platform gate that closes
+// the chain has its own test below (which names both hosts explicitly).
+// Without a named host the question becomes "what can THIS host
+// enforce", and on a rung-less host (Windows) every mode degrades to
+// danger-full-access — correct behaviour, wrong subject.
 const sources = (
   over: Partial<SandboxPolicySources> = {},
 ): SandboxPolicySources => ({
   deploymentRoot: "/repo/workspace",
+  os: "linux",
   ...over,
 });
 
@@ -268,16 +287,19 @@ test("the writable roots are the mode's own set, and the judgement lands", async
   expect(
     isWritableUnderPolicy(rooted, "/repo/workspace/allowed/../../escape"),
   ).toBe(false);
-  // The symlink's target sits in /dev/shm — OUTSIDE every writable root
-  // (workspace-write grants the workspace, /tmp and the platform's temp
-  // dir; a target under /tmp would be legitimately writable and prove
-  // nothing about the containment). /dev/shm is the Linux tmpfs that is
-  // neither of those; this suite runs on Linux (the CI matrix and the dev
-  // box), and a host without it fails here loudly rather than silently
-  // weakening the assertion.
-  const outside = await mkdtemp(join("/dev/shm", "natalia-policy-out-"));
+  // The symlink's target sits OUTSIDE every writable root
+  // (workspace-write grants the workspace and the platform's temp dir;
+  // a target under the temp dir would be legitimately writable and prove
+  // nothing about the containment).
+  //
+  // On POSIX that outside is the /dev/shm tmpfs, which is neither. On
+  // Windows there is no /dev/shm, and the equivalent outside is the
+  // user's home directory — not the temp dir, and not this test's
+  // workspace (which is itself a mkdtemp under the temp dir).
+  const outsideBase = process.platform === "win32" ? homedir() : "/dev/shm";
+  const outside = await mkdtemp(join(outsideBase, "natalia-policy-out-"));
   await writeFile(join(outside, "secret.txt"), "s");
-  await symlink(outside, join(root, "allowed", "link"), "dir");
+  await link(outside, join(root, "allowed", "link"));
   expect(
     isWritableUnderPolicy(policy, join(root, "allowed", "link", "secret.txt")),
   ).toBe(false);

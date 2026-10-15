@@ -84,3 +84,91 @@ test("an embedded-filesystem execPath is not mistaken for an install", async () 
   // diagnosable instead of silent.
   expect(resolved.endsWith(join("prebuilt", "windows-x64"))).toBe(true);
 });
+
+/**
+ * The tier ts-build stages INSIDE the plugin package.
+ *
+ * `build:windows` runs ts-build without NATALIA_BUILD_SKIP_NATIVE, so it
+ * writes the bridge to `<plugin>/pty-bridge/` — a location the resolver used
+ * to skip entirely, which is why a `build:windows` distribution shipped a
+ * bridge the runtime could not find and every pane died naming a path that
+ * directory never got. It is also the only candidate that resolves when the
+ * plugin is loaded out of a plugin store, which is how the real-runtime suite
+ * loads it: there, `../prebuilt` names a directory no build writes.
+ *
+ * The install candidates are neutralised first: an earlier test in this file
+ * leaves argv[0] as "bun" and the cwd inside the install fixture, so
+ * `dirname("bun")` is "." and a relative hit there would answer before the
+ * staged tier is ever consulted.
+ */
+async function withNoInstallCandidates(run: () => Promise<void>) {
+  const savedArgv0 = process.argv[0];
+  const savedExecPath = process.execPath;
+  const savedCwd = process.cwd();
+  const empty = mkdtempSync(join(tmpdir(), "natalia-prebuilt-noinstall-"));
+  try {
+    process.argv[0] = join(empty, "bun");
+    Object.defineProperty(process, "execPath", {
+      value: join(empty, "natalia.exe"),
+      configurable: true,
+    });
+    process.chdir(empty);
+    await run();
+  } finally {
+    process.argv[0] = savedArgv0;
+    Object.defineProperty(process, "execPath", {
+      value: savedExecPath,
+      configurable: true,
+    });
+    process.chdir(savedCwd);
+    rmSync(empty, { recursive: true, force: true });
+  }
+}
+
+test("the bridge staged inside the plugin package is found", async () => {
+  const pluginDir = mkdtempSync(join(tmpdir(), "natalia-prebuilt-staged-"));
+  try {
+    mkdirSync(join(pluginDir, "pty-bridge"), { recursive: true });
+    writeFileSync(
+      join(pluginDir, "pty-bridge", "natalia-conpty-bridge.exe"),
+      "bridge",
+    );
+    await withNoInstallCandidates(async () => {
+      const { nativeTerminalPrebuiltDir } = await import(
+        "../src/prebuilt-dir.ts"
+      );
+      expect(nativeTerminalPrebuiltDir("win32", pluginDir)).toBe(
+        join(pluginDir, "pty-bridge"),
+      );
+    });
+  } finally {
+    rmSync(pluginDir, { recursive: true, force: true });
+  }
+});
+
+test("the install tier still outranks the staged one", async () => {
+  // Order is the contract: a release stages the bridge beside the executable,
+  // and that answer must not change because a plugin package also carries a
+  // staged copy.
+  const pluginDir = mkdtempSync(join(tmpdir(), "natalia-prebuilt-order-"));
+  try {
+    mkdirSync(join(pluginDir, "pty-bridge"), { recursive: true });
+    writeFileSync(
+      join(pluginDir, "pty-bridge", "natalia-conpty-bridge.exe"),
+      "bridge",
+    );
+    process.argv[0] = "bun";
+    Object.defineProperty(process, "execPath", {
+      value: join(root, "natalia.exe"),
+      configurable: true,
+    });
+    const { nativeTerminalPrebuiltDir } = await import(
+      "../src/prebuilt-dir.ts"
+    );
+    expect(nativeTerminalPrebuiltDir("win32", pluginDir)).toBe(
+      join(root, "prebuilt", "windows-x64"),
+    );
+  } finally {
+    rmSync(pluginDir, { recursive: true, force: true });
+  }
+});

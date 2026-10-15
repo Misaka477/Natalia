@@ -617,6 +617,11 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         // (audit 缺口 2): a provider error's message IS its classification,
         // so the frames ride for the unclassified ones.
         ...(errorStackFrames(error) ? { stack: errorStackFrames(error) } : {}),
+        // The link to the evidence (audit 缺口 7): a failed turn and its
+        // snapshot used to be two separate acts — read the failure, then go
+        // find out how to capture the state it left. The command names THIS
+        // turn, so the bundle carries the journal range the failure lives in.
+        bundle: `natalia debug-bundle <dest-dir> --turn ${id}`,
         durationMs: Date.now() - startedAt,
       });
       input.publish({

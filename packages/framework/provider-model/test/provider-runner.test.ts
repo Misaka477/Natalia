@@ -2030,6 +2030,68 @@ test("turn telemetry rides the injected log, and degrades to silence without it"
   expect(records).toEqual([]);
 });
 
+test("a failed turn records where it failed and how to capture it", async () => {
+  // The failure's evidence, in the one place an operator reads it: the WHERE
+  // (frames — the classification already says WHY) and the command whose
+  // bundle carries this turn's journal range. Without the second half a
+  // failure and its snapshot were two separate acts.
+  const records: Array<{
+    level: string;
+    component: string;
+    message: string;
+    fields: Record<string, unknown>;
+  }> = [];
+  const capture =
+    (level: string) =>
+    (
+      component: string,
+      message: string,
+      fields?: Record<string, unknown>,
+    ): void => {
+      records.push({ level, component, message, fields: fields ?? {} });
+    };
+  const { runner } = makeHarness(
+    {
+      provider: "scripted",
+      model: "m1",
+      async *stream() {
+        throw new TypeError("boom in the stream");
+      },
+    },
+    {
+      permissionMode: "auto",
+      log: {
+        info: capture("info"),
+        error: capture("error"),
+        debug: capture("debug"),
+      },
+    },
+  );
+  await runner.runTurn(turn);
+  const failed = records.find(
+    (record) =>
+      record.component === "[natalia-turn]" &&
+      record.message === "finished" &&
+      record.level === "error",
+  );
+  expect(failed).toBeDefined();
+  expect(String(failed!.fields.error)).toContain("boom in the stream");
+  // The failure says something about itself beyond its prose: frames when the
+  // error was unclassified, or the classification the classifier left in the
+  // message (`provider call failed [connection]: TypeError: …`) when it was.
+  // This harness classifies the throw before the turn's catch sees it, so the
+  // second form is the one that lands here; the frames are pinned in
+  // errors.test. Either way the record is not prose alone.
+  const identity = Array.isArray(failed!.fields.stack)
+    ? "frames"
+    : /\[[a-z]+\]:\s/u.test(String(failed!.fields.error))
+      ? "classification"
+      : "";
+  expect(identity).not.toBe("");
+  // And the way to capture the state it left behind, naming THIS turn.
+  expect(String(failed!.fields.bundle)).toContain(`--turn ${turn.id}`);
+});
+
 test("the provider prefix is stable across turns whose dynamic state differs (the prefix cache's condition)", async () => {
   // The prefix-cache assembly's invariant: the STATIC system prompt is
   // the first message and byte-identical across turns; every dynamic

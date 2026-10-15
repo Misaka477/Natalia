@@ -60,6 +60,13 @@ export type PurgeTargets = {
   logsBytes: number;
   hasConfig: boolean;
   configBytes: number;
+  /**
+   * Every entry purge would remove, discovered from the home. A count of
+   * stores and a config size cannot tell a reader that their workspaces,
+   * skills, installed plugins and interface layout are about to go; the names
+   * can, and they are the same names the deletion uses.
+   */
+  entries: string[];
 };
 
 async function isDirectory(path: string): Promise<boolean> {
@@ -124,6 +131,9 @@ export async function listPurgeTargets(home: string): Promise<PurgeTargets> {
     logsBytes,
     hasConfig: configBytes > 0,
     configBytes,
+    entries: (await entries(home)).filter(
+      (entry) => !(HOME_PROGRAM_ENTRIES as readonly string[]).includes(entry),
+    ),
   };
 }
 
@@ -204,19 +214,36 @@ export function resolvePurgeGate(input: { yes: boolean; isTTY: boolean }): {
 }
 
 /**
- * The ONLY data deletion: stores/, logs/ and config.json. The program
- * (bin/, versions/) is deliberately NOT this command's business — that is
- * uninstall's, and mixing them would put data deletion behind the wrong
- * door.
+ * The only entries of the home that are the PROGRAM on the layout the POSIX
+ * installer writes: `<home>/bin/natalia` symlinks into
+ * `<home>/versions/<version>/`. Data deletion is not the program's business —
+ * that is uninstall's — so these two are excluded and everything else in the
+ * home is data and goes.
+ *
+ * This is an EXCLUSION list on purpose. The inclusion list it replaces named
+ * `stores`, `logs` and `config.json`, which was wrong twice over: the config
+ * has not lived at `<home>/config.json` for several releases (the reader in
+ * `debug-bundle.ts` read a file nothing wrote, so "remove the configuration"
+ * removed nothing), and every new child — `workspaces.json`, `skills`,
+ * `cache`, `plugin-store`, `run`, `vault`, `composition.d` — was silently
+ * outside it. A deletion list that has to be updated whenever the product
+ * gains a directory is a list that will be wrong; this one is right by
+ * construction.
+ */
+const HOME_PROGRAM_ENTRIES = ["bin", "versions"] as const;
+
+/**
+ * The ONLY data deletion: everything the one home holds, discovered. The
+ * program (bin/, versions/) is deliberately NOT this command's business —
+ * that is uninstall's, and mixing them would put data deletion behind the
+ * wrong door.
  */
 export async function purgeData(home: string): Promise<{ removed: string[] }> {
   const removed: string[] = [];
-  for (const entry of ["stores", "logs", "config.json"]) {
-    const path = join(home, entry);
-    if (await exists(path)) {
-      await rm(path, { recursive: true, force: true });
-      removed.push(entry);
-    }
+  for (const entry of await entries(home)) {
+    if ((HOME_PROGRAM_ENTRIES as readonly string[]).includes(entry)) continue;
+    await rm(join(home, entry), { recursive: true, force: true });
+    removed.push(entry);
   }
   return { removed };
 }
@@ -271,13 +298,4 @@ export async function exportStores(
     bytes,
     manifest: manifestPath,
   };
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
 }

@@ -26,7 +26,59 @@ import {
  * master plan's DoD #6 — uninstall never touches the life-preserving
  * store, byte for byte, and a reinstall finds the rescue ring exactly
  * where the message said it stayed.
+ *
+ * The case below pins the OTHER half, which was wrong: what purge deletes.
  */
+test("purge removes everything the home holds, not a list that only looks complete", async () => {
+  const home = fixtureHome("purge-discovery");
+  // Every child a real home now carries. The list purge used to name was
+  // `stores`, `logs` and `config.json` — the config has not lived at the
+  // home root for several releases, and every one of these was silently
+  // outside it, so "remove the configuration" left the configuration, the
+  // workspaces, the skills, the installed plugins and the interface layout
+  // exactly where they were.
+  for (const entry of [
+    "stores",
+    "logs",
+    "vault",
+    "skills",
+    "cache",
+    "run",
+    "plugin-store",
+    "composition.d",
+  ]) {
+    mkdirSync(join(home, entry), { recursive: true });
+    writeFileSync(join(home, entry, "payload"), entry);
+  }
+  writeFileSync(join(home, "config.json"), "{}");
+  writeFileSync(join(home, "workspaces.json"), "[]");
+  writeFileSync(join(home, "tui.json"), "{}");
+
+  // What the confirmation is shown, before anything is deleted: the names of
+  // what will go — a store count and a config size cannot tell a reader that
+  // their workspaces and plugins are about to disappear.
+  const targets = await listPurgeTargets(home);
+  expect(targets.entries).toContain("workspaces.json");
+  expect(targets.entries).toContain("plugin-store");
+  expect(targets.entries).toContain("skills");
+  // The program is not data.
+  expect(targets.entries).not.toContain("bin");
+  expect(targets.entries).not.toContain("versions");
+
+  const { removed } = await purgeData(home);
+  expect(removed).toContain("config.json");
+  expect(removed).toContain("workspaces.json");
+  expect(removed).toContain("plugin-store");
+  expect(removed).toContain("skills");
+  expect(removed).toContain("stores");
+  // Nothing of the data is left behind, so a reinstall genuinely starts clean.
+  expect(
+    readdirSync(home).filter((name) => name !== "bin" && name !== "versions"),
+  ).toEqual([]);
+  // And the program survived, because deleting it is uninstall's business.
+  expect(readdirSync(join(home, "bin"))).toEqual(["natalia"]);
+  expect(readdirSync(join(home, "versions"))).toEqual(["0.0.0"]);
+});
 
 let base = "";
 

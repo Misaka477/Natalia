@@ -7,9 +7,8 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { hashTreeFiles } from "@anthelia/platform";
+import { hashTreeFiles, resolveNataliaHome } from "@anthelia/platform";
 import {
   resolveWorkspaceJsonSessionsDir,
   resolveWorkspaceJournalDatabasePath,
@@ -93,10 +92,13 @@ export async function captureDebugBundle(input: {
 }): Promise<BundleReport> {
   const workspaceRoot = resolve(input.workspaceRoot);
   const dest = resolve(input.dest);
-  const home =
-    input.nataliaHome ??
-    process.env.NATALIA_HOME ??
-    join(homedir(), ".natalia");
+  // The one home, through the one resolver. This was a fourth hand-spelled
+  // `input.nataliaHome ?? $NATALIA_HOME ?? ~/.natalia`, which ignored the
+  // store-home alias, ignored the bare-drive guard, and — with the global
+  // config reaching this directory only recently — used to read a
+  // `<home>/config.json` that nothing wrote, so every bundle reported "no
+  // global config" on a machine that had one.
+  const home = input.nataliaHome ?? resolveNataliaHome();
   // Refuse to write into an existing tree — a bundle is a snapshot, and
   // silently merging into an old one would mix two incidents.
   try {

@@ -31,7 +31,10 @@ import {
 const linux = { os: "linux" as const, env: { HOME: "/home/demo" } };
 const windows = {
   os: "win32" as const,
-  env: { USERPROFILE: "C:\\Users\\demo", APPDATA: "C:\\Users\\demo\\AppData\\Roaming" },
+  env: {
+    USERPROFILE: "C:\\Users\\demo",
+    APPDATA: "C:\\Users\\demo\\AppData\\Roaming",
+  },
 };
 
 test("the default home is the same directory name on both platforms", () => {
@@ -125,12 +128,16 @@ test("the legacy roots are read candidates that exclude the live home", () => {
   expect(roots).not.toContain(live);
   // The two Windows roots the old code actually wrote, plus the `.config`
   // spellings a POSIX install used.
-  expect(roots).toContain(win32.join("C:\\Users\\demo\\AppData\\Roaming", "natalia"));
+  expect(roots).toContain(
+    win32.join("C:\\Users\\demo\\AppData\\Roaming", "natalia"),
+  );
   expect(roots).toContain(
     win32.join("C:\\Users\\demo\\AppData\\Roaming", "natalia-cli"),
   );
   expect(roots).toContain(win32.join("C:\\Users\\demo", ".config", "natalia"));
-  expect(roots).toContain(win32.join("C:\\Users\\demo", ".config", "natalia-cli"));
+  expect(roots).toContain(
+    win32.join("C:\\Users\\demo", ".config", "natalia-cli"),
+  );
   // Deduplicated by RESOLVED path: on POSIX the config home and `~/.config`
   // are the same directory, and listing it twice would be a lie about how many
   // places are searched.

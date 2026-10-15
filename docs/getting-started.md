@@ -148,10 +148,10 @@ npm run ts:cli -- session delete <id>
 
 ## 8. Where data lives
 
-| Data                                    | Location                            |
-| --------------------------------------- | ----------------------------------- |
-| Workspace config, sessions, checkpoints | `<workspace>/.natalia/`             |
-| Everything global                       | `~/.natalia/`                       |
+| Data                                    | Location                |
+| --------------------------------------- | ----------------------- |
+| Workspace config, sessions, checkpoints | `<workspace>/.natalia/` |
+| Everything global                       | `~/.natalia/`           |
 
 The global home is ONE directory: `$HOME/.natalia` on Linux and macOS,
 `%USERPROFILE%\.natalia\` on Windows. It holds the global `config.json`, the

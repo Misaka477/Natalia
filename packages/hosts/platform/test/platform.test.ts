@@ -342,10 +342,15 @@ describe("the state directory's live name and its legacy fallback", () => {
   // so what is left here is the entry that used to be missing entirely: the
   // pair of roots the preload and the environment actually name.
   test("the live root is not one of the legacy candidates", () => {
-    const roots = legacyNataliaRoots({ os: "linux", env: { HOME: "/home/demo" } });
-    expect(roots).not.toContain(resolveNataliaHome(undefined, {
+    const roots = legacyNataliaRoots({
       os: "linux",
       env: { HOME: "/home/demo" },
-    }));
+    });
+    expect(roots).not.toContain(
+      resolveNataliaHome(undefined, {
+        os: "linux",
+        env: { HOME: "/home/demo" },
+      }),
+    );
   });
 });

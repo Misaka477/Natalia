@@ -136,7 +136,10 @@ export function defaultNataliaHome(input: NataliaHomeInput = {}): string {
  * directory name, and `resolve()` would otherwise turn it into
  * `<cwd>/~/env-natalia`.
  */
-export function expandHomePath(path: string, input: NataliaHomeInput = {}): string {
+export function expandHomePath(
+  path: string,
+  input: NataliaHomeInput = {},
+): string {
   if (path === "~") return nataliaUserHome(input);
   if (path.startsWith("~/") || path.startsWith("~\\"))
     return pathApi(input).join(nataliaUserHome(input), path.slice(2));

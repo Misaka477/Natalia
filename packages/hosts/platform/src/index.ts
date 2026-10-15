@@ -548,7 +548,6 @@ export function globalConfigHome(input: PlatformInput = {}): string {
  * spellings.
  */
 
-
 /**
  * Root of the per-user durable state tree, preserving the previous
  * `XDG_STATE_HOME ?? $HOME/.local/state` resolution on POSIX.
@@ -559,7 +558,9 @@ export function userStateHome(input: PlatformInput = {}): string {
     return usableDirectory([env.LOCALAPPDATA], () =>
       win32.join(nataliaUserHome(input), "AppData", "Local"),
     );
-  return env.XDG_STATE_HOME ?? posix.join(nataliaUserHome(input), ".local", "state");
+  return (
+    env.XDG_STATE_HOME ?? posix.join(nataliaUserHome(input), ".local", "state")
+  );
 }
 
 /**

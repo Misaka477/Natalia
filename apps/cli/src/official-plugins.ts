@@ -162,7 +162,9 @@ export function resolvePluginStoreRoot(
   // `nataliaHomeJoin`, not `nataliaHomePath`: the latter reads `process.env`
   // itself, so a caller that injects an environment would silently get the
   // ambient home — which is what a test asserting the injected one catches.
-  return explicit ? resolve(explicit) : nataliaHomeJoin({ env }, "plugin-store");
+  return explicit
+    ? resolve(explicit)
+    : nataliaHomeJoin({ env }, "plugin-store");
 }
 
 export function pluginStoreRoot() {

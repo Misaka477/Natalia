@@ -48,9 +48,9 @@ natalia doctor          # 首跑体检
 **安装位置 ≠ 状态位置。** 上一步装的是程序本身。你的状态在**一个**根下，
 卸载时不勾"删除配置"就不动它：
 
-| 根       | POSIX                | Windows                   | 装什么                                                                                     |
-| -------- | -------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
-| 全局主目录 | `~/.natalia/`        | `%USERPROFILE%\.natalia\` | config、workspace 注册表、技能、UI 状态、插件店、缓存、`logs/`、`stores/`（SQLite 会话日志）、`vault/` |
+| 根         | POSIX         | Windows                   | 装什么                                                                                                 |
+| ---------- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 全局主目录 | `~/.natalia/` | `%USERPROFILE%\.natalia\` | config、workspace 注册表、技能、UI 状态、插件店、缓存、`logs/`、`stores/`（SQLite 会话日志）、`vault/` |
 
 **这个目录就是大的那个**——会话日志按工作区哈希分库，长年累月可以到 GB 级。
 换机器/迁移数据时带走它一个就够。`NATALIA_HOME` 可以整体迁移它。旧版本把
@@ -333,8 +333,8 @@ natalia doctor                        # the first-run health report
 the program in place. Your state lives under ONE root, and an uninstall that
 does not tick "delete the configuration" leaves it alone:
 
-| Root        | POSIX         | Windows                   | Holds                                                                                                        |
-| ----------- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Root        | POSIX         | Windows                   | Holds                                                                                                              |
+| ----------- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | global home | `~/.natalia/` | `%USERPROFILE%\.natalia\` | config, workspace registry, skills, UI state, plugin store, caches, `logs/`, `stores/` (SQLite journals), `vault/` |
 
 That home IS the big one — journals are per-workspace SQLite files and grow to

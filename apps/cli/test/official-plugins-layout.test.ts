@@ -124,9 +124,9 @@ test("VFS candidates never win, and the store is the home's in every context", (
   // resolved on Windows anchors to the current drive, which is not what an
   // installed Windows host reports.
   const home = process.platform === "win32" ? "C:\\Users\\u" : "/home/u";
-  expect(
-    resolvePluginStoreRoot({ NATALIA_HOME: join(home, ".natalia") }),
-  ).toBe(join(home, ".natalia", "plugin-store"));
+  expect(resolvePluginStoreRoot({ NATALIA_HOME: join(home, ".natalia") })).toBe(
+    join(home, ".natalia", "plugin-store"),
+  );
   // A dev or test flow that needs its own store injects one. The override is
   // absolute on purpose: a relative value would resolve against the working
   // directory, which is the class of bug this whole change removes.
@@ -159,9 +159,9 @@ test("an install's old plugin store is carried into the one home, once", async (
     await migrateLegacyPluginStore({ storeRoot: home, legacyRoot: legacy }),
   ).toEqual({ migrated: true, from: legacy });
   expect(existsSync(join(home, "natalia.lock"))).toBe(true);
-  expect(existsSync(join(home, "node_modules", "@user", "my-plugin", "index.js"))).toBe(
-    true,
-  );
+  expect(
+    existsSync(join(home, "node_modules", "@user", "my-plugin", "index.js")),
+  ).toBe(true);
   // Copied, not moved: the old directory belongs to the install that wrote it,
   // and removing it is the uninstaller's business.
   expect(existsSync(join(legacy, "natalia.lock"))).toBe(true);

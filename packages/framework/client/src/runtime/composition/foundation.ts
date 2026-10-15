@@ -1,9 +1,6 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import {
-  foregroundProcessForTTY,
-  userRuntimeHome,
-} from "@anthelia/platform";
+import { foregroundProcessForTTY, userRuntimeHome } from "@anthelia/platform";
 import { resolveNataliaPath } from "@anthelia/platform";
 import { TerminalCommandBuffer } from "@anthelia/tools";
 import {

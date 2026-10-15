@@ -447,7 +447,8 @@ export function createProviderSelection(
         }`,
       );
       providers = buildModelCatalog(config);
-    }    return providers.flatMap((provider) =>
+    }
+    return providers.flatMap((provider) =>
       provider.models
         .filter(
           (entry) =>

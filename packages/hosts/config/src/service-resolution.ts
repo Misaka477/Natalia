@@ -39,7 +39,10 @@ export function resolveGlobalConfigPath(
   exists: (path: string) => boolean = existsSync,
 ): { path: string; legacy: boolean } {
   const resolved = resolveNataliaPath(input, exists, "config.json");
-  return { path: resolve(resolved.path), legacy: resolved.legacy !== undefined };
+  return {
+    path: resolve(resolved.path),
+    legacy: resolved.legacy !== undefined,
+  };
 }
 
 export async function resolveConfig(input: {

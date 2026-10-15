@@ -119,7 +119,17 @@ test("the C++ policy and the TS mirror agree on every input", () => {
       closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: value }).action,
       value,
     ).toBe("quit");
-  for (const value of ["", "   ", "1", "true", "yes", "on", "2", "MINIMISE", "TRUE"])
+  for (const value of [
+    "",
+    "   ",
+    "1",
+    "true",
+    "yes",
+    "on",
+    "2",
+    "MINIMISE",
+    "TRUE",
+  ])
     expect(
       closeActionFromEnv({ NATALIA_MINIMISE_ON_CLOSE: value }).action,
       value,

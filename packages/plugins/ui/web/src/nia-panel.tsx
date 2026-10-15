@@ -33,6 +33,14 @@ export function NiaPanel(props: {
   suspendVirtualization?: boolean;
   paging?: PagedTranscriptState;
   onLoadOlder?: () => void;
+  /**
+   * Where a click on the model control goes when there is no model to choose.
+   *
+   * The shell owns the settings signal; this panel only needs somewhere to
+   * send a user who has nothing in the picker. Left unset, the control keeps
+   * opening its own menu.
+   */
+  onOpenSettings?: () => void;
 }) {
   const [draft, setDraft] = createSignal("");
   const [attachments, setAttachments] = createSignal<ComposerAttachment[]>([]);
@@ -356,6 +364,13 @@ export function NiaPanel(props: {
           <NeuSelect
             value={modelID()}
             options={modelOptions()}
+            // No model configured: this click opens the model settings
+            // instead of an empty menu. The control is unchanged either way.
+            onActivate={
+              modelOptions().length > 0
+                ? undefined
+                : () => props.onOpenSettings?.()
+            }
             placeholder="Nia 模型"
             onChange={(next) => {
               setModelID(next);

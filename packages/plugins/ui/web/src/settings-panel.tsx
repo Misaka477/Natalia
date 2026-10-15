@@ -167,7 +167,7 @@ function ToolFamilyRow(props: {
   );
 }
 
-type CategoryId =
+export type CategoryId =
   | "model"
   | "security"
   | "runtime"
@@ -246,6 +246,16 @@ function verboseLog(...args: unknown[]) {
 export function SettingsPanel(props: {
   open: boolean;
   onClose: () => void;
+  /**
+   * The category to show when the panel is opened by a caller that names one.
+   *
+   * The panel keeps the category the user last visited, which is right for the
+   * settings button and wrong for a link that says "the model page": the model
+   * controls send a user who has no model there directly, and landing them on
+   * whatever they visited last would send them somewhere that does not answer
+   * the click. Left unset, the panel behaves exactly as before.
+   */
+  category?: CategoryId;
   onOpenModels?: () => void;
   themeMode?: string;
   onCycleThemeMode?: () => void;
@@ -275,6 +285,13 @@ export function SettingsPanel(props: {
   host?: import("@natalia/ui-host").UiPluginContext["host"];
 }) {
   const [activeCategory, setActiveCategory] = createSignal<CategoryId>("model");
+  // Applied on OPENING: the remembered category stays the default for the
+  // settings button, and a caller that named one gets it. Reading `props.open`
+  // makes this fire on the closed -> open edge, not while the panel is open.
+  createEffect(() => {
+    const requested = props.category;
+    if (props.open && requested) setActiveCategory(requested);
+  });
   /**
    * The panel's own view of the runtime config.
    *

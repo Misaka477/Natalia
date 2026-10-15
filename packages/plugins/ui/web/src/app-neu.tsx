@@ -43,7 +43,11 @@ import { PendingTakeover } from "./components/PendingTakeover";
 import { QueueDock } from "./components/QueueDock";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 import { ReviewPane } from "./components/RightPanel";
-import { SettingsPanel, type RegisteredToolView } from "./settings-panel";
+import {
+  SettingsPanel,
+  type CategoryId,
+  type RegisteredToolView,
+} from "./settings-panel";
 import {
   createUiPanelRequirementContext,
   uiPanelRequirementsSatisfied,
@@ -789,6 +793,20 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     UiPanelRequirementContext | undefined
   >(undefined);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  /**
+   * The settings page a caller asked for when it opened the panel.
+   *
+   * The four model controls need somewhere to send a user who has no model to
+   * choose: with no provider configured their menu would be empty, so clicking
+   * one opens the model page of the settings instead of showing a list of
+   * nothing. The panel keeps its own remembered category for every other
+   * opener, so this is cleared when it closes — a request, not a new default.
+   */
+  const [settingsCategory, setSettingsCategory] = createSignal<CategoryId>();
+  const openModelSettings = () => {
+    setSettingsCategory("model");
+    setSettingsOpen(true);
+  };
   const [pluginManagerOpen, setPluginManagerOpen] = createSignal(false);
   const [themeMode, setThemeMode] = createSignal(
     props.ctx.preferences.get<string>("themeMode") ?? "light",
@@ -4086,6 +4104,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     <NeuSelect
                       value={modelSelectionSignal()?.modelID ?? ""}
                       options={modelOptions()}
+                      // No provider configured means an empty menu, so this
+                      // click goes to the model settings instead of listing
+                      // nothing. The control itself is untouched: same box,
+                      // same chevron, in the same position. With a model to
+                      // pick, the menu opens as it always did.
+                      onActivate={
+                        modelOptions().length > 0
+                          ? undefined
+                          : openModelSettings
+                      }
                       onChange={(modelID) => {
                         const sessionID =
                           selectedSessionID() || state().sessionID;
@@ -4423,6 +4451,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     <NeuSelect
                       value={chatProfile().normal?.modelID ?? ""}
                       options={modelOptions()}
+                      // See the main toolbar's model control: no model to
+                      // choose means this click opens the model settings.
+                      onActivate={
+                        modelOptions().length > 0
+                          ? undefined
+                          : openModelSettings
+                      }
                       onChange={(modelID) =>
                         void updateChatProfile({
                           ...chatProfile(),
@@ -4461,6 +4496,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     <NeuSelect
                       value={chatProfile().expert?.modelID ?? ""}
                       options={modelOptions()}
+                      onActivate={
+                        modelOptions().length > 0
+                          ? undefined
+                          : openModelSettings
+                      }
                       onChange={(modelID) =>
                         void updateChatProfile({
                           ...chatProfile(),
@@ -4646,6 +4686,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     runtime={props.ctx.runtime}
                     catalog={modelCatalog()}
                     sessionID={selectedSessionID() || state().sessionID}
+                    onOpenSettings={openModelSettings}
                     loadAttachmentUrl={loadAttachmentUrl}
                     suspendVirtualization={resizing()}
                     paging={niaPaging()}
@@ -4854,7 +4895,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       <SettingsPanel
         host={props.ctx.host}
         open={settingsOpen()}
-        onClose={() => setSettingsOpen(false)}
+        category={settingsCategory()}
+        onClose={() => {
+          setSettingsOpen(false);
+          // The category request belongs to the opening that carried it, so
+          // the next open through the settings button keeps its own memory.
+          setSettingsCategory(undefined);
+        }}
         onOpenModels={() => {
           setModelOpen(true);
           setSettingsOpen(false);

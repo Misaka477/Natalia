@@ -1640,32 +1640,72 @@ function withEscalation(tool: RuntimeTool, subject: string): RuntimeTool {
   };
 }
 
+/**
+ * Ask about a pane the model started; never ask about one the human started.
+ *
+ * The rule is about the PANE, not about which operation is done in it, so it
+ * applies to every terminal tool: a pane the human opened is their own
+ * context, and a pane the model opened is the model's. The origin is the
+ * registry's own record (`inputOwner`), which the human also changes by
+ * taking the pane over — so the answer tracks the pane rather than the
+ * caller. No pane named in the arguments falls back to the tool's own flag,
+ * which is the fail-closed direction.
+ */
+function withPaneApproval(tool: RuntimeTool): RuntimeTool {
+  return {
+    ...tool,
+    approvalFor: async (input, context) => {
+      const id = optionalString(requireObject(input).id);
+      if (!id) return tool.requiresApproval;
+      try {
+        const registry = requireNativeTerminal(context);
+        const sessions = await registry.list();
+        const owner = sessions.find((session) => session.id === id)?.inputOwner;
+        return owner !== "human";
+      } catch {
+        // No registry in this context (a hand-built one in a test): the
+        // tool's own flag decides.
+        return tool.requiresApproval;
+      }
+    },
+  };
+}
+
 /** Every interactive terminal tool, including the observe entry point. */
 export function terminalTools(): RuntimeTool[] {
   return [
     // The start tool resolves its own escalation: the grant decides the mode
     // the pane is spawned in.
-    interactiveStartTool(),
-    terminalObserveTool(),
-    withEscalation(interactiveReadTool(), "terminal pane read"),
+    withPaneApproval(interactiveStartTool()),
+    withPaneApproval(terminalObserveTool()),
+    withPaneApproval(
+      withEscalation(interactiveReadTool(), "terminal pane read"),
+    ),
     // Sits next to the read tool on purpose: the pair is what makes the two
     // surfaces discoverable, rather than one of them only being reachable by a
     // model that already knew to ask.
-    terminalLastCommandTool(),
-    withEscalation(interactiveSearchTool(), "terminal pane search"),
-    withEscalation(interactiveWriteTool(), "terminal pane write"),
-    interactiveSendLineTool(),
-    interactiveKeyTool(),
-    withEscalation(interactiveInputTool(), "terminal pane input"),
-    interactiveSnapshotTool(),
-    interactiveResizeTool(),
-    interactiveRequestHumanTool(),
-    interactiveStopTool(),
-    interactiveListTool(),
+    withPaneApproval(terminalLastCommandTool()),
+    withPaneApproval(
+      withEscalation(interactiveSearchTool(), "terminal pane search"),
+    ),
+    withPaneApproval(
+      withEscalation(interactiveWriteTool(), "terminal pane write"),
+    ),
+    withPaneApproval(interactiveSendLineTool()),
+    withPaneApproval(interactiveKeyTool()),
+    withPaneApproval(
+      withEscalation(interactiveInputTool(), "terminal pane input"),
+    ),
+    withPaneApproval(interactiveSnapshotTool()),
+    withPaneApproval(interactiveResizeTool()),
+    withPaneApproval(interactiveRequestHumanTool()),
+    withPaneApproval(interactiveStopTool()),
+    // `list` names no pane, so its predicate falls back to its own flag.
+    withPaneApproval(interactiveListTool()),
     // Sits after the list tool on purpose: the pair is what makes the
     // lifecycle discoverable — list shows what exists, cleanup reclaims what
     // nobody will read again.
-    interactiveCleanupTool(),
+    withPaneApproval(interactiveCleanupTool()),
   ];
 }
 

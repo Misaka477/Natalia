@@ -108,3 +108,75 @@ test("an escalation without its justification is refused before a spawn", () => 
     ),
   ).rejects.toThrow(/justification/u);
 });
+
+/** A context whose terminal registry reports one pane with the given owner. */
+function contextWithPane(inputOwner: "model" | "human" | undefined) {
+  return {
+    workspaceRoot: "C:\\workspace",
+    terminal: {
+      list: async () =>
+        inputOwner === undefined
+          ? []
+          : [
+              {
+                id: "terminal_pane",
+                host: "pty",
+                paneID: 1,
+                windowID: 1,
+                muxWindowID: 1,
+                tabID: 1,
+                command: "pwsh",
+                cwd: "C:\\workspace",
+                status: "running",
+                startedAt: "2026-10-16T00:00:00.000Z",
+                inputOwner,
+              },
+            ],
+    },
+  } as never;
+}
+
+test("a pane the human owns is never asked about; a pane the model owns always is", async () => {
+  const read = terminalTools().find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  );
+  const write = terminalTools().find(
+    (candidate) => candidate.name === "interactive_terminal_write",
+  );
+  if (!read?.approvalFor || !write?.approvalFor)
+    throw new Error("the pane tools lost their per-call approval");
+  // The rule is about the pane and not the operation: a read of the human's
+  // pane is not asked about, a read of the model's is.
+  expect(
+    await read.approvalFor({ id: "terminal_pane" }, contextWithPane("human")),
+  ).toBe(false);
+  expect(
+    await read.approvalFor({ id: "terminal_pane" }, contextWithPane("model")),
+  ).toBe(true);
+  expect(
+    await write.approvalFor({ id: "terminal_pane" }, contextWithPane("human")),
+  ).toBe(false);
+  expect(
+    await write.approvalFor({ id: "terminal_pane" }, contextWithPane("model")),
+  ).toBe(true);
+});
+
+test("no pane named, or no registry, falls back to the tool's own flag", async () => {
+  const read = terminalTools().find(
+    (candidate) => candidate.name === "interactive_terminal_read",
+  );
+  const write = terminalTools().find(
+    (candidate) => candidate.name === "interactive_terminal_write",
+  );
+  if (!read?.approvalFor || !write?.approvalFor)
+    throw new Error("the pane tools lost their per-call approval");
+  // No id: read is a read tool (false), write is a write tool (true).
+  expect(await read.approvalFor({}, contextWithPane(undefined))).toBe(false);
+  expect(await write.approvalFor({}, contextWithPane(undefined))).toBe(true);
+  // No registry at all: the same fallback, never a silent allow.
+  expect(
+    await write.approvalFor({ id: "terminal_pane" }, {
+      workspaceRoot: "C:\\",
+    } as never),
+  ).toBe(true);
+});

@@ -247,6 +247,16 @@ export type TerminalSessionView = {
   cwd: string;
   status: "running" | "exited";
   startedAt: string;
+  /**
+   * Who the pane belongs to: the model that started it, or the human who
+   * started or took it over.
+   *
+   * The approval rule the terminal family follows reads this and nothing
+   * else: a pane the human owns is never asked about, a pane the model owns
+   * always is. It is the pane's fact, not the caller's, so it is carried on
+   * the view rather than resolved at each call.
+   */
+  inputOwner?: "model" | "human";
 };
 
 /** Operational terminal surface consumed by tools, independent of its backend. */
@@ -659,6 +669,21 @@ export type RuntimeTool = ToolExecutionBoundary & {
   description: string;
   parameters: ToolSchema;
   output?: ToolOutputDefinition;
+  /**
+   * Decide whether THIS call needs approval, from a fact the static flag
+   * cannot see.
+   *
+   * The terminal family answers its question from the pane's origin: a pane
+   * the model started is asked about, a pane the human started is not — the
+   * same rule for every tool in the family, because the fact is about the
+   * pane and not about which operation is being done in it. Absent, the
+   * static `requiresApproval` decides. The predicate runs BEFORE the call is
+   * published or executed, so a rejected escalation is still a rejected call.
+   */
+  approvalFor?: (
+    input: unknown,
+    context: ToolExecutionContext,
+  ) => boolean | Promise<boolean>;
   execute(input: unknown, context: ToolExecutionContext): Promise<string>;
 };
 

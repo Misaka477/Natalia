@@ -99,7 +99,33 @@ export async function runExecuteStage(
   const forcedApproval = await requiresForcedGitApprovalAst(
     commandTextForApproval,
   );
-  const approvalRequired = tool.requiresApproval || Boolean(forcedApproval);
+  // A tool may answer "does THIS call need approval" from a fact its static
+  // flag cannot see. The terminal family's fact is the pane's origin: a pane
+  // the model started is asked about, a pane the human started is not — the
+  // same rule for every tool of the family, because the fact is about the
+  // pane and not about which operation is done in it. The context it is given
+  // is this call's own; the signal it carries is unused by any predicate (the
+  // call's real one is created below, once the timeout is known).
+  const perCallApproval = tool.approvalFor
+    ? await tool.approvalFor(
+        parsedForApproval ?? {},
+        buildToolExecutionContext({
+          exec,
+          publish,
+          toolID,
+          tool,
+          call,
+          turnID,
+          attachImage,
+          ctx,
+          sessionID,
+          workspaceRoot,
+          signal: exec?.activeAbort?.signal ?? new AbortController().signal,
+          parsed: parsedForApproval ?? {},
+        }),
+      )
+    : tool.requiresApproval;
+  const approvalRequired = Boolean(perCallApproval) || Boolean(forcedApproval);
   publish({
     type: "tool.update",
     id: toolID,

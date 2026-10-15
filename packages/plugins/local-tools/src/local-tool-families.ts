@@ -103,6 +103,33 @@ export async function reloadLocalToolFamily(input: {
   throw new Error(`tool family not found: ${input.familyID}`);
 }
 
+/**
+ * The module specifier for a family entry, and the reload query that goes
+ * with it.
+ *
+ * The two runtimes disagree about where the cache key lives, and the
+ * disagreement is measured, not assumed:
+ *
+ * - Bun keys a `file:` URL's module cache by the URL WITHOUT its query, so
+ *   `file:///...index.ts?reload=1` silently returns the module already in
+ *   memory. A bare path with the query appended is a distinct key there and
+ *   does re-evaluate.
+ * - Node is the mirror image: a bare absolute path is not a legal module
+ *   specifier on Windows (`ERR_UNSUPPORTED_ESM_URL_SCHEME`), while a file URL
+ *   with a query is both legal and a distinct key.
+ *
+ * So the spelling follows the runtime — a runtime check, never a baked-in
+ * choice (AGENTS.md §4). Both branches re-evaluate the changed bytes; neither
+ * regresses the other. Without a cacheBust token the file URL is correct on
+ * both, and is what the plain load path uses.
+ */
+export function toolFamilySpecifier(entryPath: string, cacheBust?: number) {
+  if (!cacheBust) return pathToFileURL(entryPath).href;
+  return typeof Bun !== "undefined"
+    ? `${entryPath}?reload=${cacheBust}`
+    : `${pathToFileURL(entryPath).href}?reload=${cacheBust}`;
+}
+
 async function importLocalToolFamily(
   manifest: LocalToolFamilyManifest,
   path: string,
@@ -121,9 +148,10 @@ async function importLocalToolFamily(
         return undefined;
       }
     }
-    const href = options?.cacheBust
-      ? `${entryPath}?reload=${Date.now()}`
-      : pathToFileURL(entryPath).href;
+    const href = toolFamilySpecifier(
+      entryPath,
+      options?.cacheBust ? Date.now() : undefined,
+    );
     const module = (await import(href)) as { default?: unknown };
     const exported = module.default;
     const family =

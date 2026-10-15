@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { PluginAPI } from "@anthelia/plugin";
 import type { RuntimeTool } from "@anthelia/tools";
 import { createLocalToolsPlugin, LOCAL_TOOLS_PLUGIN_ID } from "../src";
+import { toolFamilySpecifier } from "../src/local-tool-families";
 import { localToolsReload } from "@anthelia/runtime-services";
 
 async function fixtureFamily(root: string, toolName: string) {
@@ -74,4 +75,32 @@ test("local tools plugin registers families and replaces them on reload", async 
   expect(tools.has("fixture_run")).toBe(false);
   expect(tools.has("fixture_run_v2")).toBe(true);
   await plugin.dispose?.();
+});
+
+/**
+ * The reload specifier must actually re-evaluate the changed bytes.
+ *
+ * Bun and Node disagree about where the module cache key lives: Bun ignores a
+ * `file:` URL's query and serves the cached module, while a bare path with the
+ * query is a distinct key; Node is the mirror image and rejects a bare Windows
+ * path outright. A specifier that only looks right (a tidy `file:` URL with a
+ * query) silently returns the OLD family on Bun, so this asserts the behaviour
+ * rather than the spelling.
+ */
+test("the reload specifier re-evaluates the changed entry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-local-tools-specifier-"));
+  const entry = join(root, "index.ts");
+  const read = async (cacheBust?: number) => {
+    await writeFile(
+      entry,
+      `export default ${cacheBust ? '"SECOND"' : '"FIRST"'};`,
+    );
+    const mod = (await import(toolFamilySpecifier(entry, cacheBust))) as {
+      default: string;
+    };
+    return mod.default;
+  };
+  expect(await read()).toBe("FIRST");
+  expect(await read(1)).toBe("SECOND");
+  expect(toolFamilySpecifier(entry).startsWith("file:")).toBe(true);
 });

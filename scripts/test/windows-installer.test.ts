@@ -68,6 +68,36 @@ test("the script declares the entry points a normal application has", async () =
   expect(runSection.trim()).toBe("[Run]");
 });
 
+test("the install turns on close-to-tray, and the uninstall takes it back", async () => {
+  // The window host already implements it: NATALIA_MINIMISE_ON_CLOSE makes
+  // the close button hide the window while the app keeps running, a tray icon
+  // appears only while the window is hidden, and the tray's 退出 entry is the
+  // explicit exit that overrides the policy (apps/cef-desktop/src/window-policy.ts,
+  // simple_app.cc, simple_tray_win.cc). Without the value being installed the
+  // whole surface exists and is unreachable — the installed app exits on close,
+  // which is what the user asked to change.
+  //
+  // HKCU, not HKLM: it is a desktop preference, not an install fact, so one
+  // account must not make the choice for every account on a shared machine.
+  // `uninsdeletevalue` so uninstalling leaves no residue behind it.
+  const release = await fakeWindowsRelease();
+  const plan = await planWindowsInstall({
+    releaseDir: release,
+    icon: "icon.ico",
+  });
+  const script = renderInnoScript(plan);
+  expect(script).toContain(
+    'ValueName: "NATALIA_MINIMISE_ON_CLOSE"; ValueData: "1"',
+  );
+  expect(script).toContain('Subkey: "Environment"');
+  expect(script).toContain("uninsdeletevalue");
+  // The name the C++ side actually reads (simple_app.cc::MinimiseOnClose) and
+  // the TS mirror parses (window-policy.ts::closeActionFromEnv). Spelling it
+  // twice here is what keeps a rename in one of them from shipping an
+  // installed app whose switch does nothing.
+  expect(script).toContain("NATALIA_MINIMISE_ON_CLOSE");
+});
+
 test("the upgrade code binds the install, so a version replaces its predecessor", async () => {
   const release = await fakeWindowsRelease();
   const plan = await planWindowsInstall({

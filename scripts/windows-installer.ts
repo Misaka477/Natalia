@@ -166,6 +166,18 @@ function innoIcons(plan: WindowsInstallPlan): string[] {
 function innoRegistry(plan: WindowsInstallPlan): string[] {
   return [
     "[Registry]",
+    // Close-to-tray, the behaviour the window host already implements. The
+    // host reads NATALIA_MINIMISE_ON_CLOSE (apps/cef-desktop/src/window-policy.ts
+    // and the C++ mirror in simple_app.cc): under it the window's close button
+    // hides the window and the app keeps running, a tray icon appears only
+    // while the window is hidden, and the tray's 退出 entry is the explicit
+    // exit that overrides the policy.
+    //
+    // HKCU\Environment is per-machine-user, not HKLM: a shared machine must not
+    // make the choice for every account on it, and the value is a desktop
+    // preference, not an install fact. ` uninsdeletevalue` so uninstalling
+    // leaves no residue — the same discipline the data removals above follow.
+    `Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "NATALIA_MINIMISE_ON_CLOSE"; ValueData: "1"; Flags: uninsdeletevalue`,
     // The Apps & features row. These values are what the shell reads; a missing
     // DisplayVersion shows as an unversioned entry that cannot be upgraded.
     `Root: HKLM; Subkey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{${plan.uninstall.upgradeCode}}}_is1"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#MyAppName} {#MyAppVersion}"`,

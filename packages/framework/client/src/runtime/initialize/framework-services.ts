@@ -785,18 +785,17 @@ export async function wireFrameworkServices(
   // and tests — and closed with the runtime, so records drain on
   // shutdown instead of dying with the process.
   const telemetry = createOperationLog({
-    dir:
-      options.operationLogsDir ??
-      (process.env.NATALIA_HOME
-        ? join(process.env.NATALIA_HOME, "logs")
-        : operationLogsDir()),
+    // `NATALIA_HOME` is no longer a branch here: the one resolver reads it,
+    // and the branch used to spell `<NATALIA_HOME>/logs` by hand — a second
+    // spelling of the same rule, which is how a log and a config end up in
+    // different trees.
+    dir: options.operationLogsDir ?? operationLogsDir(),
   });
   ctx.state.serviceDirectory.provide(operationLog, telemetry);
   closeHandles.push(() => telemetry.close());
   // RINA Phase1: the Cold Vault rides the SAME home-conditional shape
-  // as the operation log (an injected dir wins, NATALIA_HOME redirects
-  // isolated runs, the .natalia family is the real-home default) and
-  // closes with the runtime exactly like it.
+  // as the operation log (an injected dir wins, the resolver's home is the
+  // real-home default) and closes with the runtime exactly like it.
   // Fail-soft, honestly: a store that cannot open (a read-only home
   // under a sandbox, a locked dir in the field) degrades to an
   // unavailable vault that says WHY — the boot continues, writes fail
@@ -805,11 +804,7 @@ export async function wireFrameworkServices(
   // runtime; silence would be the other dishonest direction.
   // One durable-knowledge root: the vault and the memory store (Phase 7)
   // are siblings under it, so a runtime's knowledge lives in one place.
-  const vaultDir =
-    options.vaultDir ??
-    (process.env.NATALIA_HOME
-      ? join(process.env.NATALIA_HOME, "vault")
-      : contextVaultDir());
+  const vaultDir = options.vaultDir ?? contextVaultDir();
   // The object-store study's acceptance 5: the vault's blob storage OPTION
   // (the study's "RINA ContextVault 的 blob 存储可选使用 ObjectStore").
   // Off by default (the inline behaviour byte-identical); the operator's

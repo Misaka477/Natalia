@@ -12,6 +12,9 @@
       "path": "../../core/contracts"
     },
     {
+      "path": "../../hosts/platform"
+    },
+    {
       "path": "../diff-wasm"
     }
   ]

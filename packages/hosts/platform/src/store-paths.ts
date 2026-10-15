@@ -12,6 +12,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
+import { NATALIA_HOME_DIR_NAME, nataliaHomePath } from "./home-paths";
 
 /**
  * The life-preserving store's path layer (architecture decisions §1.6).
@@ -64,11 +65,16 @@ export function workspaceStoreRoot(
   home?: string,
 ): string {
   if (home !== undefined)
-    return join(home, ".natalia", "stores", workspaceStoreID(workspaceRoot));
-  const relocated = process.env.NATALIA_STORE_HOME;
-  if (relocated)
-    return join(relocated, "stores", workspaceStoreID(workspaceRoot));
-  return join(homedir(), ".natalia", "stores", workspaceStoreID(workspaceRoot));
+    return join(
+      home,
+      NATALIA_HOME_DIR_NAME,
+      "stores",
+      workspaceStoreID(workspaceRoot),
+    );
+  // No explicit home: the ONE resolver decides, which is what makes
+  // `NATALIA_HOME` (and its `NATALIA_STORE_HOME` alias) relocate the store
+  // together with the config instead of leaving the two in different trees.
+  return nataliaHomePath("stores", workspaceStoreID(workspaceRoot));
 }
 
 /** The shared content-addressed object library for a workspace's store. */
@@ -386,8 +392,10 @@ export function resolveWorkspaceJsonSessionsDir(
  * `~/.natalia/logs/`, next to stores/ — telemetry is home-level, not
  * workspace-level; purge treats it as data, uninstall leaves it).
  */
-export function operationLogsDir(osHome: string = homedir()): string {
-  return join(osHome, ".natalia", "logs");
+export function operationLogsDir(osHome?: string): string {
+  return osHome === undefined
+    ? nataliaHomePath("logs")
+    : join(osHome, NATALIA_HOME_DIR_NAME, "logs");
 }
 
 /**
@@ -396,6 +404,8 @@ export function operationLogsDir(osHome: string = homedir()): string {
  * home, scoped per workspace/session by the study's isolation rules
  * (queries never cross them; the columns keep them apart).
  */
-export function contextVaultDir(osHome: string = homedir()): string {
-  return join(osHome, ".natalia", "vault");
+export function contextVaultDir(osHome?: string): string {
+  return osHome === undefined
+    ? nataliaHomePath("vault")
+    : join(osHome, NATALIA_HOME_DIR_NAME, "vault");
 }

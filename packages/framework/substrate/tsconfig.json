@@ -40,6 +40,9 @@
       "path": "../../hosts/config"
     },
     {
+      "path": "../../hosts/platform"
+    },
+    {
       "path": "../../domains/context-ledger"
     },
     {

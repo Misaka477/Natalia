@@ -1,11 +1,12 @@
 export * from "./hash-tree";
+export * from "./home-paths";
 export * from "./runtime-worker";
 export * from "./store-paths";
 export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
 import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";
+import { nataliaUserHome, usableDirectory } from "./home-paths";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { posix, win32, join } from "node:path";
 
 export {
@@ -528,7 +529,7 @@ export function globalConfigHome(input: PlatformInput = {}): string {
   const env = input.env ?? process.env;
   if (isWindows(input.os))
     return usableDirectory([env.APPDATA], () =>
-      win32.join(userHome(input), "AppData", "Roaming"),
+      win32.join(nataliaUserHome(input), "AppData", "Roaming"),
     );
   return posix.join(env.HOME ?? "", ".config");
 }
@@ -597,9 +598,9 @@ export function userStateHome(input: PlatformInput = {}): string {
   const env = input.env ?? process.env;
   if (isWindows(input.os))
     return usableDirectory([env.LOCALAPPDATA], () =>
-      win32.join(userHome(input), "AppData", "Local"),
+      win32.join(nataliaUserHome(input), "AppData", "Local"),
     );
-  return env.XDG_STATE_HOME ?? posix.join(env.HOME ?? ".", ".local", "state");
+  return env.XDG_STATE_HOME ?? posix.join(nataliaUserHome(input), ".local", "state");
 }
 
 /**
@@ -609,30 +610,10 @@ export function userStateHome(input: PlatformInput = {}): string {
 export function userRuntimeHome(input: PlatformInput = {}): string | undefined {
   const env = input.env ?? process.env;
   if (isWindows(input.os))
-    return usableDirectory([env.LOCALAPPDATA, env.TEMP], safeHomedir);
+    return usableDirectory([env.LOCALAPPDATA, env.TEMP], () =>
+      nataliaUserHome(input),
+    );
   return env.XDG_RUNTIME_DIR;
-}
-
-function userHome(input: PlatformInput): string {
-  const env = input.env ?? process.env;
-  return usableDirectory([env.USERPROFILE, env.HOME], safeHomedir);
-}
-
-/**
- * Picks the first usable directory from the candidates. A bare drive letter
- * ("D:") from a misconfigured env var (LOCALAPPDATA/TEMP/APPDATA/HOME set to
- * just the drive) is not a usable directory: creating a directory at the
- * drive root fails with EPERM on Windows, which surfaced as a hard startup
- * crash. Such values are skipped in favour of the real user home.
- */
-function usableDirectory(
-  candidates: Array<string | undefined>,
-  fallback: () => string,
-): string {
-  for (const candidate of candidates) {
-    if (candidate && !/^[A-Za-z]:$/u.test(candidate)) return candidate;
-  }
-  return fallback();
 }
 
 /**
@@ -743,14 +724,6 @@ async function nodeRm(
 async function nodeChmod(path: string, mode: number) {
   const { chmod } = await import("node:fs/promises");
   await chmod(path, mode);
-}
-
-function safeHomedir(): string {
-  try {
-    return homedir();
-  } catch {
-    return "";
-  }
 }
 
 function defaultExists(path: string): boolean {

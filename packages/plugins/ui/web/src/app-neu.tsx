@@ -128,6 +128,19 @@ const MAX_RIGHT_WIDTH = 560;
 const SECONDARY_STARTUP_ATTEMPTS = 3;
 const SECONDARY_STARTUP_RETRY_MS = 1_000;
 
+/**
+ * How long one startup SOURCE may take before it is reported as failed.
+ *
+ * The five sources are independent and Promise.all waits for all of them, so
+ * one that never settles holds the whole batch and the window shows its
+ * loading surface forever — which is what happened, with the runtime
+ * answering everything else perfectly. A rejected source already had a path
+ * to the "unavailable" state; an unanswered one had none, so it is bounded
+ * here. Ten seconds is past any source's normal answer on a fresh install and
+ * well inside the retry loop's own patience.
+ */
+const SECONDARY_STARTUP_SOURCE_TIMEOUT_MS = 10_000;
+
 function sessionTurnID(messageID: string) {
   if (!messageID.startsWith("turn_")) return undefined;
   return messageID.replace(/:(?:user|assistant|thinking|system)$/u, "");
@@ -2392,10 +2405,36 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       name: string,
       work: () => Promise<T> | undefined,
     ): Promise<{ value: T | undefined; failed: boolean }> => {
+      // Bounded, and the deadline is per SOURCE, not for the batch. The five
+      // sources below are independent, and Promise.all waits for all of them:
+      // one that never settles used to hold the whole batch, and the window
+      // showed its loading surface forever with no error anywhere — the
+      // runtime answering everything else was not enough, because nothing
+      // asked. A rejected source was already reported; an unanswered one is
+      // the same failure with no shape, so it gets one. This is the same rule
+      // the connection layer uses for a generation's readiness.
+      const timeoutMs = SECONDARY_STARTUP_SOURCE_TIMEOUT_MS;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        return { value: (await work()) as T | undefined, failed: false };
+        const value = await Promise.race([
+          Promise.resolve().then(work),
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `startup source ${name} did not answer within ${timeoutMs}ms`,
+                  ),
+                ),
+              timeoutMs,
+            );
+          }),
+        ]);
+        return { value: value as T | undefined, failed: false };
       } catch {
         return { value: undefined, failed: true };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     };
     const [requirementContext, catalog, tools, nextConfig, plugins] =

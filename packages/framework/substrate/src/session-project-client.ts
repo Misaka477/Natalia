@@ -65,6 +65,21 @@ export type RecoveryContextPlan = {
 };
 
 let nextID = 1;
+
+/**
+ * How long one worker task may take before its caller is told the worker never
+ * answered.
+ *
+ * 15s, the same number the connection layer uses for a generation's readiness
+ * deadline: a task that has not settled by then is not slow, it is stuck, and
+ * the caller has to be able to tell the difference. Override with
+ * NATALIA_WORKER_TASK_TIMEOUT_MS for a machine that genuinely needs more.
+ */
+export function runtimeWorkerTaskTimeoutMs(): number {
+  const raw = Number(process.env.NATALIA_WORKER_TASK_TIMEOUT_MS ?? "");
+  return Number.isFinite(raw) && raw >= 250 ? raw : 15_000;
+}
+
 const pending = new Map<
   number,
   {
@@ -100,11 +115,37 @@ const pool = createRuntimeWorkerPool(() => {
 
 async function run<T>(request: SessionProjectTask): Promise<T> {
   const id = nextID++;
+  // Bounded, and the deadline is the worker's, not the RPC's. A worker that
+  // never comes up — a spawn that failed, a pool that starved, a module the
+  // bundle could not resolve — used to leave this promise pending forever, and
+  // the caller had no way to tell "slow" from "never". The frontend's startup
+  // waits on the first of these, so an unbounded one is what turned a broken
+  // worker into a window that spun forever with no error anywhere. The
+  // connection layer answers the same question with a 15s readiness deadline
+  // (dsh's generationReadyTimeoutMs); this is the same rule one layer down.
   const instance = pool.worker();
   return new Promise<T>((resolve, reject) => {
+    const timeoutMs = runtimeWorkerTaskTimeoutMs();
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(
+        new Error(
+          `session-project worker did not answer ${request.op} within ${timeoutMs}ms`,
+        ),
+      );
+    }, timeoutMs);
+    // Unref'd: a task that settles must not be the reason the process lives,
+    // and a task that is abandoned must not keep it alive either.
+    timer.unref?.();
     pending.set(id, {
-      resolve: (value) => resolve(value as T),
-      reject,
+      resolve: (value) => {
+        clearTimeout(timer);
+        resolve(value as T);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
     });
     instance.postMessage({ ...request, id } as SessionProjectWorkerRequest);
   });

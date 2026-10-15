@@ -433,10 +433,21 @@ export function createProviderSelection(
     let providers: ReturnType<typeof buildModelCatalog>;
     try {
       providers = await modelCatalogInWorker(config);
-    } catch {
+    } catch (error) {
+      // The worker is an optimisation, not the answer. A worker that never
+      // came up used to leave this pending forever, and the frontend's
+      // startup waits on the first of these — so an unbounded worker is what
+      // turned a broken worker into a window that spun with no error
+      // anywhere. The synchronous path builds the same catalogue; a log line
+      // says the fast one was skipped, which is the only difference a user
+      // can see.
+      console.warn(
+        `[runtime] model catalog worker unavailable, building inline: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       providers = buildModelCatalog(config);
-    }
-    return providers.flatMap((provider) =>
+    }    return providers.flatMap((provider) =>
       provider.models
         .filter(
           (entry) =>

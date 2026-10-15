@@ -1,14 +1,59 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { nataliaLockSchema, type NataliaLock } from "@anthelia/contracts";
+import { discoverPluginManifests } from "./discovery";
 import { pluginManifestSchema, type PluginManifest } from "./manifest";
 
 export type PluginManifestEntry = { manifest: PluginManifest; path: string };
 export type InstalledPluginEntryResolution = {
   entries: PluginManifestEntry[];
   errors: Array<{ id: string; error: Error }>;
+  /**
+   * Problems that were REPAIRED instead of skipped: the entry is in
+   * `entries`, and the reason its recorded location was wrong is here. A
+   * silent repair would hide exactly the drift that broke every plugin on
+   * an installed Windows app (see `resolveEntryManifestPath`).
+   */
+  warnings: Array<{ id: string; error: Error }>;
 };
+
+/**
+ * The lock's `manifest` field, in the one shape that survives the store
+ * moving: a path RELATIVE to the store root, POSIX-separated.
+ *
+ * The field used to be an absolute path built from whichever store root was
+ * current at install time. The store then moved inside the product — from
+ * `<install>/plugin-store` to `<home>/.natalia/plugin-store`, the change that
+ * took user plugins out of the tree the uninstaller deletes — and the copied
+ * lock kept the old absolute paths. `resolveInstalledPluginEntries` requires
+ * the manifest to be inside its package, so every one of those entries was
+ * refused: measured on an installed Windows app, 15 of 16 official plugins
+ * failed with "plugin manifest escapes package", which means NO plugin loaded
+ * and every plugin-owned panel disappeared from the rail (the terminal tab,
+ * the file tab, and every capability-gated control with them). A relative
+ * record cannot drift that way.
+ */
+export function lockManifestPath(
+  packageName: string,
+  relativeManifest: string,
+): string {
+  return [
+    "node_modules",
+    ...packageName.split("/"),
+    ...relativeManifest.split(/[\\/]/u),
+  ].join("/");
+}
+
+/** A lock's recorded `manifest`, resolved against the store it belongs to. */
+export function resolveLockManifestPath(
+  pluginStoreRoot: string,
+  recorded: string,
+): string {
+  return isAbsolute(recorded)
+    ? resolve(recorded)
+    : resolve(resolve(pluginStoreRoot), recorded);
+}
 
 export async function loadNataliaPluginLock(
   pluginStoreRoot: string,
@@ -30,6 +75,7 @@ export async function resolveInstalledPluginEntries(input: {
 }): Promise<InstalledPluginEntryResolution> {
   const entries: PluginManifestEntry[] = [];
   const errors: InstalledPluginEntryResolution["errors"] = [];
+  const warnings: InstalledPluginEntryResolution["warnings"] = [];
   let lock: NataliaLock;
   try {
     lock = await loadNataliaPluginLock(input.pluginStoreRoot);
@@ -44,6 +90,7 @@ export async function resolveInstalledPluginEntries(input: {
           ),
         },
       ],
+      warnings,
     };
   }
   const modulesRoot = resolve(input.pluginStoreRoot, "node_modules");
@@ -65,12 +112,13 @@ export async function resolveInstalledPluginEntries(input: {
         packageRoot,
         "plugin package path escapes closure",
       );
-      const manifestPath = resolve(locked.manifest);
-      assertPathInside(
+      const manifestPath = await resolveEntryManifestPath({
+        pluginStoreRoot: input.pluginStoreRoot,
         packageRoot,
-        manifestPath,
-        "plugin manifest escapes package",
-      );
+        recorded: locked.manifest,
+        id,
+        warnings,
+      });
       const [actualModulesRoot, actualPackageRoot, actualManifestPath] =
         await Promise.all([
           realpath(modulesRoot),
@@ -125,13 +173,77 @@ export async function resolveInstalledPluginEntries(input: {
       });
     }
   }
-  return { entries, errors };
+  return { entries, errors, warnings };
+}
+
+/**
+ * Where a locked entry's manifest really is, in and only in its package.
+ *
+ * Two shapes reach here, and the difference is the whole point of the
+ * relative record: a RELATIVE path resolves against the store root and cannot
+ * go stale when the store moves; an ABSOLUTE one is what locks written before
+ * that carried, and is honoured while it still lies inside the package.
+ *
+ * An absolute path that lies outside its package is the "store moved" case: it
+ * is re-anchored to the package's OWN manifest — the same file the installer,
+ * the plugin catalog and the discovery walk all read — and reported as a
+ * warning, because a repair nobody is told about is how 15 dead plugins stayed
+ * invisible. The re-anchored file still passes the realpath containment and
+ * the content-hash pin below, so nothing outside the package can be loaded
+ * either way. When the package has no manifest to anchor to, the entry fails
+ * with the same "escapes package" refusal as before.
+ */
+async function resolveEntryManifestPath(input: {
+  pluginStoreRoot: string;
+  packageRoot: string;
+  recorded: string;
+  id: string;
+  warnings: InstalledPluginEntryResolution["warnings"];
+}): Promise<string> {
+  const candidate = resolveLockManifestPath(
+    input.pluginStoreRoot,
+    input.recorded,
+  );
+  if (isInside(input.packageRoot, candidate)) return candidate;
+  const anchored = await packageManifestPath(input.packageRoot, input.recorded);
+  if (!anchored)
+    throw new Error(
+      `plugin ${input.id} manifest escapes package: ${candidate} is outside ` +
+        `${input.packageRoot}, and that package declares no natalia.plugin.json`,
+    );
+  input.warnings.push({
+    id: input.id,
+    error: new Error(
+      `plugin ${input.id} lock manifest path ${candidate} is outside its ` +
+        `package — the lock is stale (a store that moved keeps absolute ` +
+        `paths); the package's own ${anchored} was used`,
+    ),
+  });
+  return anchored;
+}
+
+/** The package's own manifest: its root, or the single one below it. */
+async function packageManifestPath(
+  packageRoot: string,
+  recorded: string,
+): Promise<string | undefined> {
+  const found = await discoverPluginManifests(packageRoot, {
+    nodeModules: false,
+  });
+  const wanted = basename(recorded);
+  return (
+    found.find((entry) => basename(entry.path) === wanted)?.path ??
+    (found.length === 1 ? found[0]!.path : undefined)
+  );
+}
+
+function isInside(root: string, candidate: string) {
+  const inside = relative(resolve(root), resolve(candidate));
+  return inside === "" || (!inside.startsWith("..") && !isAbsolute(inside));
 }
 
 function assertPathInside(root: string, candidate: string, message: string) {
-  const inside = relative(resolve(root), resolve(candidate));
-  if (inside !== "" && (inside.startsWith("..") || isAbsolute(inside)))
-    throw new Error(message);
+  if (!isInside(root, candidate)) throw new Error(message);
 }
 
 /**

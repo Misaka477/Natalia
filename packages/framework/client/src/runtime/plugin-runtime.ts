@@ -8,9 +8,9 @@ import {
   uninstallPlugin,
   type PackageManagerRun,
 } from "@natalia/installer";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { computePluginPackageHash } from "@anthelia/plugin";
+import { computePluginPackageHash, lockManifestPath } from "@anthelia/plugin";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import type { RuntimeContext } from "@anthelia/substrate";
 
@@ -27,10 +27,23 @@ async function installOfficialLocal(
   await mkdir(packagesDir, { recursive: true });
   await rm(packageRoot, { recursive: true, force: true });
   await cp(sourceDir, packageRoot, { recursive: true });
+  // The lock is keyed by the MANIFEST's id, never by the table's: the two
+  // disagree for the browser plugin (`natalia-browser` in the official table,
+  // `natalia-tool-browser` in its manifest), and a lock entry whose key is not
+  // its manifest's id is refused at load time — which is how a real install
+  // ended up with a permanently dead entry.
+  const manifest = JSON.parse(
+    await readFile(resolve(packageRoot, "natalia.plugin.json"), "utf8"),
+  ) as { id?: string };
+  if (manifest.id !== official.id)
+    throw new Error(
+      `official plugin ${official.id} declares manifest id ${String(manifest.id)} — the distribution and the plugin id table disagree`,
+    );
   const lock = await loadNataliaLock(pluginStoreRoot);
   lock.plugins[official.id] = {
     packageName: official.packageName,
-    manifest: resolve(packageRoot, "natalia.plugin.json"),
+    // Relative to the store root, so a store that moves keeps loading.
+    manifest: lockManifestPath(official.packageName, "natalia.plugin.json"),
     metadata: {
       id: official.id,
       source: {

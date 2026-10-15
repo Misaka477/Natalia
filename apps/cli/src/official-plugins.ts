@@ -1,9 +1,12 @@
 import { executableName, nataliaHomeJoin } from "@anthelia/platform";
+import { computePluginPackageHash, lockManifestPath } from "@anthelia/plugin";
 import {
   initializeOfficialPlugins,
   loadNataliaLock,
+  reconcilePluginStoreLock,
   saveNataliaLock,
   OFFICIAL_PLUGIN_PACKAGES,
+  type LockRepair,
   type OfficialPluginID,
 } from "@natalia/installer";
 import { homedir } from "node:os";
@@ -202,7 +205,8 @@ const DEV_PLUGIN_PACKAGES: ReadonlyArray<{
   source: string;
 }> = [
   {
-    id: "natalia-browser",
+    // Manifest id, not a copy of it: see OFFICIAL_PLUGIN_PACKAGES.
+    id: "natalia-tool-browser",
     directory: "natalia-browser",
     source: "packages/plugins/browser",
   },
@@ -250,19 +254,39 @@ async function syncDevOfficialPlugins() {
     }
     const manifest = JSON.parse(
       await readFile(resolve(sourceDir, "natalia.plugin.json"), "utf8"),
-    ) as { entry?: string; [key: string]: unknown };
+    ) as {
+      id?: string;
+      entry?: string;
+      scope?: "process" | "workspace" | "session";
+      [key: string]: unknown;
+    };
     manifest.entry = "index.ts";
     const manifestPath = join(packageRoot, "natalia.plugin.json");
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    // The key is the manifest's OWN id and the recorded location is relative to
+    // the store root: the table's id disagreed with the manifest for the
+    // browser plugin, and an absolute path dies when the store moves. Both
+    // mistakes were on disk in a real store.
+    const pluginID = manifest.id ?? official.id;
     const lock = await loadNataliaLock(storeRoot);
-    lock.plugins[official.id] = {
+    if (pluginID !== official.id)
+      console.warn(
+        `[official-plugins] ${official.id} declares manifest id ${pluginID}; ` +
+          `recording the lock entry under the manifest's id`,
+      );
+    lock.plugins[pluginID] = {
       packageName: official.packageName,
-      manifest: manifestPath,
+      manifest: lockManifestPath(official.packageName, "natalia.plugin.json"),
       metadata: {
-        id: official.id,
+        id: pluginID,
         source: { type: "path", path: sourceDir },
         resolvedVersion: "1.0.0",
-        scope: "session",
+        // The pin is over what THIS run just wrote. Leaving it out is not
+        // neutral: the entry this overwrites may carry an older pin, and a
+        // kept stale pin refuses the entry at load ("package content does not
+        // match natalia.lock") — a dev run silently bricking a plugin.
+        contentHash: await computePluginPackageHash(packageRoot),
+        scope: manifest.scope ?? "session",
         dependencies: [],
       },
     };
@@ -286,12 +310,20 @@ async function syncDevOfficialPlugins() {
  * already holds — the two roots are also compared resolved, because a
  * `NATALIA_PLUGIN_STORE` that points at the legacy path must not copy a
  * directory onto itself.
+ *
+ * The LOCK REPAIR that follows the copy runs on every store, migrated or not,
+ * because a store a migration already carried is exactly the broken one: the
+ * copy holds the old lock verbatim, its absolute manifest paths point into the
+ * directory the copy came from, and the loader refuses a manifest that is not
+ * inside its own package — 15 of 16 official plugins refused on a real
+ * install, so no plugin loaded and every plugin-owned panel vanished. See
+ * `reconcilePluginStoreLock`.
  */
 export async function migrateLegacyPluginStore(
   input: { storeRoot?: string; legacyRoot?: string } = {},
-): Promise<{ migrated: boolean; from?: string }> {
+): Promise<{ migrated: boolean; from?: string; repairs: LockRepair[] }> {
   const storeRoot = resolve(input.storeRoot ?? pluginStoreRoot());
-  let legacyRoot: string;
+  let legacyRoot: string | undefined;
   if (input.legacyRoot !== undefined) {
     legacyRoot = resolve(input.legacyRoot);
   } else {
@@ -306,14 +338,29 @@ export async function migrateLegacyPluginStore(
       argv0: process.argv0,
       execPath: process.execPath,
     });
-    if (!installed) return { migrated: false };
-    legacyRoot = resolve(join(dirname(installed), "plugin-store"));
+    if (installed)
+      legacyRoot = resolve(join(dirname(installed), "plugin-store"));
   }
-  if (storeRoot === legacyRoot) return { migrated: false };
-  if (await pathExists(storeRoot)) return { migrated: false };
-  if (!(await pathExists(legacyRoot))) return { migrated: false };
-  await cp(legacyRoot, storeRoot, { recursive: true });
-  return { migrated: true, from: legacyRoot };
+  let migrated = false;
+  if (
+    legacyRoot !== undefined &&
+    legacyRoot !== storeRoot &&
+    !(await pathExists(storeRoot)) &&
+    (await pathExists(legacyRoot))
+  ) {
+    await cp(legacyRoot, storeRoot, { recursive: true });
+    migrated = true;
+  }
+  const repairs = await reconcilePluginStoreLock(storeRoot);
+  for (const repair of repairs)
+    console.warn(
+      `[official-plugins] repaired the plugin store lock: ${repair.key}: ${repair.detail}`,
+    );
+  return {
+    migrated,
+    ...(migrated && legacyRoot !== undefined ? { from: legacyRoot } : {}),
+    repairs,
+  };
 }
 
 export async function initializeCliOfficialPlugins(

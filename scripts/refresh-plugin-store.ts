@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { copyFile } from "node:fs/promises";
 import { basename, resolve, join } from "node:path";
+import { lockManifestPath } from "@anthelia/plugin";
 
 /**
  * Rebuilds the generated dev plugin store from `dist/ts/plugins` without running
@@ -46,7 +47,10 @@ for (const packageDir of await readdirSorted(pluginsRoot)) {
   skipped += await copyTreeInPlace(abs, target);
   lockPlugins[manifest.id] = {
     packageName: packageJSON.name,
-    manifest: join(target, "natalia.plugin.json"),
+    // Relative to the store root, like every other writer of this field: an
+    // absolute path here is what made a whole store's plugins unloadable after
+    // the store moved (see `lockManifestPath` in @anthelia/plugin).
+    manifest: lockManifestPath(packageJSON.name, "natalia.plugin.json"),
     metadata: {
       id: manifest.id,
       source: { type: "path", path: abs },

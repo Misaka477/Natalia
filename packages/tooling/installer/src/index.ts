@@ -9,6 +9,7 @@ export {
 } from "./closure";
 export { listInstalledPlugins, type PluginCatalogRow } from "./catalog";
 export { installPlugin, setPluginEnabled, uninstallPlugin } from "./lifecycle";
+export { reconcilePluginStoreLock, type LockRepair } from "./lock-repair";
 export {
   initializeOfficialPlugins,
   OFFICIAL_PLUGIN_PACKAGES,

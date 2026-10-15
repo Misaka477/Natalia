@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -157,7 +158,7 @@ test("an install's old plugin store is carried into the one home, once", async (
   // plugins" is not a migration.
   expect(
     await migrateLegacyPluginStore({ storeRoot: home, legacyRoot: legacy }),
-  ).toEqual({ migrated: true, from: legacy });
+  ).toEqual({ migrated: true, from: legacy, repairs: [] });
   expect(existsSync(join(home, "natalia.lock"))).toBe(true);
   expect(
     existsSync(join(home, "node_modules", "@user", "my-plugin", "index.js")),
@@ -170,14 +171,14 @@ test("an install's old plugin store is carried into the one home, once", async (
   writeFileSync(join(home, "sentinel"), "kept\n");
   expect(
     await migrateLegacyPluginStore({ storeRoot: home, legacyRoot: legacy }),
-  ).toEqual({ migrated: false });
+  ).toEqual({ migrated: false, repairs: [] });
   expect(existsSync(join(home, "sentinel"))).toBe(true);
 
   // A store that IS the legacy path is not copied onto itself — which is what
   // a `NATALIA_PLUGIN_STORE` naming the old location would otherwise do.
   expect(
     await migrateLegacyPluginStore({ storeRoot: legacy, legacyRoot: legacy }),
-  ).toEqual({ migrated: false });
+  ).toEqual({ migrated: false, repairs: [] });
 
   // Nothing to carry from an install that never had a store.
   expect(
@@ -185,7 +186,84 @@ test("an install's old plugin store is carried into the one home, once", async (
       storeRoot: join(base, "fresh"),
       legacyRoot: join(base, "no-such-install", "plugin-store"),
     }),
-  ).toEqual({ migrated: false });
+  ).toEqual({ migrated: false, repairs: [] });
+});
+
+/**
+ * The migration's copy is what BROKE the installed app, so the repair that
+ * follows it is the part under test here.
+ *
+ * Measured on the user's machine: 16 lock entries, 15 refused with "plugin
+ * manifest escapes package" — the copy carried the old lock verbatim, and its
+ * absolute manifest paths still pointed into `<install>/plugin-store`. No
+ * plugin loaded, so the terminal tab, the file tab and every plugin-gated
+ * control disappeared from the UI. The repair resolves every recorded path
+ * against the package on disk instead, and reports what it changed.
+ */
+test("a migrated store's lock is repaired so its plugins can load", async () => {
+  const { migrateLegacyPluginStore } = await import("../src/official-plugins");
+  const { resolveInstalledPluginEntries } = await import("@anthelia/plugin");
+  const legacy = join(base, "moved-install", "plugin-store");
+  const home = join(base, "moved-home-store");
+  const packageRoot = join(legacy, "node_modules", "@natalia", "plugin-x");
+  mkdirSync(packageRoot, { recursive: true });
+  writeFileSync(join(packageRoot, "index.js"), "export default {};\n");
+  writeFileSync(
+    join(packageRoot, "natalia.plugin.json"),
+    JSON.stringify({
+      apiVersion: 2,
+      id: "natalia-x",
+      version: "1.0.0",
+      name: "X",
+      entry: "index.js",
+      scope: "workspace",
+    }),
+  );
+  const staleManifest = join(packageRoot, "natalia.plugin.json");
+  writeFileSync(
+    join(legacy, "natalia.lock"),
+    JSON.stringify({
+      version: 1,
+      plugins: {
+        "natalia-x": {
+          packageName: "@natalia/plugin-x",
+          manifest: staleManifest,
+          metadata: {
+            id: "natalia-x",
+            source: { type: "registry", spec: "@natalia/plugin-x" },
+            resolvedVersion: "1.0.0",
+            scope: "workspace",
+            dependencies: [],
+          },
+        },
+      },
+    }),
+  );
+
+  const result = await migrateLegacyPluginStore({
+    storeRoot: home,
+    legacyRoot: legacy,
+  });
+  expect(result.migrated).toBe(true);
+  // The recorded path is now the store-relative form, which cannot go stale.
+  expect(JSON.parse(readFileSync(join(home, "natalia.lock"), "utf8"))).toEqual({
+    version: 1,
+    plugins: {
+      "natalia-x": expect.objectContaining({
+        manifest: "node_modules/@natalia/plugin-x/natalia.plugin.json",
+      }),
+    },
+  });
+  // And the entry the RUNTIME resolves is real: this is the exact call that
+  // returned 15 errors out of 16 on the installed app.
+  const resolved = await resolveInstalledPluginEntries({
+    pluginStoreRoot: home,
+  });
+  expect(resolved.errors).toEqual([]);
+  expect(resolved.warnings).toEqual([]);
+  expect(resolved.entries.map((entry) => entry.manifest.id)).toEqual([
+    "natalia-x",
+  ]);
 });
 
 test("a throwing plugin bootstrap degrades with a warning, never a crash", async () => {

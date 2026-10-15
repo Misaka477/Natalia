@@ -1,13 +1,13 @@
 import { mkdir, realpath } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { updateConfig } from "@anthelia/config";
 import type { NataliaLock } from "@anthelia/contracts";
+import { lockManifestPath } from "@anthelia/plugin";
 import {
   closureDependencies,
   loadNataliaLock,
   npmInstallArgs,
   npmUninstallArgs,
-  packageDirectory,
   pluginClosurePaths,
   runNpm,
   saveNataliaLock,
@@ -92,8 +92,11 @@ export async function installPlugin(input: {
       const lock = structuredClone(beforeLock);
       lock.plugins[installed.manifest.id] = {
         packageName: installed.packageName,
-        manifest: join(
-          packageDirectory(paths.pluginsDir, installed.packageName),
+        // Relative to the store root, so the entry survives the store moving.
+        // See `lockManifestPath`: an absolute path is what broke every plugin
+        // on an installed app whose store had been migrated.
+        manifest: lockManifestPath(
+          installed.packageName,
           installed.relativeManifest,
         ),
         metadata: installed.metadata,

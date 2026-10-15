@@ -24,9 +24,13 @@ export async function discoverDesiredPluginEntries(input: {
         pluginStoreRoot: input.pluginStoreRoot,
         enabled: input.enabled,
       })
-    : { entries: [], errors: [] };
+    : { entries: [], errors: [], warnings: [] };
   for (const failure of installed.errors)
     input.onError(failure.id, failure.error);
+  // Repairs, not failures: the entry is usable, and the reason its recorded
+  // location had to be corrected is reported rather than swallowed.
+  for (const repair of installed.warnings)
+    input.onError(repair.id, repair.error);
 
   const ids = new Set(input.declaredIDs);
   for (const id of installed.entries.map(({ manifest }) => manifest.id)) {

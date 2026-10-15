@@ -23,7 +23,14 @@ export const OFFICIAL_PLUGIN_PACKAGES = [
     directory: "natalia-file-editor",
   },
   {
-    id: "natalia-browser",
+    // The plugin's id is its MANIFEST's id. This table said
+    // `natalia-browser` while the manifest has always said
+    // `natalia-tool-browser`, and every writer that keyed a lock entry by this
+    // table produced an entry its own reader then refused ("manifest has id
+    // natalia-tool-browser") — measured on a real store, as a permanently dead
+    // entry. The `directory` is a distribution directory name, which is a
+    // different thing and stays.
+    id: "natalia-tool-browser",
     packageName: "@natalia/plugin-browser",
     directory: "natalia-browser",
   },

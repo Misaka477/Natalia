@@ -29,6 +29,7 @@ import type {
 } from "@anthelia/contracts";
 import type { TerminalController } from "@anthelia/runtime-services";
 import { nativeTerminalPrebuiltDir } from "./prebuilt-dir";
+import { defaultPaneCommand } from "@anthelia/platform";
 import {
   nativeTerminalPaneCommand,
   nativeTerminalPaneSpawn,
@@ -1344,8 +1345,16 @@ export function createPtyTerminalController(
     // for panes — so a bare "bash" rode PATH to WSL's bash.exe, and a
     // Windows-path --rcfile under ConPTY produced the mute pane: no
     // prompt, no markers, no output, while atPrompt sat true.
+    //
+    // A caller that named NO shell gets the one this host is guaranteed to
+    // have (PowerShell on Windows, bash on Linux, zsh or bash on macOS) —
+    // never a blank command wrapped in `sh -lc ""`. The request is answered
+    // in the session view, so the reader sees the shell that actually runs.
+    const requestedCommand =
+      startInput.command?.trim() ||
+      (defaultPaneCommand() ?? startInput.command);
     const spawnSpec = nativeTerminalPaneSpawn(
-      startInput.command,
+      requestedCommand,
       process.platform,
     );
     const argv = spawnSpec.argv;
@@ -1363,7 +1372,7 @@ export function createPtyTerminalController(
       id,
       sessionID: owningSession,
       ...(startInput.agentID ? { agentID: startInput.agentID } : {}),
-      command: startInput.command,
+      command: requestedCommand,
       cwd: startInput.cwd,
       startedAt: new Date().toISOString(),
       status: "running",

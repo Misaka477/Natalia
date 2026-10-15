@@ -3,6 +3,13 @@ export * from "./home-paths";
 export * from "./runtime-worker";
 export * from "./store-paths";
 export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
+export {
+  defaultPaneCommand,
+  discoverDefaultShell,
+  shellInvocation,
+  type DiscoveredShell,
+  type ShellName,
+} from "./shell-discovery";
 import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";
 import { nataliaUserHome, usableDirectory } from "./home-paths";
 import { spawn } from "node:child_process";

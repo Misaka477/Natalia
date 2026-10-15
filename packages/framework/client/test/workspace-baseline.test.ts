@@ -3,10 +3,26 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { releaseSharedObjectStoresUnder } from "@anthelia/object-store";
 import {
   dropWorkspaceBaseline,
   workspaceBaselineStore,
 } from "../src/runtime/workspace-baseline";
+
+/**
+ * Releases the shared object library the baseline store opened, then
+ * removes the tree.
+ *
+ * The library is shared per root and lives until it is released, so a
+ * test that captured a baseline still holds its SQLite handle when the
+ * finally block runs - and Windows answers EBUSY to every delete of a
+ * root the process has touched. Releasing first is what makes the
+ * cleanup honest rather than a tolerated leak.
+ */
+async function cleanup(root: string) {
+  releaseSharedObjectStoresUnder(root);
+  await rm(root, { recursive: true, force: true });
+}
 
 /**
  * The workspace baseline — "what changed since THEN" with no git anywhere.
@@ -42,7 +58,7 @@ test("a baseline records the tree and reads its content back", async () => {
     // And an unknown baseline id likewise.
     expect(await baselines.show("baseline-nope", "src/a.ts")).toBeUndefined();
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await cleanup(root);
   }
 });
 
@@ -63,7 +79,7 @@ test("a moved file and a deleted file are both visible against the baseline", as
     );
     expect(await baselines.show(baseline.id, "src/new.ts")).toBeUndefined();
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await cleanup(root);
   }
 });
 
@@ -101,6 +117,6 @@ test("a second capture is a second record, and dropping one keeps the others", a
       ),
     ).toBe(true);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await cleanup(root);
   }
 });

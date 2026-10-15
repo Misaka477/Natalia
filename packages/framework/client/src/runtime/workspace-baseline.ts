@@ -25,7 +25,7 @@ import { SnapshotStore, type SnapshotIndex } from "@anthelia/sandbox";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 
 /** The baseline's recorded identity: the index and where its store lives. */
 export type WorkspaceBaseline = {
@@ -144,9 +144,19 @@ export function workspaceBaselineStore(input: {
 
     async show(id, path) {
       const index = await this.load(id);
-      const entry = index?.get(
-        relative(input.workspaceRoot, resolve(input.workspaceRoot, path)),
-      );
+      // The index spells its paths with "/" — the snapshot walker's own
+      // separator — while node:path's relative() answers with the HOST's
+      // separator, which on Windows is "\". A lookup keyed with the
+      // wrong spelling finds nothing, and every baseline read answered
+      // "this file has no before" for a file the capture had just
+      // recorded (measured: files=2, show() undefined).
+      const relativePath = relative(
+        input.workspaceRoot,
+        resolve(input.workspaceRoot, path),
+      )
+        .split(sep)
+        .join("/");
+      const entry = index?.get(relativePath);
       if (!entry) return undefined;
       return Buffer.from(await objects.get(entry.objectID));
     },

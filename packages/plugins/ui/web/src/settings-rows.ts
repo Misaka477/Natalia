@@ -34,21 +34,22 @@ export type SettingsCategoryId =
   | "security"
   | "runtime"
   | "interface"
-  | "storage"
-  | "system";
+  | "storage";
 
 export type SettingsCategorySpec = {
   id: SettingsCategoryId;
   label: string;
 };
 
+// "系统" used to hold the only row in it, a Quit button. It is gone: the exit
+// lives in the tray, which is the one affordance that survives a hidden
+// window, and a category with no rows is a nav entry that renders nothing.
 export const SETTINGS_CATEGORIES: readonly SettingsCategorySpec[] = [
   { id: "model", label: "模型与 Agent" },
   { id: "security", label: "权限与安全" },
   { id: "runtime", label: "运行时与上下文" },
   { id: "interface", label: "界面" },
   { id: "storage", label: "配置保存范围" },
-  { id: "system", label: "系统" },
 ];
 
 export type SettingsRowSpec = {
@@ -152,16 +153,6 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
     label: "运行时配置保存范围",
     description: "模型 / 权限 / 运行时设置保存位置",
     category: "storage",
-  },
-  // --- 系统 -------------------------------------------------------------
-  // The exit, in its own category on purpose: it is the one setting that is
-  // not a setting. A window may hide on close and the runtime keep running,
-  // so a visible way to end the app has to exist — and it must not sit
-  // among toggles, where a mis-aimed tap would end a session with live work.
-  {
-    label: "Quit Natalia",
-    description: "结束 Natalia：关闭窗口并停止运行时（需确认）",
-    category: "system",
   },
 ];
 

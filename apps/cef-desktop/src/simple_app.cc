@@ -31,12 +31,30 @@ namespace {
 // The close policy, read once per window so a torn-down environment cannot
 // flip it between the ask and the answer.
 //
-// NATALIA_MINIMISE_ON_CLOSE=1 turns the window's close button into "hide and
-// keep running", which is the only mode in which a relaunch has a window to
-// bring back. Unset (the default) means the ordinary application behaviour:
-// closing the window exits the process and the launcher's trap releases the
-// runtime with it. The policy's wording lives in window-policy.ts, mirror with
-// the tests that pin it.
+// MINIMISE IS THE DEFAULT, and the environment variable only ever opts OUT
+// (NATALIA_MINIMISE_ON_CLOSE=0|false|no|off). Closing the window hides it and
+// keeps the app running, the tray icon appears only while the window is
+// hidden, and the tray's 退出 entry is the explicit exit that ends the
+// process.
+//
+// It used to be opt-IN, and that was the defect rather than a preference:
+// "the window closes and the app disappears with no visible affordance" is
+// indistinguishable from a crash, and the escape hatch that made it honest —
+// the tray — was behind the very setting that had to be turned on first. So
+// the affordance never appeared for a user who had not been told to set an
+// environment variable, and the app exited on close for everyone else. An
+// installed copy is worse still: whether the switch was present depended on
+// which installer built it, and on whether the shell had re-read
+// HKCU\Environment since. Measured on a real install: close the window and
+// the host exited with 0 while the user watched, and no tray was there to
+// bring it back.
+//
+// The default is now the behaviour that cannot lose the window. The
+// explicit exit is the tray's 退出, which is always available in the only
+// state the tray exists in — so nothing is unreachable, and the ordinary
+// "I am done" gesture has a visible result instead of a vanishing one.
+// The policy's wording lives in window-policy.ts, mirrored with the tests
+// that pin both directions.
 //
 // ONE EXIT IS NOT THE POLICY'S TO SWALLOW: the tray's Quit. The tray exists
 // only while the window is hidden, which only happens in minimise mode, so
@@ -64,9 +82,10 @@ namespace {
 //               macOS only while SOME window remains open.
 bool MinimiseOnClose() {
   const char* raw = std::getenv("NATALIA_MINIMISE_ON_CLOSE");
-  if (raw == nullptr) return false;
+  if (raw == nullptr) return true;
   std::string value(raw);
-  return value == "1" || value == "true" || value == "yes" || value == "on";
+  return !(value == "0" || value == "false" || value == "no" ||
+           value == "off");
 }
 
 }  // namespace

@@ -250,11 +250,12 @@ export function SettingsPanel(props: {
   themeMode?: string;
   onCycleThemeMode?: () => void;
   /**
-   * Shut the application down. Optional: a surface without it (an embedded host,
-   * a read-only integration) simply does not render the row, rather than
-   * rendering a button that cannot answer.
+   * Shut the application down. REMOVED from the panel: the exit lives in the
+   * tray, which is where a user who closed the window can actually reach it.
+   * A settings row could not be the way out — it sat among toggles, and the
+   * whole point of a tray exit is that it is the one affordance that survives
+   * a hidden window.
    */
-  onQuit?: () => void;
   state?: AppState;
   config?: ConfigV4;
   preferences?: {
@@ -941,34 +942,6 @@ export function SettingsPanel(props: {
                       // asks first through the panel's own confirm dialog —
                       // ending a session with live work must take two deliberate
                       // clicks, not one stray tap among the toggles.
-                      if (item.label === "Quit Natalia" && props.onQuit) {
-                        return (
-                          <button
-                            type="button"
-                            class="neu-settings-item neu-settings-item-button neu-settings-item-danger"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: "退出 Natalia？",
-                                message:
-                                  "窗口会关闭，运行时与所有会话一起停止。当前未落盘的进度会丢失。",
-                                confirmLabel: "退出",
-                                cancelLabel: "取消",
-                                danger: true,
-                              });
-                              if (ok) props.onQuit?.();
-                            }}
-                          >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
-                                {item.label}
-                              </span>
-                              <span class="neu-settings-item-description">
-                                {item.description}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      }
                       if (
                         item.label === "Theme Mode" &&
                         props.onCycleThemeMode

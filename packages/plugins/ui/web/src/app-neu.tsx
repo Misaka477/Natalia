@@ -2595,6 +2595,26 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       label: `${name}${config()?.defaultAgentMode === name ? "（默认）" : ""}`,
     }));
 
+  /**
+   * The key the PLUGIN side panels are re-mounted on: the workspace alone.
+   *
+   * The four shell-owned panels key on the full scope above because they hold
+   * session-scoped cursors and editors and must be rebuilt when the session
+   * changes. The plugin rail's panels are the opposite case, and the terminal
+   * is why: a pane belongs to the WORKSPACE, and every turn re-runs the
+   * session-derived parts of the key above — a message arriving, or a
+   * permission change emitting a system message, is enough to change them.
+   * The remount destroys the xterm instance, its socket and its scrollback
+   * and repaints the pane from nothing, which is the report that the whole
+   * terminal tab refreshes on every message. These panels receive the session
+   * as a prop and reload their own rows when it changes — the terminal's own
+   * effect keys on sessionID+runtimeURL — so a session change needs no
+   * remount, and a workspace change still gets one.
+   */
+  const sidePanelScopeKey = createMemo(
+    () => `${workspaceIDForSelectedSession() ?? ""}`,
+  );
+
   async function changePermission(permission: string) {
     await props.ctx.runtime.updateConfig?.({
       patch: { defaultAgentMode: permission },
@@ -4719,7 +4739,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       keyed
                       when={
                         rightTab() === item.panel.id
-                          ? rightPanelScopeKey()
+                          ? sidePanelScopeKey()
                           : undefined
                       }
                     >

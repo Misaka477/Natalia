@@ -140,6 +140,12 @@ type TerminalFacts = {
   id?: string;
   status?: string;
   pid?: number;
+  /**
+   * The shell the pane runs — what the controller spawned, which is the
+   * platform's own shell when the call named none. A fact, not the request:
+   * the two differ exactly when the runtime resolved the default.
+   */
+  command?: string;
   /** The last command's own line, when the pane reports one. */
   commandLine?: string | null;
   exitCode?: number;
@@ -207,7 +213,7 @@ function interactiveStartTool(): RuntimeTool {
   return {
     name: "interactive_terminal_start",
     description:
-      "Start a real interactive Terminal session inside the workspace. On Windows the pane shell is Git Bash, not cmd.exe — use POSIX shell syntax.",
+      "Start a real interactive Terminal session inside the workspace. The pane runs the shell this host is guaranteed to have — PowerShell on Windows (PowerShell 7 where it is installed, otherwise the OS's own 5.1), bash on Linux, zsh or bash on macOS — and the answer names what is running. Omit `command` to use that shell; pass one to start a different one. Write the command line for the shell that actually runs: PowerShell syntax for a Windows pane, POSIX for a POSIX one.",
     requiresApproval: true,
     parameters: {
       type: "object",
@@ -220,7 +226,6 @@ function interactiveStartTool(): RuntimeTool {
         rows: { type: "number" },
         cols: { type: "number" },
       },
-      required: ["command"],
       additionalProperties: false,
     },
     output: {
@@ -242,9 +247,10 @@ function interactiveStartTool(): RuntimeTool {
           title:
             facts.id ?? optionalString(requireObject(args).id) ?? "terminal",
           summary: facts.status ?? "started",
-          // The command the pane runs is the card's structured field (from
-          // the arguments, which is where a call knows it), the pid a facet.
-          command: optionalString(requireObject(args).command),
+          // The command the pane RUNS is the card's structured field — the
+          // controller resolved it when the call named none — with the
+          // requested one as the older fallback, and the pid a facet.
+          command: facts.command ?? optionalString(requireObject(args).command),
           ...(facts.cwd ? { cwd: facts.cwd } : {}),
           meta:
             typeof facts.pid === "number" ? [["pid", String(facts.pid)]] : [],
@@ -254,8 +260,11 @@ function interactiveStartTool(): RuntimeTool {
     async execute(input, context) {
       const args = requireObject(input);
       const registry = requireNativeTerminal(context);
+      // No command means "the shell this host has": the controller resolves
+      // it (PowerShell on Windows, bash on Linux, zsh or bash on macOS) and
+      // the answer below names what is running.
       const session = await registry.start({
-        command: requireString(args.command, "command"),
+        command: optionalString(args.command) ?? "",
         cwd: context.workspaceRoot,
         id: optionalString(args.id),
         // The pane's file-effect mode rides the start: a pane is a REAL

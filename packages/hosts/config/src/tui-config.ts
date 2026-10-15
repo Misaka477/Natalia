@@ -1,11 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  globalConfigHome,
-  legacyStatePaths,
-  statePath,
-} from "@anthelia/platform";
+import { nataliaHomeJoin, resolveNataliaPath } from "@anthelia/platform";
 import { z } from "zod";
 
 /**
@@ -66,12 +62,11 @@ export function tuiConfigPath(
 ) {
   if (scope === "project")
     return resolve(workspaceRoot, ".natalia", "tui.json");
-  // `resolve(process.env.HOME ?? "", ...)` collapsed to the *current directory*
-  // on Windows, where HOME is normally unset. Global settings then silently
-  // applied only inside whatever directory saved them, and Natalia scattered
-  // `.config` trees into user repositories. globalConfigHome reproduces
-  // `$HOME/.config` on POSIX and resolves `%APPDATA%` on Windows.
-  return resolve(statePath(globalConfigHome(), "tui.json"));
+  // The one home. `resolve(process.env.HOME ?? "", ...)` used to collapse to
+  // the *current directory* on Windows, where HOME is normally unset, so a
+  // global setting applied only inside whatever directory happened to save it
+  // and Natalia scattered `.config` trees into user repositories.
+  return resolve(nataliaHomeJoin({}, "tui.json"));
 }
 
 export async function resolveTuiConfig(workspaceRoot: string): Promise<{
@@ -80,17 +75,13 @@ export async function resolveTuiConfig(workspaceRoot: string): Promise<{
   projectPath: string;
 }> {
   const projectPath = tuiConfigPath(workspaceRoot, "project");
-  // The legacy `natalia-cli` location as the read fallback: an existing
-  // install's TUI state is still honored. Writes go to the live name
-  // (tuiConfigPath above), so the migration is one-way and silent-safe.
-  const liveGlobalPath = tuiConfigPath(workspaceRoot, "global");
-  const legacyGlobal = legacyStatePaths(globalConfigHome(), "tui.json").find(
-    (candidate) => existsSync(candidate.path),
-  );
-  const globalPath =
-    !existsSync(liveGlobalPath) && legacyGlobal
-      ? legacyGlobal.path
-      : liveGlobalPath;
+  // The one home's copy, else the same file under a legacy root that an older
+  // install wrote it to. The read rule lives in the resolver now instead of
+  // being re-assembled here, and the root a value came from is REPORTED: a
+  // source list that only names the path makes a legacy read look like a
+  // current one.
+  const global = resolveNataliaPath({}, existsSync, "tui.json");
+  const globalPath = global.path;
   let config = tuiConfigSchema.parse({});
   const sources: TuiConfigSource[] = [{ scope: "defaults", applied: true }];
   for (const [scope, path] of [
@@ -108,7 +99,14 @@ export async function resolveTuiConfig(workspaceRoot: string): Promise<{
         attention: { ...config.attention, ...raw.attention },
         keybinds: { ...config.keybinds, ...raw.keybinds },
       });
-      sources.push({ scope, path, applied: true });
+      sources.push({
+        scope,
+        path,
+        applied: true,
+        ...(scope === "global" && global.legacy
+          ? { diagnostic: `legacy location: ${global.legacy}` }
+          : {}),
+      });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         sources.push({ scope, path, applied: false, diagnostic: "missing" });

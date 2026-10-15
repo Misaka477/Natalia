@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveNataliaHome } from "@anthelia/platform";
 import { configV4Schema, modelRefKey } from "@anthelia/contracts";
 import {
   buildModelCatalog,
@@ -350,17 +351,6 @@ test("writes settings mutations to the requested config scope", async () => {
   const workspaceRoot = await mkdtemp(
     join(tmpdir(), "natalia-config-write-scope-"),
   );
-  const home = await mkdtemp(join(tmpdir(), "natalia-config-write-home-"));
-  const previousHome = process.env.HOME;
-  const previousAppData = process.env.APPDATA;
-  const previousUserProfile = process.env.USERPROFILE;
-  // Global-scope resolution reads HOME on POSIX and APPDATA on Windows, so
-  // the fixture points the platform's own variable at the temp home.
-  process.env.HOME = home;
-  if (process.platform === "win32") {
-    process.env.APPDATA = home;
-    process.env.USERPROFILE = home;
-  }
   try {
     await updateConfigAtScope(
       workspaceRoot,
@@ -375,13 +365,13 @@ test("writes settings mutations to the requested config scope", async () => {
     const project = JSON.parse(
       await readFile(join(workspaceRoot, ".natalia", "config.json"), "utf8"),
     );
-    // The live state directory's name: a config write lands on `natalia`,
-    // not on the repository's old name. (The legacy `natalia-cli` location
-    // is the READ fallback, covered by resolveGlobalConfigPath's tests.)
-    const globalConfigPath =
-      process.platform === "win32"
-        ? join(home, "natalia", "config.json")
-        : join(home, ".config", "natalia", "config.json");
+    // One global home, not a per-platform spelling of one: the write lands in
+    // the directory the resolver names, and the test asks the resolver rather
+    // than reconstructing the layout. (The preload points NATALIA_HOME at a
+    // temp directory, so this is also the isolation the suite wants — the old
+    // form had to set HOME/APPDATA/USERPROFILE by hand, one variable per
+    // platform.)
+    const globalConfigPath = join(resolveNataliaHome(), "config.json");
     const global = JSON.parse(await readFile(globalConfigPath, "utf8"));
     expect(project).toEqual({ runtime: { maxStepsPerTurn: 7 } });
     expect(global).toEqual({ context: { compactionThresholdPercent: 91 } });
@@ -389,14 +379,7 @@ test("writes settings mutations to the requested config scope", async () => {
     expect(resolved.config.runtime.maxStepsPerTurn).toBe(7);
     expect(resolved.config.context.compactionThresholdPercent).toBe(91);
   } finally {
-    if (previousHome === undefined) delete process.env.HOME;
-    else process.env.HOME = previousHome;
-    if (previousAppData === undefined) delete process.env.APPDATA;
-    else process.env.APPDATA = previousAppData;
-    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
-    else process.env.USERPROFILE = previousUserProfile;
     await rm(workspaceRoot, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
   }
 });
 
@@ -820,27 +803,31 @@ test("catalog filters disabled and policy-denied models while preserving capabil
 
 test("an existing install's global config in the legacy natalia-cli location is still honored", async () => {
   // The rename's whole risk in one test: a user who already has
-  // ~/.config/natalia-cli/config.json must not lose it to a directory
-  // rename. The live name is written; the legacy one is still READ, and
-  // the resolution says where the config came from.
-  const previousHome = process.env.HOME;
+  // ~/.config/natalia-cli/config.json must not lose it when the home moves.
+  // The live home is written; a legacy root is still READ, and the resolution
+  // says where the config came from.
+  //
+  // The environment is INJECTED rather than mutated: the suite's preload
+  // always sets NATALIA_HOME, and an explicit home beats every legacy root —
+  // which is correct, and is exactly why a test of the fallback has to name
+  // the environment it is asking about.
   const home = await mkdtemp(join(tmpdir(), "natalia-legacy-home-"));
   try {
-    process.env.HOME = home;
     const legacyDir = join(home, ".config", "natalia-cli");
     await mkdir(legacyDir, { recursive: true });
     await writeFile(
       join(legacyDir, "config.json"),
       JSON.stringify({ context: { compactionThresholdPercent: 91 } }),
     );
-    const resolved = await resolveConfig({ workspaceRoot: home });
+    const resolved = await resolveConfig({
+      workspaceRoot: home,
+      environment: { HOME: home, USERPROFILE: home },
+    });
     expect(resolved.config.context.compactionThresholdPercent).toBe(91);
     const global = resolved.sources.find((source) => source.scope === "global");
     expect(global?.applied).toBe(true);
     expect(global?.path).toContain("natalia-cli");
   } finally {
-    if (previousHome === undefined) delete process.env.HOME;
-    else process.env.HOME = previousHome;
     await rm(home, { recursive: true, force: true });
   }
 });

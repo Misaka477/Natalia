@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { loadOrCreateConfigFile } from "@anthelia/config";
+import { nataliaHomeJoin } from "@anthelia/platform";
 
 /**
  * Where the app's own configuration lives, and the one place that makes sure it
@@ -8,17 +9,28 @@ import { loadOrCreateConfigFile } from "@anthelia/config";
  *
  * The rule this module exists to enforce: **the app is responsible for its own
  * config directory.** Not the installer — it cannot know the working directory
- * a launch will have, and a Start Menu launch's working directory is the install
- * directory. Not the user — nobody should have to create a `.natalia/` by hand
- * before the program they just installed will start.
+ * a launch will have. Not the user — nobody should have to create a
+ * `.natalia/` by hand before the program they just installed will start.
  *
  * So every path through here does two things, on EVERY launch, not only the
- * first: resolve the path (env override, else `<cwd>/.natalia/config.json`), and
- * ensure the directory and a schema-valid config file exist before anyone reads
- * them. Before this, four call sites computed the same path and then handed it
- * to the STRICT reader, so a fresh install died with ENOENT on its first launch
- * while every dev checkout — whose repo root has carried a `.natalia/` for as
- * long as the path has existed — never saw it.
+ * first: resolve the path, and ensure the directory and a schema-valid config
+ * file exist before anyone reads them. Before this, four call sites computed
+ * the same path and then handed it to the STRICT reader, so a fresh install
+ * died with ENOENT on its first launch while every dev checkout — whose repo
+ * root has carried a `.natalia/` for as long as the path has existed — never
+ * saw it.
+ *
+ * The LOCATION changed, and that is the other half of the same defect. It used
+ * to be `<cwd>/.natalia/config.json`, and the Start Menu shortcut sets the
+ * working directory to the install folder — so a normal launch wrote the
+ * user's model configuration into `<install>\.natalia\`, which the uninstaller
+ * deletes. A configuration whose location depends on how the process was
+ * started is not a configuration, it is a side effect. It is now the one
+ * home's `config.json`, beside every other piece of user data, and the working
+ * directory is not consulted at all.
+ *
+ * @param cwd - resolves a RELATIVE `NATALIA_CONFIG`; the default location no
+ * longer depends on it.
  */
 export function nataliaConfigPath(cwd = process.cwd()): string {
   const fromEnv = process.env.NATALIA_CONFIG;
@@ -26,7 +38,7 @@ export function nataliaConfigPath(cwd = process.cwd()): string {
     ? isAbsolute(fromEnv)
       ? fromEnv
       : resolve(cwd, fromEnv)
-    : resolve(cwd, ".natalia", "config.json");
+    : nataliaHomeJoin({}, "config.json");
 }
 
 /**

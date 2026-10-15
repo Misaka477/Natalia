@@ -189,6 +189,45 @@ export function nataliaCachePath(...segments: string[]): string {
 }
 
 /**
+ * Joins segments onto the home resolved for a given platform.
+ *
+ * The injectable sibling of {@link nataliaHomePath}: a resolver that decides
+ * paths per platform must not join them with the HOST's rules, or asking about
+ * Linux from Windows produces `\home\demo\.natalia\config.json`.
+ */
+export function nataliaHomeJoin(
+  input: NataliaHomeInput,
+  ...segments: string[]
+): string {
+  return pathApi(input).join(resolveNataliaHome(undefined, input), ...segments);
+}
+
+/**
+ * The path to READ: the one home's copy when it exists, else the first legacy
+ * root that has one, else the live path so a write still lands on the live
+ * home.
+ *
+ * `legacy` names the ROOT an old value came from, or is undefined for the live
+ * home — the callers that report their sources (the config resolution's source
+ * list, the doctor) need to say where a value actually came from rather than
+ * only that it was not the current location.
+ */
+export function resolveNataliaPath(
+  input: NataliaHomeInput,
+  exists: (path: string) => boolean,
+  ...segments: string[]
+): { path: string; legacy: string | undefined } {
+  const paths = pathApi(input);
+  const live = paths.join(resolveNataliaHome(undefined, input), ...segments);
+  if (exists(live)) return { path: live, legacy: undefined };
+  for (const root of legacyNataliaRoots(input)) {
+    const candidate = paths.join(root, ...segments);
+    if (exists(candidate)) return { path: candidate, legacy: root };
+  }
+  return { path: live, legacy: undefined };
+}
+
+/**
  * Whether a resolved home is the default one, and the label to show for it.
  *
  * Deliberately never returns a machine path: the default reads `~/.natalia`

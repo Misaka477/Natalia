@@ -10,7 +10,7 @@ import { createRecordedFetch } from "@natalia/transport";
 import { createHttpTransportHost } from "./transport-host";
 import { createPluginUiResolver } from "./plugin-ui";
 import { serveStaticDirectory } from "./serve-web";
-import { ensureNataliaConfigPath } from "./config-home";
+import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 import { promptArguments } from "./index";
 import {
   valueAfter,
@@ -21,6 +21,7 @@ import {
 } from "./command-helpers";
 import { pluginStoreRoot } from "./official-plugins";
 import { perfLog } from "@anthelia/runtime-services";
+import { nataliaCachePath } from "@anthelia/platform";
 
 export async function handleRuntimeCommand(argv: string[]) {
   const command = argv[0];
@@ -52,9 +53,13 @@ export async function handleRuntimeCommand(argv: string[]) {
   }
   if (command === "serve" || command === "--serve") {
     const port = parseServePort(argv);
-    const globalConfigPath =
-      process.env.NATALIA_CONFIG ??
-      resolve(process.cwd(), ".natalia", "global-config.json");
+    // The ONE home's config, not `<cwd>/.natalia/global-config.json`. The
+    // working directory is the install folder for a Start Menu launch, so the
+    // old spelling put the user's model configuration inside the install tree
+    // — and the uninstaller deletes that tree. It was also a second name
+    // (`global-config.json`) for the file `config.json` elsewhere, so two
+    // readers could disagree about which file was the configuration.
+    const globalConfigPath = nataliaConfigPath();
     // Created before the manager reads it. `serve` is what the Windows
     // launcher starts first, so a strict read here is what an installed copy
     // died on: the same ENOENT as the CLI's own faces, one layer down.
@@ -72,11 +77,12 @@ export async function handleRuntimeCommand(argv: string[]) {
       // The web server is the long-lived API surface for a workspace; persist
       // sessions into the same per-workspace SQLite store used by the TUI.
       useSqliteStore: true,
-      contextWindowCachePath: resolve(
-        process.cwd(),
-        ".natalia",
-        "context-window-cache.json",
-      ),
+      // A CACHE, so it follows the one home's cache directory rather than the
+      // server's working directory: the working directory is the install
+      // folder for a Start Menu launch, and a cache written there is deleted
+      // by the uninstaller and invisible to every diagnostic that looks in
+      // the home.
+      contextWindowCachePath: nataliaCachePath("context-window.json"),
     });
     await manager.load();
     // A fresh install has no workspace registry, and every runtime face

@@ -3,8 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { configV4Schema, parseModelRef } from "@anthelia/contracts";
 import { defaultConfigV4 } from "./migration";
-import { statePath, resolveStatePath } from "@anthelia/platform";
-import { globalConfigHome } from "@anthelia/platform";
+import { nataliaHomeJoin, resolveNataliaPath } from "@anthelia/platform";
 import { parseConfigText } from "./file";
 import { mergeConfig } from "./service-merge";
 import type {
@@ -26,22 +25,21 @@ const globalModelConfigKeys = new Set<string>(GLOBAL_MODEL_CONFIG_KEYS);
 export function defaultGlobalConfigPath(
   input: { os?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {},
 ) {
-  return resolve(statePath(globalConfigHome(input), "config.json"));
+  return resolve(nataliaHomeJoin(input, "config.json"));
 }
 
 /**
- * The global config's read path, preferring the live state directory and
- * falling back to the legacy `natalia-cli` one that an existing install
- * wrote. `legacy` is reported so the resolution's source list says the
- * truth about where the config came from.
+ * The global config's read path: the one home's `config.json`, else the same
+ * file under a legacy root an older install wrote it to. `legacy` is reported
+ * so the resolution's source list says the truth about where the config came
+ * from.
  */
 export function resolveGlobalConfigPath(
   input: { os?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {},
   exists: (path: string) => boolean = existsSync,
 ): { path: string; legacy: boolean } {
-  const root = globalConfigHome(input);
-  const resolved = resolveStatePath(root, exists, "config.json");
-  return { path: resolve(resolved.path), legacy: resolved.legacy };
+  const resolved = resolveNataliaPath(input, exists, "config.json");
+  return { path: resolve(resolved.path), legacy: resolved.legacy !== undefined };
 }
 
 export async function resolveConfig(input: {

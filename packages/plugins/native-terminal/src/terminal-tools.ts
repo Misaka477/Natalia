@@ -24,6 +24,12 @@ import {
   nativeTerminalSearchPage,
 } from "@anthelia/tools";
 import { truncateProcessOutput } from "@anthelia/tools";
+import type { ConfinementMode } from "@anthelia/confinement";
+import {
+  ESCALATION_TARGETS,
+  approveEscalation,
+  validateEscalationArgs,
+} from "@anthelia/confinement";
 import type {
   RuntimeTool,
   TerminalSessionView,
@@ -225,6 +231,17 @@ function interactiveStartTool(): RuntimeTool {
         // wants its own layout says so here instead of resizing afterwards.
         rows: { type: "number" },
         cols: { type: "number" },
+        sandbox_permissions: {
+          type: "string",
+          enum: [...ESCALATION_TARGETS],
+          description:
+            "Optional. Run this pane under a sandbox mode strictly wider than the current one — one approved grant, for this pane's whole lifetime. A pane is a real shell, so its mode is fixed at this start and no later call can widen it: this is the one place a wider mode can be asked for. Must travel with justification.",
+        },
+        justification: {
+          type: "string",
+          description:
+            "Optional. One sentence explaining why the wider mode is needed. Travels with sandbox_permissions: both or neither.",
+        },
       },
       additionalProperties: false,
     },
@@ -259,6 +276,40 @@ function interactiveStartTool(): RuntimeTool {
     },
     async execute(input, context) {
       const args = requireObject(input);
+      // The pane's sandbox is decided HERE and nowhere else: a pane is a real
+      // shell, so a mode chosen later cannot widen a spawn that already
+      // happened. The policy is the shell tool's own — a wider mode is per
+      // call, travels with a justification, and the user approves it before
+      // the spawn. Omitting both leaves the pane in the mode the session is
+      // running under.
+      const requested =
+        args.sandbox_permissions === undefined
+          ? undefined
+          : requireString(args.sandbox_permissions, "sandbox_permissions");
+      const justification =
+        args.justification === undefined
+          ? undefined
+          : requireString(args.justification, "justification");
+      validateEscalationArgs(requested, justification);
+      const effectiveMode: ConfinementMode =
+        context.confinement ?? "danger-full-access";
+      const confinement =
+        requested === undefined
+          ? effectiveMode
+          : await approveEscalation(
+              {
+                requestedMode: requested as ConfinementMode,
+                justification: justification ?? "",
+                effectiveMode,
+                subject: "terminal pane",
+              },
+              {
+                approver: context.sandboxApprover,
+                toolName: "interactive_terminal_start",
+              },
+            );
+      // Resolved before the registry is touched: a refused escalation is a
+      // rejected CALL, not a pane that started and then had to be stopped.
       const registry = requireNativeTerminal(context);
       // No command means "the shell this host has": the controller resolves
       // it (PowerShell on Windows, bash on Linux, zsh or bash on macOS) and
@@ -271,10 +322,10 @@ function interactiveStartTool(): RuntimeTool {
         // shell, so the spawn itself is confined to the same mode the
         // one-shot shell tool carries. Without this, one approval bought
         // an unlimited live shell — the worst of the sandbox holes.
-        ...(context.confinement
+        ...(context.confinement || requested !== undefined
           ? {
               confinement: {
-                mode: context.confinement,
+                mode: confinement,
                 workspaceRoot: context.workspaceRoot,
                 // The session's ownership domain rides the spawn: a pane is a
                 // REAL shell, so its kernel fence is the same set of paths the

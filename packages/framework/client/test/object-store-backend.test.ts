@@ -34,7 +34,13 @@ const profile = (rows: CompositionProfile["rows"]): CompositionProfile => ({
 const ORIGIN = { layer: "user" as const, file: "synthetic" };
 
 const ROOTS: string[] = [];
+const STORES: ObjectStore[] = [];
 afterAll(() => {
+  // Release the OS-level holders before removing the roots. An open SQLite
+  // meta database keeps a store's root undeletable on Windows, and the rm
+  // then fails EBUSY — reported as an unhandled error between tests, which
+  // masks whatever the test itself asserted.
+  for (const store of STORES) store.dispose();
   for (const root of ROOTS) rmSync(root, { recursive: true, force: true });
 });
 
@@ -116,7 +122,7 @@ test("apply configures the store; the env seam beats the configured selection; u
     const root = mkdtempSync(join(tmpdir(), "backend-row-"));
     ROOTS.push(root);
     const store = new ObjectStore(join(root, "objects"));
-    void store;
+    STORES.push(store);
     expect(objectStoreBackendStatus()).toBe("rust");
   } finally {
     applyCompositionObjectStoreBackend(undefined);

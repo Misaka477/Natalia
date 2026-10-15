@@ -171,12 +171,25 @@ test("the fsize rlimit caps the write (SIGXFSZ at the ceiling)", () => {
 
 test("danger-full-access runs unconfined (no wrapper needed)", () => {
   const target = join(outside, "danger.txt");
+  // The host's own runtime as the command, and a file write as the effect:
+  // the point of this case is that the wrapper returns the command
+  // UNCHANGED and it runs, so the command only has to be one the host can
+  // spawn. /bin/sh is not a Windows path (the spawn failed with status
+  // undefined), and cmd's redirect refuses a quoted target, so a shell
+  // spelling buys a quoting problem on one host or the other. The Landlock
+  // cases above stay gated on the binary; this one has no backend to gate
+  // on, so it asks a question every host can answer instead of skipping.
+  const command = process.execPath;
+  const args = [
+    "-e",
+    `require("node:fs").writeFileSync(${JSON.stringify(target)}, "ok")`,
+  ];
   const wrapped = wrapConfinedCommand({
     mode: "danger-full-access",
-    command: "/bin/sh",
-    args: ["-c", `echo ok > "${target}"`],
+    command,
+    args,
   });
-  expect(wrapped).not.toBeUndefined();
+  expect(wrapped).toEqual({ command, args });
   const result = run(wrapped!.command, wrapped!.args);
   expect(result.status).toBe(0);
   expect(existsSync(target)).toBe(true);

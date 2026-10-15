@@ -224,8 +224,31 @@ async function pathExists(path: string) {
   );
 }
 
+/**
+ * Point two plugins at the checkout's SOURCE while developing them.
+ *
+ * Only into a store the dev flow asked for (`NATALIA_PLUGIN_STORE`). The store
+ * a plain run resolves is the product's own, in the one home, and writing dev
+ * shims there is not a dev convenience: the shim re-exports a file inside the
+ * checkout, so the INSTALLED app then loads a plugin whose import cannot
+ * resolve, and reports it. Measured on a real store: `natalia-tool-web` failed
+ * with "Cannot find package '@anthelia/tools' imported from
+ * E:\\Development\\natalia-cli\\packages\\plugins\\tools\\web\\src\\web-tools.ts"
+ * — a checkout path in a shipped runtime's diagnostic, and a plugin the user
+ * lost. The rest of the store's plugins come from the installer and stay
+ * authoritative.
+ */
 async function syncDevOfficialPlugins() {
   if (process.env.NATALIA_TS_VERSION) return;
+  if (!process.env[NATALIA_PLUGIN_STORE_ENV]?.trim()) {
+    console.warn(
+      `[official-plugins] not pointing the browser and web plugins at this ` +
+        `checkout's sources: ${NATALIA_PLUGIN_STORE_ENV} is unset, so the ` +
+        `store is the product's own. Set it (refresh:plugin-store writes ` +
+        `dist/ts/plugin-store) to develop those two plugins from source.`,
+    );
+    return;
+  }
   const workspaceRoot = resolve(import.meta.dir, "../../..");
   for (const plugin of DEV_PLUGIN_PACKAGES) {
     const official = OFFICIAL_PLUGIN_PACKAGES.find(

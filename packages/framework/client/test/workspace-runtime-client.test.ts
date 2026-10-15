@@ -876,6 +876,41 @@ test("workspace delete replaces an inactive workspace's active session", async (
   }
 });
 
+test("deleting a workspace the runtime does not hold is refused", async () => {
+  const root = await officialPluginWorkspace("workspace-delete-unknown");
+  const previousRegistry = process.env.NATALIA_WORKSPACES_FILE;
+  process.env.NATALIA_WORKSPACES_FILE = join(root, "workspaces.json");
+  const manager = createWorkspaceManager({
+    pluginStoreRoot: officialPluginStoreRoot(root),
+    globalConfigPath: join(root, "global-config.json"),
+  });
+  try {
+    const added = await manager.workspaceAdd({ path: root });
+    // The shape a user reported as "the workspace will not delete": measured
+    // on a live runtime, an id that was never registered came back as
+    // `{"removed":true}` while the registry kept the workspace — the UI
+    // refreshed, the row stayed, and nothing said why. A delete that removed
+    // nothing must not answer "removed".
+    await expect(
+      manager.workspaceRemove("ws_never_registered"),
+    ).rejects.toThrow("workspace not found");
+    expect((await manager.list()).map((entry) => entry.workspaceID)).toEqual([
+      added.workspaceID,
+    ]);
+
+    // And the real id still removes, so the refusal is not a dead end.
+    await expect(manager.workspaceRemove(added.workspaceID)).resolves.toEqual({
+      removed: true,
+    });
+    expect(await manager.list()).toEqual([]);
+  } finally {
+    await manager.dispose();
+    if (previousRegistry === undefined)
+      delete process.env.NATALIA_WORKSPACES_FILE;
+    else process.env.NATALIA_WORKSPACES_FILE = previousRegistry;
+  }
+});
+
 test("load restores the persisted active workspace", async () => {
   const firstRoot = await officialPluginWorkspace("workspace-active-a");
   const secondRoot = await officialPluginWorkspace("workspace-active-b");

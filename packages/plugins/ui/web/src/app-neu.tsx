@@ -1485,6 +1485,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshWorkspaces();
       await refreshSessions();
     } catch (error: unknown) {
+      // In the dialog the user is looking at, not in the add-workspace panel's
+      // error signal: that signal renders only while THAT panel is open, so a
+      // failed delete wrote its reason to a place nobody could see and the
+      // click looked like it did nothing at all. Renaming above already
+      // reports this way.
+      await alert({
+        title: "删除工作区失败",
+        message: error instanceof Error ? error.message : String(error),
+      });
       setWorkspaceError(error instanceof Error ? error.message : String(error));
     }
   }

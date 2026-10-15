@@ -558,7 +558,15 @@ export function createWorkspaceManager(
 
   async function removeWorkspace(workspaceID: string) {
     const ws = runtimes.get(workspaceID);
-    if (!ws) return { removed: true };
+    // An id this runtime does not hold is an ERROR, not a success. Reporting
+    // `removed: true` for it is the shape a user reported as "the workspace
+    // will not delete": the UI refreshes, the workspace is still in the list,
+    // and nothing anywhere says why. Measured on a live runtime: removing an
+    // id that was never registered returned `{"removed":true}` and left the
+    // registry untouched. Every sibling accessor below throws the same
+    // `workspace not found` for the same input; this one used to be the
+    // exception.
+    if (!ws) throw new Error(`workspace not found: ${workspaceID}`);
     await ws.client.dispose?.();
     runtimes.delete(workspaceID);
     invalidateSessionCache(workspaceID);

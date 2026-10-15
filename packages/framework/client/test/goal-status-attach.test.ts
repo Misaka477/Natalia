@@ -32,6 +32,13 @@ const provider: StreamingProvider = {
  * chain is five provider turns with durable writes between them; 120s leaves
  * room for the runner without making a genuine hang ambiguous. The per-test
  * timeout above it is the outer bound.
+ *
+ * That outer bound was NOT above it: both chain tests declared 120s, below
+ * the 200s they were allowed to wait, so a slow runner was killed by the
+ * harness before the chain's own deadline — with no "timed out waiting for
+ * X" to say which link was slow. Measured: the pause case took 91ms alone and
+ * exceeded 120s under the full suite's 4-way concurrency. The two tests now
+ * declare 240s, which is what this comment always said.
  */
 const CHAIN_BUDGET_MS = 200_000;
 
@@ -358,7 +365,7 @@ test("an edit steers the running round: the durable edit lands and round 2 uses 
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-}, 120_000);
+}, 240_000);
 
 test("pause disarms — the running goal round finishes and no next one starts (user 2026-10-07)", async () => {
   const { client, events, releases, waitUntil } = await bootGoalSteer(
@@ -404,7 +411,7 @@ test("pause disarms — the running goal round finishes and no next one starts (
     for (const release of releases.values()) release();
     await client.dispose?.();
   }
-}, 120_000);
+}, 240_000);
 
 /**
  * A stream killed mid-flight must keep the text it already generated. The

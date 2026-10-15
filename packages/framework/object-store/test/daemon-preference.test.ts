@@ -191,6 +191,7 @@ test("the store asks the daemon first when one is injected, and its own index ot
   const store = new ObjectStore(root, {
     daemonFactory: async () => recordingDaemon,
   });
+  stores.push(store);
   expect((await store.get(id)).equals(payload)).toBe(true);
   // The preference PROVEN: the store asked the daemon, and the daemon's
   // location answer drove the local pack read.

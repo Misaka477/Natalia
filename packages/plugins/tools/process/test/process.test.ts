@@ -262,7 +262,17 @@ test("managed process stop terminates the owned process group", async () => {
   await tools
     .get("process_stop")!
     .execute({ id: "proc_group" }, { workspaceRoot: root });
-  await Bun.sleep(100);
+  // A bounded wait for both deaths, not a fixed sleep: the group kill is
+  // asynchronous and the child is the last to go, so a 100ms sleep asserted
+  // "the child is dead" on a loaded host before it was — measured, the full
+  // suite's 4-way concurrency lost that race while the same case passed
+  // alone. The file already waits this way for the other death assertions.
+  for (
+    let attempt = 0;
+    attempt < 50 && (processAlive(started.pid!) || processAlive(childPID));
+    attempt += 1
+  )
+    await Bun.sleep(20);
   expect(processAlive(started.pid!)).toBe(false);
   expect(processAlive(childPID)).toBe(false);
 });

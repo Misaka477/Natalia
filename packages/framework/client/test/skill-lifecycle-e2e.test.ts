@@ -114,13 +114,21 @@ test("the gc reads real usage: a cancelled turn's skill is evictable, a done tur
   await client.submitAndWait!("use the worker skill");
   // The stalled turn: fire it, let the tool land, let the cancel land.
   void client.submit("use the dead skill").catch(() => undefined);
+  // Wait for the activation FACTS too, not only for the cancel: the
+  // assertions below read the `skill.activated` events, and publishing them
+  // is asynchronous relative to the turn finishing. Under the full suite's
+  // 4-way concurrency the worker's fact landed after the wait had already
+  // been satisfied by the cancel, and the assertion read `["dead"]` — the
+  // same case passes alone. Waiting for what is asserted makes it
+  // deterministic instead of racing the publisher.
   await waitForAsync(
     async () =>
       deadLoaded &&
       events.some(
         (event) =>
           event.type === "turn.finished" && event.stopReason === "cancelled",
-      ),
+      ) &&
+      events.filter((event) => event.type === "skill.activated").length === 2,
     15_000,
   );
 

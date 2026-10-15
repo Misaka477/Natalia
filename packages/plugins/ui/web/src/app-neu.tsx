@@ -857,8 +857,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     | undefined
   >();
   const [panelRevision, setPanelRevision] = createSignal(0);
-  const [interactiveTerminalAvailable, setInteractiveTerminalAvailable] =
-    createSignal(false);
   const [transcriptHistoryLoading, setTranscriptHistoryLoading] =
     createSignal(true);
   const [transcriptOlderLoading, setTranscriptOlderLoading] =
@@ -2406,16 +2404,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     nextConfig:
       | Awaited<ReturnType<NonNullable<typeof props.ctx.runtime.configGet>>>
       | undefined;
-    plugins:
-      | Awaited<ReturnType<NonNullable<typeof props.ctx.runtime.plugins>>>
-      | undefined;
     failed: string[];
   }> {
     const settle = async <T,>(
       name: string,
       work: () => Promise<T> | undefined,
     ): Promise<{ value: T | undefined; failed: boolean }> => {
-      // Bounded, and the deadline is per SOURCE, not for the batch. The five
+      // Bounded, and the deadline is per SOURCE, not for the batch. The four
       // sources below are independent, and Promise.all waits for all of them:
       // one that never settles used to hold the whole batch, and the window
       // showed its loading surface forever with no error anywhere — the
@@ -2447,39 +2442,32 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         if (timer) clearTimeout(timer);
       }
     };
-    const [requirementContext, catalog, tools, nextConfig, plugins] =
-      await Promise.all([
-        settle("panelRequirements", () =>
-          createUiPanelRequirementContext(props.ctx.runtime),
+    const [requirementContext, catalog, tools, nextConfig] = await Promise.all([
+      settle("panelRequirements", () =>
+        createUiPanelRequirementContext(props.ctx.runtime),
+      ),
+      settle("modelCatalog", () => props.ctx.runtime.modelCatalog?.()),
+      settle("registeredTools", () =>
+        props.ctx.runtime.registeredTools?.(
+          selectedSessionID() || state().sessionID,
         ),
-        settle("modelCatalog", () => props.ctx.runtime.modelCatalog?.()),
-        settle("registeredTools", () =>
-          props.ctx.runtime.registeredTools?.(
-            selectedSessionID() || state().sessionID,
-          ),
-        ),
-        settle("configGet", () => props.ctx.runtime.configGet?.()),
-        settle("plugins", () => props.ctx.runtime.plugins?.()),
-      ]);
-    const failed = [requirementContext, catalog, tools, nextConfig, plugins]
+      ),
+      settle("configGet", () => props.ctx.runtime.configGet?.()),
+    ]);
+    const failed = [requirementContext, catalog, tools, nextConfig]
       .map((entry, index) => (entry.failed ? index : -1))
       .filter((index) => index >= 0)
       .map(
         (index) =>
-          [
-            "panelRequirements",
-            "modelCatalog",
-            "registeredTools",
-            "configGet",
-            "plugins",
-          ][index]!,
+          ["panelRequirements", "modelCatalog", "registeredTools", "configGet"][
+            index
+          ]!,
       );
     return {
       requirementContext: requirementContext.value,
       catalog: catalog.value,
       tools: tools.value,
       nextConfig: nextConfig.value,
-      plugins: plugins.value,
       failed,
     };
   }
@@ -2497,20 +2485,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       if (data.catalog) setModelCatalog(data.catalog);
       if (data.tools) setRegisteredTools(data.tools);
       if (data.nextConfig) setConfig(data.nextConfig);
-      // A FAILED probe is not evidence of absence. `data.plugins` arrives
-      // through the runtime's secondary worker, and reading its failure as
-      // "the terminal plugin is not installed" removed the terminal tab from
-      // the rail — a control the user had, deleted by a timeout. This is the
-      // rule the sibling `panelVisible` below already follows: with no
-      // knowledge, do not hide. Only a list that actually ARRIVED can say the
-      // plugin is missing.
-      if (Array.isArray(data.plugins))
-        setInteractiveTerminalAvailable(
-          data.plugins.some(
-            (plugin) =>
-              (plugin as { id?: string }).id === "natalia-tool-terminal",
-          ),
-        );
     });
     perfLog(
       `[perf] secondary applied +${(performance.now() - appliedAt).toFixed(1)}ms`,
@@ -3237,10 +3211,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         (item, index, all) =>
           all.findIndex((other) => other.panel.id === item.panel.id) === index,
       )
-      .filter(
-        (item) =>
-          item.panel.id !== "terminal" || interactiveTerminalAvailable(),
-      )
+      // No second gate on plugins here. A listed panel is a panel whose plugin
+      // the host armed from the plugin CATALOG (`installed && enabled`) or has
+      // already mounted, and that is the only thing that decides whether a
+      // plugin-owned tab exists — "installed and enabled, therefore visible;
+      // disabled or uninstalled, therefore gone". A gate that asked the
+      // runtime for its LOADED plugin list said the opposite of the catalog:
+      // plugins load lazily, so that list is empty at startup (measured on an
+      // installed app: `plugin.list` returned no plugins while the catalog
+      // listed 16), and the terminal tab was deleted from the rail every time.
       .map((item) => {
         const id = `${item.pluginId}:${item.panel.id}`;
         return {

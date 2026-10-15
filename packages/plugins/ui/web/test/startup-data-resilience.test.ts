@@ -107,14 +107,28 @@ test("the UI waits longer for a startup source than the server's deadline", () =
   expect(uiBound).toBeGreaterThan(serverDeadline);
 });
 
-test("a startup source that never answered cannot delete a UI control", () => {
+/**
+ * A startup probe cannot decide whether a plugin-owned control exists.
+ *
+ * The gate that used to sit here asked `plugins()` — the runtime's LOADED
+ * plugins — and deleted the terminal tab when the answer was an empty list.
+ * The list is empty at startup by design (plugins load lazily) and it is the
+ * second, disagreeing answer to a question the host already answers from the
+ * plugin catalog, which is what arms a panel in the first place. Measured on
+ * an installed app: the catalog listed 16 plugins while `plugin.list` returned
+ * none, and the terminal tab was gone — the same empty list also left the file
+ * tab blank and the plugin-gated panels missing. Visibility is the catalog's
+ * answer alone: installed and enabled means visible, disabled or uninstalled
+ * means gone.
+ */
+test("no startup probe gates a plugin-owned panel", () => {
   const app = source("packages/plugins/ui/web/src/app-neu.tsx");
-  // The terminal panel's gate reads only a list that ARRIVED. The previous
-  // form collapsed "the probe failed" and "the plugin is absent" into one
-  // false, and a timeout silently removed a control the user had.
-  expect(app).toContain("if (Array.isArray(data.plugins))");
-  expect(app).not.toMatch(/Boolean\(\s*Array\.isArray\(data\.plugins\)\s*&&/u);
-  // The gate itself stays, so a plugin that is genuinely gone still hides
-  // its tab rather than advertising a control that cannot work.
-  expect(app).toContain('item.panel.id !== "terminal"');
+  expect(app).not.toContain("interactiveTerminalAvailable");
+  expect(app).not.toMatch(/item\.panel\.id !== "terminal"/u);
+  // The five sources this pins is now four: the plugin list was only ever
+  // consulted by the gate above.
+  expect(app).not.toMatch(/settle\("plugins"/u);
+  // The host's own arming rule stays the one that decides.
+  const host = source("packages/hosts/ui-host/src/host.ts");
+  expect(host).toContain("if (!entry.enabled || !entry.installed) continue");
 });

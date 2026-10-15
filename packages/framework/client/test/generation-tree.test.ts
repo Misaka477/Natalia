@@ -1,6 +1,18 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 import type { GenerationTreeFile } from "@anthelia/contracts";
+
+/**
+ * The absolute path the engine resolves a file to.
+ *
+ * The engine resolves with node:path, so on Windows the answer is
+ * drive-absolute ("E:\\repo\\a.ts") and a key spelled "/repo/a.ts"
+ * matches nothing — every plan then sees a workspace that is absent and
+ * produces no writes. Spelling the keys with the same resolve() asks the
+ * same question on every platform.
+ */
+const at = (...segments: string[]) => resolve("/repo", ...segments);
 import {
   planTreePromotion,
   treeConflictReason,
@@ -43,19 +55,19 @@ function harness(input: {
 
 test("workspace at the base takes the tree's content", async () => {
   const { plan } = harness({
-    workspace: { "/repo/a.ts": "base" },
+    workspace: { [at("a.ts")]: "base" },
     files: [{ path: "a.ts", next: NEXT, base: BASE }],
   });
   const result = await plan();
   expect(result.writes).toHaveLength(1);
-  expect(result.writes[0]!.abs).toBe("/repo/a.ts");
+  expect(result.writes[0]!.abs).toBe(at("a.ts"));
   expect(result.writes[0]!.content.toString()).toBe("next content");
   expect(result.conflicts).toHaveLength(0);
 });
 
 test("workspace already at the tree's content is a no-op (idempotent)", async () => {
   const { plan } = harness({
-    workspace: { "/repo/a.ts": "next content" },
+    workspace: { [at("a.ts")]: "next content" },
     files: [{ path: "a.ts", next: NEXT, base: BASE }],
   });
   const result = await plan();
@@ -65,7 +77,7 @@ test("workspace already at the tree's content is a no-op (idempotent)", async ()
 
 test("a workspace that moved since the tree was cut is a named conflict", async () => {
   const { plan } = harness({
-    workspace: { "/repo/a.ts": "someone else's edit" },
+    workspace: { [at("a.ts")]: "someone else's edit" },
     files: [{ path: "a.ts", next: NEXT, base: BASE }],
   });
   const result = await plan();
@@ -88,7 +100,7 @@ test("a new file with no base lands only where the workspace has nothing", async
   });
   expect((await created.plan()).writes).toHaveLength(1);
   const taken = harness({
-    workspace: { "/repo/new.ts": "already here" },
+    workspace: { [at("new.ts")]: "already here" },
     files: [{ path: "new.ts", next: NEXT }],
   });
   const result = await taken.plan();
@@ -98,11 +110,11 @@ test("a new file with no base lands only where the workspace has nothing", async
 
 test("a deletion whose base still stands removes the file", async () => {
   const { plan } = harness({
-    workspace: { "/repo/gone.ts": "base" },
+    workspace: { [at("gone.ts")]: "base" },
     files: [{ path: "gone.ts", next: null, base: BASE }],
   });
   const result = await plan();
-  expect(result.deletes).toEqual([{ abs: "/repo/gone.ts" }]);
+  expect(result.deletes).toEqual([{ abs: at("gone.ts") }]);
   // Already gone: a no-op, not a failure.
   const gone = harness({
     workspace: {},
@@ -111,7 +123,7 @@ test("a deletion whose base still stands removes the file", async () => {
   expect((await gone.plan()).unchanged).toEqual(["gone.ts"]);
   // Deleted AND moved since: a conflict, never a silent removal.
   const moved = harness({
-    workspace: { "/repo/gone.ts": "edited" },
+    workspace: { [at("gone.ts")]: "edited" },
     files: [{ path: "gone.ts", next: null, base: BASE }],
   });
   expect((await moved.plan()).conflicts).toHaveLength(1);
@@ -119,7 +131,7 @@ test("a deletion whose base still stands removes the file", async () => {
 
 test("one conflict refuses the whole plan — nothing lands", async () => {
   const { plan } = harness({
-    workspace: { "/repo/ok.ts": "base", "/repo/bad.ts": "moved" },
+    workspace: { [at("ok.ts")]: "base", [at("bad.ts")]: "moved" },
     files: [
       { path: "ok.ts", next: NEXT, base: BASE },
       { path: "bad.ts", next: NEXT, base: BASE },

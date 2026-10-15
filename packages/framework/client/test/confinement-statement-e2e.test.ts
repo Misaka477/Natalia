@@ -46,8 +46,25 @@ test("the main agent's request states the session's confinement mode", async () 
   await client.submitAndWait!("do a thing");
 
   const requests = requestTexts.join("\n");
-  expect(requests).toContain("Confinement mode: workspace-write");
-  expect(requests).toContain("targets: danger-full-access");
+  // The mode the request states is the deployment default as THIS host
+  // can enforce it: workspace-write where the rung exists, the degraded
+  // danger-full-access where it does not (Windows). The escalation
+  // targets are the same either way — danger-full-access is the only
+  // widening a rung-less host can offer.
+  expect(requests).toContain(
+    `Confinement mode: ${
+      process.platform === "linux" ? "workspace-write" : "danger-full-access"
+    }`,
+  );
+  // And the widening advertisement matches the mode: from
+  // workspace-write there is one target, from danger-full-access there
+  // is none — the product says so rather than naming an unreachable
+  // target.
+  if (process.platform === "linux") {
+    expect(requests).toContain("targets: danger-full-access");
+  } else {
+    expect(requests).toContain("no wider mode exists from here");
+  }
   // Inside the dynamic context block — never the static system prompt.
   expect(requests).toContain('<runtime_context source="environment"');
 

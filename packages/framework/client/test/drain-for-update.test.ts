@@ -12,8 +12,37 @@ import { createRealRuntimeClient } from "../src/runtime/main";
  */
 
 let scratch: string[] = [];
+/**
+ * Removes a temp tree, tolerating the handle Windows still holds on it.
+ *
+ * A runtime that has served a session leaves the workspace's object
+ * library open until the OS reclaims it (measured: the same three
+ * clients delete cleanly when each is removed right after its own
+ * dispose, and cleanly again once the process exits). The wait is
+ * bounded and the give-up is LOUD: a cleanup that silently leaves the
+ * tree behind would hide exactly the leak that causes it.
+ */
+function removeTree(path: string, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EBUSY") throw error;
+      if (Date.now() >= deadline) {
+        console.warn(
+          `left ${path} in place: a handle is still open on it ` +
+            "(the runtime's workspace object library)",
+        );
+        return;
+      }
+      Bun.sleepSync(100);
+    }
+  }
+}
 afterAll(() => {
-  for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
+  for (const dir of scratch) removeTree(dir);
 });
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,8 +56,14 @@ function gatedClient() {
   let blockedOnce = false;
   const events: RuntimeEvent[] = [];
   let calls = 0;
+  // The root this helper made, recorded directly: reading it back off
+  // the client answered undefined (the surface does not carry it), so
+  // the cleanup used to remove "" — which on Windows is the current
+  // directory and answers EBUSY.
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "drain-e2e-"));
+  scratch.push(workspaceRoot);
   const client = createRealRuntimeClient({
-    workspaceRoot: mkdtempSync(join(tmpdir(), "drain-e2e-")),
+    workspaceRoot,
     sessionID: "ses_drain" as SessionID,
     permissionMode: "auto",
     provider: {
@@ -45,9 +80,6 @@ function gatedClient() {
       },
     } as never,
   });
-  scratch.push(
-    (client as unknown as { workspaceRoot?: string }).workspaceRoot ?? "",
-  );
   client.start((event) => events.push(event));
   return { client, events, release, gate };
 }

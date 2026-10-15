@@ -19,6 +19,11 @@ import { createScriptedProvider } from "./e2e-harness";
 test("record_validation records recordedAt and an artifactRef for a large output", async () => {
   const root = await officialPluginWorkspace("evidence-artifact-ref");
   const sessionID = "ses_evidence_artifact" as SessionID;
+  // The chatty command, spelled for the host's shell: `seq` is POSIX and
+  // pwsh does not have it, so the POSIX spelling failed the COMMAND on
+  // Windows — and a command that produced no output persists no
+  // artifact, which is what the assertion below reads.
+  const chattyCommand = process.platform === "win32" ? "1..3000" : "seq 1 3000";
   const client = createRealRuntimeClient({
     workspaceRoot: root,
     sessionID,
@@ -31,7 +36,7 @@ test("record_validation records recordedAt and an artifactRef for a large output
             arguments: {
               taskID: "task_big",
               objective: "run a chatty validation",
-              command: "seq 1 3000",
+              command: chattyCommand,
             },
           }),
         },

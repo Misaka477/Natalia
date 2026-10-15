@@ -139,11 +139,19 @@ export function createRecordValidationTool(
         );
         result = run.exitCode === 0 ? "passed" : "failed";
         safeSummary = run.safeSummary;
+
         // EI E2 artifact refs: a run whose output exceeds the summary is
         // persisted (redacted + bounded) so the evidence can reference it.
         if (run.fullOutput.length > run.safeSummary.length) {
           const name = `validation:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`;
-          const relative = `.natalia/artifacts/${name.replace(/[^a-zA-Z0-9:_-]/gu, "_")}.log`;
+          // The name is an ID, not a path component: the colons that
+          // separate its parts are legal in a POSIX file name but are
+          // RESERVED on Windows, where a colon introduces an alternate
+          // data stream and the write fails (measured: ENOENT) — so the
+          // artifact was never persisted there and the evidence could
+          // never reference it. Everything outside the portable set is
+          // folded to an underscore.
+          const relative = `.natalia/artifacts/${name.replace(/[^a-zA-Z0-9_-]/gu, "_")}.log`;
           try {
             const absolute = join(ctx.ports.getWorkspaceRoot(), relative);
             await mkdir(

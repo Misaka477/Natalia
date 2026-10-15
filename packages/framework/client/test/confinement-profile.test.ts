@@ -28,11 +28,18 @@ const row = (config: Record<string, unknown>, disabled?: boolean) => ({
   origin: { layer: "base" as const, file: "/app/composition.base.json" },
 });
 
+// The chain tests below name `os: "linux"` on purpose: they are about
+// the REQUEST precedence (row, then legacy key, then schema default),
+// and the platform gate that closes the chain is the subject of the two
+// tests after them. Without the explicit os the question becomes "what
+// can THIS host enforce", which on a rung-less host (Windows) answers
+// danger-full-access for every mode — correct behaviour, wrong subject.
 test("the composition row wins over the legacy config key", () => {
   expect(
     effectiveConfinementMode({
       profile: profile([row({ mode: "read-only" })]),
       configMode: "danger-full-access",
+      os: "linux",
     }),
   ).toBe("read-only");
 });
@@ -42,16 +49,17 @@ test("a retired row (disabled) hands the key back to legacy config", () => {
     effectiveConfinementMode({
       profile: profile([row({ mode: "read-only" }, true)]),
       configMode: "danger-full-access",
+      os: "linux",
     }),
   ).toBe("danger-full-access");
 });
 
 test("no profile: the legacy config key, then the schema default", () => {
-  expect(effectiveConfinementMode({ configMode: "read-only" })).toBe(
-    "read-only",
-  );
-  expect(effectiveConfinementMode({})).toBe("workspace-write");
-  expect(effectiveConfinementMode({})).toBe("workspace-write");
+  expect(
+    effectiveConfinementMode({ configMode: "read-only", os: "linux" }),
+  ).toBe("read-only");
+  expect(effectiveConfinementMode({ os: "linux" })).toBe("workspace-write");
+  expect(effectiveConfinementMode({ os: "linux" })).toBe("workspace-write");
 });
 
 test("membership guard: garbage in either source falls through to the chain's next legal value", () => {
@@ -59,18 +67,21 @@ test("membership guard: garbage in either source falls through to the chain's ne
     effectiveConfinementMode({
       profile: profile([row({ mode: "sideways" })]),
       configMode: "also-bad",
+      os: "linux",
     }),
   ).toBe("workspace-write");
   expect(
     effectiveConfinementMode({
       profile: profile([row({ mode: "sideways" })]),
       configMode: "read-only",
+      os: "linux",
     }),
   ).toBe("read-only");
   expect(
     effectiveConfinementMode({
       profile: profile([row({})]),
       configMode: undefined,
+      os: "linux",
     }),
   ).toBe("workspace-write");
 });
@@ -185,6 +196,13 @@ test("an approved escalation journals the entry; a refusal and a missing seam do
   };
 
   // Approved: the fact names the from/to pair and the justification.
+  //
+  // The FROM mode is the deployment default as this host can enforce it:
+  // workspace-write where the rung exists, the degraded
+  // danger-full-access where it does not (Windows) — the same gate the
+  // chain tests above spell out, read through the production call site.
+  const from =
+    process.platform === "linux" ? "workspace-write" : "danger-full-access";
   const allowed = build({});
   const outcome = await allowed.sandboxApprover.request({
     requestedMode: "danger-full-access",
@@ -195,7 +213,7 @@ test("an approved escalation journals the entry; a refusal and a missing seam do
     {
       type: "confinement.escalated",
       at: expect.any(String),
-      from: "workspace-write",
+      from,
       to: "danger-full-access",
       justification: "the user asked for a host-wide install",
       toolID: "run_shell",
@@ -282,14 +300,21 @@ test("the session's rung override is the mode the tool context resolves", async 
 
   // The deployment asks read-only; the session's rung says otherwise. The
   // session override wins — that is the whole point of the human's switch.
+  // (danger-full-access is enforceable everywhere, so this line holds on
+  // every host.)
   const widened = build({
     configMode: "read-only",
     sessionMode: "danger-full-access",
   });
   expect(widened.confinement).toBe("danger-full-access");
-  // Without an override, the deployment default stands.
-  expect(build({ configMode: "read-only" }).confinement).toBe("read-only");
-  expect(build({}).confinement).toBe("workspace-write");
+  // Without an override, the deployment default stands — as this host can
+  // enforce it, which is the rung-less degradation on Windows.
+  const deployment =
+    process.platform === "linux" ? "read-only" : "danger-full-access";
+  expect(build({ configMode: "read-only" }).confinement).toBe(deployment);
+  expect(build({}).confinement).toBe(
+    process.platform === "linux" ? "workspace-write" : "danger-full-access",
+  );
 
   // The escalation's approval id carries the rung it asked for, so the
   // response's session grant can be applied to the ladder.
@@ -339,7 +364,15 @@ test("the main agent's write authorize refuses a symlink escape", async () => {
   try {
     await mkdir(join(root, "allowed"), { recursive: true });
     await writeFile(join(root, "allowed", "inside.txt"), "x");
-    await symlink(outside, join(root, "allowed", "link"), "dir");
+    // A junction on Windows: an unprivileged process cannot create a
+    // directory symlink there (EPERM), and realpath resolves a junction
+    // the same way — the property under test is the escape detection,
+    // not the link kind.
+    await symlink(
+      outside,
+      join(root, "allowed", "link"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
     // Inside: allowed.
     await context.workspaceWriteAuthorize?.({
       toolName: "write_file",

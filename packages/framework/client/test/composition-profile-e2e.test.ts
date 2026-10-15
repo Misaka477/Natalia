@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { confinementSupported } from "@anthelia/confinement";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import {
   createOfficialRuntimeClient,
@@ -25,6 +26,13 @@ async function runTouchTurn(options: {
 }) {
   const root = await officialPluginWorkspace(options.prefix);
   const probe = join(root, "probe.txt");
+  // The command is spelled for the host's shell: `touch` is POSIX and
+  // pwsh does not have it, so the POSIX spelling failed the COMMAND on
+  // Windows rather than exercising the confinement row.
+  const touchCommand =
+    process.platform === "win32"
+      ? `Set-Content -Path "${probe}" -Value "scratch"`
+      : `touch "${probe}"`;
   if (options.readOnlyDropIn) {
     const dir = join(root, ".natalia", "composition.d");
     mkdirSync(dir, { recursive: true });
@@ -48,7 +56,7 @@ async function runTouchTurn(options: {
           tool: () => ({
             name: "run_shell",
             arguments: {
-              command: `touch "${probe}"`,
+              command: touchCommand,
               description: "Create a scratch file",
             },
           }),
@@ -68,22 +76,31 @@ async function runTouchTurn(options: {
 }
 
 test("a workspace drop-in's read-only row stops the write the shipped base allows", async () => {
-  const readOnly = await runTouchTurn({
-    prefix: "profile-e2e-readonly",
-    readOnlyDropIn: true,
-  });
-  // The tool RAN (the update is there) — and the file is not: the
-  // confinement row from the drop-in refused the write.
-  expect(readOnly.shellUpdates.length).toBeGreaterThan(0);
-  expect(existsSync(readOnly.probe)).toBe(false);
-
-  // Control: the same turn in a plain workspace — the shipped base says
-  // workspace-write, so the file lands. The stage acceptance made
-  // executable: this change retunes nothing until an overlay says so.
+  // Control first: the shipped base says workspace-write, so the file
+  // lands. The stage acceptance made executable: this change retunes
+  // nothing until an overlay says so. That half holds on every host.
   const control = await runTouchTurn({
     prefix: "profile-e2e-control",
     readOnlyDropIn: false,
   });
   expect(control.shellUpdates.length).toBeGreaterThan(0);
   expect(existsSync(control.probe)).toBe(true);
+
+  const readOnly = await runTouchTurn({
+    prefix: "profile-e2e-readonly",
+    readOnlyDropIn: true,
+  });
+  // The tool RAN (the update is there) either way.
+  expect(readOnly.shellUpdates.length).toBeGreaterThan(0);
+  if (confinementSupported(process.platform)) {
+    // A host with the rung: the file is not there — the confinement row
+    // from the drop-in refused the write.
+    expect(existsSync(readOnly.probe)).toBe(false);
+  } else {
+    // A rung-less host (Windows) degrades read-only to
+    // danger-full-access, which the confinement package's own header
+    // spells out as the honest degradation — so the write lands. The
+    // drop-in still did its job; the host could not hold the answer.
+    expect(existsSync(readOnly.probe)).toBe(true);
+  }
 });

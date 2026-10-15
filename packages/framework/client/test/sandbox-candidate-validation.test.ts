@@ -116,7 +116,19 @@ test("the promotion gate validates exactly once", async () => {
   );
   const { client, sandboxes } = await bootWorkspace(
     root,
-    { sandbox: { promoteCommand: `date +%s%N >> ${counter}` } },
+    {
+      sandbox: {
+        // The side effect is the count, and only its spelling is per host:
+        // `date +%s%N` is a POSIX binary pwsh resolves as Get-Date, which
+        // then fails to bind "+%s%N" and the validation exits 1 before
+        // appending anything. Both spellings append exactly one line to the
+        // counter and exit 0.
+        promoteCommand:
+          process.platform === "win32"
+            ? `Add-Content -Path '${counter}' -Value 'run'`
+            : `date +%s%N >> ${counter}`,
+      },
+    },
     "ses_gate_once",
   );
 

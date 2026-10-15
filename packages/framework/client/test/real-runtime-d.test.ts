@@ -97,7 +97,16 @@ test("evidence summary is secret-safe", async () => {
     JSON.stringify({
       version: 4,
       sandbox: {
-        promoteCommand: 'printf "token=fakefaketoken\\n"; true',
+        // Spelled per host: the promote command runs through the platform's
+        // own shell, and `printf`/`true` are POSIX binaries pwsh does not
+        // have — the validation then exited 1 before printing anything, so
+        // the redaction seam this test covers was never reached. Both
+        // spellings print one `key=value` line and exit 0, which is what the
+        // seam under test consumes.
+        promoteCommand:
+          process.platform === "win32"
+            ? '"token=fakefaketoken"'
+            : 'printf "token=fakefaketoken\\n"; true',
       },
     }),
   );

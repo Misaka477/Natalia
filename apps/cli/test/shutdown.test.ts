@@ -3,7 +3,11 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { settleShutdown, shutdownStepTimeoutMs } from "../src/command-helpers";
+import {
+  exitAfterShutdown,
+  settleShutdown,
+  shutdownStepTimeoutMs,
+} from "../src/command-helpers";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 
@@ -48,6 +52,49 @@ test("settleShutdown swallows a failing step", async () => {
     delete process.env.NATALIA_SHUTDOWN_STEP_TIMEOUT_MS;
   }
 });
+
+/**
+ * The exit must wait for the line to be WRITTEN, not for a guessed delay.
+ *
+ * Measured reasoning, not preference: a fixed 50ms sleep was the previous
+ * mechanism, and it is wrong in both directions — too short and a redirected
+ * console loses the last line (which is how "the last thing it printed"
+ * becomes nothing, the reported symptom the sequence exists to fix), and
+ * longer than needed is time the user spends watching a process that has
+ * already finished. The write callback is the deterministic answer.
+ */
+test("exitAfterShutdown exits only after the shutdown line is written", () => {
+  const written: string[] = [];
+  const exits: number[] = [];
+  let release: (() => void) | undefined;
+  exitAfterShutdown(7, {
+    write: (line, done) => {
+      written.push(line);
+      release = done;
+    },
+    exit: (code) => exits.push(code),
+  });
+  // The line is handed to the stream, and the process has NOT gone yet.
+  expect(written).toHaveLength(1);
+  expect(written[0]).toContain("exiting with code 7");
+  expect(exits).toEqual([]);
+  release?.();
+  expect(exits).toEqual([7]);
+});
+
+test("exitAfterShutdown still exits when the write never completes", async () => {
+  const exits: number[] = [];
+  exitAfterShutdown(0, {
+    write: () => {
+      /* a stream that never calls back: a closed pipe */
+    },
+    exit: (code) => exits.push(code),
+  });
+  // Nothing is synchronous about the exit, even on the backstop path.
+  expect(exits).toEqual([]);
+  await Bun.sleep(1_200);
+  expect(exits).toEqual([0]);
+}, 10_000);
 
 /**
  * POSIX signals are the whole subject of the test below: the child is driven

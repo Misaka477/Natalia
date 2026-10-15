@@ -149,15 +149,39 @@ export function logActiveHandles(label = "post-shutdown"): void {
  * not take effect says THAT with what is still alive. The exit itself is
  * last: a printed line that reaches the user before the process goes is the
  * whole point.
+ *
+ * @param code - the exit code the sequence earned.
+ * @param io - the write and the exit, injectable so a test can observe the
+ * ordering without ending the test process. Production passes neither.
  */
-export function exitAfterShutdown(code = 0): void {
+export function exitAfterShutdown(
+  code = 0,
+  io: {
+    write?: (line: string, done: () => void) => void;
+    exit?: (code: number) => void;
+  } = {},
+): void {
   logActiveHandles();
-  console.warn(
+  const line =
     `[shutdown] everything disposed; exiting with code ${code}` +
-      (code === 0 ? "" : " (an earlier step failed)"),
-  );
-  // Let the write reach stdout before the process goes. A plain
-  // process.exit() can truncate a buffered line on a redirected console,
-  // which is how "the last thing it printed" becomes nothing.
-  setTimeout(() => process.exit(code), 50);
+    (code === 0 ? "" : " (an earlier step failed)");
+  // The exit waits for the WRITE, not for a guessed delay. A fixed sleep is
+  // wrong in both directions: too short and the last line is lost — a
+  // redirected console buffers it, which is how "the last thing it printed"
+  // becomes nothing — and longer than needed is time the user spends watching
+  // a process that has already finished. The write callback is the
+  // deterministic answer, and the timer is the backstop for a stream that
+  // never calls back (a closed pipe). The backstop is deliberately NOT
+  // unref'd: a guaranteed exit is this function's entire purpose.
+  const exit = io.exit ?? ((value: number) => process.exit(value));
+  const write =
+    io.write ??
+    ((text: string, done: () => void) => {
+      process.stderr.write(text, done);
+    });
+  const backstop = setTimeout(() => exit(code), 1_000);
+  write(`${line}\n`, () => {
+    clearTimeout(backstop);
+    exit(code);
+  });
 }

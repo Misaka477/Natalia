@@ -5,6 +5,7 @@ import type {
   RuntimeNativeTerminalSession,
 } from "@anthelia/contracts";
 import { WebTerminal, type WebTerminalApi } from "./web-terminal";
+import { shortShellName } from "./shell-name";
 import "./styles.css";
 
 const MAX_TERMINALS_PER_SESSION = 8;
@@ -42,7 +43,31 @@ export function TerminalPane(
   const [sessions, setSessions] = createSignal<RuntimeNativeTerminalSession[]>(
     [],
   );
-  const [shellProfile, setShellProfile] = createSignal("bash");
+  /**
+   * What the shell select shows. Empty means "the runtime's own default" —
+   * the pane is started without naming a shell and the runtime picks the one
+   * this host always has (PowerShell on Windows, bash on Linux, zsh on
+   * macOS). The value shown is then taken from the session the runtime
+   * reports, so the select can never claim a shell the pane is not running.
+   */
+  const [shellProfile, setShellProfile] = createSignal("");
+  /**
+   * Show what the runtime says is running, once it says it.
+   *
+   * The runtime picks the default shell for a pane that names none, and
+   * reports the pane's command in its session view — so the select's value
+   * is the pane's own truth rather than this panel's guess about the host's
+   * operating system. Until a pane exists there is nothing to report, and
+   * the select keeps the placeholder of its first option.
+   */
+  function syncShellFromSessions(list: RuntimeNativeTerminalSession[]): void {
+    if (shellProfile()) return;
+    const withShell = list.find(
+      (item) => item.status === "running" && item.command?.trim(),
+    );
+    if (!withShell) return;
+    setShellProfile(shortShellName(withShell.command));
+  }
   const [searchQuery, setSearchQuery] = createSignal("");
   const terminalApis = new Map<string, WebTerminalApi>();
   const activeApi = () => terminalApis.get(activeID() ?? "");
@@ -57,6 +82,7 @@ export function TerminalPane(
     const listed = (await props.runtime?.nativeTerminalList?.(sessionID)) ?? [];
     if (token !== loadToken) return;
     setSessions(listed);
+    syncShellFromSessions(listed);
     const running = listed.filter(
       (item) =>
         item.status === "running" &&
@@ -284,6 +310,10 @@ export function TerminalPane(
             <option value="zsh">zsh</option>
             <option value="sh">sh</option>
             <option value="pwsh">pwsh</option>
+            {/* Windows PowerShell: the OS's own 5.1, which the platform's
+                finder returns when PowerShell 7 is not installed. Without the
+                option a pane running it could not be shown by name. */}
+            <option value="powershell">powershell</option>
           </select>
           <span
             class="terminal-owner-badge"

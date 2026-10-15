@@ -266,6 +266,22 @@ test("a migrated store's lock is repaired so its plugins can load", async () => 
   ]);
 });
 
+test("a store named with a different case is the same store, never a copy source", async () => {
+  // The rule is a Windows rule: its paths are case-insensitive and a string
+  // comparison is not, so the two spellings below are one directory there.
+  if (process.platform !== "win32") return;
+  const { migrateLegacyPluginStore } = await import("../src/official-plugins");
+  const legacy = join(base, "Case-Store", "plugin-store");
+  mkdirSync(join(legacy, "node_modules"), { recursive: true });
+  writeFileSync(join(legacy, "natalia.lock"), '{"version":1,"plugins":{}}\n');
+  expect(
+    await migrateLegacyPluginStore({
+      storeRoot: legacy.toLowerCase(),
+      legacyRoot: legacy,
+    }),
+  ).toEqual({ migrated: false, repairs: [] });
+});
+
 test("a throwing plugin bootstrap degrades with a warning, never a crash", async () => {
   const { initializeOfficialPluginsForHostCommand } = await import(
     "../src/official-plugins"

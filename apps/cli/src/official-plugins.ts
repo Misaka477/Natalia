@@ -225,6 +225,21 @@ async function pathExists(path: string) {
 }
 
 /**
+ * Whether two resolved paths name the same directory on this host.
+ *
+ * Windows paths are case-insensitive and a string comparison is not, so
+ * `E:\Natalia\plugin-store` and `E:\natalia\plugin-store` are one directory a
+ * resolver can be asked to copy onto itself — which corrupts the store it
+ * copies. A POSIX host compares as written: `/home/Me` and `/home/me` are
+ * different directories there.
+ */
+function sameDirectory(left: string, right: string): boolean {
+  if (process.platform === "win32")
+    return left.toLowerCase() === right.toLowerCase();
+  return left === right;
+}
+
+/**
  * Point two plugins at the checkout's SOURCE while developing them.
  *
  * Only into a store the dev flow asked for (`NATALIA_PLUGIN_STORE`). The store
@@ -367,7 +382,11 @@ export async function migrateLegacyPluginStore(
   let migrated = false;
   if (
     legacyRoot !== undefined &&
-    legacyRoot !== storeRoot &&
+    // Case-insensitively the same directory on Windows: a resolved path
+    // spelling differs only in case, and copying a directory onto itself
+    // corrupts the store it copies. `NATALIA_PLUGIN_STORE` naming the legacy
+    // path in a different case is enough to reach it.
+    !sameDirectory(legacyRoot, storeRoot) &&
     !(await pathExists(storeRoot)) &&
     (await pathExists(legacyRoot))
   ) {

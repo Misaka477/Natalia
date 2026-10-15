@@ -26,8 +26,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveNataliaHome } from "@anthelia/platform";
 
 /** What a second launch asks the running instance to do. */
 export type InstanceRequest =
@@ -61,7 +61,19 @@ export type AcquireOptions = {
   isProcessAlive?: (pid: number) => boolean;
 };
 
-const DEFAULT_STATE_DIR = join(homedir(), ".natalia");
+/**
+ * The shell's instance lock, in the one user-data home.
+ *
+ * It was a second spelling of the same directory (`join(homedir(), ".natalia")`)
+ * — right by coincidence, and wrong the moment the home is relocated: a
+ * `NATALIA_HOME` install would keep its lock at `~/.natalia` while the runtime
+ * kept its state somewhere else, so "a second launch opens another window
+ * instead of a second runtime" would stop being enforceable. A function rather
+ * than a constant because the resolver reads the environment at call time.
+ */
+function defaultStateDir(): string {
+  return resolveNataliaHome();
+}
 
 function lockPaths(stateDir: string, appName: string) {
   return {
@@ -103,7 +115,7 @@ function pidFromFile(path: string): number | undefined {
 export async function acquireSingleInstance(
   options: AcquireOptions = {},
 ): Promise<InstanceHandle> {
-  const stateDir = options.stateDir ?? DEFAULT_STATE_DIR;
+  const stateDir = options.stateDir ?? defaultStateDir();
   const appName = options.appName ?? "natalia";
   const isAlive = options.isProcessAlive ?? defaultIsProcessAlive;
   const { socket: socketPath, pid: pidPath } = lockPaths(stateDir, appName);
@@ -227,7 +239,7 @@ export async function requestShow(
   options: { stateDir?: string; appName?: string } = {},
 ): Promise<boolean> {
   const { socket } = lockPaths(
-    options.stateDir ?? DEFAULT_STATE_DIR,
+    options.stateDir ?? defaultStateDir(),
     options.appName ?? "natalia",
   );
   return await handOff(socket, { kind: "show" });
@@ -238,7 +250,7 @@ export async function requestExit(
   options: { stateDir?: string; appName?: string } = {},
 ): Promise<boolean> {
   const { socket } = lockPaths(
-    options.stateDir ?? DEFAULT_STATE_DIR,
+    options.stateDir ?? defaultStateDir(),
     options.appName ?? "natalia",
   );
   return await handOff(socket, { kind: "exit" });

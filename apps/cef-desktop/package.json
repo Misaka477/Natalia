@@ -8,5 +8,8 @@
     "dev": "bash run-cef-desktop.sh",
     "build": "mkdir -p build && cd build && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake .. -DCMAKE_BUILD_TYPE=Release && CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake --build . -j4"
   },
+  "dependencies": {
+    "@anthelia/platform": "workspace:*"
+  },
   "devDependencies": {}
 }

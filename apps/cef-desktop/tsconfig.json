@@ -6,5 +6,8 @@
     "noEmit": true
   },
   "include": ["src", "test"],
-  "references": [{ "path": "../../packages/core/contracts" }]
+  "references": [
+    { "path": "../../packages/core/contracts" },
+    { "path": "../../packages/hosts/platform" }
+  ]
 }

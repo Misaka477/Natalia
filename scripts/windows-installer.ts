@@ -268,14 +268,18 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "    Exit;",
     "  end;",
     "  Answer := SuppressibleMsgBox(" +
-      "'Natalia keeps its data in two places:' #13#10 #13#10 " +
-      "'  ' + ExpandConstant('{app}') + '\\.natalia' #13#10 " +
-      "'      the configuration home: your model settings, sessions, checkpoints' #13#10 #13#10 " +
-      "'  ' + UserProfileDir + '\\.natalia' #13#10 " +
-      "'      the per-user stores, sessions, logs and object vault' #13#10 #13#10 " +
-      "'Delete them as well as the program?' #13#10 #13#10 " +
-      "'Yes    = delete them' #13#10 " +
-      "'No     = keep them (recommended)' #13#10 " +
+      "'Natalia keeps everything in ONE folder:' #13#10 #13#10 " +
+      "'  ' + UserProfileDir + '\\.natalia' #13#10 #13#10 " +
+      "'It holds:' #13#10 " +
+      "'    your model configuration' #13#10 " +
+      "'    your workspaces, and the sessions in them' #13#10 " +
+      "'    session history and checkpoints' #13#10 " +
+      "'    the object store that crash recovery reads' #13#10 " +
+      "'    skills, installed plugins and caches' #13#10 " +
+      "'    the interface layout' #13#10 #13#10 " +
+      "'Yes    = delete all of it (cannot be undone)' #13#10 " +
+      "'No     = keep it: install Natalia again later and it' #13#10 " +
+      "'         opens where you left off, settings intact' #13#10 " +
       "'Cancel = do not uninstall',",
     "    mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON2, IDNO);",
     "  if Answer = IDCANCEL then",
@@ -299,29 +303,13 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "  Kept := '';",
     "  if not KeepData then",
     "  begin",
-    "    // The user said yes: both roots go. The config home first — it is the",
-    "    // one that holds the model configuration, and it is the one that lands",
-    "    // inside the install folder because the launcher runs the runtime with",
-    "    // the install folder as its working directory.",
-    "    // The constant and the path fragment are concatenated, NOT embedded in",
-    "    // one literal: a constant followed by a backslash inside the same",
-    "    // string makes Inno's scanner read the name only up to the backslash,",
-    "    // and the uninstaller died at runtime with `Unknown constant` before",
-    "    // deleting anything. That branch had never run in the verification that",
-    "    // shipped it (a silent uninstall keeps the data and skips this block).",
-    "    Target := ExpandConstant('{app}') + '\\.natalia';",
-    "    if DirExists(Target) then",
-    "    begin",
-    "      if not DelTree(Target, True, True, True) then",
-    "      begin",
-    "        Failed := True;",
-    "        Log('Natalia uninstaller: could not fully remove ' + Target +",
-    "            ' (the application may still be running)');",
-    "        Kept := Kept + '  ' + Target + #13#10;",
-    "      end",
-    "      else",
-    "        Log('Natalia uninstaller: removed ' + Target);",
-    "    end;",
+    "    // The ONE root, and its failure IS a failure: every setting, workspace,",
+    "    // session, checkpoint and installed plugin lives here, so a refusal to",
+    "    // remove it is the one outcome worth reporting.",
+    "    // Concatenated, NOT embedded in one literal: a constant followed by a",
+    "    // backslash inside the same string makes Inno's scanner read the name",
+    "    // only up to the backslash, and the uninstaller died at runtime with",
+    "    // `Unknown constant` before deleting anything.",
     "    Target := UserProfileDir + '\\.natalia';",
     "    if DirExists(Target) then",
     "    begin",
@@ -335,9 +323,21 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "      else",
     "        Log('Natalia uninstaller: removed ' + Target);",
     "    end;",
-    "    // The plugin store and the window host's user-data dir. Neither is user",
-    "    // content — one is downloaded plugins, the other is CEF's profile — so",
-    "    // they follow the same answer rather than being asked about separately.",
+    "    // Legacy locations older builds wrote, and the two trees that belong to",
+    "    // the window shell rather than the runtime: the downloaded plugin store",
+    "    // and CEF's profile inside the install folder, and the CEF cache and",
+    "    // stale ProcessSingleton lock under LOCALAPPDATA. BEST-EFFORT on",
+    "    // purpose — a leftover here is a stale directory, not lost user data,",
+    "    // so it must not turn a successful uninstall into a failed one.",
+    "    //",
+    "    // `<install>\\.natalia` is in this list because older builds wrote the",
+    "    // runtime's config there: the launcher ran the runtime with the install",
+    "    // folder as its working directory, so `<cwd>/.natalia/config.json` WAS",
+    "    // the global config. Nothing writes it now.",
+    "    Target := ExpandConstant('{app}') + '\\.natalia';",
+    "    if DirExists(Target) then",
+    "      if not DelTree(Target, True, True, True) then",
+    "        Log('Natalia uninstaller: could not fully remove ' + Target);",
     "    Target := ExpandConstant('{app}') + '\\plugin-store';",
     "    if DirExists(Target) then",
     "      if not DelTree(Target, True, True, True) then",
@@ -346,19 +346,12 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "    if DirExists(Target) then",
     "      if not DelTree(Target, True, True, True) then",
     "        Log('Natalia uninstaller: could not fully remove ' + Target);",
-    "    // The per-user state tree under LOCALAPPDATA: the window host's CEF",
-    "    // profile, its ProcessSingleton lock, and the terminal runtime state.",
-    "    // The lock is the dangerous one — it outlives the process it belongs",
-    "    // to, so a stale lock hands the next launch's window to an instance",
-    "    // that no longer exists. Verified on the user's machine: this tree",
-    "    // exists and holds exactly those.",
     "    Target := ExpandConstant('{localappdata}') + '\\natalia';",
     "    if DirExists(Target) then",
     "      if not DelTree(Target, True, True, True) then",
     "        Log('Natalia uninstaller: could not fully remove ' + Target);",
-    "    // The global config home (the runtime's roaming config root), where",
-    "    // the global config, the workspace registry, skills and UI state",
-    "    // live. Absent on a machine that never wrote one; the guard is cheap.",
+    "    // The roaming config root an older build read its global config, TUI",
+    "    // state, workspace registry and skills from. Read-only legacy now.",
     "    Target := ExpandConstant('{userappdata}') + '\\natalia';",
     "    if DirExists(Target) then",
     "      if not DelTree(Target, True, True, True) then",
@@ -369,17 +362,17 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "    // The user said no, so say where their data is. Silence is what made " +
       "this",
     "    // look like a bug: files survived and nobody was told they had.",
-    "    // Concatenated, not embedded — for the reason see the note on the",
-    "    // delete branch above (Inno's scanner stops at the backslash).",
-    "    if DirExists(ExpandConstant('{app}') + '\\.natalia') then",
-    "      Kept := Kept + '  ' + ExpandConstant('{app}') + '\\.natalia' + #13#10;",
+    "    // Concatenated, not embedded — see the note on the delete branch above.",
     "    if DirExists(UserProfileDir + '\\.natalia') then",
     "      Kept := Kept + '  ' + UserProfileDir + '\\.natalia' + #13#10;",
+    "    if DirExists(ExpandConstant('{app}') + '\\user-data') then",
+    "      Kept := Kept + '  ' + ExpandConstant('{app}') + '\\user-data' + #13#10;",
     "  end;",
     "  if KeepData and (Kept <> '') then",
     "    SuppressibleMsgBox('Natalia has been uninstalled.' #13#10 #13#10 " +
       "      'Your data was left in place:' #13#10 #13#10 + Kept + #13#10 " +
-      "      'Delete those folders by hand if you do not need them.',",
+      "      'Install Natalia again and it opens where you left off. Delete ' +",
+    "      'these folders by hand if you do not need them.',",
     "      mbInformation, MB_OK, IDOK);",
     "  if Failed then",
     "    SuppressibleMsgBox('Natalia was uninstalled, but some of its data could not be removed (the application may still be running). You can delete those folders by hand, or close Natalia and run the uninstaller again.',",

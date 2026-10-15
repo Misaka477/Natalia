@@ -225,6 +225,29 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   expect(script).toContain("UserProfileDir + '\\.natalia'");
   expect(script).toContain("ExpandConstant('{localappdata}') + '\\natalia'");
   expect(script).toContain("ExpandConstant('{userappdata}') + '\\natalia'");
+
+  // The PROMPT, which nothing asserted before: the choice is only informed if
+  // the dialog says what is inside the folder. It used to say "Natalia keeps
+  // its data in two places" and name `<install>\.natalia` as the
+  // configuration home — which stopped being true when the config left the
+  // working directory, so the reader was sent looking for data in a directory
+  // the product no longer writes.
+  expect(script).toContain("Natalia keeps everything in ONE folder");
+  expect(script).not.toContain("keeps its data in two places");
+  for (const item of [
+    "your model configuration",
+    "your workspaces, and the sessions in them",
+    "session history and checkpoints",
+    "the object store that crash recovery reads",
+    "skills, installed plugins and caches",
+    "the interface layout",
+  ])
+    expect(script).toContain(item);
+  // Deleting is irreversible and the dialog says so.
+  expect(script).toContain("Yes    = delete all of it (cannot be undone)");
+  // And the other half of the choice: keeping is not losing. This is the
+  // promise a reinstall relies on.
+  expect(script).toContain("opens where you left off, settings intact");
   // The profile root is the environment variable, not a constant: the name
   // this uninstaller used first is not an Inno constant at all (the compiler
   // rejects it), and the second choice is the per-user program-files

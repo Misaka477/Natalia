@@ -40,18 +40,52 @@ test("the start tool declares the escalation fields with real descriptions", () 
   );
 });
 
-test("the other terminal tools do not advertise a mode they cannot honor", () => {
-  const properties = Object.fromEntries(
-    terminalTools()
-      .filter((tool) => tool.name !== "interactive_terminal_start")
-      .map((tool) => [tool.name, tool.parameters.properties ?? {}]),
+test("every model-facing execution tool carries the escalation fields", () => {
+  const byName = new Map(
+    terminalTools().map((tool) => [tool.name, tool] as const),
   );
-  for (const [name, own] of Object.entries(properties)) {
+  // The four execution tools the model drives a pane with. Each declares the
+  // same two fields with descriptions the model can act on: what a grant
+  // approves, that a pane's mode is fixed at start, and that the two fields
+  // travel together.
+  for (const name of [
+    "interactive_terminal_read",
+    "interactive_terminal_search",
+    "interactive_terminal_write",
+    "interactive_terminal_input",
+  ]) {
+    const properties = byName.get(name)?.parameters.properties as Record<
+      string,
+      { enum?: string[]; description?: string }
+    >;
+    expect(properties?.sandbox_permissions?.enum, name).toEqual([
+      ...ESCALATION_TARGETS,
+    ]);
     expect(
-      (own as Record<string, unknown>).sandbox_permissions,
-      `${name} declares a sandbox mode it cannot apply to an already-running pane`,
-    ).toBeUndefined();
+      properties?.sandbox_permissions?.description?.length ?? 0,
+      name,
+    ).toBeGreaterThan(80);
+    expect(
+      properties?.justification?.description?.length ?? 0,
+      name,
+    ).toBeGreaterThan(20);
   }
+});
+
+test("a malformed escalation is refused before the tool touches a pane", async () => {
+  const tool = terminalTools().find(
+    (candidate) => candidate.name === "interactive_terminal_write",
+  );
+  if (!tool) throw new Error("interactive_terminal_write is not registered");
+  // The justification without its mode: the shared validator refuses it, and
+  // it does so BEFORE the tool's own execute — which would otherwise reach for
+  // a pane this context does not have and fail for the wrong reason.
+  await expect(
+    tool.execute?.(
+      { id: "terminal_x", input: "rm -rf /", justification: "because" },
+      { workspaceRoot: "C:\\workspace" } as never,
+    ),
+  ).rejects.toThrow(/sandbox_permissions/u);
 });
 
 test("an escalation without its justification is refused before a spawn", () => {

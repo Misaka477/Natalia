@@ -215,6 +215,73 @@ function modelNativeTerminalInfo(session: TerminalSessionView) {
   };
 }
 
+type TerminalToolContext = Parameters<NonNullable<RuntimeTool["execute"]>>[1];
+
+/**
+ * The two escalation fields, identical in every terminal tool the model can
+ * call.
+ *
+ * The policy they carry is the shell tool's: a wider sandbox mode is asked for
+ * per call, travels with a justification, and the user approves it for THAT
+ * action only — one grant, one action, nothing remembered. The pane rule is
+ * part of the wording, because it is what makes the field mean what it says: a
+ * pane is a real shell whose mode is fixed when it starts, so a grant on a
+ * later call approves the action rather than re-scoping the pane. An action
+ * that still needs more room than the pane has is refused by the kernel with
+ * the escalation marker, and the answer to that is a new pane started at the
+ * wider mode.
+ */
+const ESCALATION_PROPERTIES = {
+  sandbox_permissions: {
+    type: "string",
+    enum: [...ESCALATION_TARGETS],
+    description:
+      "Optional. Ask to run THIS ONE ACTION under a sandbox mode strictly wider than the current one — the user approves it for this action and nothing is remembered. A pane is a real shell whose mode is fixed when it starts: a grant here approves the action, not the pane. Must travel with justification.",
+  },
+  justification: {
+    type: "string",
+    description:
+      "Optional. One sentence explaining why the wider mode is needed. Travels with sandbox_permissions: both or neither.",
+  },
+} as const;
+
+/**
+ * Read a call's escalation request and let the user decide it.
+ *
+ * Shared by every terminal tool so the four of them answer the model's
+ * question the same way, and so a malformed pair (a mode without a
+ * justification, or a justification without a mode) is refused by the shared
+ * validator BEFORE anything is created or typed.
+ */
+async function resolveCallEscalation(
+  args: Record<string, unknown>,
+  context: TerminalToolContext,
+  subject: string,
+  toolName: string,
+): Promise<ConfinementMode | undefined> {
+  const requested =
+    args.sandbox_permissions === undefined
+      ? undefined
+      : requireString(args.sandbox_permissions, "sandbox_permissions");
+  const justification =
+    args.justification === undefined
+      ? undefined
+      : requireString(args.justification, "justification");
+  validateEscalationArgs(requested, justification);
+  if (requested === undefined) return undefined;
+  return await approveEscalation(
+    {
+      requestedMode: requested as ConfinementMode,
+      justification: justification ?? "",
+      // A hand-built context with no resolved mode behaves unconfined — the
+      // same rule the shell tool applies.
+      effectiveMode: context.confinement ?? "danger-full-access",
+      subject,
+    },
+    { approver: context.sandboxApprover, toolName },
+  );
+}
+
 function interactiveStartTool(): RuntimeTool {
   return {
     name: "interactive_terminal_start",
@@ -231,17 +298,7 @@ function interactiveStartTool(): RuntimeTool {
         // wants its own layout says so here instead of resizing afterwards.
         rows: { type: "number" },
         cols: { type: "number" },
-        sandbox_permissions: {
-          type: "string",
-          enum: [...ESCALATION_TARGETS],
-          description:
-            "Optional. Run this pane under a sandbox mode strictly wider than the current one — one approved grant, for this pane's whole lifetime. A pane is a real shell, so its mode is fixed at this start and no later call can widen it: this is the one place a wider mode can be asked for. Must travel with justification.",
-        },
-        justification: {
-          type: "string",
-          description:
-            "Optional. One sentence explaining why the wider mode is needed. Travels with sandbox_permissions: both or neither.",
-        },
+        ...ESCALATION_PROPERTIES,
       },
       additionalProperties: false,
     },
@@ -278,36 +335,18 @@ function interactiveStartTool(): RuntimeTool {
       const args = requireObject(input);
       // The pane's sandbox is decided HERE and nowhere else: a pane is a real
       // shell, so a mode chosen later cannot widen a spawn that already
-      // happened. The policy is the shell tool's own — a wider mode is per
-      // call, travels with a justification, and the user approves it before
-      // the spawn. Omitting both leaves the pane in the mode the session is
-      // running under.
-      const requested =
-        args.sandbox_permissions === undefined
-          ? undefined
-          : requireString(args.sandbox_permissions, "sandbox_permissions");
-      const justification =
-        args.justification === undefined
-          ? undefined
-          : requireString(args.justification, "justification");
-      validateEscalationArgs(requested, justification);
+      // happened. The escalation is resolved before the registry is touched,
+      // so a refused one is a rejected CALL rather than a pane that started
+      // and then had to be stopped.
       const effectiveMode: ConfinementMode =
         context.confinement ?? "danger-full-access";
-      const confinement =
-        requested === undefined
-          ? effectiveMode
-          : await approveEscalation(
-              {
-                requestedMode: requested as ConfinementMode,
-                justification: justification ?? "",
-                effectiveMode,
-                subject: "terminal pane",
-              },
-              {
-                approver: context.sandboxApprover,
-                toolName: "interactive_terminal_start",
-              },
-            );
+      const escalation = await resolveCallEscalation(
+        args,
+        context,
+        "terminal pane",
+        "interactive_terminal_start",
+      );
+      const confinement = escalation ?? effectiveMode;
       // Resolved before the registry is touched: a refused escalation is a
       // rejected CALL, not a pane that started and then had to be stopped.
       const registry = requireNativeTerminal(context);
@@ -322,7 +361,7 @@ function interactiveStartTool(): RuntimeTool {
         // shell, so the spawn itself is confined to the same mode the
         // one-shot shell tool carries. Without this, one approval bought
         // an unlimited live shell — the worst of the sandbox holes.
-        ...(context.confinement || requested !== undefined
+        ...(context.confinement || escalation !== undefined
           ? {
               confinement: {
                 mode: confinement,
@@ -1563,21 +1602,61 @@ function interactiveCleanupTool(): RuntimeTool {
   };
 }
 
+/**
+ * Give a tool the escalation fields, and make it resolve them first.
+ *
+ * The model-facing execution tools of the terminal family answer the same
+ * question the same way: a call may ask to run its ONE ACTION in a wider
+ * sandbox mode, the user decides it through the same approval seam every
+ * tool uses, and the grant is journaled (`confinement.escalated`) and then
+ * forgotten. `interactive_terminal_start` resolves its own because the grant
+ * decides the mode its pane spawns in; for the rest the grant approves the
+ * action, and a pane that needs more room than it has is refused by the
+ * kernel with the escalation marker — the answer to which is a pane started
+ * at the wider mode.
+ */
+function withEscalation(tool: RuntimeTool, subject: string): RuntimeTool {
+  const execute = tool.execute;
+  return {
+    ...tool,
+    parameters: {
+      ...tool.parameters,
+      properties: {
+        ...tool.parameters.properties,
+        ...ESCALATION_PROPERTIES,
+      },
+    },
+    async execute(input, context) {
+      // Before anything is read, typed or searched: a refused escalation is a
+      // rejected CALL, not an action that half-happened.
+      await resolveCallEscalation(
+        requireObject(input),
+        context,
+        subject,
+        tool.name,
+      );
+      return await execute!(input, context);
+    },
+  };
+}
+
 /** Every interactive terminal tool, including the observe entry point. */
 export function terminalTools(): RuntimeTool[] {
   return [
+    // The start tool resolves its own escalation: the grant decides the mode
+    // the pane is spawned in.
     interactiveStartTool(),
     terminalObserveTool(),
-    interactiveReadTool(),
+    withEscalation(interactiveReadTool(), "terminal pane read"),
     // Sits next to the read tool on purpose: the pair is what makes the two
     // surfaces discoverable, rather than one of them only being reachable by a
     // model that already knew to ask.
     terminalLastCommandTool(),
-    interactiveSearchTool(),
-    interactiveWriteTool(),
+    withEscalation(interactiveSearchTool(), "terminal pane search"),
+    withEscalation(interactiveWriteTool(), "terminal pane write"),
     interactiveSendLineTool(),
     interactiveKeyTool(),
-    interactiveInputTool(),
+    withEscalation(interactiveInputTool(), "terminal pane input"),
     interactiveSnapshotTool(),
     interactiveResizeTool(),
     interactiveRequestHumanTool(),

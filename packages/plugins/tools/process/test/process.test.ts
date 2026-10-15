@@ -77,8 +77,21 @@ test("the process plugin owns its tools and provides the registry service", asyn
     expect(tools.has(tool.name)).toBe(false);
 });
 
+/**
+ * How long a fixture waits for a managed process to produce something.
+ *
+ * These waits are bounded by a DEADLINE, not by an iteration count: the
+ * launch chain is `cmd -> pwsh` on Windows and the fixture's own
+ * `Start-Process` child, so "the output arrived" is a second-scale event on
+ * a quiet host and a longer one under the full suite's 4-way concurrency.
+ * Measured: a 50x20ms (1s) budget lost the race and the case failed with
+ * "timed out waiting for child.pid" while passing alone.
+ */
+const FIXTURE_WAIT_MS = 20_000;
+
 async function waitForOutput(read: () => Promise<string>, expected = "ready") {
-  for (let index = 0; index < 50; index++) {
+  const deadline = Date.now() + FIXTURE_WAIT_MS;
+  while (Date.now() < deadline) {
     if ((await read()).includes(expected)) return;
     await Bun.sleep(20);
   }
@@ -94,7 +107,8 @@ function processAlive(pid: number) {
 }
 
 async function waitForFile(path: string) {
-  for (let index = 0; index < 50; index++) {
+  const deadline = Date.now() + FIXTURE_WAIT_MS;
+  while (Date.now() < deadline) {
     try {
       const content = (await readFile(path, "utf8")).trim();
       // The file is created BEFORE the pid is written into it, so an empty
@@ -181,7 +195,7 @@ test("default process tools execute real commands", async () => {
   await tools
     .get("process_stop")!
     .execute({ id: "proc_test" }, { workspaceRoot: root });
-});
+}, 30_000);
 
 test("managed process registry reports live workspace process counts", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-count-"));
@@ -232,7 +246,7 @@ test("managed process registry persists state across registry instances", async 
   await second
     .get("process_stop")!
     .execute({ id: "proc_persist" }, { workspaceRoot: root });
-});
+}, 30_000);
 
 test("managed process restart preserves readiness configuration", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-restart-"));
@@ -329,7 +343,7 @@ test("managed process output uses a UTF-8 byte budget", async () => {
   await tools
     .get("process_stop")!
     .execute({ id: "proc_output" }, { workspaceRoot: root });
-});
+}, 30_000);
 
 test("managed process max runtime stops the owned process group", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-tools-process-deadline-"));
@@ -578,7 +592,7 @@ test("a capped process output names its spill file", async () => {
     .get("process_output")!
     .execute({ id: "proc_small" }, { workspaceRoot: root });
   expect(small).not.toContain("truncated");
-});
+}, 30_000);
 
 test("process_status output carries its freshness, and process_output refreshes it (T-04)", async () => {
   // The status read returns the retained output snapshot as it stands; for a
@@ -616,7 +630,7 @@ test("process_status output carries its freshness, and process_output refreshes 
   await tools
     .get("process_stop")!
     .execute({ id: "proc_fresh" }, { workspaceRoot: root });
-});
+}, 30_000);
 
 test("a natural death presents one terminal state across status, wait and audit (T-03)", async () => {
   // Two terminal states, one producer each: an explicit stop (or the
@@ -832,4 +846,4 @@ test("a status read reports the output the process actually produced (P1-12)", a
   await tools
     .get("process_stop")!
     .execute({ id: "proc_fresh" }, { workspaceRoot: root });
-});
+}, 30_000);

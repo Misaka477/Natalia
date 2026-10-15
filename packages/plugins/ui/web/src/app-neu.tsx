@@ -136,10 +136,20 @@ const SECONDARY_STARTUP_RETRY_MS = 1_000;
  * loading surface forever — which is what happened, with the runtime
  * answering everything else perfectly. A rejected source already had a path
  * to the "unavailable" state; an unanswered one had none, so it is bounded
- * here. Ten seconds is past any source's normal answer on a fresh install and
- * well inside the retry loop's own patience.
+ * here.
+ *
+ * TWENTY SECONDS, and the bound is not free: it must exceed the SLOWEST
+ * answer the server can legitimately give for one of these sources, or a
+ * correct answer gets reported as no answer. Two of the five go through a
+ * runtime worker whose own deadline is 15s
+ * (`runtimeWorkerTaskTimeoutMs`, packages/framework/substrate), and both
+ * still answer after it: `plugins()` catches the worker's failure and
+ * projects inline (extensions-runtime.ts), and the model catalog is built
+ * inline. At the 10s this bound used to be, the UI gave up five seconds
+ * BEFORE the server it was waiting on. Move this whenever that deadline
+ * moves.
  */
-const SECONDARY_STARTUP_SOURCE_TIMEOUT_MS = 10_000;
+const SECONDARY_STARTUP_SOURCE_TIMEOUT_MS = 20_000;
 
 function sessionTurnID(messageID: string) {
   if (!messageID.startsWith("turn_")) return undefined;
@@ -2487,15 +2497,20 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       if (data.catalog) setModelCatalog(data.catalog);
       if (data.tools) setRegisteredTools(data.tools);
       if (data.nextConfig) setConfig(data.nextConfig);
-      setInteractiveTerminalAvailable(
-        Boolean(
-          Array.isArray(data.plugins) &&
-            data.plugins.some(
-              (plugin) =>
-                (plugin as { id?: string }).id === "natalia-tool-terminal",
-            ),
-        ),
-      );
+      // A FAILED probe is not evidence of absence. `data.plugins` arrives
+      // through the runtime's secondary worker, and reading its failure as
+      // "the terminal plugin is not installed" removed the terminal tab from
+      // the rail — a control the user had, deleted by a timeout. This is the
+      // rule the sibling `panelVisible` below already follows: with no
+      // knowledge, do not hide. Only a list that actually ARRIVED can say the
+      // plugin is missing.
+      if (Array.isArray(data.plugins))
+        setInteractiveTerminalAvailable(
+          data.plugins.some(
+            (plugin) =>
+              (plugin as { id?: string }).id === "natalia-tool-terminal",
+          ),
+        );
     });
     perfLog(
       `[perf] secondary applied +${(performance.now() - appliedAt).toFixed(1)}ms`,

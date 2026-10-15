@@ -64,3 +64,57 @@ test("a workspace listing that fails is shown, not implied", () => {
   const styles = source("packages/plugins/ui/file-editor/src/styles.ts");
   expect(styles).toContain(".neu-file-list-error {");
 });
+
+/**
+ * The UI must not give up on a source before the server it is waiting on.
+ *
+ * Measured: the per-source bound was 10s while two of the five sources are
+ * answered through a runtime worker whose own deadline is 15s — `plugins()`
+ * and the model catalog both answer AFTER that deadline, by falling back
+ * inline. The UI therefore reported "no answer" for a question the server was
+ * still answering, and a missing `plugins` list was read as "the terminal
+ * plugin is not installed", which deleted the terminal tab from the rail. The
+ * inversion is invisible in either file alone, which is why it is asserted
+ * across both — and why the check names the file to move when the deadline
+ * moves.
+ */
+test("the UI waits longer for a startup source than the server's deadline", () => {
+  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const substrate = source(
+    "packages/framework/substrate/src/session-project-client.ts",
+  );
+  const uiBound = Number(
+    app
+      .match(/SECONDARY_STARTUP_SOURCE_TIMEOUT_MS = ([\d_]+)/u)?.[1]
+      ?.replaceAll("_", ""),
+  );
+  const serverDeadline = Number(
+    substrate
+      .match(
+        /NATALIA_WORKER_TASK_TIMEOUT_MS[\s\S]{0,200}?\?\s*raw\s*:\s*([\d_]+)/u,
+      )?.[1]
+      ?.replaceAll("_", ""),
+  );
+  expect(
+    Number.isFinite(serverDeadline),
+    "the runtime worker task deadline could not be read from " +
+      "session-project-client.ts — if it moved, move this guard with it",
+  ).toBe(true);
+  expect(
+    Number.isFinite(uiBound),
+    "SECONDARY_STARTUP_SOURCE_TIMEOUT_MS could not be read from app-neu.tsx",
+  ).toBe(true);
+  expect(uiBound).toBeGreaterThan(serverDeadline);
+});
+
+test("a startup source that never answered cannot delete a UI control", () => {
+  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  // The terminal panel's gate reads only a list that ARRIVED. The previous
+  // form collapsed "the probe failed" and "the plugin is absent" into one
+  // false, and a timeout silently removed a control the user had.
+  expect(app).toContain("if (Array.isArray(data.plugins))");
+  expect(app).not.toMatch(/Boolean\(\s*Array\.isArray\(data\.plugins\)\s*&&/u);
+  // The gate itself stays, so a plugin that is genuinely gone still hides
+  // its tab rather than advertising a control that cannot work.
+  expect(app).toContain('item.panel.id !== "terminal"');
+});

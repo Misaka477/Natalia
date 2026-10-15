@@ -12,7 +12,14 @@ import { ObjectStore, rustCas } from "../src";
  */
 
 const roots: string[] = [];
+const stores: ObjectStore[] = [];
 afterAll(() => {
+  // Release the OS-level holders FIRST. dispose() exists for exactly this:
+  // POSIX unlinks tolerate open files, but on Windows an open SQLite meta
+  // database or a live pack daemon keeps the store's root undeletable, and
+  // the rm then fails EBUSY — reported as an unhandled error between tests,
+  // which masks whatever the test itself asserted.
+  for (const store of stores) store.dispose();
   for (const root of roots) rm(root, { recursive: true, force: true });
 });
 const sha256 = (bytes: Buffer) =>
@@ -30,7 +37,9 @@ async function storeWithPack(payloads: Buffer[]) {
   const frame = rustCas.compactFrame(entries);
   await writeFile(join(packDir, "pack-a.idx"), frame.idx);
   await writeFile(join(packDir, "pack-a.pack"), frame.pack);
-  return { root, packDir, store: new ObjectStore(root) };
+  const store = new ObjectStore(root);
+  stores.push(store);
+  return { root, packDir, store };
 }
 
 test("a healthy store fsck's clean: every indexed entry hashes to its id", async () => {
@@ -88,7 +97,9 @@ test("an index that names the wrong payload is caught by the hash, not the read"
   ]);
   await writeFile(join(packDir, "pack-a.idx"), frame.idx);
   await writeFile(join(packDir, "pack-a.pack"), frame.pack);
-  const answer = await new ObjectStore(root).fsck();
+  const store = new ObjectStore(root);
+  stores.push(store);
+  const answer = await store.fsck();
   expect(answer.ok).toBe(false);
   // Both entries: each reads back the other's bytes, hashes correctly to
   // neither id.

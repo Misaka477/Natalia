@@ -31,7 +31,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import {
   NativePackIndex,
@@ -469,7 +469,13 @@ export class ObjectStore {
     const corrupt: Array<{ pack: string; id?: string; reason: string }> = [];
     const byPack = new Map<string, string[]>();
     for (const [id, entry] of this.packs) {
-      const packName = entry.packFile.split("/").pop() ?? entry.packFile;
+      // basename(), not a "/" split: `packFile` is built with node:path's
+      // join(), which answers with the HOST separator. Splitting a Windows
+      // path on "/" does not cut at all, so `.pop()` returned the whole
+      // absolute path, the `byPack` lookup below found nothing for every
+      // pack, and fsck silently verified ZERO entries — a corrupt store
+      // reported `ok: true` with an empty `corrupt` list.
+      const packName = basename(entry.packFile);
       const list = byPack.get(packName) ?? [];
       list.push(id);
       byPack.set(packName, list);

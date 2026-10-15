@@ -903,3 +903,21 @@ test("load restores the persisted active workspace", async () => {
     else process.env.NATALIA_WORKSPACES_FILE = previousRegistry;
   }
 });
+
+test("the workspace registry lives in the same tree the global config does", async () => {
+  // Every case above sets NATALIA_WORKSPACES_FILE, which is why this was
+  // never covered: the default path was only ever exercised by whatever the
+  // runner's home happened to be. On Windows it resolved to
+  // `C:\Users\<name>\.config\natalia` — the XDG layout — while the roaming
+  // config root is `%APPDATA%\natalia`. Two conventions for two pieces of
+  // the same user state is how a registry ended up where the uninstaller
+  // does not clean and the settings panel does not name.
+  delete process.env.NATALIA_WORKSPACES_FILE;
+  const { globalConfigHome } = await import("@anthelia/platform");
+  const { liveWorkspaceRegistryPath } = await import(
+    "../src/workspace-manager"
+  );
+  expect(liveWorkspaceRegistryPath()).toBe(
+    join(globalConfigHome(), "natalia", "workspaces.json"),
+  );
+});

@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { LEGACY_STATE_DIR_NAMES } from "@anthelia/platform";
+import { globalConfigHome, LEGACY_STATE_DIR_NAMES } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import { createLocalSessionService } from "@anthelia/session-store";
 import {
@@ -148,8 +148,16 @@ function explicitWorkspaceRegistryPath(): string | undefined {
 }
 
 /** The live state directory — where writes go. */
-function liveWorkspaceRegistryPath() {
-  return join(homedir(), ".config", "natalia", "workspaces.json");
+export function liveWorkspaceRegistryPath() {
+  // The same tree the global config lives in, not a POSIX-shaped path hard
+  // coded beside it. `.config` under the home directory is the XDG layout;
+  // on Windows it resolved to `C:\Users\<name>\.config\natalia`, which is a
+  // directory nothing else in the product writes to and that a user will
+  // never find — while the roaming config root is `%APPDATA%\natalia`.
+  // Two conventions for two pieces of the same user state is what let a
+  // workspace registry exist in a place the uninstaller does not clean and
+  // the settings panel does not name.
+  return join(globalConfigHome(), "natalia", "workspaces.json");
 }
 
 /** The legacy `natalia-cli` location an existing install already wrote. */
@@ -157,6 +165,20 @@ function legacyWorkspaceRegistryPaths() {
   return LEGACY_STATE_DIR_NAMES.map((name) =>
     join(homedir(), ".config", name, "workspaces.json"),
   );
+}
+
+/**
+ * The registry the previous Windows builds wrote, which was the same XDG
+ * path the POSIX layout uses.
+ *
+ * It is a read candidate, never a write target: an install that already
+ * registered its workspaces keeps them, and the next write lands on the
+ * live name above. Without this entry a Windows upgrade would forget every
+ * workspace the user had — the registry exists, the new code simply did not
+ * look there.
+ */
+function previousWindowsWorkspaceRegistryPath() {
+  return join(homedir(), ".config", "natalia", "workspaces.json");
 }
 
 /**
@@ -174,7 +196,10 @@ async function readWorkspaceRegistryPath() {
   } catch {
     // fall through to the legacy candidates
   }
-  for (const candidate of legacyWorkspaceRegistryPaths())
+  for (const candidate of [
+    ...legacyWorkspaceRegistryPaths(),
+    previousWindowsWorkspaceRegistryPath(),
+  ])
     try {
       await access(candidate);
       return candidate;

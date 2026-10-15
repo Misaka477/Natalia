@@ -196,6 +196,14 @@ export async function wireFrameworkServices(
   const dispose = () => {
     for (const handle of closeHandles.reverse()) handle();
   };
+  // TEMPORARY: which await here costs 22 seconds on a packaged Windows copy.
+  const slow = (label: string) => {
+    const started = performance.now();
+    return () =>
+      console.error(
+        `[slowinit] ${label} +${(performance.now() - started).toFixed(1)}ms`,
+      );
+  };
 
   const sandboxOwner = registry.registerOwner({
     id: "natalia-sandbox",
@@ -585,23 +593,33 @@ export async function wireFrameworkServices(
     const profileRegistry = createCompositionRowRegistry(
       compositionRowRegistrations,
     );
-    const baseFile = requireBaseProfileFile(
-      profileSearchCandidates({
-        explicitFile: process.env.NATALIA_BASE_PROFILE,
-        sourceDir: import.meta.dir,
-        execPath: process.execPath,
-        argvScript: process.argv[1],
-      }),
-    );
+    const baseFile = (() => {
+      const done = slow("requireBaseProfileFile");
+      try {
+        return requireBaseProfileFile(
+          profileSearchCandidates({
+            explicitFile: process.env.NATALIA_BASE_PROFILE,
+            sourceDir: import.meta.dir,
+            execPath: process.execPath,
+            argvScript: process.argv[1],
+          }),
+        );
+      } finally {
+        done();
+      }
+    })();
     const profileHome = ctx.ports.getUserRuntimeHome();
-    const activeProfile = await loadCompositionProfile({
-      baseFile,
-      globalDir: profileHome
-        ? join(profileHome, ".natalia", "composition.d")
-        : undefined,
-      workspaceDir: join(workspaceRoot, ".natalia", "composition.d"),
-      registry: profileRegistry,
-    });
+    const activeProfile = await (() => {
+      const done = slow(`loadCompositionProfile ${baseFile}`);
+      return loadCompositionProfile({
+        baseFile,
+        globalDir: profileHome
+          ? join(profileHome, ".natalia", "composition.d")
+          : undefined,
+        workspaceDir: join(workspaceRoot, ".natalia", "composition.d"),
+        registry: profileRegistry,
+      }).finally(done);
+    })();
     provide(compositionProfile, activeProfile);
     // Decision17: the store backend follows the same breath as the
     // profile (absence = TypeScript, so nothing changes until a row
@@ -646,7 +664,10 @@ export async function wireFrameworkServices(
     };
     provide(terminalInput, terminal);
   }
-  await refreshPluginInputs();
+  await (() => {
+    const done = slow("refreshPluginInputs");
+    return refreshPluginInputs().finally(done);
+  })();
 
   const retry: RetryService = createRetryService({
     policy: () => ctx.ports.getRetryPolicy(),
@@ -705,7 +726,10 @@ export async function wireFrameworkServices(
   // Observation's current path set: a complete, ignore-aware walk — NOT the
   // fuzzy-finder catalog (ignore-free, 200 results, 1s cache). A bounded set
   // here turns every hinted path past the bound into a fabricated deletion.
-  const ignoreRules = await loadNataliaIgnore(workspaceRoot);
+  const ignoreRules = await (() => {
+    const done = slow(`loadNataliaIgnore ${workspaceRoot}`);
+    return loadNataliaIgnore(workspaceRoot).finally(done);
+  })();
   const files = createWorkspaceFilesController({
     workspaceRoot,
     listPaths: async () => listWorkspaceFilePaths({ workspaceRoot }),
@@ -727,7 +751,10 @@ export async function wireFrameworkServices(
     },
   });
   try {
-    await files.init();
+    await (() => {
+      const done = slow(`files.init ${workspaceRoot}`);
+      return files.init().finally(done);
+    })();
   } catch (error) {
     files.close();
     throw error;

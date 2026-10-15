@@ -19,10 +19,12 @@
  *                     alive, so a relaunch (a second icon click, the launcher
  *                     entry) brings the window back instead of starting a copy.
  *
- * The default is "quit", which is what any application a user already knows
- * does. "Minimise" is opt-in (`NATALIA_MINIMISE_ON_CLOSE=1`), because a window
- * that disappears on close with no visible affordance reads as a crash — and
- * that is exactly why the setting exists with the explicit exit path beside it.
+ * The default is "minimise": closing the window hides it, the app keeps
+ * running, and the tray icon's Quit is the explicit exit. The variable opts
+ * OUT (`NATALIA_MINIMISE_ON_CLOSE=0|false|no|off`) — the same set the C++ side
+ * matches — because a window that exits on close takes the running turn, the
+ * attached terminals and the runtime's warm state with it, and a single
+ * mis-click is not a request to end all that.
  *
  * The state lives in one place so the two directions (window → runtime, and
  * relaunch → window) cannot disagree: a relaunch asks the RUNNING instance to
@@ -56,26 +58,27 @@ export type ClosePolicy = {
 /**
  * Read the close action from the environment.
  *
- * Anything unset, empty, or unrecognised means "quit": an application that
- * disappears on close because a variable was mistyped is worse than one that
- * always exits.
+ * The default is "minimise" — matching `MinimiseOnClose()` in simple_app.cc,
+ * which returns true unless the value is one of the four opt-outs. Only those
+ * four quit; anything else, including a typo, keeps the window's contents
+ * alive, because the failure of the other direction is unrecoverable.
  */
 export function closeActionFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): ClosePolicy {
   // Trimmed but NOT lower-cased: the C++ side compares the raw bytes
-  // (value == "1" || ...), and a TS mirror that accepted "TRUE" would promise a
+  // (value == "0" || ...), and a TS mirror that accepted "NO" would promise a
   // behaviour the product does not have. A test comparing the two keeps it so.
   const raw = (env.NATALIA_MINIMISE_ON_CLOSE ?? "").trim();
-  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on")
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off")
     return {
-      action: "minimise",
-      reason:
-        "the window hides on close; the app keeps running (NATALIA_MINIMISE_ON_CLOSE)",
+      action: "quit",
+      reason: "the window exits on close (NATALIA_MINIMISE_ON_CLOSE)",
     };
   return {
-    action: "quit",
-    reason: "the window exits on close",
+    action: "minimise",
+    reason:
+      "the window hides on close; the app keeps running — quit from the tray icon",
   };
 }
 
@@ -120,8 +123,8 @@ export function processSurvivesWindowClose(action: CloseAction): boolean {
  * same rule (`quit_requested_`, checked first in CanClose — see the policy
  * comment in simple_app.cc), and the parity test compares the two.
  *
- * The window's close button is the policy's to answer: minimise when opted in,
- * quit otherwise.
+ * The window's close button is the policy's to answer: minimise by default,
+ * quit when the variable opts out.
  */
 export function closeActionFor(
   source: CloseSource,

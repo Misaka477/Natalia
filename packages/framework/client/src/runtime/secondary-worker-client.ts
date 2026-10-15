@@ -71,7 +71,6 @@ async function run<T>(request: SecondaryWorkerTask): Promise<T> {
         ),
       );
     }, timeoutMs);
-    timer.unref?.();
     pending.set(id, {
       resolve: (value) => {
         clearTimeout(timer);

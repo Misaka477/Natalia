@@ -134,9 +134,6 @@ async function run<T>(request: SessionProjectTask): Promise<T> {
         ),
       );
     }, timeoutMs);
-    // Unref'd: a task that settles must not be the reason the process lives,
-    // and a task that is abandoned must not keep it alive either.
-    timer.unref?.();
     pending.set(id, {
       resolve: (value) => {
         clearTimeout(timer);

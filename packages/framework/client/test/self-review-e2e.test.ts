@@ -54,7 +54,16 @@ test("a turn sediments a skill through the side-channel review", async () => {
   );
   const pluginFixture = join(scratch, "skills-plugin");
   mkdirSync(pluginFixture, { recursive: true });
-  symlinkSync(join(pluginSource, "src"), join(pluginFixture, "src"), "dir");
+  // A directory JUNCTION on Windows, a symlink everywhere else: an
+  // unprivileged Windows process cannot create a directory symlink (EPERM),
+  // and realpath resolves a junction identically — so the plugin discovery
+  // under test sees the same source tree either way. What is NOT the same is
+  // the link kind, and a fixture the host refuses to make tests nothing.
+  symlinkSync(
+    join(pluginSource, "src"),
+    join(pluginFixture, "src"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   const manifest = JSON.parse(
     readFileSync(join(pluginSource, "natalia.plugin.json"), "utf8"),
   ) as Record<string, unknown>;

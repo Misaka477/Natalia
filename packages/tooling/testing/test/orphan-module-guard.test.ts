@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * The orphan-module guard catches what it exists to catch.
@@ -13,8 +14,12 @@ import { join } from "node:path";
  * directions.
  */
 
-const guardPath = new URL("../bin/orphan-module-guard.ts", import.meta.url)
-  .pathname;
+// fileURLToPath, not URL.pathname: on Windows pathname spells "/E:/…", which
+// is not a path any child process can import — the spawn fails and every
+// assertion below reads a guard that never ran.
+const guardPath = fileURLToPath(
+  new URL("../bin/orphan-module-guard.ts", import.meta.url),
+);
 
 async function runGuard(cwd: string) {
   const proc = Bun.spawnSync(["bun", guardPath], {

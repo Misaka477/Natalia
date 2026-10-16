@@ -25,22 +25,31 @@ import {
   type PtyProcess,
 } from "../src";
 
-type FakePty = PtyProcess & { spawn: { file: string; cwd: string } };
+type FakePty = PtyProcess & {
+  spawn: { file: string; cwd: string };
+  /** Feeds the pane's output stream: how a shell's markers reach the controller. */
+  emit(data: string): void;
+};
 
 function fakePty(): { factory: PtyFactory; spawned: FakePty[] } {
   const spawned: FakePty[] = [];
   const factory: PtyFactory = (options) => {
+    const listeners = new Set<(chunk: string) => void>();
     const process: FakePty = {
       pid: 4000 + spawned.length,
       spawn: { file: options.file, cwd: options.cwd },
       write() {},
       resize() {},
       kill() {},
-      onData() {
-        return { dispose: () => undefined };
+      onData(listener) {
+        listeners.add(listener);
+        return { dispose: () => listeners.delete(listener) };
       },
       onExit() {
         return { dispose: () => undefined };
+      },
+      emit(data) {
+        for (const listener of listeners) listener(data);
       },
     };
     spawned.push(process);
@@ -62,6 +71,41 @@ function layoutStore() {
     },
   };
 }
+
+test("a shell that walks to another directory moves the saved layout with it", async () => {
+  // Measured live before this: the layout kept the SPAWN directory, so a session
+  // that `cd`-ed into a subdirectory and restarted came back at the workspace
+  // root. The pane's live directory arrives as OSC 7, and a change to it is a
+  // change to the session's terminal.
+  const root = await mkdtemp(join(tmpdir(), "natalia-pane-layout-cwd-"));
+  const sessionID = "ses_layout_cwd";
+  const store = layoutStore();
+  const fake = fakePty();
+  const runtime = controllerWith(root, fake.factory, store.hooks);
+  await runtime.init();
+  await runtime.start({
+    command: "pwsh",
+    cwd: root,
+    id: "term_walked",
+    sessionID,
+  });
+  await settle();
+  expect(store.saved.get(sessionID)?.panes[0]?.cwd).toBe(root);
+
+  // The shell reports where it is, exactly as the integration script does: OSC 7
+  // with a file:// URL. (The live directory is what the layout must carry, so the
+  // marker's own spelling is exercised here too.)
+  const subdirectory = join(root, "sub");
+  fake.spawned[0]!.emit(
+    `\u001b]7;file://localhost/${subdirectory.replaceAll("\\", "/").replace(/^\//u, "")}\u0007`,
+  );
+  await settle();
+  const walked = store.saved.get(sessionID)?.panes[0]?.cwd ?? "";
+  expect(walked.replaceAll("\\", "/").replace(/^\//u, "")).toBe(
+    subdirectory.replaceAll("\\", "/").replace(/^\//u, ""),
+  );
+  await runtime.close();
+});
 
 function controllerWith(
   root: string,

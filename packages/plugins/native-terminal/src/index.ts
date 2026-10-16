@@ -11,6 +11,7 @@ export {
 } from "./pane-command";
 export {
   createPtyTerminalController,
+  type PaneLayoutRecord,
   type PtyFactory,
   type PtyProcess,
   type PtySpawnOptions,

@@ -68,15 +68,30 @@ const MARKER_RE = new RegExp(
   "g",
 );
 
-/** Percent-decode an OSC 7 path; a malformed escape keeps its raw form. */
+/**
+ * Percent-decode an OSC 7 path; a malformed escape keeps its raw form.
+ *
+ * And put a Windows path back into Windows spelling. The URL's grammar is
+ * POSIX — the host and the path are separated by `/`, and separators inside the
+ * path are `/` — so a Windows shell's directory arrives as `/E:/Development/x`
+ * once decoded. Handing that to a spawn is a mixed spelling at best and a
+ * relative path at worst (a leading `/` is not a drive root), so a drive path
+ * becomes `E:\Development\x` on a Windows host. The check is the PATH's own
+ * shape (`/<letter>:`), never the producer's platform, and a POSIX path is left
+ * exactly as it was.
+ */
 function decodeCwd(path: string): string {
+  let decoded: string;
   try {
-    return decodeURIComponent(path);
+    decoded = decodeURIComponent(path);
   } catch {
     // A lone `%` or a truncated escape is a producer bug, not a reason to lose
     // the directory: the raw form is still more useful than nothing.
     return path;
   }
+  if (process.platform === "win32" && /^\/[A-Za-z]:/u.test(decoded))
+    return decoded.slice(1).replaceAll("/", "\\");
+  return decoded;
 }
 
 /**

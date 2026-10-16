@@ -97,9 +97,18 @@ function Global:Prompt() {
 	# every shell-integration-aware terminal reads, and now ours too. It replaces
 	# the private `633;P;Cwd` this line used to emit: a namespace only this repo
 	# understood was a marker nobody read, and the standard one is read by every
-	# terminal including this one. Percent-encoded because the sequence's grammar
-	# ends at BEL and a space belongs INSIDE the URL.
-	$Result += "$([char]0x1b)]7;file://$env:COMPUTERNAME$([System.Uri]::EscapeDataString($PWD.ProviderPath))`a"
+	# terminal including this one.
+	#
+	# THE PATH IS ENCODED SEGMENT BY SEGMENT, WITH `/` LEFT AS THE SEPARATOR, and
+	# that is not decoration. `EscapeDataString` over a whole Windows path encodes
+	# the separators too (`%5C`), so the URL carried no `/` at all after the two
+	# slashes of `file://` — and the reader finds the host/path boundary at the
+	# first `/`. Measured on this host: the pane's live directory was never read
+	# (`E:\Natalia` reported while the shell stood in a subdirectory of another
+	# drive), which is exactly the fact a restored tab is supposed to carry.
+	$NataliaPath = ($PWD.ProviderPath -replace '\\', '/')
+	$NataliaEncoded = (($NataliaPath -split '/') | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
+	$Result += "$([char]0x1b)]7;file://$env:COMPUTERNAME/$NataliaEncoded`a"
 	# The operator's own prompt still draws: this adds markers around it rather than
 	# replacing it.
 	$Result += $Global:__NataliaState.OriginalPrompt.Invoke()

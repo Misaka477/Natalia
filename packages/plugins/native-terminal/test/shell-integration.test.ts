@@ -147,6 +147,32 @@ describe("parseShellMarkers: OSC 7, the working directory", () => {
     ]);
   });
 
+  test("a Windows drive path comes back in Windows spelling", () => {
+    // The measurement that found this: the pane's reported cwd stayed at its
+    // spawn directory while the shell stood in a subdirectory of another drive,
+    // because PowerShell's `EscapeDataString` over a whole Windows path encodes
+    // the separators too — the URL had no `/` after `file://` for the reader to
+    // find the host/path boundary at. The script now encodes segment by segment
+    // with `/` left as the separator (the URL's own grammar), and the reader puts
+    // the drive path back the way the shell spells it.
+    const path = "/E%3A/Development/natalia-cli/.restore-probe/sub";
+    const markers = parseShellMarkers(osc7(path, "ZEPHYRUS-M16"));
+    expect(markers).toEqual([
+      {
+        kind: "cwd",
+        cwd:
+          process.platform === "win32"
+            ? "E:\\Development\\natalia-cli\\.restore-probe\\sub"
+            : "/E:/Development/natalia-cli/.restore-probe/sub",
+      },
+    ]);
+    // And a POSIX path is untouched: the drive-path rewrite is the path's own
+    // shape, not the reader's platform.
+    expect(parseShellMarkers(osc7("/home/me/work", "host"))).toEqual([
+      { kind: "cwd", cwd: "/home/me/work" },
+    ]);
+  });
+
   test("reads the ST terminator spelling too", () => {
     expect(parseShellMarkers(osc7("/tmp", "localhost", ST))).toEqual([
       { kind: "cwd", cwd: "/tmp" },

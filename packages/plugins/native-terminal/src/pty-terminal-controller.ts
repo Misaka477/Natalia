@@ -1084,7 +1084,15 @@ export function createPtyTerminalController(
     // IS, not where it was started. `publicSession` already carries the field;
     // this is what keeps it alive.
     for (const marker of markers) {
-      if (marker.kind === "cwd") session.cwd = marker.cwd;
+      if (marker.kind !== "cwd") continue;
+      if (session.cwd === marker.cwd) continue;
+      session.cwd = marker.cwd;
+      // The directory is part of what a session's terminal is, so a shell that
+      // walks somewhere new changes the saved layout. Without this the layout
+      // kept the SPAWN directory (saved when the pane started) and a restored
+      // tab came back at the workspace root instead of where the work was —
+      // measured live: `cd` into a subdirectory, restart, land at the root.
+      scheduleLayoutSave(session.sessionID);
     }
     if (markers.some((marker) => marker.kind === "command-executed"))
       session.outputBaseLines = paneText(session);

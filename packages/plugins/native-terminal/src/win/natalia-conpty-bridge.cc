@@ -3,12 +3,23 @@
 // `{kind} {size}\n`-framed output and a `{pid}` line on stdout; JSON-encoded
 // input/resize/kill lines on stdin).
 //
-// It exists because the PTY backend has no other Windows answer: node-pty's
-// native modules cannot load under bun (dlopen at init fails), and the Python
-// bridge needs the POSIX pty module. ConPTY is the platform's own pseudo
-// console, and this helper is the smallest process that turns it into the byte
-// stream the pty controller already consumes - so the controller, the panel
-// and the model all see the same real bytes Linux sees.
+// It exists because the PTY backend has no other Windows answer. The Python
+// bridge needs the POSIX pty module, and node-pty - which this package already
+// depends on and which its JS layer DOES import under Bun - cannot serve a pane
+// there: measured 2026-10-17 on this host, `node-pty@1.0.0` + Bun 1.4.0, its
+// prebuilt native module is refused at `spawn`:
+//
+//   The module 'pty' was compiled against a different Node.js ABI version using
+//   NODE_MODULE_VERSION 137. This version of Bun requires NODE_MODULE_VERSION 147.
+//
+// (The older wording here said "dlopen at init fails", which is the same
+// conclusion reached one step too early: importing succeeds, spawning does not,
+// and the reason is an ABI mismatch rather than a load failure. Recorded so the
+// next reader neither repeats the experiment nor dismisses it as folklore.)
+// ConPTY is the platform's own pseudo console, and this helper is the smallest
+// process that turns it into the byte stream the pty controller already consumes
+// - so the controller, the panel and the model all see the same real bytes Linux
+// sees.
 
 #include <windows.h>
 

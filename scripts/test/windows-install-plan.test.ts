@@ -52,6 +52,45 @@ test("the plan lists the release's whole tree, and none of its bookkeeping", asy
   expect(targets).not.toContain("install.ps1");
 });
 
+test("no machine-local state reaches the user's disk", async () => {
+  // Every name is one a checkout writes for its own machine — and each was
+  // measured shipping at least once. `plugin-store/` rode into a 91 MB release
+  // (a directory, invisible to the `Bun.file().exists()` the guard used), and
+  // `shared-plugin-store/` — the suite's shared official-plugin install, whose
+  // lock pins the checkout by ABSOLUTE path — rode into every release this
+  // build assembled until the list was named once and read here.
+  const release = await fakeWindowsRelease();
+  for (const state of [
+    "plugin-store",
+    "cli-dev-pty-stores",
+    "client-test-workspaces",
+    "shared-plugin-store",
+  ]) {
+    await mkdir(join(release, state, "node_modules", "@natalia", "plugin"), {
+      recursive: true,
+    });
+    await writeFile(join(release, state, "natalia.lock"), "{}\n");
+    await writeFile(
+      join(release, state, "node_modules", "@natalia", "plugin", "index.js"),
+      "state\n",
+    );
+  }
+  const plan = await planWindowsInstall({ releaseDir: release });
+  const targets = plan.files.map((file) => file.target);
+  // A plugin a release really ships still lands — the guard is about state.
+  expect(targets).toContain("resources\\plugins\\one.js");
+  for (const state of [
+    "plugin-store",
+    "cli-dev-pty-stores",
+    "client-test-workspaces",
+    "shared-plugin-store",
+  ])
+    expect(
+      targets.filter((target) => target.startsWith(`${state}\\`)),
+      `${state}/ must not be installed`,
+    ).toEqual([]);
+});
+
 test("the shortcut runs the stack, not a process that cannot show a window alone", async () => {
   const release = await fakeWindowsRelease();
   const plan = await planWindowsInstall({ releaseDir: release });

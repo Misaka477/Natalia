@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { hashTreeFiles } from "../packages/hosts/platform/src/hash-tree";
 import { resolvePwshPath } from "../packages/hosts/platform/src/pwsh";
 import { censusFromWorkspace } from "../apps/cli/src/layer-census";
+import { MACHINE_LOCAL_STATE_DIRS } from "./machine-local-state";
 
 type TargetResult = {
   target: string;
@@ -575,11 +576,7 @@ async function verifyRelease(
       !(await isDir(join(outDir, required)))
     )
       problems.push(`the release is missing ${required}`);
-  for (const forbidden of [
-    "client-test-workspaces",
-    "plugin-store",
-    "cli-dev-pty-stores",
-  ]) {
+  for (const forbidden of MACHINE_LOCAL_STATE_DIRS) {
     // A STAT, not Bun.file().exists(): the offender is a DIRECTORY, and
     // `Bun.file()` on a directory reports "no such file" — so this guard passed
     // a release carrying a full dev plugin-store (natalia.lock + node_modules +
@@ -587,6 +584,11 @@ async function verifyRelease(
     // the installer then shipped it. The guard's own comment already records
     // that `plugins` needed a stat for the same reason; the forbidden list did
     // not get the same treatment when it was written.
+    //
+    // The list is shared with the copier below and with the installer plan
+    // (`scripts/machine-local-state.ts`), because it was three copies of one
+    // rule and the fourth state directory — the suite's `shared-plugin-store`,
+    // whose lock pins this checkout by absolute path — was on none of them.
     try {
       const stats = await stat(join(outDir, forbidden));
       if (stats.isDirectory() || stats.isFile())
@@ -890,11 +892,12 @@ for (const target of targets) {
     // hard-killed run leaves workspaces behind, and they must never ship
     // (19 MiB of test residue in SHA256SUMS ties the artifact to the
     // machine that built it).
-    const stateDirs = new Set([
-      "plugin-store",
-      "cli-dev-pty-stores",
-      "client-test-workspaces",
-    ]);
+    // The list is the one in `scripts/machine-local-state.ts`, which the
+    // verifier below and the installer plan read too: this Set used to be its
+    // own copy, so `shared-plugin-store/` — the suite's shared official-plugin
+    // install, 93 files whose lock pins `dist/ts/plugins` by absolute checkout
+    // path — shipped in every release and landed in the deployed tree.
+    const stateDirs = new Set<string>(MACHINE_LOCAL_STATE_DIRS);
     for (const entry of await readdir(join(root, "dist", "ts"))) {
       if (stateDirs.has(entry)) {
         await rm(join(outDir, entry), { recursive: true, force: true });

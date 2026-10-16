@@ -5,16 +5,23 @@ import type {
   RuntimeNativeTerminalSession,
 } from "@anthelia/contracts";
 import { WebTerminal, type WebTerminalApi } from "./web-terminal";
+import { reconcileTabs, sameTabs, type TerminalTab } from "./terminal-tabs";
 import "./styles.css";
 
 const MAX_TERMINALS_PER_SESSION = 8;
 
-type TerminalTab = {
-  id: string;
-  title: string;
-  cells: string[];
-  layout: "vertical" | "horizontal";
-};
+/**
+ * The session the panes on screen belong to.
+ *
+ * A pane is attached to a session, not to whatever the projection says this
+ * instant. The projection is briefly empty at several ordinary moments (a UI
+ * host reload, a session-list refresh, the app finishing its boot), and the
+ * panel used to answer that gap by clearing every tab: the xterm, its socket
+ * and its scrollback die with the component, and the reload that follows is
+ * what the user sees as "the terminal reloaded". Only a DIFFERENT session moves
+ * the panes.
+ */
+type TerminalAttachment = { sessionID: string; runtimeURL: string };
 
 function newTerminalID() {
   return `terminal_${crypto.randomUUID()}`;
@@ -42,6 +49,8 @@ export function TerminalPane(
   const [sessions, setSessions] = createSignal<RuntimeNativeTerminalSession[]>(
     [],
   );
+  const [attachment, setAttachment] = createSignal<TerminalAttachment>();
+  const sessionID = () => attachment()?.sessionID;
   // The pane's shell is NOT this panel's decision, and there is deliberately no
   // control for it. A pane is started without naming a shell, and the host
   // picks the one it always has (PowerShell on Windows, bash on Linux, zsh on
@@ -57,63 +66,65 @@ export function TerminalPane(
   const terminalApis = new Map<string, WebTerminalApi>();
   const activeApi = () => terminalApis.get(activeID() ?? "");
   let loadToken = 0;
+  // The session the tabs on screen were loaded for. Switching sessions rebuilds
+  // them from that session's own pane list; staying on one keeps them.
+  const [tabsSessionID, setTabsSessionID] = createSignal<string>();
 
-  function retitle(next: TerminalTab[]) {
-    return next.map((tab, index) => ({ ...tab, title: tabTitle(index) }));
+  function ensureActive(next: TerminalTab[]) {
+    const current = activeID();
+    if (current && next.some((tab) => tab.cells.includes(current))) return;
+    setActiveID(next[0]?.cells[0]);
   }
 
-  async function loadTabs(sessionID: string) {
+  /**
+   * Reconciles the tabs against the backend's pane list BY PANE ID (the rules
+   * live in terminal-tabs.ts), and writes the signal only when the list
+   * actually moved: a tab whose panes are all still running is handed on as the
+   * SAME object, so the xterm host is neither rebuilt nor reconnected.
+   */
+  async function loadTabs(forSessionID: string) {
     const token = ++loadToken;
-    const listed = (await props.runtime?.nativeTerminalList?.(sessionID)) ?? [];
+    const listed =
+      (await props.runtime?.nativeTerminalList?.(forSessionID)) ?? [];
     if (token !== loadToken) return;
     setSessions(listed);
     const running = listed.filter(
       (item) =>
         item.status === "running" &&
-        (!item.sessionID || item.sessionID === sessionID),
+        (!item.sessionID || item.sessionID === forSessionID),
     );
-    if (!running.length) {
-      const id = newTerminalID();
-      setTabs([{ id, title: tabTitle(0), cells: [id], layout: "horizontal" }]);
-      setActiveID(id);
-      setLimitError();
-      return;
-    }
-    const next = retitle(
-      running.map((item) => ({
-        id: item.id,
-        title: "",
-        cells: [item.id],
-        layout: "horizontal" as const,
-      })),
-    );
-    setTabs(next);
-    const current = activeID();
-    setActiveID(
-      current && next.some((tab) => tab.id === current) ? current : next[0]?.id,
-    );
+    const sameSession = tabsSessionID() === forSessionID;
+    const previous = sameSession ? tabs() : [];
+    if (!sameSession) setTabsSessionID(forSessionID);
+    const next = reconcileTabs({
+      previous,
+      running: running.map((item) => item.id),
+      known: listed.map((item) => item.id),
+      newPaneID: newTerminalID,
+    });
+    if (!sameTabs(next, previous)) setTabs(next);
+    ensureActive(next);
     setLimitError();
   }
 
-  createEffect((previous?: string) => {
-    const sessionID = props.sessionID;
+  createEffect(() => {
+    const nextSessionID = props.sessionID;
     const runtimeURL = props.runtimeURL;
-    const key = `${sessionID ?? ""}\0${runtimeURL ?? ""}`;
-    if (!sessionID || !runtimeURL) {
-      setTabs([]);
-      setActiveID();
-      setLimitError();
-      return key;
-    }
-    if (previous === key) return key;
-    void loadTabs(sessionID);
-    return key;
+    if (!nextSessionID || !runtimeURL) return;
+    const current = attachment();
+    if (
+      current &&
+      current.sessionID === nextSessionID &&
+      current.runtimeURL === runtimeURL
+    )
+      return;
+    setAttachment({ sessionID: nextSessionID, runtimeURL });
+    void loadTabs(nextSessionID);
   });
 
   createEffect(() => {
     const events = props.events;
-    const sessionID = props.sessionID;
-    if (!events || !sessionID) return;
+    if (!events) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = events.subscribe((event) => {
       const relevant =
@@ -123,10 +134,12 @@ export function TerminalPane(
         (event.type === "terminal.timeline" &&
           (event.action === "started" || event.action === "exit"));
       if (!relevant) return;
-      if (sessionID && event.sessionID && event.sessionID !== sessionID) return;
+      const current = attachment()?.sessionID;
+      if (!current) return;
+      if (event.sessionID && event.sessionID !== current) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        if (sessionID) void loadTabs(sessionID);
+        if (attachment()?.sessionID === current) void loadTabs(current);
       }, 50);
     });
     onCleanup(() => {
@@ -136,8 +149,9 @@ export function TerminalPane(
   });
 
   async function refreshSessions() {
-    const listed =
-      (await props.runtime?.nativeTerminalList?.(props.sessionID)) ?? [];
+    const current = sessionID();
+    if (!current) return;
+    const listed = (await props.runtime?.nativeTerminalList?.(current)) ?? [];
     setSessions(listed);
   }
 
@@ -145,7 +159,7 @@ export function TerminalPane(
     const id = activeID();
     if (!id) return;
     try {
-      await props.runtime?.nativeTerminalClaimHumanInput?.(id, props.sessionID);
+      await props.runtime?.nativeTerminalClaimHumanInput?.(id, sessionID());
       await refreshSessions();
     } catch {
       // optional method may not exist; leave current state
@@ -156,10 +170,7 @@ export function TerminalPane(
     const id = activeID();
     if (!id) return;
     try {
-      await props.runtime?.nativeTerminalReleaseHumanControl?.(
-        id,
-        props.sessionID,
-      );
+      await props.runtime?.nativeTerminalReleaseHumanControl?.(id, sessionID());
       await refreshSessions();
     } catch {
       // optional method may not exist; leave current state
@@ -172,15 +183,9 @@ export function TerminalPane(
     try {
       const session = sessions().find((item) => item.id === id);
       if (session?.secureInput)
-        await props.runtime?.nativeTerminalEndSecureInput?.(
-          id,
-          props.sessionID,
-        );
+        await props.runtime?.nativeTerminalEndSecureInput?.(id, sessionID());
       else
-        await props.runtime?.nativeTerminalBeginSecureInput?.(
-          id,
-          props.sessionID,
-        );
+        await props.runtime?.nativeTerminalBeginSecureInput?.(id, sessionID());
       await refreshSessions();
     } catch {
       // optional method may not exist; leave current state
@@ -188,17 +193,13 @@ export function TerminalPane(
   }
 
   async function addTab() {
-    if (!props.sessionID) return;
+    if (!sessionID()) return;
     if (tabs().length >= MAX_TERMINALS_PER_SESSION) {
       setLimitError(`每个会话最多 ${MAX_TERMINALS_PER_SESSION} 个终端`);
       return;
     }
     const id = newTerminalID();
-    const next = retitle([
-      ...tabs(),
-      { id, title: "", cells: [id], layout: "horizontal" },
-    ]);
-    setTabs(next);
+    setTabs([...tabs(), { id, cells: [id], layout: "horizontal" }]);
     setActiveID(id);
     setLimitError();
   }
@@ -228,7 +229,6 @@ export function TerminalPane(
       remaining = [
         {
           id: nextID,
-          title: tabTitle(0),
           cells: [nextID],
           layout: "horizontal",
         },
@@ -236,16 +236,13 @@ export function TerminalPane(
       setTabs(remaining);
       setActiveID(nextID);
     } else {
-      setTabs(retitle(remaining));
-      if (
-        activeID() === id ||
-        !remaining.some((tab) => tab.cells.includes(activeID() ?? ""))
-      )
-        setActiveID(remaining[0]?.cells[0]);
+      setTabs(remaining);
+      if (activeID() === id) setActiveID(remaining[0]?.cells[0]);
+      else ensureActive(remaining);
     }
     setLimitError();
     try {
-      await props.runtime?.nativeTerminalStop?.(id, props.sessionID);
+      await props.runtime?.nativeTerminalStop?.(id, sessionID());
     } catch {
       // already exited
     }
@@ -263,19 +260,16 @@ export function TerminalPane(
         : item,
     );
     setTabs(next);
-    if (activeID() === cellID) {
-      const replaced = next.find((item) => item.id === tab.id)!;
-      setActiveID(replaced.cells[0]);
-    }
+    ensureActive(next);
     void props.runtime
-      ?.nativeTerminalStop?.(cellID, props.sessionID)
+      ?.nativeTerminalStop?.(cellID, sessionID())
       .catch(() => undefined);
   }
 
   return (
     <div class="terminal-pane">
       <Show
-        when={props.sessionID && props.runtimeURL}
+        when={attachment()}
         fallback={
           <div class="terminal-output">
             <div class="terminal-line terminal-line-header">
@@ -437,7 +431,7 @@ export function TerminalPane(
         </div>
         <div class="terminal-tabs">
           <For each={tabs()}>
-            {(tab) => (
+            {(tab, index) => (
               <button
                 type="button"
                 class="terminal-tab"
@@ -446,11 +440,11 @@ export function TerminalPane(
                 }
                 onClick={() => setActiveID(tab.cells[0])}
               >
-                <span class="terminal-tab-label">{tab.title}</span>
+                <span class="terminal-tab-label">{tabTitle(index())}</span>
                 <span
                   class="terminal-tab-close"
                   role="button"
-                  aria-label={`关闭 ${tab.title}`}
+                  aria-label={`关闭 ${tabTitle(index())}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     void closeTab(tab.id);
@@ -501,9 +495,9 @@ export function TerminalPane(
                         onClick={() => setActiveID(cellID)}
                       >
                         <WebTerminal
-                          sessionID={props.sessionID!}
+                          sessionID={sessionID()!}
                           terminalID={cellID}
-                          runtimeURL={props.runtimeURL ?? ""}
+                          runtimeURL={attachment()?.runtimeURL ?? ""}
                           token={props.token}
                           active={props.active && activeID() === cellID}
                           registerApi={(api) => {

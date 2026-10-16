@@ -17,7 +17,7 @@ import {
   validateToolOutput,
   type RuntimeTool,
 } from "@anthelia/tools";
-import type { RuntimeEvent } from "@anthelia/contracts";
+import { RuntimeRefusal, type RuntimeEvent } from "@anthelia/contracts";
 import { type ToolPolicyService } from "@anthelia/runtime-services";
 import { workLedgerController as workLedgerControllerToken } from "@natalia/work-ledger";
 import { toolPolicy as toolPolicyToken } from "@natalia/tool-policy";
@@ -578,6 +578,14 @@ export async function runExecuteStage(
       callID: call.id,
       turnID,
       error: message,
+      // A refusal carries its own structure: the rule that said no and the
+      // path it judged. The confinement spawn's fail-closed refusal names its
+      // MODE in the rule (`confinement mode ro requires a backend`), so the
+      // log record branches on fields — a reader never parses the prose the
+      // message assembled (the seam's audit entry: 禁闭 spawn).
+      ...(error instanceof RuntimeRefusal && error.rule
+        ? { rule: error.rule, ...(error.path ? { path: error.path } : {}) }
+        : {}),
     });
     publish({
       type: "tool.update",

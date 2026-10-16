@@ -49,6 +49,7 @@ async function drive(
   ) => Promise<void>,
   until: (frames: Frame[]) => boolean,
   ms = 30_000,
+  verbose = true,
 ): Promise<{
   frames: Frame[];
   text: string;
@@ -60,6 +61,15 @@ async function drive(
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
+    // The bridge's trace is OPT-IN (natalia-conpty-bridge.cc): one pane spawns
+    // one bridge, so its narration — the handshake, the command line, a line per
+    // delivered input — used to flood whatever stderr the host inherited. This
+    // harness is the reader that asserts on the trace, so it asks for it
+    // explicitly. A failure still prints without this flag.
+    env: {
+      ...process.env,
+      ...(verbose ? { NATALIA_CONPTY_BRIDGE_VERBOSE: "1" } : {}),
+    },
   });
   // The bridge reports its ConPTY handshake to stderr — the P23 investigation
   // put it there saying "a fix that cannot be told apart from nothing
@@ -333,4 +343,49 @@ test.skipIf(!canRun)(
     expect(killed.exit).toBeDefined();
   },
   90_000,
+);
+
+test.skipIf(!canRun)(
+  "the bridge is quiet by default, and still speaks when it fails",
+  async () => {
+    // Measured with the gated build: a complete session (spec, typed command,
+    // kill) writes NOTHING to stderr, while the same drive with
+    // NATALIA_CONPTY_BRIDGE_VERBOSE=1 writes seven trace lines. The default
+    // matters because the bridge inherits the host's stderr — one line per
+    // delivered input, for every pane, in the operator's own log.
+    const quiet = await drive(
+      {
+        file: "cmd.exe",
+        args: [],
+        cwd: tmpdir(),
+        cols: 80,
+        rows: 25,
+        env: {},
+      },
+      async (send) => {
+        await send({ type: "input", data: "echo QUIET_OK\r\n" });
+      },
+      (seen) => count(seen, "QUIET_OK") >= 1,
+      30_000,
+      false,
+    );
+    expect(quiet.text).toContain("QUIET_OK");
+    expect(quiet.stderr).toBe("");
+
+    // And the other half of the rule: a spec the bridge cannot use prints
+    // without being asked. A silent failure is the defect this whole file
+    // exists for.
+    const child = Bun.spawn([bridgeExe], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, NATALIA_CONPTY_BRIDGE_VERBOSE: undefined },
+    });
+    child.stdin.write("\n");
+    await child.stdin.flush();
+    const stderr = await new Response(child.stderr).text();
+    expect(await child.exited).toBe(1);
+    expect(stderr).toContain("conpty-bridge: empty spec");
+  },
+  60_000,
 );

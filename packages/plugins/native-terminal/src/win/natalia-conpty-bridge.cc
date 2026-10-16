@@ -14,6 +14,7 @@
 
 #include <fcntl.h>
 #include <io.h>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -21,6 +22,34 @@
 #include <vector>
 
 namespace {
+
+/**
+ * Informational diagnostics are OPT-IN; failures always print.
+ *
+ * The bridge is spawned once per pane, so its trace — the handshake, the
+ * command line, and one line for EVERY input it delivers — is a per-pane flood
+ * in whatever stderr the host inherited (the operator's terminal, the app's log
+ * file), and it buries the lines that matter. The rule here is the ordinary
+ * one: a failure (a spec the parser cannot use, a console or process that would
+ * not start, a truncated stdout) prints unconditionally, because a bridge that
+ * cannot start must never be silent; the narration prints only when
+ * `NATALIA_CONPTY_BRIDGE_VERBOSE` is set to anything but empty or "0", which is
+ * how the harnesses that assert on the trace (conpty-native.test.ts) and a
+ * human debugging a mute pane both read it.
+ */
+bool informationalLogging() {
+  const char* value = std::getenv("NATALIA_CONPTY_BRIDGE_VERBOSE");
+  return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
+/** One informational line, to stderr, only when the trace was asked for. */
+void bridgeNote(const char* format, ...) {
+  if (!informationalLogging()) return;
+  va_list args;
+  va_start(args, format);
+  std::vfprintf(stderr, format, args);
+  va_end(args);
+}
 
 HANDLE g_pcInputWrite = nullptr;   // our writes -> the console's keyboard
 HANDLE g_pcOutputRead = nullptr;   // the console's screen -> our reads
@@ -296,8 +325,8 @@ DWORD WINAPI pumpConsoleOutput(LPVOID) {
     DWORD read = 0;
     if (!ReadFile(g_pcOutputRead, buffer, sizeof(buffer), &read, nullptr) ||
         read == 0) {
-      fprintf(stderr, "conpty-bridge: output pump ended (read=%lu err=%lu)\n",
-              (unsigned long)read, (unsigned long)GetLastError());
+      bridgeNote("conpty-bridge: output pump ended (read=%lu err=%lu)\n",
+                 (unsigned long)read, (unsigned long)GetLastError());
       break;
     }
     // The console's first bytes are its own proof of life: input waits on this.
@@ -512,17 +541,16 @@ int main() {
   // read it as the answer. The mute is open as issue #2, and the next
   // Windows session takes it from the relay evidence, not from here.
   const HRESULT resized = ResizePseudoConsole(g_pseudoConsole, size);
-  fprintf(stderr,
-          "conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
-          (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
+  bridgeNote("conpty-bridge: viewport handshake requested %ux%u (hr=%#lx)\n",
+             (unsigned)size.X, (unsigned)size.Y, (unsigned long)resized);
   // The command line, verbatim. The Windows CI's first native run showed
   // cmd.exe reporting `'"echo CONPTY_NATIVE_OK' is not recognized` — a command
   // line with an unbalanced leading quote, from a builder that on its face
   // wraps every argument in a pair. Reading the builder cannot settle which
   // byte is wrong; printing it can, and the next run either shows the malformed
   // line (builder bug) or a well-formed one (a cmd.exe tail-parsing quirk).
-  fprintf(stderr, "conpty-bridge: command line: %s\n",
-          narrow(commandLine).c_str());
+  bridgeNote("conpty-bridge: command line: %s\n",
+             narrow(commandLine).c_str());
 
   const HANDLE outputPump = CreateThread(nullptr, 0, pumpConsoleOutput, nullptr, 0, nullptr);
 
@@ -596,7 +624,7 @@ int main() {
         DWORD written = 0;
         WriteFile(g_pcInputWrite, text.data(), (DWORD)text.size(), &written,
                   nullptr);
-        fprintf(stderr, "conpty-bridge: input line delivered (%zu bytes)\n", text.size());
+        bridgeNote("conpty-bridge: input line delivered (%zu bytes)\n", text.size());
       }
       continue;
     }
@@ -639,7 +667,7 @@ int main() {
   // So: close the console, let the relay flush and the pump see EOF (it logs
   // "output pump ended" when it does), wait for it, and only then report the
   // child's exit. This is the reference samples' shutdown order.
-  fprintf(stderr, "conpty-bridge: control loop ended; closing the console\n");
+  bridgeNote("conpty-bridge: control loop ended; closing the console\n");
   // The kill path already closed the console and nulled the handle before
   // breaking out of the loop. Closing the same HPCON twice is undefined
   // behaviour, and measured on the Windows CI it cost the exit frame: the
@@ -651,10 +679,10 @@ int main() {
     ClosePseudoConsole(g_pseudoConsole);
     g_pseudoConsole = nullptr;
   }
-  fprintf(stderr, "conpty-bridge: console closed; waiting for the child\n");
+  bridgeNote("conpty-bridge: console closed; waiting for the child\n");
 
   WaitForSingleObject(g_childProcess, INFINITE);
-  fprintf(stderr, "conpty-bridge: child wait returned\n");
+  bridgeNote("conpty-bridge: child wait returned\n");
   DWORD exitCode = 0;
   GetExitCodeProcess(g_childProcess, &exitCode);
   if (outputPump) {

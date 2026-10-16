@@ -13,7 +13,10 @@
  */
 import { createAttachmentService } from "@anthelia/attachments";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
-import { configureBashExecutable, configurePwshExecutable } from "@anthelia/platform";
+import {
+  configureBashExecutable,
+  configurePwshExecutable,
+} from "@anthelia/platform";
 import {
   compositionProfile,
   compositionRowRegistrations,

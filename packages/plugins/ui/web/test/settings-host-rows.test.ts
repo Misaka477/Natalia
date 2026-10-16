@@ -21,7 +21,8 @@ test("a host-only row is hidden on every other host — POSIX needs no setting",
     expect(settingAppliesToHost(WINDOWS_ONLY, host)).toBe(false);
 });
 
-test("an unknown host is not Windows", () => {  // A runtime that never published a host (an old journal, a host that
+test("an unknown host is not Windows", () => {
+  // A runtime that never published a host (an old journal, a host that
   // does not emit the segment) must not get the row on a guess.
   expect(settingAppliesToHost(WINDOWS_ONLY, undefined)).toBe(false);
   expect(hostFromSegments(undefined)).toBeUndefined();

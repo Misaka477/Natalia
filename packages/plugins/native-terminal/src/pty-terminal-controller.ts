@@ -1451,8 +1451,7 @@ export function createPtyTerminalController(
       input.publish({
         type: "diagnostic",
         level: "warning",
-        message:
-          `the terminal is running Windows PowerShell 5.1 (${file}): no PowerShell 7 was found in the well-known install locations or on PATH, so the pane has no PSReadLine prompt handling and none of the pwsh-7 flags. Point 设置 → PowerShell 路径 (runtime.shell.pwshPath) at the pwsh.exe to use.`,
+        message: `the terminal is running Windows PowerShell 5.1 (${file}): no PowerShell 7 was found in the well-known install locations or on PATH, so the pane has no PSReadLine prompt handling and none of the pwsh-7 flags. Point 设置 → PowerShell 路径 (runtime.shell.pwshPath) at the pwsh.exe to use.`,
         ...(sessionID ? { sessionID } : {}),
       });
     }
@@ -1468,7 +1467,8 @@ export function createPtyTerminalController(
       // integration that replaced them would spawn a shell that cannot find ls.
       env: { ...shellEnv, ...envRecord() },
       command: startInput.command,
-    });    session.pty = pty;
+    });
+    session.pty = pty;
     // The pane's identity is the process the controller spawned, captured
     // once. The handshake below names the shell INSIDE it, which is a
     // different fact and rides separately.

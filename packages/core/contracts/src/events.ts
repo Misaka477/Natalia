@@ -4408,7 +4408,15 @@ export type RuntimeClient = {
    * secure-input arbitration.
    */
   nativeTerminalStart?(input: {
-    command: string;
+    /**
+     * The shell to run. OPTIONAL: a caller that names none gets the shell this
+     * host always has, resolved by the platform's own shell discovery (pwsh on
+     * Windows, bash on Linux, zsh on macOS) — the same single source the
+     * terminal controller falls back to. It was required, and the one caller
+     * that therefore had to invent a value (the pane's socket route) invented
+     * `"bash"` on Windows whenever the environment defined SHELL.
+     */
+    command?: string;
     cwd?: string;
     id?: string;
     sessionID?: string;

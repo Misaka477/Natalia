@@ -82,7 +82,7 @@ test("HTTP terminal websocket is gated behind terminalWrite", async () => {
           windowID: 0,
           muxWindowID: 0,
           tabID: 0,
-          command: input.command,
+          command: input.command ?? "bash", // the host resolves a default when the caller names none
           cwd: input.cwd ?? "",
           status: "running",
           inputOwner: "model",
@@ -344,7 +344,7 @@ test("a failed screen replay does not cost the pane its live stream", async () =
           windowID: 0,
           muxWindowID: 0,
           tabID: 0,
-          command: input.command,
+          command: input.command ?? "bash", // the host resolves a default when the caller names none
           cwd: input.cwd ?? "",
           status: "running",
           inputOwner: "model",
@@ -440,7 +440,7 @@ test("an empty pane reconnects to an empty screen, not to the last session's", a
           windowID: 0,
           muxWindowID: 0,
           tabID: 0,
-          command: input.command,
+          command: input.command ?? "bash", // the host resolves a default when the caller names none
           cwd: "",
           status: "running",
           inputOwner: "model",

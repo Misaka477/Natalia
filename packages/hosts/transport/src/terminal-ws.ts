@@ -98,16 +98,20 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           return;
         }
         if (!session) {
+          // The pane's shell is the HOST's decision, not this route's. A pane
+          // whose caller names no command is started WITHOUT one, and the
+          // terminal controller resolves the shell this machine always has
+          // through the platform's discovery: pwsh on Windows, bash on Linux,
+          // zsh on macOS.
+          //
+          // This route used to build its own chain — `command || $SHELL ||
+          // (win32 ? "pwsh" : "bash")` — and that chain is how a Windows pane
+          // came up as bash: the environment had SHELL set (Git for Windows
+          // does), so it won over a discovery that had resolved pwsh correctly.
+          // One place decides; a caller's explicit command still wins.
+          const requested = ws.data.command?.trim();
           session = await client.nativeTerminalStart({
-            // The host's own shell when the pane names none. POSIX
-            // answers through SHELL; Windows has no such variable and its
-            // interactive shell is pwsh, which every install has — a bare
-            // "bash" there is a Git-for-Windows dependency the pane should
-            // not inherit by default.
-            command:
-              ws.data.command ||
-              process.env.SHELL ||
-              (process.platform === "win32" ? "pwsh" : "bash"),
+            ...(requested ? { command: requested } : {}),
             id: terminalID,
             sessionID,
           });

@@ -53,7 +53,7 @@ function stubClient(): RuntimeClient {
         windowID: 1,
         muxWindowID: 1,
         tabID: 1,
-        command: input.command,
+        command: input.command ?? "bash", // the host resolves a default when the caller names none
         cwd: input.cwd ?? "",
         status: "running",
         inputOwner: "model",

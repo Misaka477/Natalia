@@ -2176,10 +2176,17 @@ export async function handleRPCMessage(
       const params = body.params;
       if (!params || typeof params !== "object")
         throw invalidParams("nativeTerminal.start.params must be an object");
-      const command = (params as { command?: unknown }).command;
-      if (typeof command !== "string" || !command)
+      // Naming a shell is OPTIONAL: a pane opened without one runs the shell
+      // this host always has (the platform's discovery). The requirement here
+      // used to force every caller to invent a value, and the socket route
+      // invented `"bash"` on Windows. A present value must still be usable.
+      const command =
+        typeof (params as { command?: unknown }).command === "string"
+          ? (params as { command: string }).command
+          : undefined;
+      if (command !== undefined && !command.trim())
         throw invalidParams(
-          "nativeTerminal.start.params.command must be a non-empty string",
+          "nativeTerminal.start.params.command must be a non-empty string when present",
         );
       const cwd =
         typeof (params as { cwd?: unknown }).cwd === "string"

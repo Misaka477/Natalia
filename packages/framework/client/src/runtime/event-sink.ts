@@ -242,10 +242,15 @@ export function createEventSink(
     } catch (error) {
       // A failed context epoch must never break event publishing.
       const message = error instanceof Error ? error.message : String(error);
+      // WHICH session and WHICH trigger, in the message: the published diagnostic
+      // carries the ambient sink's session, which is not necessarily the session
+      // the write was for — a difference that cost a round of misattribution when
+      // the deployed runtime reported a foreign-key failure naming a session that
+      // could not have been the one deleted.
       ctx.ports.publish?.({
         type: "diagnostic",
         level: "warning",
-        message: `context epoch write failed: ${message}`,
+        message: `context epoch write failed: ${message} (session=${exec.session.id} trigger=${trigger})`,
       });
     }
   }

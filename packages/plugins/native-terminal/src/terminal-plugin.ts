@@ -9,6 +9,11 @@ import {
   type TerminalControllerInput,
 } from "@anthelia/runtime-services";
 import { createPtyTerminalController } from "./pty-terminal-controller";
+import {
+  adoptTerminalController,
+  closeTerminalControllerForShutdown,
+  releaseTerminalController,
+} from "./terminal-controller-holder";
 import { terminalTools, terminalToolFamily } from "./terminal-tools";
 
 export const TERMINAL_PLUGIN_ID = "natalia-tool-terminal";
@@ -49,11 +54,20 @@ export const TERMINAL_PLUGIN_MANIFEST: PluginManifest = {
  * The one true terminal plugin. It owns the native host implementation, the
  * terminal resource controller and the terminal tools/aliases: on setup it
  * constructs the controller, provides the `terminalController` token and
- * registers the tool surface; on unload it disposes the controller so every
- * pane stops and the host is torn down.
+ * registers the tool surface.
+ *
+ * Its `dispose` deliberately does NOT close the controller. A config write
+ * reloads the plugins that require a host input, and the terminal plugin is one
+ * of them (measured: `plugin.update natalia-tool-terminal unloaded` right after
+ * a permission write), so closing it there killed every pane in the process and
+ * the user saw the terminal reload every time. The controller — panes, ptys,
+ * screens, scrollback — is held across plugin instances and adopted by the next
+ * one; only the host process's exit kills the panes (see
+ * `terminal-controller-holder.ts`).
  */
 export function createTerminalPlugin(input: TerminalControllerInput): Plugin {
   let controller: TerminalController | undefined;
+  let shutdownHookInstalled = false;
   return {
     manifest: TERMINAL_PLUGIN_MANIFEST,
     async setup(api) {
@@ -68,7 +82,18 @@ export function createTerminalPlugin(input: TerminalControllerInput): Plugin {
       // the host-built-beside-the-pty-controller dance, and its registry lent
       // to the pty spawn. Windows panes are ConPTY bridge panes, POSIX panes
       // are Rust/Python bridge panes, and both are the same pty controller.
-      controller = createPtyTerminalController({ ...input, settlement });
+      const adopted = adoptTerminalController(
+        { ...input, settlement },
+        (inputs) =>
+          createPtyTerminalController(inputs as TerminalControllerInput),
+      );
+      controller = adopted.controller;
+      if (!shutdownHookInstalled) {
+        shutdownHookInstalled = true;
+        // Installed once per process, on the first instance: the host's exit is
+        // the only path that kills panes now that a plugin reload does not.
+        process.once("exit", () => closeTerminalControllerForShutdown());
+      }
       api.services.provide(terminalController.id, controller);
       for (const tool of terminalTools()) api.tools.register(tool);
       for (const [alias, target] of Object.entries(
@@ -77,7 +102,9 @@ export function createTerminalPlugin(input: TerminalControllerInput): Plugin {
         api.tools.registerAlias(alias, target);
     },
     async dispose() {
-      await controller?.close();
+      // The service binding is released by the plugin API (the registry refuses
+      // an unloaded plugin that still owns a capability); the PANES stay.
+      if (controller) releaseTerminalController(controller);
       controller = undefined;
     },
   };

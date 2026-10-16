@@ -1783,6 +1783,36 @@ export function createPtyTerminalController(
     return collected;
   }
 
+  /**
+   * Kills every pane synchronously, for the host process's own exit event.
+   *
+   * The terminal plugin no longer closes the controller when it is disposed —
+   * panes outlive a plugin reload, which is the whole point of
+   * `terminal-controller-holder.ts` — so the host's exit is the one place a
+   * pane's pty must be killed. Node runs only synchronous work during `exit`,
+   * and killing a pty is one call; no events are published, because nothing is
+   * left to read them. The reference implementation's terminal handle has the
+   * same shape for the same job (`terminateForHostExit`).
+   */
+  function forceCloseSync() {
+    closed = true;
+    for (const session of sessions.values()) {
+      if (session.status === "running") {
+        try {
+          session.pty?.kill();
+        } catch {
+          // already gone
+        }
+      }
+      if (session.settleTimer) clearTimeout(session.settleTimer);
+    }
+    sessions.clear();
+    idempotency.clear();
+    writes.clear();
+    revisionWaiters.clear();
+    outputListeners.clear();
+  }
+
   async function close() {
     if (closed) return;
     closed = true;
@@ -1835,5 +1865,6 @@ export function createPtyTerminalController(
     stopForSession,
     collectExited,
     close,
+    forceCloseSync,
   };
 }

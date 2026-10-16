@@ -755,6 +755,16 @@ export interface TerminalController {
    */
   collectExited?(input: { maxIdleMinutes: number }): Promise<string[]>;
   close(): Promise<void>;
+  /**
+   * Kill every live pane synchronously, for the host process's `exit` event.
+   *
+   * The terminal plugin does not close the controller when it is disposed — a
+   * config write reloads the plugins that require a host input, and killing the
+   * panes there is what made the terminal reload on every permission change — so
+   * the host's exit is the one path left that must end the ptys. Node runs only
+   * synchronous work during `exit`, and killing a pty is one call.
+   */
+  forceCloseSync?(): void;
 }
 
 export interface McpService {

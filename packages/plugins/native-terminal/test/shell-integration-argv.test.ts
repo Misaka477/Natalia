@@ -99,31 +99,24 @@ describe("integratedShellArgv", () => {
     expect(integratedShellArgv("/usr/bin/fish")).toBeUndefined();
   });
 
-  // The same call, pinned per platform, because `basename` is the platform's
-  // own: POSIX splits on `/` only, so `C:\Windows\System32\bash.exe` has no
-  // separator to split at and the lookup key is the whole string — no entry,
-  // undefined. Windows splits on `\`, so the key is `bash.exe` → `bash`, which
-  // resolves. Both are the contract; the guard is the POSIX one (a POSIX build
-  // must never hand a Windows spelling a POSIX rcfile, which is worse than no
-  // integration), and CI runs on Linux so that is the branch that must hold.
-  test.skipIf(process.platform === "win32")(
-    "a Windows spelling does not match the POSIX entry",
-    () => {
-      expect(
-        integratedShellArgv("C:\\Windows\\System32\\bash.exe"),
-      ).toBeUndefined();
-    },
-  );
-
-  test.skipIf(process.platform !== "win32")(
-    "a Windows spelling resolves by basename, so its rcfile is its own",
-    () => {
-      const integrated = integratedShellArgv("C:\\Windows\\System32\\bash.exe");
-      expect(integrated).toBeDefined();
-      expect(integrated!.argv[0]).toBe("C:\\Windows\\System32\\bash.exe");
-      expect(integrated!.argv[1]).toBe("--rcfile");
-    },
-  );
+  // ONE expectation, on every host. The lookup key used to be the HOST's
+  // `basename`, which splits on `/` only, so `C:\Windows\System32\bash.exe` had
+  // no separator to split at and the key was the whole string: the same call
+  // answered "undefined" on POSIX and "bash" on Windows. That was pinned as two
+  // platform-split tests, and the Linux runner then caught what the split hid —
+  // a pane command DERIVED for Windows (a Windows workspace, its argv built by
+  // `nativeTerminalPaneCommand(command, "win32")`) silently lost its integration
+  // on any non-Windows host. The flavour is the path's own now (a separator or a
+  // drive letter), so one expectation holds everywhere: the Windows spelling
+  // resolves as Windows.
+  test("a Windows spelling resolves by its own flavour, on any host", () => {
+    const integrated = integratedShellArgv("C:\\Windows\\System32\\bash.exe");
+    expect(integrated).toBeDefined();
+    expect(integrated!.argv[0]).toBe("C:\\Windows\\System32\\bash.exe");
+    expect(integrated!.argv[1]).toBe("--rcfile");
+    // And the POSIX spelling keeps resolving exactly as it did.
+    expect(integratedShellArgv("/bin/bash")?.argv[1]).toBe("--rcfile");
+  });
 });
 
 describe("the pinned pane contract", () => {

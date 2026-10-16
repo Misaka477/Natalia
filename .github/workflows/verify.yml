@@ -90,6 +90,15 @@ jobs:
           key: ast-packs-${{ runner.os }}-${{ hashFiles('scripts/build-ast-packs.ts', 'packages/framework/diff-wasm/**/Cargo.toml', 'packages/framework/diff-wasm/text-build/**') }}
       - name: Build the AST wasm packs
         run: npm run diff:build-wasm
+      # The web shell is a BUILD, and nothing else ran one. `tsc` accepts shapes
+      # Solid's JSX compiler refuses — a fragment under an element is the one
+      # that got through: typecheck, format, the import/contract guards and all
+      # twenty test layers were green, and `vite build` failed on the first line
+      # of the file it could not compile. The only caller was the packaging
+      # chain, so the defect surfaced at deploy time. It runs after the wasm
+      # packs because the diff worker imports one of them at build time.
+      - name: Build the web shell
+        run: npm run build:web
       # The test jobs use the SAME distribution the gates just proved —
       # rebuilding it per job costs each of them a minute of the window the
       # platform's shutdown signal runs in, and the platform kills whatever

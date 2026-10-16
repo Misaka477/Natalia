@@ -214,3 +214,23 @@ test("our own pty bridges ride their own directory, not the fork's", () => {
   expect(standalone).toContain("expectedBridge");
   expect(standalone).toContain("pty-bridge");
 });
+
+test("CI builds the web shell, not only typechecks it", () => {
+  // The gate that was missing, and what it cost: Solid's JSX compiler refuses
+  // shapes `tsc` accepts, so a fragment nested under an element passed
+  // typecheck, format, every guard and all twenty test layers, and failed at
+  // `vite build` — which only the packaging chain ran, so it was found on the
+  // deploy machine. The window is a build product; a run that never builds it
+  // cannot say the app works.
+  const workflow = readFileSync(
+    join(root, ".github", "workflows", "verify.yml"),
+    "utf8",
+  );
+  expect(workflow).toContain("- name: Build the web shell");
+  expect(workflow).toContain("run: npm run build:web");
+  // After the wasm packs: the diff worker imports one at build time, so a shell
+  // built before them would fail on a fresh checkout for the wrong reason.
+  expect(workflow.indexOf("Build the web shell")).toBeGreaterThan(
+    workflow.indexOf("Build the AST wasm packs"),
+  );
+});

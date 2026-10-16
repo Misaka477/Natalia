@@ -4,6 +4,7 @@ import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import { sessionRunCoordinator } from "@anthelia/session";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
+import { applySandboxRungGrant } from "../sandbox-rung";
 import type { TurnController } from "@anthelia/turn-orchestration";
 type Surface = Pick<
   RuntimeServiceClient,
@@ -18,6 +19,7 @@ type Surface = Pick<
   | "respondApproval"
   | "respondQuestion"
   | "respondInteractive"
+  | "setSandboxRung"
 >;
 export function createCoreSurface(
   ctx: RuntimeContext,
@@ -170,6 +172,31 @@ export function createCoreSurface(
     async respondApproval(response) {
       await ctx.ports.getReady();
       return ctx.ports.getInteractive().respondApproval(response);
+    },
+    /**
+     * Move this session's sandbox rung (the four-rung ladder).
+     *
+     * The ladder's own module already knew how to do this and had no caller:
+     * the only way to a wider rung was a session-scoped approval on an
+     * escalation, so the selector could not offer the rung at all. This is the
+     * door the UI needs — and it goes through the same function, so the model
+     * is told through the same `context.instructions` record and the journal
+     * keeps the same audit line.
+     */
+    async setSandboxRung(input) {
+      await ctx.ports.getReady();
+      const sessionID = (input.sessionID ??
+        ctx.ports.getActiveExec()?.session.id) as SessionID | undefined;
+      if (!sessionID) return { changed: false, mode: input.mode };
+      const previous = ctx.ports
+        .getExecutionBySession()
+        .get(sessionID)?.sandboxModeOverride;
+      const applied = applySandboxRungGrant(ctx, sessionID, input.mode);
+      return {
+        changed: applied !== undefined,
+        mode: input.mode,
+        ...(previous ? { previous } : {}),
+      };
     },
     async respondQuestion(response) {
       await ctx.ports.getReady();

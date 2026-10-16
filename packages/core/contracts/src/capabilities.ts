@@ -257,7 +257,13 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "projectionContributions",
   ],
   /** Security and configuration management (permission profiles). */
-  management: ["permissionList", "permissionSave", "permissionDelete"],
+  management: [
+    "permissionList",
+    "permissionSave",
+    "permissionDelete",
+    // The four-rung ladder's own door: moving THIS session's sandbox rung.
+    "setSandboxRung",
+  ],
   /** Durable task and flow documents. */
   observability: [
     "runtimeStatus",

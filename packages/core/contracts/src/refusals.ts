@@ -871,6 +871,11 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "recorded",
     note: "a disposed runtime answers recorded:false without journaling; invalid input is rejected by validation at the surface AND the transport edge before anything is recorded",
   },
+  setSandboxRung: {
+    refusal: "value",
+    expressedBy: "changed",
+    note: "a session that is not live — or one already on that rung — answers changed:false with the mode it was asked for, so the answer says whether the ladder MOVED rather than that the call was accepted",
+  },
   setLogVerbosity: {
     refusal: "value",
     expressedBy: "ok",

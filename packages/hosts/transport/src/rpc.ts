@@ -29,6 +29,7 @@ import {
   describeRuntimeCapabilities,
   runtimeFailureData,
 } from "@anthelia/contracts";
+import { CONFINEMENT_MODES } from "@anthelia/contracts";
 import type { RuntimeClient, RuntimeFailureData } from "@anthelia/contracts";
 import type { RPCRequest, RPCResponse } from "./rpc-client";
 
@@ -238,6 +239,8 @@ export const RPC_ROUTE_MEMBERS = {
   "mcp.resource": "readMcpResource",
   "mcp.server.add": "mcpServerAdd",
   "mcp.server.remove": "mcpServerRemove",
+  // The four-rung ladder: moving the live session's sandbox rung.
+  "sandbox.rung.set": "setSandboxRung",
   "permission.list": "permissionList",
   "permission.save": "permissionSave",
   "permission.delete": "permissionDelete",
@@ -4478,6 +4481,32 @@ export async function handleRPCMessage(
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: await client.permissionList?.(),
+      };
+    }
+    if (body.method === "sandbox.rung.set") {
+      optionsGuard(client, "setSandboxRung");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("sandbox.rung.set.params must be an object");
+      const mode = (params as { mode?: unknown }).mode;
+      if (
+        typeof mode !== "string" ||
+        !(CONFINEMENT_MODES as readonly string[]).includes(mode)
+      )
+        throw invalidParams(
+          `sandbox.rung.set.params.mode must be one of ${CONFINEMENT_MODES.join(", ")}`,
+        );
+      const sessionID =
+        typeof (params as { sessionID?: unknown }).sessionID === "string"
+          ? (params as { sessionID: string }).sessionID
+          : undefined;
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.setSandboxRung?.({
+          mode: mode as (typeof CONFINEMENT_MODES)[number],
+          ...(sessionID ? { sessionID } : {}),
+        }),
       };
     }
     if (body.method === "permission.save") {

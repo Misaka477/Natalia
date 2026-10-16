@@ -4650,6 +4650,28 @@ export type RuntimeClient = {
     reason?: string;
   }>;
   /**
+   * Moves THIS session's sandbox rung (the four-rung ladder: read / ask /
+   * auto in the workspace / auto everywhere).
+   *
+   * Session-scoped by design, and the model is told through the same durable
+   * `context.instructions {kind: "sandbox_rung"}` channel a generation switch
+   * uses — a model handed a wider sandbox that does not know it keeps
+   * apologising for writes it may now make. A new session starts at the
+   * deployment's rung again.
+   *
+   * `changed: false` is a real answer, not a failure: either the session
+   * already ran that rung, or it is not live (a session that has not been
+   * attached has no execution to move). A write.
+   */
+  setSandboxRung?(input: {
+    sessionID?: string;
+    mode: import("./schema-types").ConfinementMode;
+  }): Promise<{
+    changed: boolean;
+    mode: import("./schema-types").ConfinementMode;
+    previous?: import("./schema-types").ConfinementMode;
+  }>;
+  /**
    * Adds or replaces an MCP server from its config (the MCP official field
    * set: type/command/args/url/headers/environment/…). The runtime writes
    * the config and reconnects the server; connection failures surface as

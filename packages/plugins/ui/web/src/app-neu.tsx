@@ -12,7 +12,13 @@ import type {
 } from "@anthelia/contracts";
 import { type AppState, cloneState } from "@natalia/view-store";
 import { cloneStateInWorker } from "./clone-state-worker-client";
+import type { ConfinementMode } from "@anthelia/contracts";
 import { panelScopeKey } from "./panel-scope";
+import {
+  PERMISSION_RUNGS,
+  availableRungs,
+  rungForConfig,
+} from "./permission-rungs";
 import {
   createSignal,
   createEffect,
@@ -2599,10 +2605,29 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }),
   );
 
+  /**
+   * The session's sandbox rung, as the runtime accepted it.
+   *
+   * Held here because moving the rung is a session-scoped WRITE with an answer
+   * (`changed`), and `status.snapshot` does not carry it yet: the display falls
+   * back to what the config says (approval axis + the deployment's mode) until
+   * the human moves it, and to this signal afterwards.
+   */
+  const [sessionSandboxRung, setSessionSandboxRung] = createSignal<
+    ConfinementMode | undefined
+  >(undefined);
+  /** The rung the controls are standing on. */
+  const currentRung = () =>
+    rungForConfig({
+      agentMode: config()?.defaultAgentMode,
+      confinement:
+        sessionSandboxRung() ??
+        (config()?.confinement as { mode?: ConfinementMode } | undefined)?.mode,
+    });
   const permissionOptions = () =>
-    Object.entries(config()?.agentModes ?? {}).map(([name, mode]) => ({
-      value: name,
-      label: `${name}${config()?.defaultAgentMode === name ? "（默认）" : ""}`,
+    availableRungs(config()?.agentModes).map((rung) => ({
+      value: rung.id,
+      label: `${rung.label}${currentRung()?.id === rung.id ? "（当前）" : ""}`,
     }));
 
   // The PLUGIN side panels (terminal, todo, files) have NO scope key at all.
@@ -2620,13 +2645,39 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // own `subscribe` compares the workspace key; the terminal's effect keys on
   // sessionID+runtimeURL), so a key here could only do harm.
 
-  async function changePermission(permission: string) {
+  /**
+   * Move to a rung: BOTH axes, in one act.
+   *
+   * The approval side is the deployment's (`defaultAgentMode`, global — what
+   * the control used to write and all it used to write). The sandbox side is
+   * the SESSION's rung, through the runtime's own ladder, which is the only
+   * place a wider scope is granted: the composition profile's row outranks the
+   * config inside the runtime, so a config write alone would have looked like
+   * it worked and changed nothing.
+   */
+  async function changePermission(rungID: string) {
+    const rung = PERMISSION_RUNGS.find((candidate) => candidate.id === rungID);
+    if (!rung) return;
     await props.ctx.runtime.updateConfig?.({
-      patch: { defaultAgentMode: permission },
+      patch: {
+        defaultAgentMode: rung.agentMode,
+        // Recorded too, so a deployment whose profile does not pin a mode
+        // follows the rung without a session in flight.
+        confinement: { mode: rung.confinement },
+      },
       scope: "global",
     } as never);
     const next = await props.ctx.runtime.configGet?.();
     if (next) setConfig(next);
+    const applied = await props.ctx.runtime.setSandboxRung?.({
+      mode: rung.confinement,
+      ...(selectedSessionID() || state().sessionID
+        ? { sessionID: selectedSessionID() || state().sessionID }
+        : {}),
+    });
+    // The answer says whether the ladder MOVED; either way the rung the
+    // session is standing on is the one that was asked for.
+    if (applied) setSessionSandboxRung(applied.mode);
   }
 
   async function updateChatProfile(next: ChatModelProfile) {
@@ -4163,7 +4214,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       menuPosition="top"
                     />
                     <NeuSelect
-                      value={config()?.defaultAgentMode ?? "ask"}
+                      value={
+                        currentRung()?.id ?? config()?.defaultAgentMode ?? "ask"
+                      }
                       options={
                         startupDataDegraded()
                           ? [

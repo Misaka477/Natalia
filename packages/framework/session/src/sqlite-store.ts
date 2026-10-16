@@ -1234,6 +1234,16 @@ export class SqliteSessionStore {
     sessionID: SessionID,
     snapshot: import("@anthelia/contracts").DurableContextCheckpointRecord,
   ) {
+    // The epoch has a foreign key to the session too, and it is written from the
+    // event sink rather than from an append, so the append guards above cannot
+    // cover it. Measured on the deployed runtime: deleting a session while the
+    // slot was still checkpointing produced
+    //   `context epoch write failed: FOREIGN KEY constraint failed`
+    // as a warning diagnostic — the same "late write for a session that is
+    // gone" family, through the one writer that had no tombstone check. The row
+    // is meaningless either way (`delete` removes this session's epochs), so it
+    // is dropped rather than reported.
+    if (this.dropsBecauseSessionDeleted(sessionID)) return;
     const row = this.db
       .query(
         `SELECT COALESCE(MAX(seq), 0) AS max_seq FROM events WHERE session_id = ?`,

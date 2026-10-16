@@ -761,6 +761,37 @@ test("a deleted session's late events are dropped, not thrown", async () => {
   }
 });
 
+test("a deleted session's context epoch write is dropped, not thrown", async () => {
+  // The same "late write for a session that is gone" family, through the one
+  // writer the append guards do not cover: the event sink checkpoints the
+  // context slot straight into `context_epochs`, whose `session_id` also
+  // references `sessions(id)`. Measured on the deployed runtime after the event
+  // path was fixed: `context epoch write failed: FOREIGN KEY constraint failed`
+  // as a warning diagnostic. The row is meaningless either way (`delete` removes
+  // this session's epochs), so it is dropped.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-epoch-deleted-"));
+  const store = new SqliteSessionStore(join(root, "sessions.db"));
+  const sessionID = "ses_epoch_deleted" as SessionID;
+  const snapshot = {
+    tokens: 1,
+  } as unknown as import("@anthelia/contracts").DurableContextCheckpointRecord;
+  try {
+    store.create(sessionID, "Deleted while checkpointing");
+    store.writeContextEpoch(sessionID, snapshot);
+    expect(store.loadContextEpoch(sessionID)).toBeDefined();
+    store.delete(sessionID);
+    expect(() => store.writeContextEpoch(sessionID, snapshot)).not.toThrow();
+    expect(store.loadContextEpoch(sessionID)).toBeUndefined();
+    // A session that never existed is still a programming error: the foreign key
+    // refuses it, exactly as this store's other writers do.
+    expect(() =>
+      store.writeContextEpoch("ses_epoch_never" as SessionID, snapshot),
+    ).toThrow();
+  } finally {
+    store.close();
+  }
+});
+
 test("SQLite batches async durable appends and flushes settlement barriers", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-async-batch-"));
   const store = new SqliteSessionStore(join(root, "sessions.db"));

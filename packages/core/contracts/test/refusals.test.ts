@@ -98,6 +98,10 @@ test("the members whose refusal must be a value are named, and each names its fi
     // {ok:false, reason} rather than applying an empty table (which would
     // silence every named logger).
     "setLogVerbosity",
+    // The four-rung ladder: a session that is not live, or one already on
+    // that rung, answers {changed:false} with the mode it was asked for —
+    // the answer says whether the ladder MOVED.
+    "setSandboxRung",
     "shutdown",
     "updateConfig",
     "updateConstitutionDocRule",

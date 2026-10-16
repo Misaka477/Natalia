@@ -2044,6 +2044,21 @@ test("read-only profile rejects side-effecting tools without an approval request
   ).rejects.toMatchObject({
     code: "ENOENT",
   });
+
+  // The failed call is in the OPERATIONS LOG too — the failing seam's own
+  // record, carrying the tool, the call and the turn (audit 缺口 3/4). The
+  // model saw a tool result; the operator needs the same fact without reading
+  // the transcript, at the default log level.
+  const toolErrors =
+    (await client.operationRecords?.({ component: "tool", level: "error" })) ??
+    [];
+  expect(
+    toolErrors.some(
+      (record) =>
+        typeof record.fields?.tool === "string" &&
+        record.fields.tool === "write_file",
+    ),
+  ).toBe(true);
 });
 
 test("selected permission profile denies tools outside its allow list before approval", async () => {

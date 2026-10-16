@@ -29,6 +29,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import { activePlanForExec } from "@natalia/collab";
 import type { WorkLedgerController } from "@natalia/work-ledger";
 import { OPAQUE_WORKSPACE_WRITERS, rinaCache } from "@anthelia/rina";
+import { logOf } from "@anthelia/operation-log";
 import { executeWithReadCache } from "./read-cache";
 
 export type ExecuteStageInput = {
@@ -566,6 +567,18 @@ export async function runExecuteStage(
     )
       mutationRegistry?.forget(call.id);
     const message = error instanceof Error ? error.message : String(error);
+    // The failing seam, in the OPERATIONS LOG (audit 缺口 4). A failed call
+    // already reached the model and the work graph, but neither is where an
+    // operator looks when a turn goes wrong: a merge that could not validate,
+    // a rollback that refused, a write that threw — all of it arrived as a
+    // tool result and vanished from the log. The turn rides the record, so the
+    // failure joins the same spine as the diagnostics.
+    logOf(ctx.state.serviceDirectory).error("tool", "execution failed", {
+      tool: tool.name,
+      callID: call.id,
+      turnID,
+      error: message,
+    });
     publish({
       type: "tool.update",
       id: toolID,

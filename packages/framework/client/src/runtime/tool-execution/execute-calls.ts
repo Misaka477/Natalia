@@ -33,6 +33,7 @@ import type {
 } from "@anthelia/contracts";
 import type { ToolMaterialization } from "@anthelia/tools";
 import type { RuntimeContext } from "@anthelia/substrate";
+import { logOf } from "@anthelia/operation-log";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import type { WorkLedgerController } from "@natalia/work-ledger";
@@ -418,6 +419,18 @@ export function createExecuteCalls(
       const resolved = materialized.resolve(call.name);
       if (resolved.status !== "ready") {
         const reason = resolved.error;
+        // The seam, in the OPERATIONS LOG (audit 缺口 4): a call that never
+        // ran — unknown, stale, or refused by policy — was reported to the
+        // model and the work graph only, and the model is the one reader that
+        // cannot investigate. The resolution's status names the class; the
+        // turn rides the record so it joins the same spine as the diagnostics.
+        logOf(ctx.state.serviceDirectory).error("tool", "call did not run", {
+          tool: call.name,
+          callID: call.id,
+          turnID,
+          resolution: resolved.status,
+          error: reason ?? "",
+        });
         const registered = tools.get(call.name);
         if (
           registered &&

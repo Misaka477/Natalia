@@ -13,7 +13,16 @@
  */
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
 import { hashTreeFiles } from "@anthelia/platform";
 
 /** The install root: `NATALIA_HOME` overrides (D2 unattended + tests). */
@@ -246,6 +255,61 @@ export async function purgeData(home: string): Promise<{ removed: string[] }> {
     removed.push(entry);
   }
   return { removed };
+}
+
+export type WorkspaceStatePurge = {
+  /** The workspace folder the state was removed from. */
+  root: string;
+  /** Whether a `<workspace>/.natalia` was there and is gone. */
+  removed: boolean;
+};
+
+/**
+ * The WORKSPACE-local state of every workspace the registry names.
+ *
+ * The home's own data is `purgeData`'s business; this is the other half of
+ * "delete my data": `<workspace>/.natalia` (object store, checkpoints, session
+ * records) sits inside a project folder the user chose, so it is never the
+ * folder's contents this removes — only Natalia's own directory inside it. The
+ * registry is the only list of the workspaces, so it is read first and the
+ * answer is the list itself: nothing to read means nothing to delete, and a
+ * workspace whose state is already gone reports `removed: false` rather than
+ * claiming a deletion that did not happen.
+ *
+ * Non-interactive on purpose: the uninstaller calls it before its own file
+ * removal (see `scripts/windows-installer.ts`), and a prompt inside an
+ * uninstaller that is already asking would be the second question of a dialog
+ * the user already answered.
+ */
+export async function purgeWorkspaceState(
+  home: string = nataliaHome(),
+): Promise<WorkspaceStatePurge[]> {
+  const result: WorkspaceStatePurge[] = [];
+  let raw: string;
+  try {
+    raw = await readFile(join(home, "workspaces.json"), "utf8");
+  } catch {
+    return result;
+  }
+  let entries: unknown;
+  try {
+    entries = JSON.parse(raw);
+  } catch {
+    return result;
+  }
+  if (!Array.isArray(entries)) return result;
+  for (const entry of entries as Array<{ path?: unknown }>) {
+    const root = typeof entry.path === "string" ? entry.path : "";
+    if (!root) continue;
+    const state = join(root, ".natalia");
+    if (!existsSync(state)) {
+      result.push({ root, removed: false });
+      continue;
+    }
+    rmSync(state, { recursive: true, force: true });
+    result.push({ root, removed: !existsSync(state) });
+  }
+  return result;
 }
 
 export type ExportReport = {

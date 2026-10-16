@@ -226,6 +226,14 @@ test("the uninstaller offers to delete the data the app actually writes", async 
   expect(script).toContain("ExpandConstant('{localappdata}') + '\\natalia'");
   expect(script).toContain("ExpandConstant('{userappdata}') + '\\natalia'");
 
+  // And the WORKSPACE-local state, which the home's registry names: the
+  // prompt promises "delete all of it", and `<workspace>\.natalia` (object
+  // store, checkpoints, session records) is part of it. The APP does the
+  // deleting — only it can read the registry — and the uninstaller asks it at
+  // `usUninstall`, which is the only step where the executable still exists.
+  expect(script).toContain("CurUninstallStep = usUninstall");
+  expect(script).toContain("'purge-workspaces'");
+
   // The PROMPT, which nothing asserted before: the choice is only informed if
   // the dialog says what is inside the folder. It used to say "Natalia keeps
   // its data in two places" and name `<install>\.natalia` as the

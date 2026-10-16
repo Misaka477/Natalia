@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -17,6 +17,7 @@ import {
   listPurgeTargets,
   purgeConfirmation,
   purgeData,
+  purgeWorkspaceState,
   resolvePurgeGate,
   uninstallProgram,
 } from "../src/store-maintenance";
@@ -268,4 +269,46 @@ test("an installed binary derives its home from the install layout", () => {
     if (saved === undefined) delete process.env.NATALIA_HOME;
     else process.env.NATALIA_HOME = saved;
   }
+});
+
+test("the workspace purge removes Natalia's state, never the project folder", async () => {
+  // The other half of "delete my data": each registered workspace's own
+  // `<workspace>/.natalia`. The registry is the only list of the workspaces,
+  // so it is read first — and the PROJECT FOLDER the state sits in is the
+  // user's, never this command's to remove.
+  const base = mkdtempSync(join(tmpdir(), "natalia-purge-workspaces-"));
+  const home = join(base, "home");
+  const withState = join(base, "with-state");
+  const withoutState = join(base, "without-state");
+  mkdirSync(join(home), { recursive: true });
+  mkdirSync(join(withState, ".natalia", "stores"), { recursive: true });
+  mkdirSync(join(withoutState), { recursive: true });
+  writeFileSync(join(withState, ".natalia", "stores", "session.json"), "{}\n");
+  writeFileSync(
+    join(home, "workspaces.json"),
+    JSON.stringify(
+      [
+        { path: withState, title: "with state", active: true },
+        { path: withoutState, title: "already clean", active: false },
+        // A malformed entry must not abort the pass: it is skipped.
+        { title: "no path" },
+      ],
+      null,
+      2,
+    ),
+  );
+
+  const report = await purgeWorkspaceState(home);
+  expect(report).toEqual([
+    { root: withState, removed: true },
+    { root: withoutState, removed: false },
+  ]);
+  // The state is gone, and the folder the user chose is not.
+  expect(existsSync(join(withState, ".natalia"))).toBe(false);
+  expect(existsSync(withState)).toBe(true);
+
+  // A home with nothing to read: nothing to delete, and no throw.
+  expect(await purgeWorkspaceState(join(base, "no-such-home"))).toEqual([]);
+
+  rmSync(base, { recursive: true, force: true });
 });

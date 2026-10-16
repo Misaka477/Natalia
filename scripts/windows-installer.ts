@@ -296,7 +296,27 @@ function innoRegistry(plan: WindowsInstallPlan): string[] {
     "  Target: String;",
     "  Failed: Boolean;",
     "  Kept: String;",
+    "  ResultCode: Integer;",
     "begin",
+    "  // The WORKSPACE-local state (`<workspace>\\.natalia` — object store,",
+    "  // checkpoints, session records), which the home's registry names. The APP",
+    "  // deletes it, because only it can read the registry and it knows its own",
+    "  // layout; the uninstaller only has to ask BEFORE it removes the program —",
+    "  // which is this step: the tree is still there, and the prompt the user",
+    "  // already answered covers it. The Exec's own failure is not this",
+    "  // uninstaller's: the command reports it, and the home's data below is",
+    "  // still removed.",
+    "  if CurUninstallStep = usUninstall then",
+    "  begin",
+    "    if not KeepData then",
+    // Concatenated, not embedded — the same rule the delete branch below
+    // states: a constant followed by a backslash inside one literal makes
+    // Inno's scanner read the constant name only up to the backslash, and the
+    // uninstaller dies at runtime with `Unknown constant`. The guard in
+    // scripts/test asserts this spelling.
+    "      Exec(ExpandConstant('{app}') + '\\natalia.exe', 'purge-workspaces', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);",
+    "    Exit;",
+    "  end;",
     "  if CurUninstallStep <> usPostUninstall then",
     "    Exit;",
     "  Failed := False;",

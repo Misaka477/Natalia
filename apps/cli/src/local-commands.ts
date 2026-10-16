@@ -87,6 +87,7 @@ import {
   nataliaHome,
   purgeConfirmation,
   purgeData,
+  purgeWorkspaceState,
   resolvePurgeGate,
   uninstallProgram,
 } from "./store-maintenance";
@@ -123,6 +124,7 @@ export async function handleLocalCommands(argv: string[]) {
       "replay",
       "uninstall",
       "purge",
+      "purge-workspaces",
       "store",
       "debug-bundle",
       "bench",
@@ -215,6 +217,16 @@ export async function handleLocalCommands(argv: string[]) {
       console.log(
         "the program is not this command's business — run natalia uninstall for bin/ and versions/",
       );
+      break;
+    }
+    case "purge-workspaces": {
+      // The OTHER half of "delete my data": each registered workspace's own
+      // `<workspace>/.natalia`, removed without touching the project folder it
+      // sits in. Non-interactive because the uninstaller calls it before its
+      // own file removal, inside a dialog the user already answered — a second
+      // question there would be the wrong place to ask.
+      const removed = await purgeWorkspaceState(nataliaHome());
+      console.log(JSON.stringify({ removed }, null, 2));
       break;
     }
     case "debug-bundle": {

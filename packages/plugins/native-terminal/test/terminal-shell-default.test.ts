@@ -24,6 +24,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { discoverDefaultShell, shellInvocation } from "@anthelia/platform";
+import { integratedShellArgv } from "../src/shell-integration-argv";
 
 const root = join(import.meta.dir, "..", "..", "..", "..");
 const source = (relative: string) => readFileSync(join(root, relative), "utf8");
@@ -79,6 +80,36 @@ test("a POSIX host answers bash or zsh, never pwsh", () => {
     exists: (path) => path === "/bin/zsh",
   });
   expect(["bash", "zsh"]).toContain(mac?.name ?? "");
+});
+
+test("the integration argv is built for the PowerShell it actually got", () => {
+  // The defect this pins, seen on the user's machine: the pane resolved to
+  // Windows PowerShell 5.1 (a per-user pwsh 7 install was not on the runtime's
+  // PATH) and the argv handed it `-Interactive`, which is a pwsh-7-only switch.
+  // 5.1 answers "-Interactive : The term '-Interactive' is not recognized …
+  // CommandNotFoundException", so the pane opened unusable. 5.1 is a REACHABLE
+  // answer by design — it is the resolver's documented last resort — so the argv
+  // has to suit whichever shell was resolved.
+  const fiveOne = integratedShellArgv(
+    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  );
+  expect(fiveOne?.argv.slice(1, 4)).toEqual(["-NoLogo", "-NoExit", "-Command"]);
+  expect(fiveOne?.argv).not.toContain("-Interactive");
+  // The integration script is still dot-sourced, so a 5.1 pane keeps everything
+  // short of the pwsh-7-only switch.
+  expect(fiveOne?.argv.at(-1)).toContain("shell-integration-pwsh.ps1");
+
+  // pwsh 7 keeps the switch the read-line override needs: without it the pane's
+  // command line arrives empty (measured).
+  const seven = integratedShellArgv(
+    "C:\\Users\\demo\\AppData\\Local\\Programs\\PowerShell\\7\\pwsh.exe",
+  );
+  expect(seven?.argv.slice(1, 5)).toEqual([
+    "-NoLogo",
+    "-NoExit",
+    "-Interactive",
+    "-Command",
+  ]);
 });
 
 /**

@@ -30,6 +30,10 @@ const SCRIPTS: Record<string, string> = {
   bash: "shell-integration-bash.sh",
   zsh: "shell-integration-zsh.sh",
   pwsh: "shell-integration-pwsh.ps1",
+  // Windows PowerShell 5.1 is the SAME integration script and a different argv:
+  // the resolver's documented last resort is `powershell.exe`, so a pane can
+  // legitimately be 5.1 and must still be integrated (see `integratedShellArgv`).
+  powershell: "shell-integration-pwsh.ps1",
 };
 
 /** The directory this module lives in: where the bundled scripts are. */
@@ -78,21 +82,28 @@ export function integratedShellArgv(
       env: { ZDOTDIR: ensureZshRcDir() },
     };
   // PowerShell has no --rcfile and reads no rc file of its own. It takes a command to
-  // dot-source, and it must be INTERACTIVE for the read-line override to be the one
-  // that reads input -- measured: without `-Interactive` the startup and prompt markers
-  // appear and the command line arrives empty, and nothing in the argv looks wrong.
-  if (name === "pwsh")
-    return {
-      argv: [
-        shellPath,
-        "-NoLogo",
-        "-NoExit",
-        "-Interactive",
-        "-Command",
-        `. '${join(BUNDLED, script)}'`,
-      ],
-      env: {},
-    };
+  // dot-source.
+  //
+  // THE FLAGS FOLLOW THE SHELL THAT WAS RESOLVED, not the name the caller asked
+  // for. `-Interactive` is pwsh-7-only: Windows PowerShell 5.1 — the resolver's
+  // documented last resort — answers it with "-Interactive : The term
+  // '-Interactive' is not recognized … CommandNotFoundException" and the pane
+  // opens unusable (measured on this host; the same flags without it run 5.1
+  // fine). This is the bug the user hit: the panel asked for `pwsh`, the
+  // resolver answered 5.1 (a per-user pwsh 7 install was not on the runtime's
+  // PATH), and this argv handed 5.1 a switch only 7 has. The reference
+  // implementation never assumes 7 anywhere — its PowerShell argv is
+  // `pwsh -NoLogo -NoProfile -NonInteractive -Command …`, every switch of which
+  // 5.1 accepts — so the spelling here is chosen per resolved product.
+  if (name === "pwsh" || name === "powershell") {
+    const argv = [shellPath, "-NoLogo", "-NoExit"];
+    // pwsh 7 keeps the switch its read-line override needs: without it the
+    // startup and prompt markers still appear but the command line arrives empty
+    // (measured).
+    if (name === "pwsh") argv.push("-Interactive");
+    argv.push("-Command", `. '${join(BUNDLED, script)}'`);
+    return { argv, env: {} };
+  }
   return { argv: [shellPath, "--rcfile", join(BUNDLED, script)], env: {} };
 }
 
@@ -208,17 +219,29 @@ export function interactiveShellArgv(
   const candidates = existsSync(trimmed) ? [trimmed] : [words[0]];
   for (const candidate of candidates) {
     if (candidate === undefined) continue;
-    const integrated = integratedShellArgv(candidate);
+    // RESOLVE FIRST, then integrate: which PowerShell this host has is the
+    // resolver's answer, and the flags must match what it found — deciding them
+    // from the requested name is exactly how a 5.1 pane was handed the pwsh-7
+    // `-Interactive` switch.
+    const resolved = resolveShellPath(candidate, os);
+    const file = resolved[0];
+    if (file === undefined) continue;
+    const integrated = integratedShellArgv(file);
     if (!integrated) continue;
     // The path first, then the script flags that came with it, then whatever the
     // pane's own command line carried (`-l`, `-i`) — the remainder only applies
     // to the word-shaped candidate; a whole-path candidate already carries all.
     const rest = candidate === trimmed ? [] : words.slice(1);
-    return [
-      ...resolveShellPath(integrated.argv[0]!, os),
-      ...integrated.argv.slice(1),
-      ...rest,
-    ];
+    // A PowerShell pane is integrated only when the pane IS the shell. Given
+    // extra words it is a COMMAND (`pwsh -Command 'x'`), and the integration's own
+    // `-Command` would then be followed by a second one — PowerShell takes the
+    // last, so the pane ran the command line with the integration's flags in
+    // front of it and the text arrived mangled (measured: `[Console]::` reached
+    // the shell as `[Console`). bash and zsh compose with extra arguments
+    // (`--rcfile` is additive), which is why the rule is PowerShell's.
+    const name = basename(file).replace(/\.(exe|cmd|bat)$/i, "");
+    if ((name === "pwsh" || name === "powershell") && rest.length > 0) continue;
+    return [...integrated.argv, ...rest];
   }
   return undefined;
 }

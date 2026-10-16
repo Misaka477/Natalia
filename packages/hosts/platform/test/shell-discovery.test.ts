@@ -20,6 +20,7 @@ test("the Windows branch probes the well-known roots, then the PATH", () => {
   // env is spelled out so the candidates are this host's, not the machine's.
   const env = {
     ProgramFiles: "C:\\Program Files",
+    LOCALAPPDATA: "C:\\Users\\demo\\AppData\\Local",
     SystemRoot: "C:\\Windows",
     PATH: "D:\\tools",
   };
@@ -34,7 +35,9 @@ test("the Windows branch probes the well-known roots, then the PATH", () => {
     path: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
   });
 
-  // The whole candidate list, in order: 7, then the PATH, then the OS's own 5.1.
+  // The whole candidate list, in order: the machine-wide 7, the PER-USER 7 (the
+  // MSI's default scope, which no machine-wide list can see), the PATH, then the
+  // OS's own 5.1.
   const order: string[] = [];
   discoverDefaultShell({
     os: "win32",
@@ -46,9 +49,22 @@ test("the Windows branch probes the well-known roots, then the PATH", () => {
   });
   expect(order).toEqual([
     "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    "C:\\Users\\demo\\AppData\\Local\\Programs\\PowerShell\\7\\pwsh.exe",
     "D:\\tools\\pwsh.exe",
     "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
   ]);
+
+  // A host whose only PowerShell 7 is the per-user install finds it: measured on
+  // this machine, where the pane resolved to 5.1 for exactly this reason.
+  const perUser = discoverDefaultShell({
+    os: "win32",
+    env,
+    exists: (path) => path.startsWith("C:\\Users\\demo\\AppData\\Local"),
+  });
+  expect(perUser).toEqual({
+    name: "pwsh",
+    path: "C:\\Users\\demo\\AppData\\Local\\Programs\\PowerShell\\7\\pwsh.exe",
+  });
 
   // A host without PowerShell 7 still has the OS's own 5.1 — never no shell.
   const fiveOne = discoverDefaultShell({

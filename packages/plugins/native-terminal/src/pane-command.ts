@@ -5,11 +5,7 @@
 // a fork-host one. The shell spelling still belongs to @anthelia/shell's
 // executor seam (`selectExecutor().resolve`), exactly as it did in place.
 import { selectExecutor } from "@anthelia/shell";
-import {
-  interactiveShellArgv,
-  shellEnvFor,
-  withShellIntegration,
-} from "./shell-integration-argv";
+import { interactiveShellArgv, shellEnvFor } from "./shell-integration-argv";
 
 /**
  * The shell that owns the pane command's spelling, selected PER CALL.
@@ -55,7 +51,14 @@ export function nativeTerminalPaneCommand(
       ? {}
       : { shellExecutable: "/bin/sh" }),
   });
-  return withShellIntegration([spec.command, ...spec.args]).argv;
+  // A COMMAND pane is not integrated, and the argv is the executor's own — one
+  // `-Command`, no shell integration in front of it. It used to be run through
+  // `withShellIntegration`, which prepends the shell's integration argv to
+  // whatever it is given: a PowerShell pane therefore ran with TWO `-Command`
+  // arguments and the command text arrived mangled (`[Console]::` reached the
+  // shell as `[Console`, measured on this host). No markers is the documented
+  // outcome for a command pane anyway — the screen read still carries it.
+  return [spec.command, ...spec.args];
 }
 
 /**

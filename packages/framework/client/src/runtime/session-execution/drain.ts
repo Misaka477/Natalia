@@ -18,6 +18,8 @@
  * trade a visible refusal for invisible data loss.
  */
 
+import { perfLog } from "@anthelia/runtime-services";
+
 /** The runtime's view of "which sessions have a turn in flight". */
 export type DrainSource = {
   getExecutionBySession(): Map<string, { activeTurnID?: string } | undefined>;
@@ -33,15 +35,38 @@ export async function waitForDrain(
   );
   const started = Date.now();
   const deadline = started + timeoutMs;
+  // Instrumented (audit 缺口 4: the seams that can fail): a drain that waits
+  // and a drain that gives up are both invisible in the log today, and the
+  // second one is exactly the case a reader is trying to explain — "why did
+  // the restart refuse?" starts here.
+  let reportedWait = false;
   for (;;) {
     let active = 0;
     for (const exec of source.getExecutionBySession().values())
       if (exec?.activeTurnID) active += 1;
-    if (active === 0) return { waitedMs: Date.now() - started };
-    if (Date.now() >= deadline)
-      throw new Error(
-        `drainForUpdate: ${active} turn(s) still active after ${Date.now() - started}ms — a restart would drop them; retry when quiet`,
+    if (active === 0) {
+      const waitedMs = Date.now() - started;
+      if (waitedMs > 100)
+        perfLog(
+          `[drain] quiet after ${waitedMs}ms (${active} active, waited for turns to finish)`,
+        );
+      return { waitedMs };
+    }
+    if (!reportedWait) {
+      reportedWait = true;
+      perfLog(
+        `[drain] waiting for ${active} active turn(s), budget ${timeoutMs}ms`,
       );
+    }
+    if (Date.now() >= deadline) {
+      const waitedMs = Date.now() - started;
+      perfLog(
+        `[drain] TIMED OUT after ${waitedMs}ms with ${active} turn(s) still active — refusing the switch rather than dropping them`,
+      );
+      throw new Error(
+        `drainForUpdate: ${active} turn(s) still active after ${waitedMs}ms — a restart would drop them; retry when quiet`,
+      );
+    }
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, 50);
       timer.unref?.();

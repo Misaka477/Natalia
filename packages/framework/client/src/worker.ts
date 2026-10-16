@@ -1673,7 +1673,7 @@ export async function handleWorkerRequest(
     const value = request.value as { sessionID?: string } | undefined;
     return client.resume?.(value?.sessionID);
   }
-  if (request.method === "snapshot") return client.snapshot();
+  if (request.method === "snapshot") return await client.snapshot();
   if (request.method === "diagnostic") {
     const input = request.value as { message?: unknown; level?: unknown };
     return client.diagnostic(

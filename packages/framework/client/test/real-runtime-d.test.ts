@@ -1985,8 +1985,11 @@ test("an initialization failure surfaces its cause, not a derived symptom", asyn
     expect(error).toBeInstanceOf(Error);
     expect(String(error)).toContain("permission profile not found");
   }
-  // The pure constructor keeps working; nothing derived was invented.
-  expect(client.snapshot().type).toBe("snapshot.created");
+  // The pure constructor keeps working; nothing derived was invented. Awaited
+  // because the contract now says an implementation MAY answer with a promise
+  // (a remote face cannot snapshot synchronously) — this one still returns the
+  // event directly, which `await` accepts unchanged.
+  expect((await client.snapshot()).type).toBe("snapshot.created");
   await client.dispose?.();
 }, 30_000);
 

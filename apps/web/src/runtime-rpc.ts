@@ -880,30 +880,14 @@ export function createWebRuntimeClient(
         ...(input as Record<string, unknown>),
       })) as never;
     },
-    // KNOWN DEFECT, and a fabrication rather than a default.
-    //
-    // The RPC is fired and its result DISCARDED, and a fixed
-    // `{type: "snapshot.created", id: "snap_web", files: []}` is returned
-    // instead — so a caller is told a snapshot was created with that id and no
-    // files, whatever the runtime answered.
-    //
-    // It cannot be fixed HERE, and that is why it is written down rather than
-    // quietly left: `RuntimeClient.snapshot()` is declared SYNCHRONOUS and
-    // genuinely is on the server (`rpc.ts` takes `client.snapshot()` as the
-    // RPC result, and `real-runtime-d.test.ts` pins the sync event), while this
-    // face is REMOTE — no synchronous implementation can obtain the real
-    // answer. Removing the fabrication therefore starts at the interface: it
-    // has to become `RuntimeEvent | Promise<RuntimeEvent>` and every consumer
-    // has to await (the transport handler, the worker dispatcher, this face,
-    // and `app-neu.tsx`'s `onSnapshot` consumer). Half of that change makes the
-    // transport serialize a promise, which is worse than the lie.
+    // The real answer, not a fabrication (audit 22b). This face is REMOTE and
+    // cannot snapshot synchronously, so the contract became
+    // `RuntimeEvent | Promise<RuntimeEvent>` and every hop now awaits — the
+    // transport route, the worker dispatcher, and this face. A caller gets the
+    // runtime's actual event (its id and its files) instead of the fixed
+    // `{id: "snap_web", files: []}` the RPC used to discard.
     snapshot() {
-      void call("snapshot");
-      return {
-        type: "snapshot.created",
-        id: "snap_web",
-        files: [],
-      } as never;
+      return call("snapshot") as Promise<RuntimeEvent>;
     },
     diagnostic(message, level) {
       const event: RuntimeEvent = {

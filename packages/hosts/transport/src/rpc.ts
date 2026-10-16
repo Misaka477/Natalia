@@ -1711,7 +1711,11 @@ export async function handleRPCMessage(
       return {
         jsonrpc: "2.0",
         id: body.id ?? null,
-        result: client.snapshot(),
+        // Awaited: the contract now allows an implementation to answer with a
+        // promise (a REMOTE face cannot snapshot synchronously), and returning
+        // the promise itself would serialize `{}` — the fabricated-answer bug
+        // traded for a silent one.
+        result: await client.snapshot(),
       };
     if (body.method === "session.history") {
       optionsGuard(client, "history");

@@ -4821,7 +4821,20 @@ export type RuntimeClient = {
     reason?: string;
     note?: string;
   }>;
-  snapshot(input?: { sessionID?: string; workspaceID?: string }): RuntimeEvent;
+  /**
+   * Create a snapshot and answer with its event.
+   *
+   * The union exists because of one honest asymmetry the RPC face exposed:
+   * the server's client snapshots synchronously, but a REMOTE face cannot —
+   * so `apps/web` returned a fabricated `{id: "snap_web", files: []}` while
+   * the real answer was discarded (the fabrication is removed; this face now
+   * returns the call's promise). An implementation that already has the event
+   * returns it directly, which still type-checks; consumers await.
+   */
+  snapshot(input?: {
+    sessionID?: string;
+    workspaceID?: string;
+  }): RuntimeEvent | Promise<RuntimeEvent>;
   diagnostic(message: string, level?: "info" | "warning" | "error"): void;
   lastSubmission(input?: {
     sessionID?: string;

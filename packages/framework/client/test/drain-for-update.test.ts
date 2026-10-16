@@ -135,6 +135,17 @@ test("a timed-out drain throws with the count and leaves NO sticky refusal", asy
     /1 turn\(s\) still active after \d+ms/u,
   );
 
+  // The seam is in the OPERATIONS LOG, at the default level (audit 缺口 4):
+  // "why did the restart refuse" must be answerable from the log a reader
+  // has open, not only from the thrown message the caller saw. The perf
+  // helper would have been silent here without NATALIA_PERF_VERBOSE=1.
+  const drainErrors =
+    (await client.operationRecords?.({ component: "drain" })) ?? [];
+  expect(drainErrors.length).toBeGreaterThan(0);
+  expect(
+    drainErrors.some((record) => record.message.includes("timed out")),
+  ).toBe(true);
+
   // release the original turn: it completes normally
   release();
   await gate;

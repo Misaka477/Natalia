@@ -18,7 +18,7 @@
  * trade a visible refusal for invisible data loss.
  */
 
-import { perfLog } from "@anthelia/runtime-services";
+import { logOf, type OperationLog } from "@anthelia/operation-log";
 
 /** The runtime's view of "which sessions have a turn in flight". */
 export type DrainSource = {
@@ -27,18 +27,29 @@ export type DrainSource = {
 
 export async function waitForDrain(
   source: DrainSource,
-  input?: { timeoutMs?: number },
+  input?: {
+    timeoutMs?: number;
+    /**
+     * The operation log to report on. Optional so a bare caller (a test, a
+     * path with no composition) still works — but the DEFAULT level, not a
+     * perf-gated one: a timeout that refuses a switch must be in the log a
+     * reader actually has open, and `perfLog` is silent without
+     * NATALIA_PERF_VERBOSE=1.
+     */
+    log?: OperationLog;
+  },
 ): Promise<{ waitedMs: number }> {
   const timeoutMs = Math.max(
     200,
     Math.min(Math.round(input?.timeoutMs ?? 120_000), 600_000),
   );
+  const log = input?.log;
   const started = Date.now();
   const deadline = started + timeoutMs;
   // Instrumented (audit 缺口 4: the seams that can fail): a drain that waits
-  // and a drain that gives up are both invisible in the log today, and the
-  // second one is exactly the case a reader is trying to explain — "why did
-  // the restart refuse?" starts here.
+  // and a drain that gives up were both absent from the log, and the second
+  // is exactly the case a reader is trying to explain — "why did the restart
+  // refuse?" starts here.
   let reportedWait = false;
   for (;;) {
     let active = 0;
@@ -46,23 +57,19 @@ export async function waitForDrain(
       if (exec?.activeTurnID) active += 1;
     if (active === 0) {
       const waitedMs = Date.now() - started;
-      if (waitedMs > 100)
-        perfLog(
-          `[drain] quiet after ${waitedMs}ms (${active} active, waited for turns to finish)`,
-        );
+      if (waitedMs > 100) log?.info("drain", "quiet", { waitedMs, active });
       return { waitedMs };
     }
     if (!reportedWait) {
       reportedWait = true;
-      perfLog(
-        `[drain] waiting for ${active} active turn(s), budget ${timeoutMs}ms`,
-      );
+      log?.info("drain", "waiting", { active, budgetMs: timeoutMs });
     }
     if (Date.now() >= deadline) {
       const waitedMs = Date.now() - started;
-      perfLog(
-        `[drain] TIMED OUT after ${waitedMs}ms with ${active} turn(s) still active — refusing the switch rather than dropping them`,
-      );
+      log?.error("drain", "timed out — refusing the switch", {
+        waitedMs,
+        active,
+      });
       throw new Error(
         `drainForUpdate: ${active} turn(s) still active after ${waitedMs}ms — a restart would drop them; retry when quiet`,
       );

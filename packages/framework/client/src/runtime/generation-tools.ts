@@ -26,7 +26,8 @@ import {
   updateConfigAtScope,
 } from "@anthelia/config";
 import type { ConfigV4, Generation, RuntimeEvent } from "@anthelia/contracts";
-import { perfLog, sandboxService } from "@anthelia/runtime-services";
+import { sandboxService } from "@anthelia/runtime-services";
+import { logOf } from "@anthelia/operation-log";
 import { waitForDrain } from "./session-execution/drain";
 import { planTreePromotion, treeConflictReason } from "./generation-tree";
 import { editParent, planEdits } from "@anthelia/tools";
@@ -333,7 +334,10 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         // The drain is the shared wait (the same one the lifecycle surface
         // and the daemon's flip path use) — one answer to "is it quiet".
         drain: async () => {
-          await waitForDrain(ctx.ports, { timeoutMs: 120_000 });
+          await waitForDrain(ctx.ports, {
+            timeoutMs: 120_000,
+            log: logOf(ctx.state.serviceDirectory),
+          });
         },
         // Land the candidate's CODE: the workspace's repository checks the
         // ref out (or applies the patch). The process restart that makes
@@ -356,19 +360,25 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
       // returned only to the model, which is the one reader that cannot
       // investigate — the operator's log had nothing. The stage is the answer
       // to "where did it stop", the verdict's failing checks are the answer to
-      // "why", and both levels carry the candidate so two switches can be
-      // told apart.
-      const summary = `candidate=${args.candidateID} stage=${result.stage} verdict=${result.verdict.verdict} failed=${
-        result.verdict.checks
+      // "why", and both carry the candidate so two switches can be told apart.
+      // The OPERATION log, not the perf helper: the perf helper is silent
+      // unless NATALIA_PERF_VERBOSE=1, and a switch that did not take is not a
+      // timing observation — it must be there at the default level.
+      const log = logOf(ctx.state.serviceDirectory);
+      const fields = {
+        candidateID: args.candidateID,
+        stage: result.stage,
+        verdict: result.verdict.verdict,
+        failedChecks: result.verdict.checks
           .filter((check) => !check.ok)
-          .map(
-            (check) => check.check + (check.detail ? ` (${check.detail})` : ""),
-          )
-          .join(",") || "none"
-      }`;
+          .map((check) =>
+            check.detail ? `${check.check}: ${check.detail}` : check.check,
+          ),
+        ...(result.detail ? { detail: result.detail } : {}),
+      };
       if (result.switched || result.stage === "rolled-back")
-        perfLog(`[generation] switch ${summary}`);
-      else perfLog(`[generation] switch DID NOT TAKE (${summary})`);
+        log.info("generation-switch", "applied", fields);
+      else log.error("generation-switch", "did not take", fields);
       // 洞 6: the model is TOLD it moved. A live switch announces itself
       // now; a deferred one announces at the boot that performs it (the
       // reload's own notice channel), because a notice for a switch that

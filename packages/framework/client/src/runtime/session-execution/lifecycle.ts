@@ -117,7 +117,12 @@ export function createLifecycleSurface(
     async drainForUpdate(input?: { timeoutMs?: number }): Promise<{
       waitedMs: number;
     }> {
-      return await waitForDrain(ctx.ports, input);
+      // The log rides so the wait reports at the DEFAULT level: a refusal to
+      // switch over a live turn has to be visible without turning anything up.
+      return await waitForDrain(ctx.ports, {
+        ...input,
+        log: logOf(ctx.state.serviceDirectory),
+      });
     },
     async dispose() {
       const flushStart = Date.now();

@@ -125,6 +125,11 @@ apps/cef-desktop/build/
 .btmp/
 /packages/plugins/native-terminal/native/pty-bridge/target/
 
+# Bun's scratch directory, created as `undefined/bun/...` when a script runs
+# without BUN_TMPDIR — the same accident that put a `.pile` cache into history
+# once already (2026-10-04). Ignored by name so `git add` cannot sweep it.
+/undefined/
+
 # Machine-local runtime state: never tracked, never shipped
 .natalia/
 

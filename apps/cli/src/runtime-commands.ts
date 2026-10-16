@@ -25,7 +25,7 @@ import {
   pluginStoreRoot,
 } from "./official-plugins";
 import { perfLog } from "@anthelia/runtime-services";
-import { nataliaCachePath } from "@anthelia/platform";
+import { nataliaCachePath, nataliaHomeJoin } from "@anthelia/platform";
 
 export async function handleRuntimeCommand(argv: string[]) {
   const command = argv[0];
@@ -77,12 +77,15 @@ export async function handleRuntimeCommand(argv: string[]) {
       // and installing an official plugin from the shell failed there.
       pluginDistributionRoot: officialPluginDistributionRoot(),
       globalConfigPath,
-      sessionDir: resolve(process.cwd(), ".natalia", "workspace-sessions"),
-      checkpointDir: resolve(
-        process.cwd(),
-        ".natalia",
-        "workspace-checkpoints",
-      ),
+      // The one home, never the working directory. These two are the JSON
+      // store's own roots (the SQLite store is per-workspace), and a
+      // cwd-relative one put them inside the install tree for a Start Menu
+      // launch — the tree the uninstaller deletes, so the fallback store
+      // died with an uninstall. Existing data under the old spelling is not
+      // moved here: it is keyed by workspace and the move belongs to the
+      // workspace manager, which knows each real root.
+      sessionDir: nataliaHomeJoin({}, "workspace-sessions"),
+      checkpointDir: nataliaHomeJoin({}, "workspace-checkpoints"),
       // The web server is the long-lived API surface for a workspace; persist
       // sessions into the same per-workspace SQLite store used by the TUI.
       useSqliteStore: true,

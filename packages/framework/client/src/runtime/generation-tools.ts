@@ -26,7 +26,7 @@ import {
   updateConfigAtScope,
 } from "@anthelia/config";
 import type { ConfigV4, Generation, RuntimeEvent } from "@anthelia/contracts";
-import { sandboxService } from "@anthelia/runtime-services";
+import { perfLog, sandboxService } from "@anthelia/runtime-services";
 import { waitForDrain } from "./session-execution/drain";
 import { planTreePromotion, treeConflictReason } from "./generation-tree";
 import { editParent, planEdits } from "@anthelia/tools";
@@ -352,6 +352,23 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
         },
         publish: (event) => ctx.ports.publish(event),
       });
+      // Instrumented (audit 缺口 4: the seams that can fail). A failed switch
+      // returned only to the model, which is the one reader that cannot
+      // investigate — the operator's log had nothing. The stage is the answer
+      // to "where did it stop", the verdict's failing checks are the answer to
+      // "why", and both levels carry the candidate so two switches can be
+      // told apart.
+      const summary = `candidate=${args.candidateID} stage=${result.stage} verdict=${result.verdict.verdict} failed=${
+        result.verdict.checks
+          .filter((check) => !check.ok)
+          .map(
+            (check) => check.check + (check.detail ? ` (${check.detail})` : ""),
+          )
+          .join(",") || "none"
+      }`;
+      if (result.switched || result.stage === "rolled-back")
+        perfLog(`[generation] switch ${summary}`);
+      else perfLog(`[generation] switch DID NOT TAKE (${summary})`);
       // 洞 6: the model is TOLD it moved. A live switch announces itself
       // now; a deferred one announces at the boot that performs it (the
       // reload's own notice channel), because a notice for a switch that

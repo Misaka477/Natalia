@@ -6,9 +6,9 @@
  * workspace and its `<workspace>/.natalia` (object store, checkpoints, session
  * records) sat inside the tree the uninstaller deletes. The reference
  * implementation settles this with a fixed path under the OS Documents
- * directory (`packages/api/workspace-controller/src/default-directory.ts`:
- * `<Documents>/deepseek-harness/default-workspace`), resolved from the OS
- * rather than from the working directory. This is the same rule for Natalia:
+ * directory (its workspace controller's own `default-directory` module: the
+ * Documents directory, then one fixed leaf), resolved from the OS rather than
+ * from the working directory. This is the same rule for Natalia:
  * `<Documents>/Natalia/default-workspace`, one installation, one path, whatever
  * the process was started from.
  *

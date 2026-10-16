@@ -128,7 +128,8 @@ async function run<T>(request: SessionProjectTask): Promise<T> {
   // waits on the first of these, so an unbounded one is what turned a broken
   // worker into a window that spun forever with no error anywhere. The
   // connection layer answers the same question with a 15s readiness deadline
-  // (dsh's generationReadyTimeoutMs); this is the same rule one layer down.
+  // (the reference implementation's own readiness timeout); this is the same
+  // rule one layer down.
   const instance = (() => {
     try {
       return pool.worker();

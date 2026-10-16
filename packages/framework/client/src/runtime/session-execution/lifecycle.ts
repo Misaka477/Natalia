@@ -1,4 +1,5 @@
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
+import { perfLog } from "@anthelia/runtime-services";
 import { waitForDrain } from "./drain";
 import { sessionStoreController } from "@anthelia/session-store";
 import { checkpointFactory } from "@anthelia/checkpoint";
@@ -87,17 +88,17 @@ export function createLifecycleSurface(
       const config = ctx.ports.getTsRuntimeConfig();
       if (!config) throw new Error("runtime configuration is not initialized");
       // The worker round trip is an optimisation for a large config, not the
-      // answer. In a packaged build the worker module is not a file on disk
-      // — the bundler inlines it and `import.meta.url` resolves into the
-      // runtime's own embedded paths — so `new Worker(...)` there fails
-      // without settling anything, and this await never returns. `config.get`
-      // is the first request the web shell makes, which is why a packaged
-      // Windows copy spun on its loading surface forever while every other
-      // endpoint answered correctly. structuredClone is the same copy without
-      // the round trip; the log names the path that ran, because a user whose
-      // settings are slow to load deserves to know it was the fallback.
+      // answer. It is a real staged file beside the executable, resolved
+      // through the runtime worker locator — but a missing stage, a spawn
+      // that fails, or a worker that dies still leaves this await unsettled,
+      // and `config.get` is the first request the web shell makes: an
+      // unbounded wait there is what spun a packaged Windows copy on its
+      // loading surface while every other endpoint answered. structuredClone
+      // is the same copy without the round trip; the log names the path that
+      // ran, because a user whose settings are slow to load deserves to know
+      // it was the fallback.
       return await cloneConfigInWorker(config).catch((error) => {
-        console.warn(
+        perfLog(
           `[runtime] config clone worker unavailable, using structuredClone: ${
             error instanceof Error ? error.message : String(error)
           }`,

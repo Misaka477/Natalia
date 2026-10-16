@@ -36,9 +36,9 @@ test("the keepalive stays well inside the client's tolerance", async () => {
     source.match(/SSE_HEARTBEAT_MS = ([\d_]+)/u)?.[1]?.replaceAll("_", ""),
   );
   expect(Number.isFinite(heartbeat)).toBe(true);
-  // dsh pings on the same order and terminates a stream after two missed
-  // pings; a keepalive slower than that would let a half-open connection sit
-  // unnoticed for minutes.
+  // The reference implementation pings on the same order and terminates a
+  // stream after two missed pings; a keepalive slower than that would let a
+  // half-open connection sit unnoticed for minutes.
   expect(heartbeat).toBeLessThanOrEqual(15_000);
   // And every write to a subscriber goes through the one guarded writer, so a
   // dead front-end cannot throw into the runtime's publish path or stay in the

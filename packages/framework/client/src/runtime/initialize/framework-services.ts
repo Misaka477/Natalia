@@ -72,7 +72,7 @@ import {
   operationLog,
 } from "@anthelia/operation-log";
 import { createRuntimeDiagnostics } from "@anthelia/runtime-diagnostics";
-import { runtimeDiagnostics } from "@anthelia/runtime-services";
+import { perfLog, runtimeDiagnostics } from "@anthelia/runtime-services";
 import { sessionInvariants } from "@anthelia/session";
 import { constitutionInvariants } from "@natalia/governance-ledger";
 import { workLedgerInvariants } from "@natalia/work-ledger";
@@ -198,10 +198,13 @@ export async function wireFrameworkServices(
     for (const handle of closeHandles.reverse()) handle();
   };
   // TEMPORARY: which await here costs 22 seconds on a packaged Windows copy.
+  // A timing probe is a log line, not a console one: the runtime zone writes
+  // through the operation log so the line carries the ambient scope and can be
+  // raised with the live verbosity valve.
   const slow = (label: string) => {
     const started = performance.now();
     return () =>
-      console.error(
+      perfLog(
         `[slowinit] ${label} +${(performance.now() - started).toFixed(1)}ms`,
       );
   };

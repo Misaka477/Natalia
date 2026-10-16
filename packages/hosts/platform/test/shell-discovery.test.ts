@@ -54,7 +54,7 @@ test("linux is bash and macOS is zsh, both found by the file existing", () => {
   expect(macosWithoutZsh).toEqual({ name: "bash", path: "/bin/bash" });
 });
 
-test("a POSIX shell runs a script through -lc, login and command", () => {
+test("a POSIX shell runs a script through -lc, profile and command", () => {
   const invocation = shellInvocation("echo hi", {
     os: "linux",
     exists: (path) => path === "/usr/bin/bash",

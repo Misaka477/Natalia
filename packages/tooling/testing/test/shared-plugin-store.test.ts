@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { realpath, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   officialPluginStoreRoot,
   officialPluginWorkspace,
@@ -37,9 +37,11 @@ test("every workspace's official plugins resolve to the shared install's realpat
       expect(entries.length).toBeGreaterThan(0);
       // Each workspace's lock names its own store path, but the manifest
       // realpath — the URL the loader evaluates — lands in the shared
-      // install for BOTH.
+      // install for BOTH. The manifest is recorded RELATIVE to its store
+      // (a store that moves keeps loading), so it is resolved here the way
+      // the loader resolves it.
       for (const entry of entries)
-        expect(await realpath(entry.manifest)).toContain(
+        expect(await realpath(resolve(store, entry.manifest))).toContain(
           await realpath(sharedPluginStoreRoot),
         );
     }
@@ -49,7 +51,7 @@ test("every workspace's official plugins resolve to the shared install's realpat
         await readFile(join(store, "natalia.lock"), "utf8"),
       ) as { plugins: Record<string, { manifest: string }> };
       const first = Object.values(lock.plugins)[0]!;
-      return await realpath(first.manifest);
+      return await realpath(resolve(store, first.manifest));
     };
     expect(await manifestFor(firstStore)).toBe(await manifestFor(secondStore));
   } finally {

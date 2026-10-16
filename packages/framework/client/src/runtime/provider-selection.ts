@@ -441,7 +441,7 @@ export function createProviderSelection(
       // anywhere. The synchronous path builds the same catalogue; a log line
       // says the fast one was skipped, which is the only difference a user
       // can see.
-      console.warn(
+      perfLog(
         `[runtime] model catalog worker unavailable, building inline: ${
           error instanceof Error ? error.message : String(error)
         }`,

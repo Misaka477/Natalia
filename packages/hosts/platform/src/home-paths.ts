@@ -13,12 +13,12 @@
  * working directory to the install folder, so a normal launch wrote the model
  * configuration into `<install>\.natalia\` — which the uninstaller deletes.
  *
- * The reference implementation settles this with one module
- * (`packages/util/home-paths`): a single home, `~/.dsh`, resolved from an
- * explicit value, then `$DSH_HOME`, then the user home — never the working
- * directory, and with a blank environment value treated as unset so that an
- * empty override cannot silently mean "here". Everything else is a typed child
- * of that home. This module is the same contract for Natalia.
+ * The reference implementation settles this with one module: a single home
+ * under the user home, resolved from an explicit value, then its own home
+ * environment variable, then the user home — never the working directory, and
+ * with a blank environment value treated as unset so that an empty override
+ * cannot silently mean "here". Everything else is a typed child of that home.
+ * This module is the same contract for Natalia.
  *
  * Platform branch: NONE, deliberately. `homedir()` is the user home on every
  * platform we ship (`%USERPROFILE%` on Windows, `$HOME` elsewhere), and the

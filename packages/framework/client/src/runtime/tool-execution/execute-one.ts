@@ -108,6 +108,8 @@ export function createExecuteOne(
             type: "diagnostic",
             level: "info",
             message: diagnostic,
+            // The spine: this call's turn — the hook event above names it.
+            ...(turnID ? { turnID } : {}),
           });
         }
         if (preResult.allowed) return { decision: "allow" as const };
@@ -122,12 +124,16 @@ export function createExecuteOne(
                 type: "diagnostic",
                 level: "warning",
                 message: `cleared blocked terminal command buffer for ${terminalID}`,
+                // The spine: the turn that was blocked.
+                ...(turnID ? { turnID } : {}),
               });
             } catch (error) {
               publish({
                 type: "diagnostic",
                 level: "warning",
                 message: `could not clear blocked terminal command buffer for ${terminalID}: ${error instanceof Error ? error.message : String(error)}`,
+                // The spine, even when the clearing itself failed.
+                ...(turnID ? { turnID } : {}),
               });
             }
           }

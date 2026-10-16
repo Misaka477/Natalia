@@ -387,6 +387,9 @@ export async function installSubagents(
             level: "warning",
             message:
               "Provider emitted a subagent tool call after tools were disabled; ignored the call and finalized with text",
+            // The spine: the SUBAGENT's turn — the same id its content and
+            // thinking events carry, so the warning joins its stream.
+            turnID: subagentTurnID(runner),
           });
         if (!output.trim() && (isLastStep || step > 1)) {
           publishSubagentEvent(runner, {
@@ -560,6 +563,8 @@ export async function installSubagents(
               level: "warning",
               message:
                 "Provider emitted a subagent tool call after tools were disabled; ignored the call and finalized with text",
+              // The spine: the subagent's own turn id (audit 缺口 3).
+              turnID: subagentTurnID(runner),
             });
           if (!output.trim() && (isLastStep || step > 1)) {
             publishSubagentEvent(runner, {

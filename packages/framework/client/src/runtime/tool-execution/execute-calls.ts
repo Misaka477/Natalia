@@ -316,6 +316,8 @@ export function createExecuteCalls(
         type: "diagnostic",
         level: "warning",
         message: `tool batch contained duplicate tool_call_id(s); remapped before execution: ${normalizedCalls.duplicates.join(", ")}`,
+        // The spine: a remapped id is a fact about THIS turn's batch.
+        ...(turnID ? { turnID } : {}),
       });
     const effectiveCalls = normalizedCalls.calls;
     const assistantMessage: ProviderMessage = {
@@ -385,6 +387,8 @@ export function createExecuteCalls(
           type: "diagnostic",
           level: "warning",
           message: reason,
+          // The spine: which turn the provider emitted this malformed call in.
+          ...(turnID ? { turnID } : {}),
         });
         publish({
           type: "tool.update",

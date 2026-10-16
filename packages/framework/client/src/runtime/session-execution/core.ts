@@ -136,6 +136,11 @@ export function createCoreSurface(
           type: "diagnostic",
           level: "warning",
           message: `session cancellation cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+          // The spine: the turn that was being cancelled — the record is
+          // about its cleanup, not about the session in general.
+          ...(cancelledExec?.activeTurnID
+            ? { turnID: cancelledExec.activeTurnID }
+            : {}),
         }),
       );
     },
@@ -149,7 +154,15 @@ export function createCoreSurface(
       return event;
     },
     diagnostic(message, level = "warning") {
-      ctx.ports.publish({ type: "diagnostic", level, message });
+      const active = ctx.ports.getActiveExec();
+      ctx.ports.publish({
+        type: "diagnostic",
+        level,
+        message,
+        // The spine when one exists: a surface-level diagnostic raised during
+        // a turn is still a sentence about THAT turn.
+        ...(active?.activeTurnID ? { turnID: active.activeTurnID } : {}),
+      });
     },
     lastSubmission() {
       return ctx.ports.getActiveExec()?.lastSubmitted;

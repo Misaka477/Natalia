@@ -529,6 +529,11 @@ export function createProviderRunner(input: ProviderRunnerInput) {
           level: "warning",
           message:
             "Provider omitted the required final text response; emitted a deterministic fallback",
+          // The spine, plus a stable code: the same fact the turn.finished
+          // carries as `reason: "missing_final_response"`, so the occurrence
+          // can be counted without parsing prose.
+          turnID: id,
+          code: "missing_final_response",
         });
       }
       if (assistant)

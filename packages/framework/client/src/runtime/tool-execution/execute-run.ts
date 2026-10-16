@@ -354,6 +354,9 @@ export async function runExecuteStage(
         type: "diagnostic",
         level: "warning",
         message: `pre-tool checkpoint failed for ${tool.name}: ${error instanceof Error ? error.message : String(error)}`,
+        // The spine: this turn's own id — the work-graph registration above
+        // already carries it.
+        ...(turnID ? { turnID } : {}),
       });
     }
     // WG4 Phase 3: register the expected mutation before the tool runs.

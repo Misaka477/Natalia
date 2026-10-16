@@ -1012,6 +1012,60 @@ test("restoreProjection uses a disk checkpoint + tail and fails soft to full", (
   }
 });
 
+test("a journaled diagnostic keeps its turn through the restore path", () => {
+  // The round-trip the `turnID` change has to survive: the sink journals the
+  // event, `restoreProjection` replays the tail, and `sessionAttach` feeds
+  // `replayableEvents` back into the diagnostics surface. If persistence
+  // dropped the field, the diagnostic would come back as a sentence with no
+  // subject — the very thing the field was added to prevent. The question the
+  // field invites ("did adding it break restore?") answers the same way: the
+  // replay passes the stored event through.
+  const path = join(
+    tmpdir(),
+    `natalia-diagnostic-roundtrip-${crypto.randomUUID()}.db`,
+  );
+  const store = new SqliteSessionStore(path);
+  const sessionID = "ses_diag_roundtrip" as SessionID;
+  try {
+    store.create(sessionID, "Diagnostic round trip");
+    const diagnostic: RuntimeEvent = {
+      type: "diagnostic",
+      level: "warning",
+      message: "call did not run",
+      turnID: "turn_rt",
+      at: "2026-10-16T00:00:00.000Z",
+    };
+    store.appendEvent(sessionID, diagnostic);
+    // The record's own events are what a cold attach projects from when no
+    // checkpoint exists (the fallback `restoreProjection` takes); the tail is
+    // walked only above a checkpoint. Feeding the record the stored event is
+    // the path attach actually runs, and the field has to survive it.
+    const full = {
+      id: sessionID,
+      events: [diagnostic],
+    } as unknown as SessionRecord;
+    const adapter = {
+      loadProjectionCheckpoint: () => undefined,
+      eventsAfter: (id: string, after: number) =>
+        store.loadEventsAfter(id as SessionID, after),
+    };
+    const projection = restoreProjection(sessionID, full, adapter);
+    const replayed = projection.replayableEvents.filter(
+      (event) => event.type === "diagnostic",
+    );
+    expect(replayed).toEqual([
+      expect.objectContaining({
+        type: "diagnostic",
+        turnID: "turn_rt",
+        message: "call did not run",
+      }),
+    ]);
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+  }
+});
+
 test("appending durable events auto-saves a projection checkpoint", () => {
   const path = join(
     tmpdir(),

@@ -147,6 +147,47 @@ test("a construction change replaces the controller instead of serving stale pan
   closeTerminalControllerForShutdown();
 });
 
+test("a controller that was closed is never adopted", async () => {
+  // The measured failure: a runtime that shuts down closes its controller while
+  // the module-level holder still remembers it, and the NEXT runtime in the same
+  // process adopts the corpse — every pane start then dies with "terminal
+  // controller is closed". 14 suite failures, all of them a case that opens a
+  // pane after another case's runtime closed its controller.
+  const root = await mkdtemp(join(tmpdir(), "natalia-terminal-spent-"));
+  const { factory, processes } = fakePty();
+
+  const first = adoptTerminalController(inputs(root, factory), create);
+  await first.controller.init();
+  await first.controller.start({
+    command: "pwsh",
+    cwd: root,
+    id: "term_before_close",
+    sessionID: "ses_one",
+  });
+  // The framework's own teardown, not the holder's: the holder is left holding a
+  // controller nobody can use again.
+  await first.controller.close();
+  expect(first.controller.isClosed?.()).toBe(true);
+  expect(heldTerminalController()).toBe(first.controller);
+
+  const second = adoptTerminalController(inputs(root, factory), create);
+  expect(second.adopted).toBe(false);
+  expect(second.controller).not.toBe(first.controller);
+  // And the replacement really works: a fresh controller initializes and starts
+  // a pane, which is exactly what the adopted corpse could not do.
+  await second.controller.init();
+  const pane = await second.controller.start({
+    command: "pwsh",
+    cwd: root,
+    id: "term_after_close",
+    sessionID: "ses_one",
+  });
+  expect(pane.id).toBe("term_after_close");
+  // The spent controller's panes were already gone with its close.
+  expect(processes[0]?.exited).toBe(true);
+  closeTerminalControllerForShutdown();
+});
+
 test("the holder keeps exactly one controller and forgets it on shutdown", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-terminal-holder-"));
   const { factory } = fakePty();

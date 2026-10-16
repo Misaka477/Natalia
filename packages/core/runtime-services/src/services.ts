@@ -765,6 +765,18 @@ export interface TerminalController {
    * synchronous work during `exit`, and killing a pty is one call.
    */
   forceCloseSync?(): void;
+  /**
+   * Whether this controller is spent (`close()` has run).
+   *
+   * A closed controller is never reopened — `init` and `start` refuse — so a
+   * consumer that CACHES one across runtimes has to ask. The terminal plugin's
+   * holder caches the controller across plugin instances (so a config reload
+   * cannot kill the user's panes); without this, a runtime that shut down in the
+   * same process left a closed controller cached and the next runtime adopted it.
+   * Optional so an implementation that predates the fact still satisfies the
+   * interface; a consumer that cannot ask treats the controller as usable.
+   */
+  isClosed?(): boolean;
 }
 
 export interface McpService {

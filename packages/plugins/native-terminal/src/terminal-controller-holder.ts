@@ -47,7 +47,10 @@ export type TerminalControllerInputs = {
 };
 
 type HeldController = {
-  controller: TerminalController & { forceCloseSync?(): void };
+  controller: TerminalController & {
+    forceCloseSync?(): void;
+    isClosed?(): boolean;
+  };
   inputs: TerminalControllerInputs;
 };
 
@@ -84,14 +87,14 @@ export function adoptTerminalController(
   inputs: TerminalControllerInputs,
   create: (inputs: TerminalControllerInputs) => TerminalController,
 ): { controller: TerminalController; adopted: boolean } {
-  if (held && sameConstructionInputs(held.inputs, inputs)) {
+  if (held && sameConstructionInputs(held.inputs, inputs) && !isSpent(held)) {
     const controller = held.controller;
     // The new instance's input replaces the old one so later releases compare
     // against what this instance was given, not against the first one's.
     held = { controller: held.controller, inputs };
     return { controller, adopted: true };
   }
-  if (held) {
+  if (held && !isSpent(held)) {
     // A construction change (a different workspace root, different PTY budgets)
     // is the one case where the panes cannot be carried over: they were built
     // for the environment the controller no longer describes.
@@ -100,11 +103,32 @@ export function adoptTerminalController(
     } catch {
       // The host's exit path is already tearing the process down.
     }
-    held = undefined;
   }
+  held = undefined;
   const controller = create(inputs) as HeldController["controller"];
   held = { controller, inputs };
   return { controller, adopted: false };
+}
+
+/**
+ * Whether the held controller has already been closed.
+ *
+ * A runtime that shuts down closes the controller it was given (the framework's
+ * own teardown), while this module-level holder still remembers it. Adopting it
+ * afterwards handed the next runtime a controller whose `init` throws
+ * "terminal controller is closed" — measured as 14 failures across the suite,
+ * every one of them a case that opens a pane after another case's runtime had
+ * closed its controller in the same process. A closed controller is spent; it is
+ * never adopted and never closed twice.
+ */
+function isSpent(heldController: HeldController): boolean {
+  try {
+    return heldController.controller.isClosed?.() === true;
+  } catch {
+    // A controller that cannot answer is treated as usable: the alternative is
+    // discarding a live one (and its panes) on a guess.
+    return false;
+  }
 }
 
 /**

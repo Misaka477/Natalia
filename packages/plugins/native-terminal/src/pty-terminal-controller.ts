@@ -1892,5 +1892,12 @@ export function createPtyTerminalController(
     collectExited,
     close,
     forceCloseSync,
+    // Whether this controller can still serve. A closed controller is spent:
+    // `init` refuses, `start` refuses, and nothing reopens it. The holder asks
+    // before adopting one, because a runtime that shut down closes its
+    // controller while the module-level holder still remembered it — and the
+    // next runtime in the same process then adopted a corpse and every pane
+    // start died with "terminal controller is closed".
+    isClosed: () => closed,
   };
 }

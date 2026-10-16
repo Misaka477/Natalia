@@ -430,8 +430,14 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
       - name: Guards
+        # The same set `npm run verify` runs, in the same order. `guard:names`
+        # was missing here, and it caught what the rest could not: a comment
+        # naming another project, which the user's 2026-10-08 ruling bans from
+        # source. A guard that only runs on a developer's machine is a guard that
+        # reports after the push, so the two lists are one list.
         run: >
           npm run guard:imports && npm run guard:contract && npm run guard:deps
           && npm run guard:suppressions && npm run guard:tests
-          && npm run guard:events && npm run guard:console
-          && npm run guard:orphans && npm run guard:budgets && npm run guard:test-workspaces
+          && npm run guard:events && npm run guard:console && npm run guard:names
+          && npm run guard:orphans && npm run guard:budgets
+          && npm run guard:memory-budget && npm run guard:test-workspaces

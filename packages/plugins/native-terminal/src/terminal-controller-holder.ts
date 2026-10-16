@@ -17,11 +17,11 @@
  * terminal reloading on every message and every permission change.
  *
  * Panes are not plugin state. The reference implementation keeps terminal
- * sessions in a service whose lifetime is not a plugin reload (`dsh-terminal`
- * declares sessions process-local and gives their cleanup to the service, with
- * backends owning only the mechanics), and its subprocess package kills live
+ * sessions in a service whose lifetime is not a plugin reload (a process-local
+ * service that owns the sessions and gives their cleanup to itself, with
+ * backends owning only the mechanics), and its subprocess layer kills live
  * terminals synchronously from the host's own exit event rather than from a
- * plugin's disposal (`LocalTerminalHandle.terminateForHostExit`).
+ * plugin's disposal (`terminateForHostExit`).
  *
  * SO: a plugin instance ADOPTS the held controller when the construction input
  * still matches, because the panes, their ptys, their screens and their

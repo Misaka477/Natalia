@@ -68,6 +68,9 @@ async function drive(
     // explicitly. A failure still prints without this flag.
     env: {
       ...process.env,
+      // The inheritance half of the env-overlay test: a variable only the BRIDGE
+      // has must reach the child even when the spec overlays its own.
+      NATALIA_BRIDGE_ENV_PARENT: "from-the-test-parent",
       ...(verbose ? { NATALIA_CONPTY_BRIDGE_VERBOSE: "1" } : {}),
     },
   });
@@ -343,6 +346,36 @@ test.skipIf(!canRun)(
     expect(killed.exit).toBeDefined();
   },
   90_000,
+);
+
+test.skipIf(!canRun)(
+  "the bridge's env overlay reaches the child, and the inherited environment survives it",
+  async () => {
+    // `PtySpawnOptions.env` is how the controller hands a pane the variables its
+    // shell needs (the per-pane history file, zsh's ZDOTDIR). The Windows bridge
+    // ignored the spec's `env` for months — a divergence from the POSIX bridge
+    // that cost a feature its whole mechanism on one platform, silently. This
+    // pins both halves: the overlay arrives, and the bridge's own environment is
+    // still inherited (the merge, not a replacement).
+    const { text } = await drive(
+      {
+        file: "cmd.exe",
+        args: [
+          "/c",
+          "echo OVERLAY=%NATALIA_BRIDGE_ENV_PROBE% INHERITED=%NATALIA_BRIDGE_ENV_PARENT%",
+        ],
+        cwd: tmpdir(),
+        cols: 80,
+        rows: 25,
+        env: { NATALIA_BRIDGE_ENV_PROBE: "overlay-ok" },
+      },
+      async () => undefined,
+      (seen) => seen.some((frame) => frame.kind === "x"),
+    );
+    expect(text).toContain("OVERLAY=overlay-ok");
+    expect(text).toContain("INHERITED=from-the-test-parent");
+  },
+  60_000,
 );
 
 test.skipIf(!canRun)(

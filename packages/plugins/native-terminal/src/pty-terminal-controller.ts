@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   applyTerminalOutput,
   createTerminalScreen,
@@ -648,6 +649,40 @@ function envRecord(): Record<string, string> {
   env.TERM = env.TERM || "xterm-256color";
   env.COLORTERM = env.COLORTERM || "truecolor";
   return env;
+}
+
+/**
+ * The file a pane's ↑/↓ history belongs to.
+ *
+ * The user's spec is a SESSION-level terminal: each tab's state survives the
+ * runtime, and a tab reopened after a restart still offers the commands its
+ * session ran. The shell's own history is not that: it is one global file per
+ * user (`ConsoleHost_history.txt`, `~/.bash_history`), so after a restart a pane
+ * comes back with whatever the whole machine has typed — and on a fresh install
+ * with nothing at all. Pointing the shell's read-line at a per-pane file (see
+ * `NATALIA_PANE_HISTORY` in the integration scripts) makes ↑/↓ the pane's own,
+ * and because a restored pane comes back with the SAME id, it comes back with
+ * the same history.
+ *
+ * The root is the same per-user runtime home the rest of the pane's state uses,
+ * with the OS temp dir as the fallback for a host that cannot name one (a pane
+ * must still start). A host that cannot create the directory yields no variable,
+ * which the scripts treat as "use the shell's own history" — the behaviour every
+ * pane had before this existed.
+ */
+function paneHistoryPath(
+  userRuntimeHome: string | undefined,
+  sessionID: string | undefined,
+  paneID: string,
+): string | undefined {
+  const root = userRuntimeHome ?? tmpdir();
+  try {
+    const dir = join(root, "pane-history", sessionID ?? "no-session");
+    mkdirSync(dir, { recursive: true });
+    return join(dir, `${paneID}.txt`);
+  } catch {
+    return undefined;
+  }
 }
 
 function trimOutput(text: string): string {
@@ -1375,6 +1410,11 @@ export function createPtyTerminalController(
     const rows = clampGeometry(startInput.rows, DEFAULT_ROWS);
     const cols = clampGeometry(startInput.cols, DEFAULT_COLS);
     const now = Date.now();
+    const paneHistory = paneHistoryPath(
+      input.userRuntimeHome?.(),
+      owningSession,
+      id,
+    );
     const session: PtySession = {
       id,
       sessionID: owningSession,
@@ -1465,7 +1505,14 @@ export function createPtyTerminalController(
       // (zsh's ZDOTDIR). `envRecord()` then supplies the operator's own
       // environment, so PATH, HOME and locale still reach the child —an
       // integration that replaced them would spawn a shell that cannot find ls.
-      env: { ...shellEnv, ...envRecord() },
+      // `NATALIA_PANE_HISTORY` is this pane's own history file (see
+      // `paneHistoryPath`); the integration scripts point the shell's read-line
+      // at it, so ↑/↓ belongs to this tab across restarts.
+      env: {
+        ...shellEnv,
+        ...envRecord(),
+        ...(paneHistory ? { NATALIA_PANE_HISTORY: paneHistory } : {}),
+      },
       command: startInput.command,
     });
     session.pty = pty;

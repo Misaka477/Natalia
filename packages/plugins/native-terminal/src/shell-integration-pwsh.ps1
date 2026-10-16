@@ -119,6 +119,35 @@ function Global:Prompt() {
 if (Get-Module -ListAvailable -Name PSReadLine) {
 	Import-Module PSReadLine -ErrorAction SilentlyContinue
 }
+
+# THE PANE'S OWN ↑/↓ HISTORY. `NATALIA_PANE_HISTORY` is set by the pane's controller to a
+# per-session, per-pane file, and it is the difference between "the terminal is back" and
+# "the terminal is back with the commands you ran in it". Without it the shell reads the
+# user's global ConsoleHost_history.txt: after a runtime restart every pane of every
+# session offers the same machine-wide list, and a session that ran its commands
+# yesterday offers whatever was typed elsewhere since.
+#
+# The order matters. `Set-PSReadLineOption -HistorySavePath` decides where new entries go
+# but does not re-read what is already there, so the file's existing lines are replayed
+# with `AddToHistory` — the public API the read-line exposes for exactly this, and what
+# fills the arrow-key buffer after a restart. Only the DELIVERED entries are replayed:
+# the file is the pane's own, so nothing else can be in it.
+if ($env:NATALIA_PANE_HISTORY) {
+	try {
+		Set-PSReadLineOption -HistorySavePath $env:NATALIA_PANE_HISTORY -ErrorAction Stop
+		if (Test-Path -LiteralPath $env:NATALIA_PANE_HISTORY) {
+			foreach ($Entry in Get-Content -LiteralPath $env:NATALIA_PANE_HISTORY -ErrorAction SilentlyContinue) {
+				if ($Entry -and $Entry.Trim()) {
+					[Microsoft.PowerShell.PSConsoleReadLine]::AddToHistory($Entry)
+				}
+			}
+		}
+	} catch {
+		# An unusable history path is not worth a broken pane: the shell keeps its own
+		# history and the markers below still work.
+	}
+}
+
 if (Get-Module -Name PSReadLine) {
 	# The command line is this function's RETURN VALUE, the only place PowerShell exposes
 	# what the user submitted. Overriding `Prompt` alone cannot learn it: Prompt runs

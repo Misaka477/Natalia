@@ -14,11 +14,13 @@
 
 #include <fcntl.h>
 #include <io.h>
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -276,6 +278,7 @@ int extractNumber(const std::string &json, const char *key, int fallback) {
   return atoi(json.c_str() + at);
 }
 
+
 std::wstring widen(const std::string &text) {
   if (text.empty()) return std::wstring();
   const int needed =
@@ -284,6 +287,118 @@ std::wstring widen(const std::string &text) {
   MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), wide.data(),
                       needed);
   return wide;
+}
+
+/**
+ * A flat JSON object of string values, as ordered name/value pairs.
+ *
+ * The spec's `env` overlay is the one field the bridge ignored (see the
+ * CreateProcessW call), and it is not decoration: `PtySpawnOptions.env` is how
+ * the controller hands a pane the variables its shell needs — the per-pane
+ * history file (`NATALIA_PANE_HISTORY`) and zsh's `ZDOTDIR` are both env, not
+ * argv. A bridge that drops them makes a feature that works on POSIX vanish on
+ * Windows with nothing in any log. Keys and values decode through the same
+ * routine the rest of the spec uses, so an escape means one thing everywhere.
+ */
+std::vector<std::pair<std::string, std::string>> extractStringMap(
+    const std::string &json, const char *key) {
+  std::vector<std::pair<std::string, std::string>> pairs;
+  size_t at = 0;
+  if (!findJsonValue(json, key, &at)) return pairs;
+  if (at >= json.size() || json[at] != '{') return pairs;
+  at += 1;
+  // A quoted token from `json[start]` (which must be the opening quote) to its
+  // closing quote, escapes skipped. Returns the token INCLUDING both quotes.
+  const auto token = [&json](size_t start) -> std::string {
+    size_t end = start + 1;
+    while (end < json.size() && json[end] != '"') {
+      if (json[end] == '\\') end += 1;
+      end += 1;
+    }
+    if (end >= json.size()) return std::string();
+    return json.substr(start, end - start + 1);
+  };
+  for (;;) {
+    at = skipJsonSpace(json, at);
+    if (at >= json.size() || json[at] == '}') break;
+    if (json[at] != '"') break;
+    const std::string keyToken = token(at);
+    if (keyToken.empty()) break;
+    at = skipJsonSpace(json, at + keyToken.size());
+    if (at >= json.size() || json[at] != ':') break;
+    at = skipJsonSpace(json, at + 1);
+    if (at >= json.size() || json[at] != '"') break;
+    const std::string valueToken = token(at);
+    if (valueToken.empty()) break;
+    // The decoder wants a document to look a key up in, and re-implementing its
+    // escape handling here would give the same escape two meanings.
+    const std::string shim =
+        std::string("{\"k\":") + keyToken + ",\"v\":" + valueToken + "}";
+    std::string name, value;
+    if (extractString(shim, "k", &name) && extractString(shim, "v", &value))
+      pairs.emplace_back(name, value);
+    at += valueToken.size();
+    // The separator between pairs. Without this the loop met the comma, saw
+    // neither } nor a quote, and stopped: a spec carrying the whole
+    // environment produced a ONE-entry overlay, measured as a pane whose
+    // NATALIA_PANE_HISTORY was empty while the trace said nv overlay: 1.
+    at = skipJsonSpace(json, at);
+    if (at < json.size() && json[at] == ',') at += 1;
+  }
+  return pairs;
+}
+
+/**
+ * The child's environment block: the bridge's own, with the spec's overlay on
+ * top, sorted by name.
+ *
+ * Windows requires the block CreateProcessW is handed to be sorted
+ * case-insensitively by name (and terminated by an empty string), which is why
+ * this is a block rather than a run of `SetEnvironmentVariableW` calls: the
+ * process-level spelling would mutate the bridge's own environment for the
+ * children it starts afterwards.
+ *
+ * Entries beginning with `=` (the console's per-drive current directories) are
+ * left out: CreateProcessW rejects a caller-built block that carries them.
+ */
+std::vector<wchar_t> buildEnvironmentBlock(
+    const std::vector<std::pair<std::string, std::string>> &overlay) {
+  std::vector<std::pair<std::wstring, std::wstring>> entries;
+  const auto put = [&entries](const std::wstring &name,
+                              const std::wstring &value) {
+    for (auto &entry : entries)
+      if (_wcsicmp(entry.first.c_str(), name.c_str()) == 0) {
+        entry.second = value;
+        return;
+      }
+    entries.emplace_back(name, value);
+  };
+  LPWCH current = GetEnvironmentStringsW();
+  if (current != nullptr) {
+    for (const wchar_t *cursor = current; *cursor != L'\0';) {
+      const std::wstring entry(cursor);
+      cursor += entry.size() + 1;
+      if (!entry.empty() && entry[0] == L'=') continue;
+      const size_t split = entry.find(L'=');
+      if (split == std::wstring::npos) continue;
+      put(entry.substr(0, split), entry.substr(split + 1));
+    }
+    FreeEnvironmentStringsW(current);
+  }
+  for (const auto &pair : overlay) put(widen(pair.first), widen(pair.second));
+  std::sort(entries.begin(), entries.end(),
+            [](const std::pair<std::wstring, std::wstring> &left,
+               const std::pair<std::wstring, std::wstring> &right) {
+              return _wcsicmp(left.first.c_str(), right.first.c_str()) < 0;
+            });
+  std::vector<wchar_t> block;
+  for (const auto &entry : entries) {
+    const std::wstring line = entry.first + L"=" + entry.second;
+    block.insert(block.end(), line.begin(), line.end());
+    block.push_back(L'\0');
+  }
+  block.push_back(L'\0');
+  return block;
 }
 
 std::string narrow(const std::wstring &text) {
@@ -458,16 +573,19 @@ int main() {
   PROCESS_INFORMATION process;
   ZeroMemory(&process, sizeof(process));
   const std::wstring workingDirectory = cwd.empty() ? std::wstring() : widen(cwd);
-  // The child inherits the bridge's environment (lpEnvironment = nullptr).
+  // The child's environment: the bridge's own block with the spec's overlay on
+  // top (see `buildEnvironmentBlock`).
   //
-  // The spec's env overlay is NOT applied, and that is a DIVERGENCE from the
-  // POSIX bridge (pty-terminal-controller.ts does `env.update(spec.get("env"))`).
-  // It is not the cause of the mute pane — the report excluded env by building
-  // both ways and seeing the same silence — and this comment used to imply
-  // otherwise, which sent a later reader looking in the wrong place. The overlay
-  // is still off because re-adding it was never the goal; if it is wanted, the
-  // safe Windows spelling is a SORTED block passed as lpEnvironment, not
-  // SetEnvironmentVariableW, because Windows requires the block sorted by name.
+  // THE OVERLAY USED TO BE OFF. It was disabled while the mute pane (P23) was
+  // being chased — env was ruled out as the cause, and the line stayed disabled
+  // because re-adding it was never the goal. The cost of leaving it that way was
+  // a silent platform divergence: on POSIX the bridge applies `spec.env`
+  // (`env.update(spec.get("env"))`) and on Windows nothing did, so every
+  // variable the controller hands a pane was dropped here — the per-pane history
+  // file (`NATALIA_PANE_HISTORY`, the one that makes ↑/↓ survive a runtime
+  // restart) and zsh's `ZDOTDIR` alike. Found by asking the pane itself what it
+  // had: `$env:NATALIA_PANE_HISTORY` printed empty while the integration script
+  // had loaded, so the variable had never reached the shell.
   //
   // With a pseudo-console, CreateProcessW takes the command line ONLY: passing
   // lpApplicationName alongside the attribute list fails with
@@ -479,11 +597,17 @@ int main() {
   // false, and the TRUE experiment it excused is the one measured above: the
   // child wrote through the bridge's inherited stdout pipe instead of the
   // console (its prompt showed up raw in the bridge's own frame stream).
-  if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
-                      EXTENDED_STARTUPINFO_PRESENT,
-                      nullptr, /* DIAG: env disabled */
-                      workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
-                      &startup.StartupInfo, &process)) {
+  const std::vector<std::pair<std::string, std::string>> environmentOverlay =
+      extractStringMap(spec, "env");
+  bridgeNote("conpty-bridge: env overlay: %zu entries\n", environmentOverlay.size());
+  std::vector<wchar_t> environmentBlock =
+      buildEnvironmentBlock(environmentOverlay);
+  if (!CreateProcessW(
+          nullptr, commandLine.data(), nullptr, nullptr, FALSE,
+          EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+          environmentBlock.empty() ? nullptr : environmentBlock.data(),
+          workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
+          &startup.StartupInfo, &process)) {
     fprintf(stderr, "conpty-bridge: CreateProcess failed (%lu)\n",
             GetLastError());
     return 6;

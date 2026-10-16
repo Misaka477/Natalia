@@ -110,6 +110,71 @@ describe("startDetachedProcess", () => {
     ).rejects.toThrow(/PowerShell/u);
   });
 
+  windowsTest(
+    "the worker's console has no window",
+    async () => {
+      // The window this pins: with `detached` (DETACHED_PROCESS) the launcher has
+      // no console, so pwsh — the first console app in the chain — allocated one
+      // and Windows gave it a VISIBLE terminal window titled with the launcher's
+      // command line. Measured on this host by window enumeration: detached → a
+      // new visible `CASCADIA_HOSTING_WINDOW_CLASS` window per start, and it
+      // stayed for as long as the command ran (the user's screenshot, and the
+      // pile of windows a full test run leaves behind). CREATE_NO_WINDOW (what
+      // `windowsHide` without `detached` asks for) gives the chain one console
+      // with no window, which the worker can see for itself.
+      const root = await mkdtemp(join(tmpdir(), "natalia-detached-hidden-"));
+      const outputPath = join(root, "out.log");
+      const report = join(root, "console.txt");
+      const pwsh = resolvePwshPath(undefined, process.env);
+      await startDetachedProcess({
+        command:
+          `Add-Type -Namespace Probe -Name Console ` +
+          `-MemberDefinition '[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow(); [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);'; ` +
+          `$h = [Probe.Console]::GetConsoleWindow(); ` +
+          `[System.IO.File]::WriteAllText('${report}', "handle=$h visible=" + [Probe.Console]::IsWindowVisible($h))`,
+        posixScript: "echo 1",
+        cwd: root,
+        outputPath,
+        os: "win32",
+        env: { PATH: process.env.PATH },
+        hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
+      });
+      const written = await waitForOutput(report);
+      expect(written).toContain("visible=False");
+      // GetConsoleWindow answers NULL for a console that has no window — the
+      // process still HAS a console (PowerShell runs, as the log shows).
+      expect(written).toContain("handle=0");
+    },
+    30_000,
+  );
+
+  windowsTest(
+    "the worker outlives the launcher that started it",
+    async () => {
+      // What `detached` was there for. The launcher is now this process's own
+      // child (Bun terminates those when the caller exits), while the worker is
+      // a grandchild and keeps running — killed here by its own pid, with no
+      // `/T`, which is exactly what the caller's exit does to the launcher.
+      const root = await mkdtemp(join(tmpdir(), "natalia-detached-outlive-"));
+      const outputPath = join(root, "out.log");
+      const marker = join(root, "alive.txt");
+      const pwsh = resolvePwshPath(undefined, process.env);
+      const { pid } = await startDetachedProcess({
+        command: `Start-Sleep 2; Set-Content -Path '${marker}' -Value alive`,
+        posixScript: "echo 1",
+        cwd: root,
+        outputPath,
+        os: "win32",
+        env: { PATH: process.env.PATH },
+        hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
+      });
+      Bun.spawnSync(["taskkill", "/F", "/PID", String(pid)]);
+      const written = await waitForOutput(marker);
+      expect(written).toContain("alive");
+    },
+    30_000,
+  );
+
   windowsTest("refuses when there is no command to run", async () => {
     // An empty command produced a worker script whose script block was
     // `& { }`: the detached chain started, the pid was reported, and the log

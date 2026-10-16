@@ -24,6 +24,7 @@ import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";
 import { nataliaUserHome, usableDirectory } from "./home-paths";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { posix, win32, join } from "node:path";
 
 export {
@@ -276,6 +277,30 @@ function pwshQuote(value: string): string {
 }
 
 /**
+ * Waits, bounded, for a detached worker to write its log.
+ *
+ * The worker's first statement truncates and creates `outputPath`, so the file's
+ * existence means PowerShell is up inside the chain and running the command. A
+ * timeout returns quietly: the callers poll the same log and report an empty one
+ * with the command in hand, which is a better diagnostic than a thrown error
+ * from a path that cannot see what went wrong.
+ */
+async function waitForDetachedWorker(
+  outputPath: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await access(outputPath);
+      return;
+    } catch {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    }
+  }
+}
+
+/**
  * Starts a detached background process and reports a PID that the operating
  * system can later signal.
  *
@@ -358,6 +383,29 @@ export async function startDetachedProcess(input: {
     // UTF-16 LE, so a log read back as UTF-8 arrives as NUL-interleaved
     // mojibake (measured). AppendAllText with an explicit no-BOM UTF-8
     // encoding is the one spelling both 5.1 and 7 honour, and it streams.
+    //
+    // AND THE LAUNCHER IS NOT `detached`. Node's and Bun's `detached` is
+    // DETACHED_PROCESS, which leaves the launcher with NO console — so the first
+    // console app in the chain (pwsh) allocates a fresh one, and Windows gives a
+    // newly allocated console a VISIBLE WINDOW. Every background start therefore
+    // opened a terminal window titled with this command line, it stayed on
+    // screen for as long as the command ran, and when the allocation failed the
+    // window stayed with "[出现错误 2147942632 (0x800700e8) (启动"…pwsh.exe
+    // -NoLogo -NoProfile -NonInteractive -Command "$s=$env:NATALIA_DETACHED_SCRIPT…"时)]"
+    // — the user's screenshot, and the pile of windows a full test run leaves
+    // behind. Measured here (window enumeration, `CASCADIA_HOSTING_WINDOW_CLASS`,
+    // visible windows): detached → 2 visible terminals, the new one titled with
+    // this command line; without `detached` → 1, i.e. none added. `windowsHide`
+    // alone is CREATE_NO_WINDOW: the chain gets ONE console with no window
+    // (the worker reports `GetConsoleWindow() = 0`), pwsh runs normally, and the
+    // worker — a grandchild — still outlives the launcher (measured: a worker
+    // whose launcher is killed keeps running and finishes its command).
+    //
+    // What `detached` did NOT do is keep a NON-detached chain alive; the
+    // launcher dies when this process exits (Bun terminates its own children),
+    // so the worker must already be RUNNING by then. The start waits for the
+    // worker's first write (the log) before returning, which is what makes that
+    // a guarantee rather than a race.
     const logPath = pwshQuote(input.outputPath);
     const command = input.command.trim();
     // Nothing to run is a refusal, not a spawn. An empty command produced a
@@ -418,7 +466,10 @@ export async function startDetachedProcess(input: {
           COMSPEC: input.hostEnv?.COMSPEC ?? process.env.COMSPEC,
           NATALIA_DETACHED_SCRIPT: workerScript,
         },
-        detached: true,
+        // `windowsHide`, NOT `detached`: CREATE_NO_WINDOW gives the chain one
+        // console with no window, where DETACHED_PROCESS made pwsh allocate a
+        // visible one. See the long note above — this is the fix for the
+        // terminal window every background start used to open.
         windowsHide: true,
         stdio: ["ignore", "ignore", "ignore"],
       },
@@ -432,6 +483,14 @@ export async function startDetachedProcess(input: {
     );
     if (pid === undefined)
       throw new Error("the detached process did not report a process id");
+    // The hand-over. Without `detached` the launcher is this process's own
+    // child, and a Bun process terminates those when it exits — while the
+    // worker (a grandchild) outlives it. So the start is only complete once the
+    // worker is RUNNING, and the worker's first statement is the log write:
+    // waiting for that file is what turns "usually started" into a guarantee.
+    // It is bounded, and a worker that never appears leaves the log empty for
+    // the caller's own poll, which is the contract both callers already use.
+    await waitForDetachedWorker(input.outputPath);
     child.unref();
     return { pid };
   }

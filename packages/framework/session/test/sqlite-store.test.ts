@@ -713,6 +713,54 @@ test("SQLite enforces session foreign keys", async () => {
   store.close();
 });
 
+test("a deleted session's late events are dropped, not thrown", async () => {
+  // The deployed failure: the user deletes a session while the terminal plugin
+  // and the turn teardown are still emitting for it, so each 20 ms flush tried
+  // to INSERT an event whose `session_id` no longer had a row and the whole
+  // batch rolled back with a raw "SQLiteError: FOREIGN KEY constraint failed"
+  // printed per flush. The tombstone (`deleted_sessions`, written by delete)
+  // says the session is gone, so every write path drops those events instead.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-deleted-late-"));
+  const store = new SqliteSessionStore(join(root, "sessions.db"));
+  const sessionID = "ses_deleted_late" as SessionID;
+  const late = () =>
+    ({
+      type: "terminal.action",
+      id: "terminal_late",
+      action: "exit",
+      sessionID,
+    }) as unknown as RuntimeEvent;
+  try {
+    store.create(sessionID, "Deleted while emitting");
+    // Queued BEFORE the delete: the flush timer fires after it.
+    store.enqueueEvent(sessionID, late());
+    store.delete(sessionID);
+    // Neither the queued batch nor anything queued later may throw...
+    await expect(store.flushPendingWrites(sessionID)).resolves.toBeUndefined();
+    expect(() => store.enqueueEvent(sessionID, late())).not.toThrow();
+    await expect(
+      store.appendEventAsync(sessionID, late()),
+    ).resolves.toBeUndefined();
+    // ...and the synchronous barrier paths behave the same way.
+    expect(() => store.appendEvent(sessionID, late())).not.toThrow();
+    expect(() => store.appendEvents(sessionID, [late()])).not.toThrow();
+    // Nothing was written: the session still reads as deleted and empty.
+    expect(store.wasDeleted(sessionID)).toBe(true);
+    expect(store.loadEvents(sessionID)).toEqual([]);
+    // A session that was never created is still a programming error, not a
+    // tombstone: the foreign key refuses it.
+    expect(() =>
+      store.appendEvent("ses_never_created", {
+        type: "turn.finished",
+        id: "turn_missing",
+        stopReason: "done",
+      }),
+    ).toThrow();
+  } finally {
+    store.close();
+  }
+});
+
 test("SQLite batches async durable appends and flushes settlement barriers", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-sqlite-async-batch-"));
   const store = new SqliteSessionStore(join(root, "sessions.db"));

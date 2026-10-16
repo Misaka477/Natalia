@@ -483,6 +483,13 @@ export class SqliteSessionStore {
       this.markDeleted(id);
     })();
     this.projectionStates.delete(id);
+    // Events that were queued before the delete are work for a session that no
+    // longer exists, and its flush timer would fire into a foreign-key refusal.
+    this.pendingAsyncEvents.delete(id);
+    const timer = this.flushTimers.get(id);
+    if (timer) clearTimeout(timer);
+    this.flushTimers.delete(id);
+    this.scheduledFlushes.delete(id);
   }
 
   wasDeleted(id: SessionID): boolean {
@@ -547,6 +554,7 @@ export class SqliteSessionStore {
   }
 
   appendEvent(sessionID: SessionID, event: RuntimeEvent) {
+    if (this.dropsBecauseSessionDeleted(sessionID)) return;
     this.db.transaction(() => {
       this.appendEventInTransaction(sessionID, event);
       this.bumpRecoveryState(sessionID);
@@ -554,6 +562,7 @@ export class SqliteSessionStore {
   }
 
   appendEvents(sessionID: SessionID, events: RuntimeEvent[]) {
+    if (this.dropsBecauseSessionDeleted(sessionID)) return;
     const txn = this.db.transaction(() => {
       // This synchronous recovery-settlement helper deliberately retains its
       // established narrow semantics. New streaming batches use the complete
@@ -1246,6 +1255,16 @@ export class SqliteSessionStore {
   /** Queues a non-barrier durable event for the next microtask/count/barrier flush. */
   enqueueEvent(sessionID: SessionID, event: RuntimeEvent) {
     if (this.closed) throw new Error("SQLite session store is closed");
+    // A DELETED session has no row for its events to belong to. Queueing them
+    // would only build work that cannot be committed: `events.session_id
+    // REFERENCES sessions(id)` refuses the INSERT, the batch transaction rolls
+    // back, and the rejection surfaced from a 20 ms timer as a raw
+    // `SQLiteError: FOREIGN KEY constraint failed` per flush — measured on the
+    // deployed runtime, where the terminal plugin and the turn teardown kept
+    // emitting for a session the user had just deleted. The store already keeps
+    // that fact (`deleted_sessions`, written by `delete`/`markDeleted`), so this
+    // is the cheap place to read it and drop the event.
+    if (this.wasDeleted(sessionID)) return;
     const events = this.pendingAsyncEvents.get(sessionID) ?? [];
     events.push(event);
     this.pendingAsyncEvents.set(sessionID, events);
@@ -1377,13 +1396,49 @@ export class SqliteSessionStore {
       await this.flushSession(sessionID);
   }
 
+  /**
+   * Whether a write for this session is dropped because the session is gone.
+   *
+   * `delete()` removes the session row and writes the `deleted_sessions`
+   * tombstone; every foreign key in the schema points at `sessions(id)`, so an
+   * append for that session is refused by SQLite — and since appends commit in
+   * batches inside one transaction, the refusal surfaced as a raw
+   * `SQLiteError: FOREIGN KEY constraint failed` on each 20 ms flush while the
+   * whole batch was lost, for a session that was already gone. Measured on the
+   * deployed runtime, where the terminal plugin and the turn teardown kept
+   * emitting for a session the user had just deleted. The tombstone is this
+   * store's own authority for "that session is gone", so every write path asks
+   * here instead of discovering it from the foreign key.
+   */
+  private dropsBecauseSessionDeleted(sessionID: SessionID): boolean {
+    if (!this.wasDeleted(sessionID)) return false;
+    // No fold survives a deleted session: a later append would replay a
+    // projection built from events the store no longer holds.
+    this.projectionStates.delete(sessionID);
+    return true;
+  }
+
   private writeBufferedBatch(sessionID: SessionID, events: RuntimeEvent[]) {
     if (!events.length) return;
-    this.db.transaction(() => {
-      for (const event of events)
-        this.appendEventInTransaction(sessionID, event);
-      this.bumpRecoveryState(sessionID, events.length);
-    })();
+    // The delete can land between the queue-time check and this flush — the
+    // flush is a 20 ms timer, and a session delete is a user action — so the
+    // commit is guarded as well. Every foreign key in this schema points at
+    // `sessions(id)`, so a foreign-key refusal on a session whose tombstone
+    // exists is the tombstone's own answer ("this session is gone"), not an
+    // infrastructure failure to report; anything else still throws.
+    try {
+      this.db.transaction(() => {
+        for (const event of events)
+          this.appendEventInTransaction(sessionID, event);
+        this.bumpRecoveryState(sessionID, events.length);
+      })();
+    } catch (error) {
+      const foreignKeyRefusal =
+        error instanceof Error &&
+        /FOREIGN KEY constraint failed/iu.test(error.message);
+      if (!foreignKeyRefusal || !this.dropsBecauseSessionDeleted(sessionID))
+        throw error;
+    }
   }
 
   private ensureRecoveryProjection(sessionID: SessionID) {

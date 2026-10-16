@@ -81,3 +81,14 @@ test("the five shell-owned panels keep the session-scoped key", () => {
   expect(app).toContain("workspaceID: state().activeWorkspaceID,");
   expect(app).toContain("sessionID: selectedSessionID() || state().sessionID,");
 });
+
+test("collapsing the rail hides it instead of unmounting it", () => {
+  // The collapse toggle used to be `{rightVisible() ? (<aside…>) : (button)}`,
+  // so collapsing destroyed every panel the rail hosts — including an editor's
+  // unsaved buffers. It is a CSS display toggle now.
+  expect(app).not.toContain("{rightVisible() ? (");
+  expect(app).toContain('display: rightVisible() ? "contents" : "none"');
+  // The way back is still offered while it is hidden.
+  expect(app).toContain("{rightVisible() ? null : (");
+  expect(app).toContain("neu-collapsed-rail neu-right-rail");
+});

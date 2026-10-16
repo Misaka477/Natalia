@@ -4624,7 +4624,20 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         </section>
 
         {/* Right secondary tabs */}
-        {rightVisible() ? (
+        {/*
+          The right rail stays MOUNTED while it is collapsed, and is hidden with
+          CSS instead of being unmounted. Unmounting it destroyed every panel it
+          hosts — the terminal's xterm instance and its socket, the file
+          editor's open tabs and UNSAVED buffers — so collapsing and expanding
+          was a way to lose work. `display: contents` leaves the resizer and the
+          aside as the flex children they already were, so the layout is byte
+          for byte what it was.
+        */}
+        <div
+          style={{
+            display: rightVisible() ? "contents" : "none",
+          }}
+        >
           <>
             <div
               class="neu-right-resizer"
@@ -4795,7 +4808,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               </div>
             </aside>
           </>
-        ) : (
+        </div>
+        {rightVisible() ? null : (
           <button
             type="button"
             class="neu-collapsed-rail neu-right-rail"

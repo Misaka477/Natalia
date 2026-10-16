@@ -95,6 +95,9 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
         type: "diagnostic",
         level: "warning",
         message,
+        // The spine: this turn's own id, so an attachment problem joins the
+        // same subject as everything else this turn reports.
+        ...(input.exec.activeTurnID ? { turnID: input.exec.activeTurnID } : {}),
       });
     logOf(ctx.state.serviceDirectory).info("nia-chat-turn", "start", {
       sessionID: input.exec.session.id,
@@ -289,7 +292,13 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
       });
     };
     const publishDiagnostic = (level: "warning" | "info", message: string) =>
-      publishForSession(input.exec, { type: "diagnostic", level, message });
+      publishForSession(input.exec, {
+        type: "diagnostic",
+        level,
+        message,
+        // The spine: which turn this phase-level problem belongs to.
+        ...(input.exec.activeTurnID ? { turnID: input.exec.activeTurnID } : {}),
+      });
     const settleThinking = () => {
       if (thinkingSettled || !thinking) return;
       thinkingSettled = true;

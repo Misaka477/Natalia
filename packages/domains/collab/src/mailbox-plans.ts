@@ -311,6 +311,9 @@ export function createMailboxPlans(ctx: RuntimeContext) {
           message: `plan handoff checkpoint failed for ${messageID}: ${
             error instanceof Error ? error.message : String(error)
           }`,
+          // The spine: the owner's active turn, when it has one — the same
+          // subject every other record of this turn carries.
+          ...(owner?.activeTurnID ? { turnID: owner.activeTurnID } : {}),
         });
       }
     }

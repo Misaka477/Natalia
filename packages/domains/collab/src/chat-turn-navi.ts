@@ -88,6 +88,8 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
         type: "diagnostic",
         level: "warning",
         message,
+        // The spine: this turn's own id (audit 缺口 3).
+        ...(input.exec.activeTurnID ? { turnID: input.exec.activeTurnID } : {}),
       });
     // Was an env gate; now the log's level gate — debug stays silent at
     // the default level and lands in the rotated channel when raised.
@@ -248,7 +250,13 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
       });
     };
     const publishDiagnostic = (level: "warning" | "info", message: string) =>
-      publishForSession(input.exec, { type: "diagnostic", level, message });
+      publishForSession(input.exec, {
+        type: "diagnostic",
+        level,
+        message,
+        // The spine: which turn this phase-level problem belongs to.
+        ...(input.exec.activeTurnID ? { turnID: input.exec.activeTurnID } : {}),
+      });
     const settleThinking = () => {
       if (thinkingSettled || !thinking) return;
       thinkingSettled = true;

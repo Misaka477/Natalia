@@ -578,10 +578,7 @@ export async function wireFrameworkServices(
     // took the terminal panes down with them.
     const rebind = <T>(token: ServiceToken<T>, value: T | undefined) =>
       pluginInputs.rebind(token, value);
-    rebind(
-      localToolsInput,
-      ctx.state.initialize.localToolsPluginInput(config),
-    );
+    rebind(localToolsInput, ctx.state.initialize.localToolsPluginInput(config));
     rebind(mcpInput, ctx.state.initialize.mcpPluginInput(config));
     rebind(skillsInput, ctx.state.initialize.skillsPluginInput(config));
 

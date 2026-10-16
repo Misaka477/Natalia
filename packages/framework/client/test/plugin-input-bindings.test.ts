@@ -44,8 +44,12 @@ test("two builds of one input's data are interchangeable, functions are read fac
     read: () => "right",
   };
   expect(sameInputData(left, right)).toBe(true);
-  expect(sameInputData(left, { ...right, workspaceRoot: "/other" })).toBe(false);
-  expect(sameInputData(left, { ...right, remoteURLs: ["https://a"] })).toBe(false);
+  expect(sameInputData(left, { ...right, workspaceRoot: "/other" })).toBe(
+    false,
+  );
+  expect(sameInputData(left, { ...right, remoteURLs: ["https://a"] })).toBe(
+    false,
+  );
   expect(sameInputData(left, { ...right, extra: 1 })).toBe(false);
   expect(sameInputData(undefined, undefined)).toBe(true);
   expect(sameInputData(left, undefined)).toBe(false);
@@ -106,14 +110,16 @@ test("disposeAll releases every binding once, in reverse order", () => {
   const { directory: dir, values } = directory();
   const bindings = createPluginInputBindings(dir);
   const second = defineService<FakeInput>("test.plugin-input-second");
-  bindings.rebind(
-    fakeInput,
-    { workspaceRoot: "/ws", remoteURLs: [], read: () => "one" },
-  );
-  bindings.rebind(
-    second,
-    { workspaceRoot: "/ws", remoteURLs: [], read: () => "two" },
-  );
+  bindings.rebind(fakeInput, {
+    workspaceRoot: "/ws",
+    remoteURLs: [],
+    read: () => "one",
+  });
+  bindings.rebind(second, {
+    workspaceRoot: "/ws",
+    remoteURLs: [],
+    read: () => "two",
+  });
   expect(bindings.boundIDs()).toEqual([fakeInput.id, second.id]);
   bindings.disposeAll();
   expect(values.size).toBe(0);

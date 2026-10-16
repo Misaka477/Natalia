@@ -19,7 +19,10 @@
  * the data decides (`sameInputData`). Nothing a plugin can observe changed ⇒
  * nothing is rebound ⇒ no plugin is re-armed.
  */
-import type { ServiceDirectory, ServiceToken } from "@anthelia/runtime-services";
+import type {
+  ServiceDirectory,
+  ServiceToken,
+} from "@anthelia/runtime-services";
 
 /**
  * Whether two builds of one host input are interchangeable.
@@ -44,7 +47,8 @@ export function sameInputData(left: unknown, right: unknown): boolean {
   // Only plain records are compared key-wise; anything richer carries behaviour
   // this comparison cannot see, so it counts as changed.
   if (leftPrototype !== Object.getPrototypeOf(right)) return false;
-  if (leftPrototype !== Object.prototype && leftPrototype !== null) return false;
+  if (leftPrototype !== Object.prototype && leftPrototype !== null)
+    return false;
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
   const leftKeys = Object.keys(leftRecord);
@@ -73,10 +77,7 @@ export type PluginInputBindings = {
 export function createPluginInputBindings(
   directory: Pick<ServiceDirectory, "provide">,
 ): PluginInputBindings {
-  const bound = new Map<
-    string,
-    { value: unknown; dispose: () => void }
-  >();
+  const bound = new Map<string, { value: unknown; dispose: () => void }>();
   return {
     rebind<T>(token: ServiceToken<T>, value: T | undefined): boolean {
       const current = bound.get(token.id);

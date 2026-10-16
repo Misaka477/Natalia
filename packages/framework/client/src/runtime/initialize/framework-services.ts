@@ -579,11 +579,22 @@ export async function wireFrameworkServices(
     // the binding it already has, because the service transiently disappearing
     // (dispose-then-provide) is what deactivated every plugin requiring it and
     // took the terminal panes down with them.
-    const rebind = <T>(token: ServiceToken<T>, value: T | undefined) =>
+    //
+    // The wrapper is named `provide` because that is what it is — the binding
+    // act, with "unless the same value is already bound" as its rule — and
+    // because the service-graph guard finds a token's provider through this
+    // spelling (`provide(<token>, …)`: the local wrapper around
+    // `directory.provide`). Calling it `rebind` made `localTools.input`,
+    // `mcp.input`, `skills.input`, `terminal.input` and `composition.profile`
+    // read as DECLARED BUT NEVER PROVIDED on the Linux runner.
+    const provide = <T>(token: ServiceToken<T>, value: T | undefined) =>
       pluginInputs.rebind(token, value);
-    rebind(localToolsInput, ctx.state.initialize.localToolsPluginInput(config));
-    rebind(mcpInput, ctx.state.initialize.mcpPluginInput(config));
-    rebind(skillsInput, ctx.state.initialize.skillsPluginInput(config));
+    provide(
+      localToolsInput,
+      ctx.state.initialize.localToolsPluginInput(config),
+    );
+    provide(mcpInput, ctx.state.initialize.mcpPluginInput(config));
+    provide(skillsInput, ctx.state.initialize.skillsPluginInput(config));
 
     // P3 "base profile 随包机制" (interface spec §6.3): the shipped
     // read-only base, then user and workspace drop-ins (lexicographic
@@ -625,7 +636,7 @@ export async function wireFrameworkServices(
         registry: profileRegistry,
       }).finally(done);
     })();
-    rebind(compositionProfile, activeProfile);
+    provide(compositionProfile, activeProfile);
     // Decision17: the store backend follows the same breath as the
     // profile (absence = TypeScript, so nothing changes until a row
     // says otherwise).
@@ -673,7 +684,7 @@ export async function wireFrameworkServices(
       windowMode: () =>
         ctx.ports.getTsRuntimeConfig()?.runtime.terminal.windowMode ?? "auto",
     };
-    rebind(terminalInput, terminal);
+    provide(terminalInput, terminal);
   }
   await (() => {
     const done = slow("refreshPluginInputs");

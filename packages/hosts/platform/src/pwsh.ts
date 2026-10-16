@@ -24,7 +24,7 @@ export const ENCODING_PREAMBLE =
   "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
 
 import { lstatSync } from "node:fs";
-import { basename } from "node:path";
+import { posix, win32 } from "node:path";
 
 /**
  * A pwsh path SET BY THE USER (the settings panel's PowerShell row, persisted in
@@ -139,7 +139,14 @@ export function resolvePwshPath(
  * a caller that ended up there says so instead of leaving the operator to guess.
  * Only that executable is named `powershell.exe`; every PowerShell 7 build is
  * `pwsh.exe`.
+ *
+ * The name is read in the PATH's own flavour, not the host's: this predicate
+ * answers about an executable a Windows host will spawn, and it is called on
+ * hosts that derive such a path without being Windows (`basename` on a POSIX
+ * host returns a Windows path whole, so the check silently answered "no" — the
+ * Linux CI runner measured exactly that).
  */
 export function isWindowsPowerShell51(path: string): boolean {
-  return basename(path).toLowerCase() === "powershell.exe";
+  const flavour = /[\\/]/u.test(path) ? win32 : posix;
+  return flavour.basename(path).toLowerCase() === "powershell.exe";
 }

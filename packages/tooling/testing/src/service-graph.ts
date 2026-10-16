@@ -81,19 +81,36 @@ export type ScannedFile = {
   readonly text: string;
 };
 
+/**
+ * A path in POSIX spelling.
+ *
+ * The analysis matches paths as TEXT — `/packages/<layer>/<name>/`, `/src/`,
+ * `/plugins/`, `/test/` — and keys its findings by them. A Windows checkout's
+ * backslashes made every one of those matches miss, so the guard passed
+ * vacuously on Windows (one host node, no tokens, no plugin manifests, no
+ * problems) while the Linux runner failed the same commit. One normalization per
+ * entry point keeps both hosts reading the same graph.
+ */
+function toPosix(path: string): string {
+  return path.replaceAll("\\", "/");
+}
+
 /** Test files and fixtures are not the production declaration surface. */
 export function isProductionSource(path: string): boolean {
+  const normalized = toPosix(path);
   return (
-    !path.includes("/test/") &&
-    !path.endsWith(".test.ts") &&
-    !path.endsWith(".spec.ts")
+    !normalized.includes("/test/") &&
+    !normalized.endsWith(".test.ts") &&
+    !normalized.endsWith(".spec.ts")
   );
 }
 
 /** Workspace package name for a repo-relative (or absolute) source path. */
 export function packageOf(path: string): string {
   const LAYERS = "framework|domains|core|plugins|tooling|hosts";
-  const m = new RegExp(`(?:^|/)packages/(${LAYERS})/([^/]+)/`).exec(path);
+  const m = new RegExp(`(?:^|/)packages/(${LAYERS})/([^/]+)/`).exec(
+    toPosix(path),
+  );
   if (!m) return HOST_PACKAGE;
   const [, layer, name] = m;
   if (layer === "plugins") return `@natalia/${name}-plugin`;
@@ -214,10 +231,21 @@ function collectManifestLists(
 /**
  * Build the service graph and run every §5.3 check. `problems` is empty when
  * the declarations are sound.
+ *
+ * Paths are normalized to POSIX spelling first, and that is not cosmetic: the
+ * analysis matches paths as TEXT (`/src/`, `/plugins/`) and keys its findings by
+ * them, so a Windows checkout's backslashes made every one of those matches miss
+ * — no tokens, no plugin manifests, no problems, a guard that passed vacuously
+ * on Windows while the Linux runner failed the same commit. One normalization at
+ * the boundary keeps both hosts reading the same graph.
  */
 export function analyzeServiceGraph(
-  files: readonly ScannedFile[],
+  scanned: readonly ScannedFile[],
 ): ServiceGraphReport {
+  const files = scanned.map((file) => ({
+    ...file,
+    path: file.path.replaceAll("\\", "/"),
+  }));
   const tokens: TokenDeclaration[] = [];
   for (const file of files)
     if (file.path.includes("/src/"))

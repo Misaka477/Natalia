@@ -10,7 +10,10 @@
  */
 
 /** The settings rows that exist because one host needs them. */
-export const HOST_ONLY_SETTING_LABELS: readonly string[] = ["Git Bash 路径"];
+export const HOST_ONLY_SETTING_LABELS: readonly string[] = [
+  "Git Bash 路径",
+  "PowerShell 路径",
+];
 
 /** The status segment's prefix for the runtime's own host name. */
 export const HOST_SEGMENT_PREFIX = "host:";

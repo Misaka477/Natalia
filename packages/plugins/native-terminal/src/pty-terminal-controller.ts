@@ -29,7 +29,7 @@ import type {
 } from "@anthelia/contracts";
 import type { TerminalController } from "@anthelia/runtime-services";
 import { nativeTerminalPrebuiltDir } from "./prebuilt-dir";
-import { defaultPaneCommand } from "@anthelia/platform";
+import { defaultPaneCommand, isWindowsPowerShell51 } from "@anthelia/platform";
 import {
   nativeTerminalPaneCommand,
   nativeTerminalPaneSpawn,
@@ -678,6 +678,13 @@ export function createPtyTerminalController(
   let activeSession: string | undefined;
   let closed = false;
   let initialized = false;
+  /**
+   * Whether the legacy-PowerShell notice has been published. The fallback is a
+   * property of the HOST (its pwsh 7 is missing from every root and from PATH),
+   * so one pane saying it is enough — a notice per pane is a flood, and the
+   * first pane is the one whose operator is looking.
+   */
+  let announcedLegacyPowerShell = false;
   const spawnPty = input.spawn ?? defaultSpawn();
   const maxPerSession = Math.max(
     1,
@@ -1429,6 +1436,26 @@ export function createPtyTerminalController(
       spawnFile = wrapped.command;
       spawnArgs = wrapped.args;
     }
+    // A pane whose PowerShell resolved to the OS's own Windows PowerShell 5.1 is
+    // a materially reduced terminal, and the operator was paying for it
+    // silently: 5.1 has no PSReadLine by default (so the prompt arrives empty),
+    // rejects the pwsh-7 `-Interactive` switch (the CommandNotFoundException the
+    // user hit), and writes the console's OEM code page. The resolution is the
+    // host's, not the caller's, so the fix is a setting rather than a flag here:
+    // say once which executable was chosen and where to point it.
+    if (!announcedLegacyPowerShell && isWindowsPowerShell51(file)) {
+      announcedLegacyPowerShell = true;
+      const sessionID = session.sessionID as
+        | RuntimeEvent["sessionID"]
+        | undefined;
+      input.publish({
+        type: "diagnostic",
+        level: "warning",
+        message:
+          `the terminal is running Windows PowerShell 5.1 (${file}): no PowerShell 7 was found in the well-known install locations or on PATH, so the pane has no PSReadLine prompt handling and none of the pwsh-7 flags. Point 设置 → PowerShell 路径 (runtime.shell.pwshPath) at the pwsh.exe to use.`,
+        ...(sessionID ? { sessionID } : {}),
+      });
+    }
     const pty = spawnPty({
       file: spawnFile,
       args: spawnArgs,
@@ -1441,8 +1468,7 @@ export function createPtyTerminalController(
       // integration that replaced them would spawn a shell that cannot find ls.
       env: { ...shellEnv, ...envRecord() },
       command: startInput.command,
-    });
-    session.pty = pty;
+    });    session.pty = pty;
     // The pane's identity is the process the controller spawned, captured
     // once. The handshake below names the shell INSIDE it, which is a
     // different fact and rides separately.

@@ -2,7 +2,14 @@ export * from "./hash-tree";
 export * from "./home-paths";
 export * from "./runtime-worker";
 export * from "./store-paths";
-export { ENCODING_PREAMBLE, candidatePwshPaths, resolvePwshPath } from "./pwsh";
+export {
+  ENCODING_PREAMBLE,
+  candidatePwshPaths,
+  configuredPwshPath,
+  configurePwshExecutable,
+  isWindowsPowerShell51,
+  resolvePwshPath,
+} from "./pwsh";
 export {
   FIRST_USE_WORKSPACE_DECLINED_FILE,
   FIRST_USE_WORKSPACE_DIR_NAME,

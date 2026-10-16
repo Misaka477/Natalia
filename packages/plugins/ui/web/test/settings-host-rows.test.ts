@@ -21,8 +21,7 @@ test("a host-only row is hidden on every other host — POSIX needs no setting",
     expect(settingAppliesToHost(WINDOWS_ONLY, host)).toBe(false);
 });
 
-test("an unknown host is not Windows", () => {
-  // A runtime that never published a host (an old journal, a host that
+test("an unknown host is not Windows", () => {  // A runtime that never published a host (an old journal, a host that
   // does not emit the segment) must not get the row on a guess.
   expect(settingAppliesToHost(WINDOWS_ONLY, undefined)).toBe(false);
   expect(hostFromSegments(undefined)).toBeUndefined();
@@ -37,6 +36,17 @@ test("the host comes out of the runtime's own status segments", () => {
     hostFromSegments(["mode:runtime", "model:gpt", "host:win32", "bg:0"]),
   ).toBe("win32");
   expect(hostFromSegments(["mode:runtime", "host:linux"])).toBe("linux");
+});
+
+test("every host-only row is Windows-only, not just the first", () => {
+  // The guard is a list, so a new Windows-only setting must land on it: the
+  // PowerShell path is the twin of the Git Bash path and needs the same rule.
+  expect(HOST_ONLY_SETTING_LABELS).toContain("PowerShell 路径");
+  for (const label of HOST_ONLY_SETTING_LABELS) {
+    expect(settingAppliesToHost(label, "win32")).toBe(true);
+    for (const host of ["linux", "darwin", undefined] as const)
+      expect(settingAppliesToHost(label, host)).toBe(false);
+  }
 });
 
 test("an ordinary row renders on every host", () => {

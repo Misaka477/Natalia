@@ -24,6 +24,30 @@ export const ENCODING_PREAMBLE =
   "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
 
 import { lstatSync } from "node:fs";
+import { basename } from "node:path";
+
+/**
+ * A pwsh path SET BY THE USER (the settings panel's PowerShell row, persisted in
+ * the config). The seam is module-level for the same reason the bash path's is:
+ * the shell call sites are primitives that must not each learn to read the
+ * config, and one boot-time wiring is the honest place. `undefined` restores
+ * discovery.
+ *
+ * WINDOWS ONLY, deliberately, exactly like the bash path: on POSIX the answer is
+ * `pwsh` and no setting is needed, so the platform guard is the resolver's, not
+ * merely the UI's. Matches the reference implementation's `pwshPath` plugin
+ * config, which is likewise an explicit executable overriding discovery.
+ */
+let configuredPwshExecutable: string | undefined;
+
+export function configurePwshExecutable(path: string | undefined): void {
+  configuredPwshExecutable = path && path.trim() ? path.trim() : undefined;
+}
+
+/** The configured path (the doctor's report reads it). */
+export function configuredPwshPath(): string | undefined {
+  return configuredPwshExecutable;
+}
 
 /**
  * Well-known PowerShell locations plus PATH entries, in resolution order.
@@ -86,9 +110,10 @@ export function pwshExecutableExists(path: string): boolean {
 /**
  * Resolve the PowerShell executable to spawn.
  *
- * `configured` is trusted as-is, so a caller who knows better wins. On win32 the
- * candidates are probed in order; everywhere else the answer is `pwsh` and PATH
- * resolution does the rest.
+ * `configured` is trusted as-is, so a caller who knows better wins; the
+ * boot-time configuration (the settings panel's row) is the next answer on
+ * Windows, and discovery follows. On win32 the candidates are probed in order;
+ * everywhere else the answer is `pwsh` and PATH resolution does the rest.
  */
 export function resolvePwshPath(
   configured: string | undefined,
@@ -98,8 +123,23 @@ export function resolvePwshPath(
 ): string {
   if (configured !== undefined && configured.length > 0) return configured;
   if (platform === "win32") {
+    if (configuredPwshExecutable) return configuredPwshExecutable;
     for (const candidate of candidatePwshPaths(env))
       if (exists(candidate)) return candidate;
   }
   return "pwsh";
+}
+
+/**
+ * Whether a resolved PowerShell is the OS's own Windows PowerShell 5.1.
+ *
+ * 5.1 is the resolver's documented last resort and a materially different
+ * shell: it is not the product's target (it has no PSReadLine by default, it
+ * rejects the pwsh-7 `-Interactive` switch, and it writes the OEM code page), so
+ * a caller that ended up there says so instead of leaving the operator to guess.
+ * Only that executable is named `powershell.exe`; every PowerShell 7 build is
+ * `pwsh.exe`.
+ */
+export function isWindowsPowerShell51(path: string): boolean {
+  return basename(path).toLowerCase() === "powershell.exe";
 }

@@ -13,7 +13,7 @@
  */
 import { createAttachmentService } from "@anthelia/attachments";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
-import { configureBashExecutable } from "@anthelia/platform";
+import { configureBashExecutable, configurePwshExecutable } from "@anthelia/platform";
 import {
   compositionProfile,
   compositionRowRegistrations,
@@ -636,10 +636,16 @@ export async function wireFrameworkServices(
     // declarations lags it, and the shape keeps the compile honest
     // without touching the cache (a stale .d.ts revives on a clean
     // build — restore the direct read then).
+    //
+    // The PowerShell row rides the same wiring with the same platform guard: a
+    // pwsh 7 installed outside the roots the resolver probes (a per-user
+    // install the inherited PATH does not carry) is exactly the machine whose
+    // pane fell back to Windows PowerShell 5.1 and rejected `-Interactive`.
     const shellConfig = ctx.ports.getTsRuntimeConfig() as
-      | { shell?: { bashPath?: string } }
+      | { shell?: { bashPath?: string; pwshPath?: string } }
       | undefined;
     configureBashExecutable(shellConfig?.shell?.bashPath);
+    configurePwshExecutable(shellConfig?.shell?.pwshPath);
     // Law 2: a reload is exactly when the composition can change (drop-in
     // edits land with the profile above) — re-point every cached entry's
     // scope so no old-composition value can answer a new one.

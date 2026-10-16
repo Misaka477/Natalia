@@ -50,17 +50,21 @@ export const terminalWindowConfigSchema = z.object({
 });
 
 /**
- * The shell-runtime settings. `bashPath` is WINDOWS-ONLY by design: on
- * Linux and macOS the shell is `bash` and no setting is needed, so the
- * resolver ignores this field off Windows (a row that does nothing on two
- * of three platforms is noise). Windows uses it because the discovery
- * sees only the four default roots and the PATH — a Git for Windows
- * installed elsewhere (D:\tools\Git, a portable install) had no answer
- * but an environment variable, and an env var is not a persisted
- * configuration. Empty means "discover".
+ * The shell-runtime settings. `bashPath` and `pwshPath` are WINDOWS-ONLY by
+ * design: on Linux and macOS the shell is `bash` (or the platform's own
+ * `zsh`), no setting is needed, and the resolvers ignore both fields off
+ * Windows (a row that does nothing on two of three platforms is noise).
+ * Windows uses them because discovery sees only the well-known install roots
+ * and the PATH — a Git for Windows installed elsewhere (D:\tools\Git, a
+ * portable install) and a PowerShell 7 installed outside the roots both had
+ * no answer but an environment variable, and an env var is not a persisted
+ * configuration. Empty means "discover", which is also how a machine whose
+ * pwsh 7 the runtime's inherited PATH cannot see gets fixed: the resolved
+ * path is what the pane is started with (see `resolvePwshPath`).
  */
 export const shellConfigSchema = z.object({
   bashPath: z.string().max(1024).optional(),
+  pwshPath: z.string().max(1024).optional(),
 });
 
 export const teamConfigSchema = z.object({

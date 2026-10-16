@@ -590,8 +590,28 @@ export function SettingsPanel(props: {
             runtime: {
               ...effectiveConfig()?.runtime,
               // An empty string means "discover" — the resolver's configured
-              // path is cleared, not set to a blank.
-              shell: { bashPath: path },
+              // path is cleared, not set to a blank. The rest of the shell
+              // section rides along: writing one row's value must not wipe the
+              // other row's (both settings live in this one object).
+              shell: { ...effectiveConfig()?.runtime?.shell, bashPath: path },
+            },
+          });
+        },
+      );
+    },
+    "PowerShell 路径": () => {
+      const current = effectiveConfig()?.runtime?.shell?.pwshPath ?? "";
+      openEdit(
+        "PowerShell 路径 (pwsh.exe 全路径，留空自动探测)",
+        current,
+        (raw) => {
+          const path = raw.trim();
+          updateConfig?.({
+            runtime: {
+              ...effectiveConfig()?.runtime,
+              // Same rule as the Git Bash row, and the same reason: the section
+              // holds both shell paths.
+              shell: { ...effectiveConfig()?.runtime?.shell, pwshPath: path },
             },
           });
         },
@@ -778,6 +798,8 @@ export function SettingsPanel(props: {
         return String(config.runtime?.terminal?.windowMode ?? "auto");
       case "Git Bash 路径":
         return config.runtime?.shell?.bashPath || "自动探测";
+      case "PowerShell 路径":
+        return config.runtime?.shell?.pwshPath || "自动探测";
       case "界面偏好保存范围":
         return uiWriteScope();
       case "运行时配置保存范围":

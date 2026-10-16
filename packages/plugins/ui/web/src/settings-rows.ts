@@ -131,6 +131,16 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
       "Git for Windows 的 bash.exe 位置（仅 Windows 需要；Linux/macOS 默认即 bash，无需设置）。留空 = 自动搜索默认安装位置与 PATH",
     category: "runtime",
   },
+  // The PowerShell twin, with the same host guard and the same reason: the
+  // resolver probes the well-known install roots and PATH, and a pwsh 7 outside
+  // both (a per-user install the runtime's inherited PATH does not carry) left
+  // the pane on Windows PowerShell 5.1.
+  {
+    label: "PowerShell 路径",
+    description:
+      "pwsh.exe 的全路径（仅 Windows 需要）。留空 = 依次搜索 Program Files、当前用户安装目录、PATH，最后退回系统自带的 Windows PowerShell 5.1",
+    category: "runtime",
+  },
   // --- 界面 -------------------------------------------------------------
   {
     label: "Theme Mode",

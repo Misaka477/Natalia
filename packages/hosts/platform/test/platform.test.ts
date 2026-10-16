@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { join, win32 } from "node:path";
 import {
   configureBashExecutable,
+  configuredPwshPath,
+  configurePwshExecutable,
   detachedShellPrefix,
   executableName,
   globalConfigHome,
   isWindows,
+  isWindowsPowerShell51,
   legacyNataliaRoots,
   profileShellCommand,
   isolatedShellCommand,
@@ -13,6 +16,7 @@ import {
   processTreeKillCommand,
   resolveBashExecutable,
   resolveNataliaHome,
+  resolvePwshPath,
   userRuntimeHome,
   userStateHome,
 } from "../src/index";
@@ -327,6 +331,92 @@ describe("the configured bash path (the settings UI's Git Bash row)", () => {
     } finally {
       configureBashExecutable(undefined);
     }
+  });
+});
+
+describe("the configured pwsh path (the settings panel's PowerShell row)", () => {
+  const perUserPwsh = win32.join(
+    "C:\\Users\\demo\\AppData\\Local",
+    "Programs",
+    "PowerShell",
+    "7",
+    "pwsh.exe",
+  );
+  const windowsEnv = {
+    ProgramFiles: "C:\\Program Files",
+    LOCALAPPDATA: "C:\\Users\\demo\\AppData\\Local",
+    PATH: "C:\\Windows\\system32",
+  };
+
+  test("wins over every candidate — a pwsh 7 anywhere is usable", () => {
+    configurePwshExecutable("D:\\tools\\pwsh\\pwsh.exe");
+    try {
+      expect(resolvePwshPath(undefined, windowsEnv, "win32")).toBe(
+        "D:\\tools\\pwsh\\pwsh.exe",
+      );
+      // Even when the discovery would have chosen the per-user install.
+      expect(
+        resolvePwshPath(
+          undefined,
+          windowsEnv,
+          "win32",
+          (path) => path === perUserPwsh,
+        ),
+      ).toBe("D:\\tools\\pwsh\\pwsh.exe");
+    } finally {
+      configurePwshExecutable(undefined);
+    }
+  });
+
+  test("a caller's own value still beats the configuration", () => {
+    configurePwshExecutable("D:\\tools\\pwsh\\pwsh.exe");
+    try {
+      expect(
+        resolvePwshPath("C:\\elsewhere\\pwsh.exe", windowsEnv, "win32"),
+      ).toBe("C:\\elsewhere\\pwsh.exe");
+    } finally {
+      configurePwshExecutable(undefined);
+    }
+  });
+
+  test("is a Windows-only surface — POSIX never consults it", () => {
+    configurePwshExecutable("/some/where/pwsh");
+    try {
+      // POSIX resolves the bare name and lets PATH do the rest; the setting is
+      // the Windows surface, exactly like the Git Bash row.
+      expect(resolvePwshPath(undefined, {}, "linux")).toBe("pwsh");
+    } finally {
+      configurePwshExecutable(undefined);
+    }
+  });
+
+  test("an empty or unset configuration restores discovery", () => {
+    configurePwshExecutable("   ");
+    try {
+      expect(configuredPwshPath()).toBeUndefined();
+      expect(
+        resolvePwshPath(
+          undefined,
+          windowsEnv,
+          "win32",
+          (path) => path === perUserPwsh,
+        ),
+      ).toBe(perUserPwsh);
+    } finally {
+      configurePwshExecutable(undefined);
+    }
+  });
+
+  test("the OS's own 5.1 is named, every PowerShell 7 build is not", () => {
+    expect(
+      isWindowsPowerShell51(
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      ),
+    ).toBe(true);
+    expect(
+      isWindowsPowerShell51("C:\\Program Files\\PowerShell\\7\\pwsh.exe"),
+    ).toBe(false);
+    expect(isWindowsPowerShell51("/usr/bin/pwsh")).toBe(false);
   });
 });
 

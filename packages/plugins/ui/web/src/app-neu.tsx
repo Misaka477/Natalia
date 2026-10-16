@@ -12,6 +12,7 @@ import type {
 } from "@anthelia/contracts";
 import { type AppState, cloneState } from "@natalia/view-store";
 import { cloneStateInWorker } from "./clone-state-worker-client";
+import { panelScopeKey } from "./panel-scope";
 import {
   createSignal,
   createEffect,
@@ -2581,16 +2582,21 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const workspaceIDForRightPanels = () =>
     state().activeWorkspaceID ?? workspaceIDForSelectedSession();
 
-  // Remount every right-side panel when the workspace/session changes. The
-  // panels hold their own async cursors and editors, so relying on prop
-  // updates left plan/review/files showing the previous workspace. Include
-  // both the immediately-selected session and the projection's active
-  // workspace/session because the runtime hydrates them in separate frames.
-  const rightPanelScopeKey = createMemo(
-    () =>
-      `${workspaceIDForSelectedSession() ?? ""}:${
-        state().activeWorkspaceID ?? ""
-      }:${selectedSessionID() || "none"}:${state().sessionID || "none"}`,
+  // Remount the right-side panels when the workspace/session changes, and ONLY
+  // then. The panels hold their own async cursors and editors, so relying on
+  // prop updates left plan/review/files showing the previous workspace.
+  //
+  // The key is computed by `panelScopeKey` from ONE source (audit: the tab
+  // re-mounted on every message). It used to mix a session-list lookup
+  // (`workspaceIDForSelectedSession()`, refreshed after events, therefore
+  // briefly empty) with the projection's own active workspace, and to carry the
+  // session twice — so an ordinary event could flip the key with nothing real
+  // changed, and a keyed <Show> rebuilds its subtree on any change.
+  const rightPanelScopeKey = createMemo(() =>
+    panelScopeKey({
+      workspaceID: state().activeWorkspaceID,
+      sessionID: selectedSessionID() || state().sessionID,
+    }),
   );
 
   const permissionOptions = () =>
@@ -2599,25 +2605,20 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       label: `${name}${config()?.defaultAgentMode === name ? "（默认）" : ""}`,
     }));
 
-  /**
-   * The key the PLUGIN side panels are re-mounted on: the workspace alone.
-   *
-   * The four shell-owned panels key on the full scope above because they hold
-   * session-scoped cursors and editors and must be rebuilt when the session
-   * changes. The plugin rail's panels are the opposite case, and the terminal
-   * is why: a pane belongs to the WORKSPACE, and every turn re-runs the
-   * session-derived parts of the key above — a message arriving, or a
-   * permission change emitting a system message, is enough to change them.
-   * The remount destroys the xterm instance, its socket and its scrollback
-   * and repaints the pane from nothing, which is the report that the whole
-   * terminal tab refreshes on every message. These panels receive the session
-   * as a prop and reload their own rows when it changes — the terminal's own
-   * effect keys on sessionID+runtimeURL — so a session change needs no
-   * remount, and a workspace change still gets one.
-   */
-  const sidePanelScopeKey = createMemo(
-    () => `${workspaceIDForSelectedSession() ?? ""}`,
-  );
+  // The PLUGIN side panels (terminal, todo, files) have NO scope key at all.
+  //
+  // They are mounted once and then only shown or hidden, because everything
+  // they hold lives inside the component and dies with it: an xterm instance
+  // with its socket and scrollback, an open diff, and — the sharpest case — the
+  // file editor's open tabs and UNSAVED buffers. A keyed <Show> rebuilds its
+  // subtree whenever the key changes, and the previous key was mixed from a
+  // debounced session list and a per-event projection snapshot, so an ordinary
+  // message re-mounted them.
+  //
+  // They do not need a key to stay correct: each panel subscribes to the
+  // projection itself and reloads on a real workspace change (the file editor's
+  // own `subscribe` compares the workspace key; the terminal's effect keys on
+  // sessionID+runtimeURL), so a key here could only do harm.
 
   async function changePermission(permission: string) {
     await props.ctx.runtime.updateConfig?.({
@@ -3317,25 +3318,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
     return unique;
   };
-
-  function mountSidePanel(
-    item: { pluginId: string; panel: { id: string } },
-    container: HTMLDivElement,
-  ) {
-    if (!props.ctx.host) return;
-    // The mount races the plugin catalog: a panel whose plugin is still loading
-    // throws "ui plugin not loaded", and an unhandled rejection is noise in the
-    // console. The catalog's revision change re-renders this slot and retries,
-    // so a miss here is expected once — it must be visible, not fatal.
-    void props.ctx.host
-      .mountPanel(item.pluginId, item.panel.id, container)
-      .catch((error: unknown) => {
-        console.warn(
-          `[panel] ${item.pluginId}:${item.panel.id} mount deferred:`,
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-  }
 
   const topbarPanels = () => {
     panelRevision();
@@ -4749,24 +4731,66 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                   />
                 </Show>
                 <For each={sidePanels()}>
-                  {(item) => (
-                    <Show
-                      keyed
-                      when={
-                        rightTab() === item.panel.id
-                          ? sidePanelScopeKey()
-                          : undefined
-                      }
-                    >
+                  {(item) => {
+                    // Mounted on FIRST activation, then kept: the panel is
+                    // never rebuilt again, only shown or hidden.
+                    //
+                    // Why not eagerly: mounting the terminal panel runs its
+                    // effect, and a terminal panel with no running pane creates
+                    // one (`loadTabs`), so eager mounting would spawn a shell
+                    // for a tab the user never opened. Why not on every
+                    // activation (what the keyed <Show> did): everything these
+                    // panels hold lives inside them — an xterm instance with its
+                    // socket and scrollback, the file editor's open tabs and
+                    // unsaved buffers — and a re-mount throws all of it away.
+                    let container: HTMLDivElement | undefined;
+                    let everShown = false;
+                    let mounting = false;
+                    let mounted = false;
+                    createEffect(() => {
+                      const active = rightTab() === item.panel.id;
+                      if (active) everShown = true;
+                      // A panel whose plugin is still loading fails to mount;
+                      // the catalog revision is the retry signal (the keyed
+                      // re-render used to provide that by rebuilding the slot).
+                      panelRevision();
+                      if (!everShown || !container || mounted || mounting)
+                        return;
+                      mounting = true;
+                      void props.ctx.host
+                        ?.mountPanel(item.pluginId, item.panel.id, container)
+                        .then(() => {
+                          mounted = true;
+                        })
+                        .catch((error: unknown) => {
+                          // Expected once while the plugin catalog races the
+                          // mount; the next revision retries.
+                          console.warn(
+                            `[panel] ${item.pluginId}:${item.panel.id} mount deferred:`,
+                            error instanceof Error
+                              ? error.message
+                              : String(error),
+                          );
+                        })
+                        .finally(() => {
+                          mounting = false;
+                        });
+                    });
+                    return (
                       <div
                         class="neu-side-panel-host"
-                        style="height:100%;"
+                        style={{
+                          height: "100%",
+                          ...(rightTab() === item.panel.id
+                            ? {}
+                            : { display: "none" }),
+                        }}
                         ref={(element) => {
-                          if (element) mountSidePanel(item, element);
+                          container = element;
                         }}
                       />
-                    </Show>
-                  )}
+                    );
+                  }}
                 </For>
               </div>
             </aside>

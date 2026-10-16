@@ -10,12 +10,6 @@ import {
   type PluginManifest,
 } from "@anthelia/plugin";
 import type { ToolRegistry } from "@anthelia/tools";
-import {
-  localToolsInput,
-  mcpInput,
-  skillsInput,
-  terminalInput,
-} from "@anthelia/runtime-services";
 import { discoverDesiredPluginEntries } from "./plugin-discovery";
 import { registerPluginOwner } from "./plugin-owner";
 import { snapshotProjectionContributions } from "./projection-contributions";
@@ -46,13 +40,6 @@ export function pluginSkillDirsFrom(
   return dirs;
 }
 
-const HOST_INPUT_SERVICES = new Set([
-  localToolsInput.id,
-  mcpInput.id,
-  skillsInput.id,
-  terminalInput.id,
-]);
-
 export type PluginConfigSnapshot = {
   paths?: string[];
   packages?: Record<string, PluginPackageConfig>;
@@ -72,7 +59,6 @@ export function createPluginsController(input: {
   let controller: ReturnType<typeof createDesiredPluginController> | undefined;
   let lastCatalog: DesiredPluginEntry[] = [];
   let closed = false;
-  let hostInputGeneration = 0;
 
   function init() {
     closed = false;
@@ -151,7 +137,6 @@ export function createPluginsController(input: {
   ) {
     const snapshot = structuredClone(config);
     const current = getController();
-    const inputGeneration = ++hostInputGeneration;
     await current.reconcileDesired(async () => {
       const users = await (
         input.discoverDesiredEntries ?? discoverDesiredPluginEntries
@@ -164,14 +149,17 @@ export function createPluginsController(input: {
         declaredIDs: injectedEntries.map((entry) => entry.id),
         onError: publishLoadError,
       });
-      const entries = [...injectedEntries, ...users].map((entry) =>
-        entry.manifest?.requires.some((name) => HOST_INPUT_SERVICES.has(name))
-          ? {
-              ...entry,
-              fingerprint: `${entry.fingerprint}:host-input:${inputGeneration}`,
-            }
-          : entry,
-      );
+      // The entries go in verbatim. A host-input consumer's own fingerprint
+      // already covers everything that decides its epoch — its manifest, its
+      // module, its settings, its enabled state — and the inputs it consumes
+      // are services: a rebind is reported to the registry as a service update,
+      // which reconciles exactly the plugins that require it. Minting a fresh
+      // fingerprint per reconcile on top of that (a per-call generation number)
+      // made every config reload — a settings write, a model selection, a
+      // permission switch, the provider check a turn runs before it starts —
+      // reload the terminal plugin and every other host-input consumer, which
+      // is how a sent message ended up restarting the user's terminal.
+      const entries = [...injectedEntries, ...users];
       const catalog = await resolveDesiredPluginCatalog({
         entries,
         previous: current.previous,

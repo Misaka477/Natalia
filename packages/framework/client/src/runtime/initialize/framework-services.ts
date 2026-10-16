@@ -147,6 +147,7 @@ import type {
   InitializeOptions,
   RuntimeContext,
 } from "@anthelia/substrate";
+import { createPluginInputBindings } from "../plugin-input-bindings";
 import { wireGovernanceLedger } from "./framework-governance-ledger";
 import { wireProviderModel } from "./framework-provider-model";
 import { wireRuntimeStatus } from "./framework-runtime-status";
@@ -563,27 +564,26 @@ export async function wireFrameworkServices(
   }
   refreshRuntimeConfig();
 
-  let pluginInputDisposers: Array<() => void> = [];
+  const pluginInputs = createPluginInputBindings(ctx.state.serviceDirectory);
   async function refreshPluginInputs() {
-    for (const disposeInput of pluginInputDisposers.splice(0).reverse())
-      disposeInput();
     const config = ctx.ports.getTsRuntimeConfig();
-    if (!config) return;
-    // Host inputs bind through the service directory: one owner per binding
-    // with the same dispose-then-provide reload semantics the owner channel
-    // had, and the wire name is the token's id on both sides of the boundary.
-    const provide = <T>(token: ServiceToken<T>, value: T | undefined) => {
-      if (value !== undefined)
-        pluginInputDisposers.push(
-          ctx.state.serviceDirectory.provide(token, value),
-        );
-    };
-    provide(
+    if (!config) {
+      pluginInputs.disposeAll();
+      return;
+    }
+    // Host inputs bind through the service directory, one binding per token.
+    // A rebuild is NOT a rebind: an input whose data came out identical keeps
+    // the binding it already has, because the service transiently disappearing
+    // (dispose-then-provide) is what deactivated every plugin requiring it and
+    // took the terminal panes down with them.
+    const rebind = <T>(token: ServiceToken<T>, value: T | undefined) =>
+      pluginInputs.rebind(token, value);
+    rebind(
       localToolsInput,
       ctx.state.initialize.localToolsPluginInput(config),
     );
-    provide(mcpInput, ctx.state.initialize.mcpPluginInput(config));
-    provide(skillsInput, ctx.state.initialize.skillsPluginInput(config));
+    rebind(mcpInput, ctx.state.initialize.mcpPluginInput(config));
+    rebind(skillsInput, ctx.state.initialize.skillsPluginInput(config));
 
     // P3 "base profile 随包机制" (interface spec §6.3): the shipped
     // read-only base, then user and workspace drop-ins (lexicographic
@@ -625,7 +625,7 @@ export async function wireFrameworkServices(
         registry: profileRegistry,
       }).finally(done);
     })();
-    provide(compositionProfile, activeProfile);
+    rebind(compositionProfile, activeProfile);
     // Decision17: the store backend follows the same breath as the
     // profile (absence = TypeScript, so nothing changes until a row
     // says otherwise).
@@ -667,7 +667,7 @@ export async function wireFrameworkServices(
       windowMode: () =>
         ctx.ports.getTsRuntimeConfig()?.runtime.terminal.windowMode ?? "auto",
     };
-    provide(terminalInput, terminal);
+    rebind(terminalInput, terminal);
   }
   await (() => {
     const done = slow("refreshPluginInputs");
@@ -972,8 +972,7 @@ export async function wireFrameworkServices(
     close() {
       dispose();
       files.close();
-      for (const disposeInput of pluginInputDisposers.splice(0).reverse())
-        disposeInput();
+      pluginInputs.disposeAll();
       runtimeConfigDispose?.();
       runtimeConfigDispose = undefined;
     },

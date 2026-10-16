@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createToolRegistry } from "@anthelia/tools";
 import { CapabilityRegistry } from "@anthelia/capability";
 import { createPluginsController } from "@anthelia/substrate";
+import { skillsInput } from "@anthelia/runtime-services";
 import {
   discoverPluginManifests,
   validatePluginPath,
@@ -1594,5 +1595,64 @@ test("plugins controller reactivates a mounted plugin when service provider iden
   ]);
   providerA.release();
   providerC.release();
+  await controller.close();
+});
+
+test("an unchanged host-input reconcile does not re-arm the plugin that requires it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-host-input-reconcile-"));
+  const kernel = new CapabilityRegistry();
+  const { controller } = makeController(root, kernel);
+  const lifecycle: string[] = [];
+  const consumer = desiredPlugin(
+    {
+      manifest: {
+        apiVersion: 2,
+        id: "builtin.host-input-consumer",
+        version: "1.0.0",
+        name: "Host Input Consumer",
+        description: "",
+        entry: "natalia:test:host-input-consumer",
+        scope: "workspace",
+        provides: [],
+        requires: [skillsInput.id],
+        optionalRequires: [],
+        conflicts: [],
+        dependencies: [],
+        hooks: {},
+        integrationPoints: [],
+      },
+      setup() {
+        lifecycle.push("setup");
+      },
+      dispose() {
+        lifecycle.push("dispose");
+      },
+    },
+    "stable",
+  );
+  const provider = kernel.registerOwner({
+    id: "test.host-input",
+    name: "Host Input",
+    version: "1.0.0",
+    scope: "workspace",
+    grants: ["services"],
+  });
+  provider.contribute("services", skillsInput.id, { workspaceRoot: root });
+  const settings = { [consumer.id]: { value: 1 } };
+
+  controller.init();
+  await controller.reconcileDesired([consumer], { settings });
+  expect(lifecycle).toEqual(["setup"]);
+  // The runtime reconciles the desired catalog on every config reload — a
+  // settings write, a model selection, a permission switch, the provider check
+  // a turn runs before it starts. When none of them changed the plugin's own
+  // identity, settings, enabled state or host inputs, the plugin must keep the
+  // epoch it has: disposing and re-setting it is exactly the churn that took
+  // the terminal controller's panes down with it (2026-10-13).
+  await controller.reconcileDesired([consumer], { settings });
+  await controller.reconcileDesired([consumer], { settings });
+  expect(lifecycle).toEqual(["setup"]);
+  expect(controller.active(consumer.id)).toBe(true);
+  provider.release();
   await controller.close();
 });

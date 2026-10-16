@@ -45,6 +45,11 @@ export function createToolPolicySurface(ctx: RuntimeContext) {
           type: "diagnostic",
           level: "info",
           message: diagnostic,
+          // The spine (audit 缺口 3): a denial is a sentence about a TURN,
+          // and the hook event above already names it. Without this the
+          // diagnostic had no subject and could not be grouped by the turn
+          // it belongs to.
+          turnID: hookEvent.turnID,
         });
       if (!preResult.allowed)
         throw new Error(
@@ -80,6 +85,9 @@ export function createToolPolicySurface(ctx: RuntimeContext) {
         type: "diagnostic",
         level: "info",
         message: diagnostic,
+        // The same spine: the hook event just above names the turn this
+        // management gate asked about.
+        turnID: hookEvent.turnID,
       });
     if (!result.allowed)
       throw new Error(
@@ -113,6 +121,12 @@ export function createToolPolicySurface(ctx: RuntimeContext) {
           type: "diagnostic",
           level: "info",
           message: diagnostic,
+          // The spine here too: the active turn when there is one, and the
+          // session-scoped sandbox key the other two gates use when there is
+          // not — never an id invented to fill the field.
+          turnID:
+            exec?.activeTurnID ??
+            (exec ? `sandbox:${exec.session.id}` : undefined),
         });
       throw new Error(
         `${input.toolName} denied for "${path}": ${permission.diagnostics.join("; ")}`,

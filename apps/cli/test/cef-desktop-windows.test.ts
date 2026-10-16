@@ -480,8 +480,16 @@ test("P23's fix re-applies the viewport before any output can flow", () => {
   // this in one run instead of re-deriving it from a silent pane.
   expect(bridge).toContain("viewport handshake requested");
 
-  // The bridge must NOT silently drop the spec's env overlay while pretending it
-  // applies it. The divergence from the POSIX bridge is real, and it is stated.
+  // The bridge APPLIES the spec's env overlay, the way Windows requires.
+  //
+  // This pin used to read the other way round: the overlay was disabled while the
+  // mute pane was being chased and the file carried a "DIVERGENCE" note saying
+  // so. The cost of that note was silent and platform-shaped — every variable the
+  // controller hands a pane (`PtySpawnOptions.env`: the per-pane history file,
+  // zsh's ZDOTDIR) existed on POSIX and vanished on Windows, with nothing in any
+  // log. The overlay is now the sorted `lpEnvironment` block the old note itself
+  // prescribed: a BLOCK, not `SetEnvironmentVariableW`, which would mutate the
+  // bridge's own environment for the children it starts afterwards.
   const controller = readFileSync(
     new URL(
       "../../../packages/plugins/native-terminal/src/pty-terminal-controller.ts",
@@ -489,9 +497,12 @@ test("P23's fix re-applies the viewport before any output can flow", () => {
     ),
     "utf8",
   );
-  // The POSIX bridge honours the spec's env overlay; the ConPTY one does not.
+  // Both bridges honour it, each in its own spelling: the POSIX bridge updates
+  // its environment map, the ConPTY bridge builds the block.
   expect(controller).toContain('env.update(spec.get("env") or {})');
-  expect(bridge).toContain("DIVERGENCE");
+  expect(bridge).toContain('extractStringMap(spec, "env")');
+  expect(bridge).toContain("buildEnvironmentBlock");
+  expect(bridge).toContain("CREATE_UNICODE_ENVIRONMENT");
   // The ConPTY bridge is the Windows default, and this is the pin that says so:
   // no env request may stand between the controller and it. (The mute pane
   // that once justified the opt-in is fixed and CI-verified on the runner.)

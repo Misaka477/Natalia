@@ -294,10 +294,25 @@ export function createProviderSelection(
     const model = exec ? exec.selectedModel : selectedModel;
     const ref = modelRefKeyForSelection(agent, model);
     if (!ref) {
+      // The negotiation's own record (audit 缺口 3/4): a diagnostic alone is
+      // session-scoped and event-shaped, while this is a decision the log must
+      // carry — a turn kept serving an old provider because a new model could
+      // not be named, and neither the turn nor the log said so.
+      const reason = "model_not_configured";
+      logOf(ctx.state.serviceDirectory).warn(
+        "provider",
+        "model override unavailable",
+        {
+          agent: agent?.name ?? "default",
+          reason,
+          ...(exec?.activeTurnID ? { turnID: exec.activeTurnID } : {}),
+        },
+      );
       publishForSession(exec, {
         type: "diagnostic",
         level: "warning",
-        message: `agent ${agent?.name ?? "default"} model override is unavailable: model_not_configured; retaining current provider`,
+        message: `agent ${agent?.name ?? "default"} model override is unavailable: ${reason}; retaining current provider`,
+        ...(exec?.activeTurnID ? { turnID: exec.activeTurnID } : {}),
       });
       return;
     }
@@ -313,10 +328,23 @@ export function createProviderSelection(
     );
     if (!next) {
       const status = modelSelectionStatus(tsRuntimeConfig, ref);
+      // The same seam: the resolution named WHY (status.reason), and the log
+      // gets the reason plus the turn while the diagnostic carries the spine.
+      logOf(ctx.state.serviceDirectory).warn(
+        "provider",
+        "model override unavailable",
+        {
+          agent: agent?.name ?? "default",
+          model: ref,
+          reason: status.reason ?? "provider_not_configured",
+          ...(exec?.activeTurnID ? { turnID: exec.activeTurnID } : {}),
+        },
+      );
       publishForSession(exec, {
         type: "diagnostic",
         level: "warning",
         message: `agent ${agent?.name ?? "default"} model override is unavailable: ${status.reason ?? "provider_not_configured"}; retaining current provider`,
+        ...(exec?.activeTurnID ? { turnID: exec.activeTurnID } : {}),
       });
       return;
     }

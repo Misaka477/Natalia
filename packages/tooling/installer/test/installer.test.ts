@@ -842,6 +842,103 @@ test("official reinstall resolves the current bundled source", async () => {
   ).toBeDefined();
 });
 
+test("official reinstall replaces the staged package the lock claims", async () => {
+  // npm treats a satisfied dependency as up to date, so `npm install <the same
+  // directory>` exits 0 and copies nothing while the lock records the new
+  // contentHash — the store then serves the PREVIOUS bundle under a lock that
+  // says otherwise. Measured on a deployed store: `natalia plugin reinstall
+  // natalia-tool-terminal` returned 0 and node_modules still held the build
+  // from days earlier, which is how a shipped fix never ran.
+  const pluginStoreRoot = await mkdtemp(
+    join(tmpdir(), "natalia-official-replace-"),
+  );
+  const distributionRoot = await officialDistribution("natalia-tool-ask");
+  const staged = join(
+    pluginStoreRoot,
+    "node_modules",
+    "@natalia",
+    "plugin-tool-ask",
+  );
+  await mkdir(staged, { recursive: true });
+  await writeFile(join(staged, "index.js"), "// the previous build\n");
+  await writeFile(
+    join(staged, "gone-in-this-build.js"),
+    "// not shipped now\n",
+  );
+
+  const stagedAtInstall: boolean[] = [];
+  await reinstallOfficialPlugin({
+    pluginStoreRoot,
+    distributionRoot,
+    pluginID: "natalia-tool-ask",
+    seams: {
+      installPlugin: async (input) => {
+        stagedAtInstall.push(existsSync(staged));
+        // What npm does once the directory is gone: re-materialize it from the
+        // spec. The files it does not ship are not restored with it.
+        await mkdir(staged, { recursive: true });
+        await writeFile(join(staged, "index.js"), "// this build\n");
+        return {
+          installed: true as const,
+          pluginID: "natalia-tool-ask",
+          packageName: "@natalia/plugin-tool-ask",
+          metadata: {
+            id: "natalia-tool-ask",
+            source: { type: "path" as const, path: input.spec },
+            resolvedVersion: "1.0.0",
+            contentHash: "the-package-just-written",
+            scope: "session" as const,
+            dependencies: [],
+          },
+        };
+      },
+    },
+  });
+
+  // The package was gone when the install ran, and what the store holds
+  // afterwards is this build's files and only them.
+  expect(stagedAtInstall).toEqual([false]);
+  expect(await readFile(join(staged, "index.js"), "utf8")).toBe(
+    "// this build\n",
+  );
+  expect(existsSync(join(staged, "gone-in-this-build.js"))).toBe(false);
+});
+
+test("a reinstall whose distribution lost the package keeps the install", async () => {
+  // The spec is resolved before anything is removed: a distribution that cannot
+  // produce the package must fail with the working install still on disk.
+  const pluginStoreRoot = await mkdtemp(
+    join(tmpdir(), "natalia-official-missing-"),
+  );
+  const emptyDistribution = await mkdtemp(
+    join(tmpdir(), "natalia-dist-empty-"),
+  );
+  const staged = join(
+    pluginStoreRoot,
+    "node_modules",
+    "@natalia",
+    "plugin-tool-ask",
+  );
+  await mkdir(staged, { recursive: true });
+  await writeFile(join(staged, "index.js"), "// the working build\n");
+  let threw = "";
+  try {
+    await reinstallOfficialPlugin({
+      pluginStoreRoot,
+      distributionRoot: emptyDistribution,
+      pluginID: "natalia-tool-ask",
+    });
+  } catch (error) {
+    threw = String(error);
+  }
+  expect(threw).toContain(
+    "official plugin package is missing from distribution",
+  );
+  expect(await readFile(join(staged, "index.js"), "utf8")).toBe(
+    "// the working build\n",
+  );
+});
+
 test("zero official plugins is a valid initialized state", async () => {
   const pluginStoreRoot = await mkdtemp(
     join(tmpdir(), "natalia-official-zero-"),

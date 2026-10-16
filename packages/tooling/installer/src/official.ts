@@ -8,7 +8,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { withStoreLock, type PackageManagerRun } from "./closure";
+import {
+  pluginClosurePaths,
+  withStoreLock,
+  type PackageManagerRun,
+} from "./closure";
 import { installPlugin } from "./lifecycle";
 
 export const OFFICIAL_PLUGIN_PACKAGES = [
@@ -173,20 +177,59 @@ export async function initializeOfficialPlugins(
   );
 }
 
+/**
+ * Reinstall one official plugin from the distribution the runtime ships with.
+ *
+ * The staged package is REMOVED first, and that removal is the whole point.
+ * `installPlugin` runs `npm install <absolute directory>`, and npm treats a
+ * dependency the store already satisfies as up to date: the store's
+ * package.json names this package, package-lock.json already records it at this
+ * version, and the directory is present — so npm exits 0 and copies NOTHING
+ * while `installPlugin` writes the freshly computed contentHash into
+ * natalia.lock. Measured on a deployed store: `natalia plugin reinstall
+ * natalia-tool-terminal` exited 0, the lock recorded the new hash, and
+ * `node_modules/@natalia/plugin-native-terminal/index.js` was still the
+ * PREVIOUS build (its mtime days old) — so the runtime loaded plugin code the
+ * lock claimed it had replaced, and a fix that shipped in the release never
+ * ran. Removing the staged directory is what makes npm re-materialize the
+ * package from the distribution, which is what "reinstall" means.
+ *
+ * The spec is resolved BEFORE the removal, so a distribution that has lost (or
+ * never had) the package fails without taking a working install with it.
+ */
 export async function reinstallOfficialPlugin(
   input: OfficialInstallInput & {
     pluginID: OfficialPluginID;
     seams?: OfficialInstallSeams;
   },
 ) {
+  const spec = await resolveOfficialPluginPackage(
+    input.distributionRoot,
+    input.pluginID,
+  );
+  await removeStagedPackage(input.pluginStoreRoot, input.pluginID);
   return await (input.seams?.installPlugin ?? installPlugin)({
     pluginStoreRoot: input.pluginStoreRoot,
-    spec: await resolveOfficialPluginPackage(
-      input.distributionRoot,
-      input.pluginID,
-    ),
+    spec,
     runPackageManager: input.runPackageManager,
   });
+}
+
+/** The directory a plugin id installs as, gone if it was there. */
+async function removeStagedPackage(
+  pluginStoreRoot: string,
+  pluginID: OfficialPluginID,
+) {
+  const entry = OFFICIAL_PLUGIN_PACKAGES.find(({ id }) => id === pluginID);
+  if (!entry) throw new Error(`unknown official plugin: ${pluginID}`);
+  await rm(
+    join(
+      pluginClosurePaths(pluginStoreRoot).pluginsDir,
+      "node_modules",
+      ...entry.packageName.split("/"),
+    ),
+    { recursive: true, force: true },
+  );
 }
 
 async function fileExists(path: string) {

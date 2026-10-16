@@ -94,11 +94,21 @@ export function createNativeTerminalSurface(
   options: ClientSurfaceOptions,
 ): Surface {
   return {
-    async nativeTerminalList(sessionID?: string) {
+    async nativeTerminalList(
+      sessionID?: string,
+      options?: { restoreSaved?: boolean },
+    ) {
       await ctx.ports.getReady();
       const terminal =
         ctx.state.serviceDirectory.getOptional(terminalController);
-      return (await terminal?.list(sessionID)) ?? [];
+      if (!terminal) return [];
+      // The saved layout first, when the caller asked for it: a runtime that
+      // started after the one that owned this session's panes has none running,
+      // and the panel is about to show the session's terminal. Idempotent, so an
+      // attach that races another one cannot double-start a pane.
+      if (options?.restoreSaved && sessionID)
+        await terminal.restoreSaved?.(sessionID);
+      return (await terminal.list(sessionID)) ?? [];
     },
     async nativeTerminalRead(id, sessionID?: string) {
       await ctx.ports.getReady();

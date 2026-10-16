@@ -4366,6 +4366,15 @@ export type RuntimeClient = {
   }): Promise<RuntimeWorkspaceFileEntry[]>;
   nativeTerminalList?(
     sessionID?: string,
+    /**
+     * Rebuild the panes this session had before the runtime last restarted.
+     *
+     * Opt-in because it STARTS processes: only a caller about to show the
+     * terminal should ask (the panel, on its first load of a session), never a
+     * reader that merely enumerates. Idempotent — panes already running are left
+     * alone — so it is safe to ask on every attach.
+     */
+    options?: { restoreSaved?: boolean },
   ): Promise<RuntimeNativeTerminalSession[]>;
   nativeTerminalRead?(
     id: string,

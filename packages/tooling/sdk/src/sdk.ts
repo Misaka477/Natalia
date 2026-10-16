@@ -390,6 +390,12 @@ export type NataliaSDK = {
   /** The native terminal host. P0-D scopes the secure-input members. */
   nativeTerminalList(
     sessionID?: string,
+    /**
+     * Rebuild the panes this session had before the runtime restarted. Starts
+     * processes, so it is opt-in and belongs to a caller about to show the
+     * terminal.
+     */
+    options?: { restoreSaved?: boolean },
   ): Promise<
     Awaited<ReturnType<NonNullable<RuntimeClient["nativeTerminalList"]>>>
   >;
@@ -1055,8 +1061,13 @@ export function createNataliaSDK(options: NataliaSDKOptions): NataliaSDK {
     },
     workGraphNodes: async (input) => await call("workgraph.nodes", input ?? {}),
     workGraphEdges: async (input) => await call("workgraph.edges", input ?? {}),
-    nativeTerminalList: async (sessionID) =>
-      await call("nativeTerminal.list", sessionID ? { sessionID } : {}),
+    nativeTerminalList: async (sessionID, options) =>
+      await call("nativeTerminal.list", {
+        ...(sessionID ? { sessionID } : {}),
+        // Opt-in: it starts the panes a session had before the runtime
+        // restarted, so only a caller about to show the terminal asks for it.
+        ...(options?.restoreSaved ? { restoreSaved: true } : {}),
+      }),
     nativeTerminalRead: async (id) => await call("nativeTerminal.read", { id }),
     nativeTerminalStop: async (id) => await call("nativeTerminal.stop", { id }),
     nativeTerminalOpenHub: async () => await call("nativeTerminal.openHub", {}),

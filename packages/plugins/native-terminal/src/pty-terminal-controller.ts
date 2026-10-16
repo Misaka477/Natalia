@@ -130,6 +130,13 @@ type PtySession = {
   sessionID?: string;
   agentID?: string;
   command: string;
+  /**
+   * Whether this pane was started inside a confinement — the model's pane for
+   * one task, not a tab the user opened. Confined panes are not part of a
+   * session's saved layout: restoring one through the panel's own start path
+   * would come back unconfined.
+   */
+  confined?: boolean;
   cwd: string;
   startedAt: string;
   status: "running" | "exited";
@@ -208,6 +215,33 @@ export type PtyTerminalControllerInput = {
   settlement?: SettlementService;
   /** How long the pane stays quiet before a frame is "settled". */
   frameSettleMs?: number;
+  /**
+   * The session's saved pane layout, if it has one.
+   *
+   * Storage is the framework's (the session store's metadata); the layout's
+   * meaning is this controller's — which panes a session had, in which order,
+   * and where each one was standing.
+   */
+  loadPaneLayout?(sessionID: string): Promise<PaneLayoutRecord | undefined>;
+  /** Remember the session's layout (called whenever its panes change). */
+  savePaneLayout?(sessionID: string, layout: PaneLayoutRecord): Promise<void>;
+};
+
+/**
+ * What a session's terminal looked like, for the next runtime to rebuild.
+ *
+ * Panes, not tabs: the tab grouping and the split arrangement are the panel's
+ * (the front end owns that model), while this controller owns the processes. A
+ * restored pane keeps its ID — which is what carries its ↑/↓ history file — and
+ * its working directory, which is what makes "the terminal came back" true of a
+ * session that was in the middle of a build.
+ *
+ * Confined panes are NOT recorded: those are the model's, started inside a
+ * sandbox for one task and stopped when it ends, and bringing one back through
+ * the panel's unconfined start path would be a privilege change nobody asked for.
+ */
+export type PaneLayoutRecord = {
+  panes: Array<{ id: string; cwd: string; command: string }>;
 };
 
 const PYTHON_PTY_BRIDGE = `
@@ -727,6 +761,86 @@ export function createPtyTerminalController(
   );
   const idleMs = Math.max(1, input.idleMs ?? DEFAULT_IDLE_MS);
 
+  /**
+   * The session's terminal as it should come back: the panes a human can see
+   * (unconfined), in the order they were opened, with the directory each one
+   * was standing in.
+   */
+  function layoutFor(sessionID: string): PaneLayoutRecord {
+    const panes: PaneLayoutRecord["panes"] = [];
+    for (const session of sessions.values()) {
+      if (session.sessionID !== sessionID) continue;
+      if (session.status !== "running" || session.confined) continue;
+      panes.push({
+        id: session.id,
+        cwd: session.cwd,
+        command: session.command,
+      });
+    }
+    return { panes };
+  }
+
+  /**
+   * Writes the layout a moment after the change that produced it.
+   *
+   * Debounced because one gesture can move several panes (a split, a close-all)
+   * and every write is a metadata round-trip through the session store; a pane
+   * that starts and exits immediately is then one write, not three.
+   */
+  const layoutSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function scheduleLayoutSave(sessionID: string | undefined): void {
+    if (!sessionID || !input.savePaneLayout) return;
+    const pending = layoutSaveTimers.get(sessionID);
+    if (pending) clearTimeout(pending);
+    const timer = setTimeout(() => {
+      layoutSaveTimers.delete(sessionID);
+      const layout = layoutFor(sessionID);
+      // A failed write is not this call's business: the layout is a convenience
+      // for the next runtime, and a pane must not die because metadata failed.
+      void input.savePaneLayout?.(sessionID, layout).catch(() => undefined);
+    }, 150);
+    timer.unref?.();
+    layoutSaveTimers.set(sessionID, timer);
+  }
+
+  /**
+   * Rebuilds the panes a session had, for the runtime that started after the one
+   * that owned them.
+   *
+   * Idempotent by pane id, so a caller may ask on every attach: a pane that is
+   * already running is left alone. A pane that was started as a PROGRAM rather
+   * than a shell is restored with that program, and one that cannot start (a
+   * shell gone from this machine, a workspace that moved) is reported and
+   * skipped rather than failing the whole restore — the session's other tabs
+   * still come back.
+   */
+  async function restoreSaved(sessionID: string): Promise<void> {
+    if (!input.loadPaneLayout) return;
+    const saved = await input.loadPaneLayout(sessionID).catch(() => undefined);
+    if (!saved?.panes.length) return;
+    for (const pane of saved.panes) {
+      const existing = sessions.get(pane.id);
+      if (existing?.status === "running") continue;
+      try {
+        await start({
+          command: pane.command,
+          cwd: pane.cwd || input.workspaceRoot,
+          id: pane.id,
+          sessionID,
+        });
+      } catch (error) {
+        input.publish({
+          type: "diagnostic",
+          level: "warning",
+          message: `a saved terminal pane could not be restored: ${error instanceof Error ? error.message : String(error)}`,
+          ...(sessionID
+            ? { sessionID: sessionID as RuntimeEvent["sessionID"] }
+            : {}),
+        });
+      }
+    }
+  }
+
   function sessionVisible(session: PtySession): boolean {
     return activeSession === undefined || session.sessionID === activeSession;
   }
@@ -1051,6 +1165,9 @@ export function createPtyTerminalController(
     session: PtySession,
     actor: "model" | "human" | "system",
   ) {
+    // A pane leaving the running set is a layout change: this is the one path
+    // every stop and every exit takes.
+    scheduleLayoutSave(session.sessionID);
     if (session.status === "exited") return;
     session.status = "exited";
     session.attached = false;
@@ -1420,6 +1537,7 @@ export function createPtyTerminalController(
       sessionID: owningSession,
       ...(startInput.agentID ? { agentID: startInput.agentID } : {}),
       command: requestedCommand,
+      ...(startInput.confinement ? { confined: true } : {}),
       cwd: startInput.cwd,
       startedAt: new Date().toISOString(),
       status: "running",
@@ -1529,6 +1647,7 @@ export function createPtyTerminalController(
       }),
     );
     sessions.set(id, session);
+    scheduleLayoutSave(owningSession);
     input.onPerformance("pty.start", performance.now() - started);
     publishAudit(session, "started", "model");
     return publicSession(session);
@@ -1937,6 +2056,7 @@ export function createPtyTerminalController(
     subscribeOutput,
     stopForSession,
     collectExited,
+    restoreSaved,
     close,
     forceCloseSync,
     // Whether this controller can still serve. A closed controller is spent:

@@ -44,6 +44,14 @@ export type TerminalControllerInputs = {
   maxPerSession?: number;
   idleMs?: number;
   settlement?: unknown;
+  /**
+   * The framework's storage for a session's saved pane layout. Carried through
+   * the holder like the rest of the construction input: the adopted controller
+   * keeps the hooks its first instance was given, which is the same instance's
+   * closures (a plugin reload does not change them).
+   */
+  loadPaneLayout?: unknown;
+  savePaneLayout?: unknown;
 };
 
 type HeldController = {

@@ -82,6 +82,24 @@ function intParam(params: Record<string, unknown> | undefined, name: string) {
   return value;
 }
 
+/**
+ * An optional boolean parameter, rejected when it is not one.
+ *
+ * The strictness is the rule every other param helper here follows: a caller
+ * that sent `"restoreSaved": "yes"` is a caller whose intent this server cannot
+ * read, and coercing it would start panes on a guess.
+ */
+function booleanParam(
+  params: Record<string, unknown> | undefined,
+  name: string,
+) {
+  const value = params?.[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean")
+    throw invalidParams(`${name} must be a boolean`);
+  return value;
+}
+
 export function arrayParam(
   params: Record<string, unknown> | undefined,
   name: string,
@@ -2063,6 +2081,11 @@ export async function handleRPCMessage(
         id: body.id ?? null,
         result: await client.nativeTerminalList?.(
           optionalStringParam(body.params, "sessionID"),
+          // Opt-in, and only ever sent by the panel's first load of a session:
+          // it starts the panes that session had before the runtime restarted.
+          booleanParam(body.params, "restoreSaved")
+            ? { restoreSaved: true }
+            : undefined,
         ),
       };
     }

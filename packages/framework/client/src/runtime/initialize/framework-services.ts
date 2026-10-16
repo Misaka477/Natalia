@@ -12,6 +12,7 @@
  * returned handle.
  */
 import { createAttachmentService } from "@anthelia/attachments";
+import { sessionStoreController as sessionStoreControllerToken } from "@anthelia/session-store";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
 import {
   configureBashExecutable,
@@ -162,6 +163,19 @@ import type {
   CompactionService,
   RetryService,
 } from "@anthelia/runtime";
+
+/**
+ * The saved terminal layout, as the framework stores it.
+ *
+ * Declared here rather than imported from the terminal plugin: the plugin owns
+ * what a layout MEANS (`PaneLayoutRecord` in the native-terminal package), and
+ * the framework owns where it is kept — a durable per-session fact in the
+ * session store's metadata. The two shapes have to agree, and the plugin's own
+ * round-trip test is what holds them together.
+ */
+type TerminalPaneLayout = {
+  panes: Array<{ id: string; cwd: string; command: string }>;
+};
 
 export type { FrameworkServices } from "@anthelia/substrate";
 import type { ContextLedgerFactory } from "@natalia/context-ledger";
@@ -683,6 +697,62 @@ export async function wireFrameworkServices(
       userRuntimeHome: ctx.ports.getUserRuntimeHome,
       windowMode: () =>
         ctx.ports.getTsRuntimeConfig()?.runtime.terminal.windowMode ?? "auto",
+      // The session's saved pane layout lives in the session store's metadata —
+      // the same home the pending-human-terminal fact uses — because it is a
+      // durable per-session fact about this session's terminal. The terminal
+      // plugin owns what a layout MEANS; this owns where it is kept.
+      loadPaneLayout: async (forSession) => {
+        const exec = ctx.ports
+          .getExecutionBySession()
+          .get(forSession as SessionID);
+        const inMemory = exec?.session.metadata?.terminalLayout;
+        if (inMemory) return inMemory as TerminalPaneLayout;
+        const store = ctx.state.serviceDirectory.getOptional(
+          sessionStoreControllerToken,
+        );
+        if (!store) return undefined;
+        // The live execution carries it whenever the session is attached (which
+        // is exactly when the panel asks), so this store read is the fallback
+        // for a runtime that has not attached it yet.
+        const loaded = await store
+          .load(forSession as SessionID, { runtimeEvents: true })
+          .catch(() => undefined);
+        return loaded?.session.metadata?.terminalLayout as
+          | TerminalPaneLayout
+          | undefined;
+      },
+      savePaneLayout: async (forSession, layout) => {
+        const exec = ctx.ports
+          .getExecutionBySession()
+          .get(forSession as SessionID);
+        if (exec?.session)
+          exec.session.metadata = {
+            ...exec.session.metadata,
+            terminalLayout: layout,
+          };
+        const store = ctx.state.serviceDirectory.getOptional(
+          sessionStoreControllerToken,
+        );
+        if (!store) return;
+        // Serialized per session like every other metadata write: two layout
+        // writes racing would land in whatever order the store happened to
+        // commit them, and the older one would win.
+        const previous = ctx.ports.getSessionPersistenceForSession(
+          forSession as SessionID,
+        );
+        const next = previous
+          .then(() =>
+            store.updateMetadata(forSession as SessionID, {
+              terminalLayout: layout,
+            }),
+          )
+          .catch(() => undefined);
+        ctx.ports.setSessionPersistenceForSession(
+          forSession as SessionID,
+          next,
+        );
+        await next;
+      },
     };
     provide(terminalInput, terminal);
   }

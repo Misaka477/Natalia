@@ -82,10 +82,18 @@ export function TerminalPane(
    * actually moved: a tab whose panes are all still running is handed on as the
    * SAME object, so the xterm host is neither rebuilt nor reconnected.
    */
-  async function loadTabs(forSessionID: string) {
+  async function loadTabs(forSessionID: string, restoreSaved = false) {
     const token = ++loadToken;
     const listed =
-      (await props.runtime?.nativeTerminalList?.(forSessionID)) ?? [];
+      (await props.runtime?.nativeTerminalList?.(
+        forSessionID,
+        // The FIRST load of a session is the one that may rebuild what the
+        // runtime before this one left behind: `restoreSaved` starts the panes
+        // that session had, with their ids and directories, so the tabs come
+        // back instead of the panel inventing one empty terminal. Every later
+        // load (an event, a reconcile) must never start anything.
+        restoreSaved ? { restoreSaved: true } : undefined,
+      )) ?? [];
     if (token !== loadToken) return;
     setSessions(listed);
     const running = listed.filter(
@@ -119,7 +127,10 @@ export function TerminalPane(
     )
       return;
     setAttachment({ sessionID: nextSessionID, runtimeURL });
-    void loadTabs(nextSessionID);
+    // The first load of a session is also the only one that asks the runtime to
+    // restore that session's saved panes: a runtime that restarted has none, and
+    // a runtime that still has them ignores the request (it is idempotent).
+    void loadTabs(nextSessionID, tabsSessionID() !== nextSessionID);
   });
 
   createEffect(() => {

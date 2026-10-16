@@ -580,6 +580,24 @@ export type TerminalControllerInput = {
   maxPerSession?: number;
   /** Recycle a session's idle PTY when the cap is hit. PTY backend only. */
   idleMs?: number;
+  /**
+   * Where a session's saved pane layout is stored, and where it comes back from.
+   *
+   * The framework supplies these (the session store's metadata is the home of
+   * durable per-session facts); the terminal plugin supplies the layout's
+   * meaning. Absent means the backend keeps no layout — every pane it starts is
+   * gone with the process, which is what the product did before section C.
+   */
+  loadPaneLayout?(sessionID: string): Promise<
+    | {
+        panes: Array<{ id: string; cwd: string; command: string }>;
+      }
+    | undefined
+  >;
+  savePaneLayout?(
+    sessionID: string,
+    layout: { panes: Array<{ id: string; cwd: string; command: string }> },
+  ): Promise<void>;
 };
 
 /** Backend-neutral terminal port. Native registry classes never cross this boundary. */
@@ -777,6 +795,16 @@ export interface TerminalController {
    * interface; a consumer that cannot ask treats the controller as usable.
    */
   isClosed?(): boolean;
+  /**
+   * Rebuild the panes a session had before the runtime restarted.
+   *
+   * The panes carry the ids they had, which is what carries their ↑/↓ history
+   * files, and the directory each was standing in. Idempotent: a pane already
+   * running is left alone, so a caller may ask on every attach. Optional because
+   * a backend without a durable pane layout (the retired mux host) has nothing
+   * to restore, and a consumer that cannot ask simply gets today's behaviour.
+   */
+  restoreSaved?(sessionID: string): Promise<void>;
 }
 
 export interface McpService {

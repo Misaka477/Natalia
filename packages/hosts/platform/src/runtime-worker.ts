@@ -136,8 +136,19 @@ export function locateRuntimeWorker(sourceUrl: URL): RuntimeWorkerLocation {
       // Not inspectable is the same answer as absent.
     }
   }
+  // The source module itself — what a checkout has, what every test run and
+  // every dev launch loads. Checked whenever the URL converted to a real path:
+  // the previous guard (`sourcePath !== sourceUrl.pathname`) asked Windows a
+  // question its answer is always yes to (fileURLToPath gives `C:\…`, the URL
+  // keeps `/C:…`) and POSIX an answer that is always no (both are `/tmp/…`) —
+  // so on Linux the source candidate was never even tried, a missing bundle
+  // threw instead of falling back, and CI failed the tests that pin exactly
+  // this. A non-convertible URL still returns undefined above, and a packaged
+  // run's embedded path (`B:\~BUN\root\…`) simply does not exist on disk, so
+  // `existsSync` is the only test that matters. There is no platform branch
+  // here on purpose — see the header.
   const sourcePath = safeFilePath(sourceUrl);
-  if (sourcePath && sourcePath !== sourceUrl.pathname) {
+  if (sourcePath) {
     searched.push(sourcePath);
     try {
       if (existsSync(sourcePath))

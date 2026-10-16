@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
+import { nataliaHomeJoin } from "@anthelia/platform";
 import {
   createRuntimeDaemonStore,
   daemonToken,
@@ -84,12 +85,17 @@ posixTest(
     writeFileSync(join(rel, "SHA256SUMS"), `${sums}\n`);
 
     // the daemon: store + token + a REAL host, and a gated turn in flight
-    // The daemon's state directory follows the live state-directory name. A
-    // test that computes this path independently agrees with the CLI's own
-    // resolution — or the version flip reads the wrong binary, which is
-    // exactly what this test caught when the two disagreed.
+    // The daemon store lives in the ONE HOME now (`daemonDir()` is
+    // `nataliaHomePath("run")`), so the fixture writes where the CLI will look
+    // for the home the CHILD is given — not where the old state-directory
+    // spelling put it. A test that computes this path independently from the
+    // CLI's own resolution reads no daemon at all: no daemon means no drain,
+    // the flip lands while the turn is still gated, and this test's whole
+    // question ("draining, not flipped") answers with the wrong binary. The
+    // child gets `NATALIA_HOME` in its env for the same reason.
+    const dataHome = join(scratch, "data");
     const store = createRuntimeDaemonStore({
-      dir: join(stateHome, "natalia", "daemon"),
+      dir: nataliaHomeJoin({ env: { NATALIA_HOME: dataHome } }, "run"),
     });
     const token = await daemonToken(store);
     let release!: () => void;
@@ -155,6 +161,11 @@ posixTest(
           Object.entries({
             ...process.env,
             XDG_STATE_HOME: stateHome,
+            // The one home the daemon store above was written under: the child
+            // resolves `daemonDir()` from its OWN environment, so without this
+            // it would look in the runner's real home, find no daemon, and
+            // flip without draining.
+            NATALIA_HOME: dataHome,
             PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
           }).filter(([, value]) => value !== undefined),
         ) as Record<string, string>,

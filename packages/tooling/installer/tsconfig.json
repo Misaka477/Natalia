@@ -14,6 +14,9 @@
     },
     {
       "path": "../../core/plugin"
+    },
+    {
+      "path": "../../hosts/platform"
     }
   ]
 }

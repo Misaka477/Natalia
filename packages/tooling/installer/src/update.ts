@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { resolveNataliaHome } from "@anthelia/platform";
 
 /**
  * `natalia update` — the D3a core (install plan §4: 检查版本 → 校验 →
@@ -93,17 +94,23 @@ export type UpdateResult = {
   steps: UpdateStep[];
 };
 
-/** install.sh's rule, verbatim: NATALIA_HOME wins, else $HOME/.natalia. */
+/**
+ * The install home, by the ONE rule the product uses everywhere.
+ *
+ * It used to re-implement the rule with `$HOME` alone, which does not exist on
+ * Windows (`%USERPROFILE%` does) — so an update on a Windows host with no
+ * `HOME` threw "cannot locate the install home" instead of finding the home
+ * every other face had already written. This is now the platform's own
+ * resolution: `NATALIA_HOME` first (a blank value treated as unset), then the
+ * user home, then `.natalia` under it — the same precedence as the config, the
+ * plugin store and the cache. The throw is gone because the answer always
+ * exists once the platform is asked.
+ */
 export function resolveUpdateHome(
   env: Record<string, string | undefined>,
   override?: string,
 ): string {
-  const home = override ?? env.NATALIA_HOME;
-  if (home) return home;
-  if (env.HOME) return join(env.HOME, ".natalia");
-  throw new Error(
-    "cannot locate the install home: set NATALIA_HOME or pass --home",
-  );
+  return resolveNataliaHome(override, { env });
 }
 
 /**

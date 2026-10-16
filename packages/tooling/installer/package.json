@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthelia/config": "workspace:*",
     "@anthelia/contracts": "workspace:*",
+    "@anthelia/platform": "workspace:*",
     "@anthelia/plugin": "workspace:*"
   }
 }

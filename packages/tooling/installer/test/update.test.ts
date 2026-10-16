@@ -13,7 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import {
   UPDATE_EXIT_CONCURRENT,
@@ -328,13 +328,32 @@ probeTest(
   },
 );
 
-test("resolveUpdateHome follows install.sh's rule: NATALIA_HOME wins, else $HOME/.natalia", () => {
+test("resolveUpdateHome follows the one home rule, on every platform", () => {
+  // NATALIA_HOME wins outright, and a BLANK value is unset — the same rule
+  // every other face uses, because this is now the platform's own resolver
+  // (it used to re-implement it with `$HOME` alone, which does not exist on
+  // Windows, so an update there threw instead of finding the home).
   expect(resolveUpdateHome({ NATALIA_HOME: "/custom", HOME: "/u" })).toBe(
-    "/custom",
+    resolve("/custom"),
   );
-  expect(resolveUpdateHome({ HOME: "/u" })).toBe(join("/u", ".natalia"));
-  expect(resolveUpdateHome({ HOME: "/u" }, "/override")).toBe("/override");
-  expect(() => resolveUpdateHome({})).toThrow(/NATALIA_HOME/u);
+  expect(resolveUpdateHome({ NATALIA_HOME: "   ", HOME: "/u" })).toBe(
+    resolve(join("/u", ".natalia")),
+  );
+  // The user home, spelled the way THIS host spells it: a POSIX value
+  // resolved on Windows is a different path, so the fixture follows the host.
+  const userHome = process.platform === "win32" ? "C:\\u" : "/u";
+  expect(resolveUpdateHome({ HOME: userHome })).toBe(
+    resolve(join(userHome, ".natalia")),
+  );
+  // An explicit override still wins over everything.
+  const override = process.platform === "win32" ? "D:\\override" : "/override";
+  expect(resolveUpdateHome({ HOME: userHome }, override)).toBe(
+    resolve(override),
+  );
+  // With NOTHING in the environment the answer still exists — the user home —
+  // because an update on a host with no HOME is exactly the case that used to
+  // throw.
+  expect(resolveUpdateHome({})).toBe(resolve(join(homedir(), ".natalia")));
 });
 
 /**

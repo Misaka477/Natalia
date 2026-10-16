@@ -32,11 +32,17 @@ import {
   type TerminalControllerInputs,
 } from "../src/terminal-controller-holder";
 
-function fakePty(): { factory: PtyFactory; processes: PtyProcess[] } {
-  const processes: PtyProcess[] = [];
+/** The fake pty the assertions read: the pane's liveness is its `exited` flag. */
+type FakePtyProcess = PtyProcess & {
+  emit(data: string): void;
+  exited: boolean;
+};
+
+function fakePty(): { factory: PtyFactory; processes: FakePtyProcess[] } {
+  const processes: FakePtyProcess[] = [];
   const factory: PtyFactory = () => {
     const dataListeners = new Set<(data: string) => void>();
-    const process: PtyProcess & { emit(data: string): void } = {
+    const process: FakePtyProcess = {
       pid: 1000 + processes.length,
       write(data) {
         for (const listener of dataListeners) listener(data);
@@ -56,7 +62,7 @@ function fakePty(): { factory: PtyFactory; processes: PtyProcess[] } {
       emit(data) {
         for (const listener of dataListeners) listener(data);
       },
-    } as PtyProcess & { emit(data: string): void; exited: boolean };
+    };
     processes.push(process);
     return process;
   };

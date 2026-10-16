@@ -15,8 +15,25 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { resolveBashExecutable, resolvePwshPath } from "@anthelia/platform";
+
+/**
+ * The executable's own name, read in the flavour that PATH is written in.
+ *
+ * `basename` alone is the HOST's flavour, and this module is handed paths
+ * derived FOR a target platform: `nativeTerminalPaneCommand("pwsh", "win32")`
+ * runs on a POSIX CI runner, and there a Windows path has no separator
+ * `basename` recognises — it came back WHOLE, the `SCRIPTS` lookup missed, and
+ * the pane silently lost its integration on every non-Windows host that derived
+ * a Windows pane. The check is the path's own spelling (a separator, or a drive
+ * letter), never the host's.
+ */
+function shellName(file: string): string {
+  const flavour =
+    /[\\/]/u.test(file) || /^[A-Za-z]:/u.test(file) ? win32 : posix;
+  return flavour.basename(file).replace(/\.(exe|cmd|bat)$/iu, "");
+}
 
 /**
  * The integration script bundled with this package, by shell basename.
@@ -61,7 +78,7 @@ const BUNDLED = import.meta.dir;
 export function integratedShellArgv(
   shellPath: string,
 ): { argv: string[]; env: Record<string, string> } | undefined {
-  const name = basename(shellPath).replace(/\.(exe|cmd|bat)$/i, "");
+  const name = shellName(shellPath);
   const script = SCRIPTS[name];
   if (!script) return undefined;
   // No `-i`: bash rejects the combination outright (`--: invalid option`), which
@@ -184,7 +201,7 @@ export function shellEnvFor(
   os?: NodeJS.Platform,
 ): Record<string, string> {
   const word = command.trim().split(/\s+/)[0] ?? "";
-  const name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+  const name = shellName(word);
   if (!SCRIPTS[name]) return {};
   if (name !== "zsh") return {};
   return { ZDOTDIR: ensureZshRcDir() };
@@ -239,7 +256,7 @@ export function interactiveShellArgv(
     // front of it and the text arrived mangled (measured: `[Console]::` reached
     // the shell as `[Console`). bash and zsh compose with extra arguments
     // (`--rcfile` is additive), which is why the rule is PowerShell's.
-    const name = basename(file).replace(/\.(exe|cmd|bat)$/i, "");
+    const name = shellName(file);
     if ((name === "pwsh" || name === "powershell") && rest.length > 0) continue;
     return [...integrated.argv, ...rest];
   }
@@ -263,7 +280,7 @@ export function interactiveShellArgv(
 function resolveShellPath(word: string, os?: NodeJS.Platform): string[] {
   if (word.includes("/") || word.includes("\\")) return [word];
   if (os === "win32") {
-    const name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+    const name = shellName(word);
     if (name === "bash") {
       const found = resolveBashExecutable({ os: "win32" });
       if (found) return [found];

@@ -82,6 +82,21 @@ test("a POSIX host answers bash or zsh, never pwsh", () => {
   expect(["bash", "zsh"]).toContain(mac?.name ?? "");
 });
 
+test("the executable's name is read in the path's own flavour, not the host's", () => {
+  // The Linux CI runner caught this: a Windows path has no separator
+  // `node:path.basename` recognises there, so the name came back WHOLE, the
+  // integration map missed, and a pane derived for Windows silently lost its
+  // shell integration — the same code path that builds a Linux workspace's pane
+  // command on a Windows host. Both flavours must be read correctly on any host.
+  const windows = integratedShellArgv(
+    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  );
+  expect(windows?.argv).toBeDefined();
+  expect(windows?.argv).not.toContain("-Interactive");
+  const posix = integratedShellArgv("/bin/bash");
+  expect(posix?.argv).toContain("--rcfile");
+});
+
 test("the integration argv is built for the PowerShell it actually got", () => {
   // The defect this pins, seen on the user's machine: the pane resolved to
   // Windows PowerShell 5.1 (a per-user pwsh 7 install was not on the runtime's

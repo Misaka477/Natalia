@@ -58,7 +58,7 @@ export function candidatePwshPaths(
  * accepts a symlink where a `stat`-based one would reject the only PowerShell a
  * Store-installed host has. A directory never matches.
  */
-function defaultExists(path: string): boolean {
+export function pwshExecutableExists(path: string): boolean {
   try {
     const info = lstatSync(path);
     return info.isFile() || info.isSymbolicLink();
@@ -80,7 +80,7 @@ export function resolvePwshPath(
   configured: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
-  exists: (path: string) => boolean = defaultExists,
+  exists: (path: string) => boolean = pwshExecutableExists,
 ): string {
   if (configured !== undefined && configured.length > 0) return configured;
   if (platform === "win32") {

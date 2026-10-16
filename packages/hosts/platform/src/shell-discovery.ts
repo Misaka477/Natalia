@@ -17,9 +17,9 @@
  * have" is a startup cost paid by every host command and a failure mode with
  * no answer.
  */
-import { isAbsolute } from "node:path";
+import { win32 } from "node:path";
 import type { NataliaHomeInput } from "./home-paths";
-import { resolvePwshPath } from "./pwsh";
+import { pwshExecutableExists, resolvePwshPath } from "./pwsh";
 
 /** The shells a pane can be started with, by the name the UI lists. */
 export type ShellName = "pwsh" | "powershell" | "bash" | "zsh";
@@ -58,8 +58,15 @@ export function discoverDefaultShell(
       undefined,
       input.env ?? process.env,
       "win32",
+      input.exists ?? pwshExecutableExists,
     );
-    return { name: "pwsh", path: isAbsolute(resolved) ? resolved : undefined };
+    // A win32 answer is judged by win32 path rules, whatever OS happens to be
+    // running this code — the injectable finder above is what makes the branch
+    // testable off Windows.
+    return {
+      name: "pwsh",
+      path: win32.isAbsolute(resolved) ? resolved : undefined,
+    };
   }
   const exists = input.exists ?? (() => false);
   if (platform === "darwin") {

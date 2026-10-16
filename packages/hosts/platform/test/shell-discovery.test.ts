@@ -15,6 +15,62 @@ test("windows resolves PowerShell, in the finder's own order", () => {
   expect(found?.name).toBe("pwsh");
 });
 
+test("the Windows branch probes the well-known roots, then the PATH", () => {
+  // The injected finder is what makes this branch answerable off Windows; the
+  // env is spelled out so the candidates are this host's, not the machine's.
+  const env = {
+    ProgramFiles: "C:\\Program Files",
+    SystemRoot: "C:\\Windows",
+    PATH: "D:\\tools",
+  };
+  const seven = discoverDefaultShell({
+    os: "win32",
+    env,
+    exists: (path) => path.toLowerCase().endsWith("pwsh.exe"),
+  });
+  // PowerShell 7 first, and the answer carries the win32 path it found.
+  expect(seven).toEqual({
+    name: "pwsh",
+    path: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+  });
+
+  // The whole candidate list, in order: 7, then the PATH, then the OS's own 5.1.
+  const order: string[] = [];
+  discoverDefaultShell({
+    os: "win32",
+    env,
+    exists: (path) => {
+      order.push(path);
+      return false;
+    },
+  });
+  expect(order).toEqual([
+    "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    "D:\\tools\\pwsh.exe",
+    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  ]);
+
+  // A host without PowerShell 7 still has the OS's own 5.1 — never no shell.
+  const fiveOne = discoverDefaultShell({
+    os: "win32",
+    env,
+    exists: (path) => path.toLowerCase().endsWith("powershell.exe"),
+  });
+  expect(fiveOne).toEqual({
+    name: "pwsh",
+    path: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  });
+
+  // Nothing found at all is still pwsh: a name, not a path, so CreateProcess
+  // resolves it off the PATH.
+  const bare = discoverDefaultShell({
+    os: "win32",
+    env,
+    exists: () => false,
+  });
+  expect(bare).toEqual({ name: "pwsh" });
+});
+
 test("the powershell invocation is the reference spelling", () => {
   const invocation = shellInvocation("Write-Output hi", {
     os: "win32",

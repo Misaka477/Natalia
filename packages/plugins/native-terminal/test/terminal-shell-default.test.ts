@@ -31,23 +31,39 @@ const source = (relative: string) => readFileSync(join(root, relative), "utf8");
 test("a Windows host answers pwsh, whatever SHELL says", () => {
   // `SHELL` is not a Windows convention; a pane that inherits it from a shell
   // that happens to have one (Git for Windows, MSYS, a CI job) must still get
-  // the shell this OS always has.
+  // the shell this OS always has. The environment is spelled out and the finder
+  // is injected so this answer is the platform's, not this machine's.
+  const probed: string[] = [];
   const windows = discoverDefaultShell({
     os: "win32",
-    env: { SHELL: "bash" },
-    // PowerShell 7 where it is installed; the OS's own 5.1 otherwise, which is
-    // the finder's own order.
-    exists: (path) => path.toLowerCase().endsWith("pwsh.exe"),
+    env: { SHELL: "bash", ProgramFiles: "C:\\Program Files", PATH: "" },
+    exists: (path) => {
+      probed.push(path);
+      return path.toLowerCase().endsWith("pwsh.exe");
+    },
   });
   expect(windows?.name).toBe("pwsh");
+  // PowerShell 7 where it is installed; the OS's own 5.1 otherwise — which is
+  // the finder's own order, and never a bash.
+  expect(probed[0]?.toLowerCase()).toContain("powershell\\7\\pwsh.exe");
+  expect(windows?.path?.toLowerCase()).toContain("pwsh.exe");
 
-  // And the invocation the pane runs needs no POSIX flags.
-  const invocation = shellInvocation("Get-Date", {
-    os: "win32",
-    exists: (path) => path.toLowerCase().endsWith("pwsh.exe"),
-  });
-  expect(invocation?.executable.toLowerCase()).toContain("pwsh.exe");
-  expect(invocation?.args).not.toContain("-lc");
+  // And the invocation the pane runs needs no POSIX flags — for a shell named
+  // by path, and for one the PATH has to place.
+  for (const shell of [
+    windows ?? { name: "pwsh" as const },
+    { name: "pwsh" as const },
+  ]) {
+    const invocation = shellInvocation("Get-Date", { shell });
+    expect(invocation.executable.toLowerCase()).toContain("pwsh");
+    expect(invocation.args).toEqual([
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Get-Date",
+    ]);
+  }
 });
 
 test("a POSIX host answers bash or zsh, never pwsh", () => {

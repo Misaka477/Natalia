@@ -26,11 +26,21 @@ test("all four model controls route a modelless click to the model settings", ()
   const app = source("packages/plugins/ui/web/src/app-neu.tsx");
   const nia = source("packages/plugins/ui/web/src/nia-panel.tsx");
 
-  // The shell carries three of them: the main toolbar, Navi's Chat model and
-  // Navi's expert model.
-  expect((app.match(/onActivate=\{/gu) ?? []).length).toBe(3);
-  expect((app.match(/: openModelSettings/gu) ?? []).length).toBe(3);
-  // Nia's is the fourth, routed through the prop it was given.
+  // The shell carries four of them: the main toolbar's model control, Navi's
+  // Chat model, Navi's expert model — and the permission control, which routes
+  // only when it has no permissions to offer (the same empty-menu bug) and
+  // leaves the degraded retry alone, because that entry IS a real option.
+  expect((app.match(/onActivate=\{/gu) ?? []).length).toBe(4);
+  // The three model controls bind it (`: openModelSettings`); the permission
+  // one picks it in a ternary (`? openModelSettings`), which is what makes its
+  // route conditional.
+  expect((app.match(/[?:] openModelSettings/gu) ?? []).length).toBe(4);
+  // The condition, in the two halves prettier may wrap: nothing degraded, and
+  // nothing to choose. Both must be there for the route to be the right one.
+  expect(app).toContain("!startupDataDegraded()");
+  expect(app).toContain("permissionOptions().length === 0");
+  expect(app).toContain("loadSecondaryStartupData()");
+  // Nia's is the fourth model one, routed through the prop it was given.
   expect((nia.match(/onActivate=\{/gu) ?? []).length).toBe(1);
   expect(nia).toContain("props.onOpenSettings?.()");
   expect(app).toContain("onOpenSettings={openModelSettings}");

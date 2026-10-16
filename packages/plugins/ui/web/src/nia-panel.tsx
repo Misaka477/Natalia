@@ -45,7 +45,10 @@ export function NiaPanel(props: {
   const [draft, setDraft] = createSignal("");
   const [attachments, setAttachments] = createSignal<ComposerAttachment[]>([]);
   const [modelID, setModelID] = createSignal("");
-  const [reasoning, setReasoning] = createSignal("medium");
+  // Empty until the runtime says otherwise: the effort has no schema default,
+  // so a pre-filled "medium" displayed a choice nobody made. The select's own
+  // placeholder shows the truth.
+  const [reasoning, setReasoning] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [elapsedMs, setElapsedMs] = createSignal(0);
   let niaApi: TranscriptHandle | undefined;
@@ -173,7 +176,7 @@ export function NiaPanel(props: {
       if (token !== profileLoadToken || requestedSessionID !== props.sessionID)
         return;
       setModelID(profile?.normal?.modelID ?? "");
-      setReasoning(profile?.normal?.reasoningEffort ?? "medium");
+      setReasoning(profile?.normal?.reasoningEffort ?? "");
     } catch {
       // Profile may be unavailable until the runtime is fully ready.
     }
@@ -269,12 +272,15 @@ export function NiaPanel(props: {
               },
             }
           : {}),
-        reasoningEffort: (profile?.normal?.reasoningEffort ?? reasoning()) as
-          | "minimal"
-          | "low"
-          | "medium"
-          | "high"
-          | "xhigh",
+        // Only a real effort is sent: the field is a five-value union with no
+        // default, so an unset control must not be saved as an invented value
+        // (an empty string would fail the provider's own validation).
+        ...((profile?.normal?.reasoningEffort ?? reasoning())
+          ? {
+              reasoningEffort: (profile?.normal?.reasoningEffort ??
+                reasoning()) as "minimal" | "low" | "medium" | "high" | "xhigh",
+            }
+          : {}),
         ...(props.sessionID ? { sessionID: props.sessionID } : {}),
       });
     } catch (cause) {

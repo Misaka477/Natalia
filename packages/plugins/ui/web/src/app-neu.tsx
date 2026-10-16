@@ -1113,8 +1113,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
    * dropdown is a delivery failure and has to look like one.
    */
   const [startupDataDegraded, setStartupDataDegraded] = createSignal(false);
-  const [reasoningEffort, setReasoningEffortSignal] =
-    createSignal<string>("medium");
+  // Empty until the runtime says otherwise: the effort has no schema default
+  // (it is a five-value union), so a pre-filled "medium" displayed a choice
+  // nobody made. The select's placeholder is what an unset effort shows — the
+  // control is unchanged, only the value it claims is now true.
+  const [reasoningEffort, setReasoningEffortSignal] = createSignal<string>("");
   const [chatProfile, setChatProfile] = createSignal<ChatModelProfile>({});
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
@@ -1924,7 +1927,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   async function loadPerSessionModelConfig(sessionID: string) {
     const token = ++perSessionLoadToken;
     setModelSelectionSignal(undefined);
-    setReasoningEffortSignal("medium");
+    // Unset until the runtime answers: the placeholder shows the truth.
+    setReasoningEffortSignal("");
     setChatProfile({});
     const [selectionResult, effortResult, profileResult] =
       await Promise.allSettled([
@@ -4188,6 +4192,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                             ]
                           : permissionOptions()
                       }
+                      // With no permissions to choose from the menu would open
+                      // empty — the same bug the model controls had — and the
+                      // place to configure this is the settings' model page, so
+                      // the click goes there. The degraded state keeps its
+                      // retry: that entry IS a real option with a real action.
+                      onActivate={
+                        !startupDataDegraded() &&
+                        permissionOptions().length === 0
+                          ? openModelSettings
+                          : undefined
+                      }
                       onChange={(permission) => {
                         // The degraded entry is the retry, not a mode:
                         // choosing it re-runs the fetch instead of
@@ -4488,7 +4503,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       menuPosition="top"
                     />
                     <NeuSelect
-                      value={chatProfile().normal?.reasoningEffort ?? "medium"}
+                      value={chatProfile().normal?.reasoningEffort ?? ""}
                       options={[
                         { value: "minimal", label: "minimal" },
                         { value: "low", label: "low" },
@@ -4531,7 +4546,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       menuPosition="top"
                     />
                     <NeuSelect
-                      value={chatProfile().expert?.reasoningEffort ?? "medium"}
+                      value={chatProfile().expert?.reasoningEffort ?? ""}
                       options={[
                         { value: "minimal", label: "minimal" },
                         { value: "low", label: "low" },

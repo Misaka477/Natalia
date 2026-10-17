@@ -368,6 +368,18 @@ export type PRReviewOutcome = {
   /** The promoted changes when approved and merged. */
   merged?: SandboxChangeView[];
   /**
+   * What the evidence for this PR was worth AFTER the review, in the same
+   * vocabulary a completion card and an audit brief use. A review is where the
+   * independent half happens: a `warranted` outcome means the same command
+   * passed on the tree that would land, and the reviewer reads that instead of
+   * inferring it from "merged: [...]".
+   */
+  warrant?: {
+    warrant: "warranted" | "unwarranted";
+    missing: string[];
+    detail: string;
+  };
+  /**
    * Set when an approved PR's promotion failed. The PR is reported back for
    * changes rather than thrown, so one candidate that cannot land does not stop
    * the lead from reviewing the rest of the batch.
@@ -548,6 +560,13 @@ export async function reviewPRs(input: {
           decision: "request-changes",
           reason: `promotion failed: ${promotion.reason}`,
           promotionError: promotion.reason,
+          warrant: prWarrant(pr, {
+            ok: false,
+            command:
+              pr.buildCommand?.trim() ||
+              input.buildCommand?.trim() ||
+              "the promotion's validation",
+          }),
         });
         continue;
       }
@@ -557,7 +576,20 @@ export async function reviewPRs(input: {
         level: "info",
         message: `PR ${pr.id} approved and promoted (${merged.length} files)`,
       });
-      outcomes.push({ id: pr.id, decision: "approve", merged });
+      const validatedCommand =
+        pr.buildCommand?.trim() ||
+        input.buildCommand?.trim() ||
+        detectPromoteCommand(input.workspaceRoot)?.command ||
+        "the promotion's validation";
+      outcomes.push({
+        id: pr.id,
+        decision: "approve",
+        merged,
+        // The independent half of the evidence, now that the same command passed
+        // on the tree that landed. Recorded on the OUTCOME because a reviewer
+        // reads the review, not the notice.
+        warrant: prWarrant(pr, { ok: true, command: validatedCommand }),
+      });
       // The work is in the host now, so its candidate is redundant: leaving it
       // behind leaks a worktree, a branch and a backup per approved PR.
       await input.sandboxes

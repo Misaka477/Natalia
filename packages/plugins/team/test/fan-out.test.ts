@@ -867,3 +867,48 @@ test("a PR's warrant names who measured it", () => {
     detail: "no command ran, so there is nothing to weigh",
   });
 });
+
+test("a review's outcome carries the warrant its evidence earned", async () => {
+  // The review is where the independent half happens, so its outcome says what
+  // the evidence became — a reviewer reads the review, not the notice. The
+  // sandbox is a stub on purpose: this pins the OUTCOME, not the merge.
+  const promoted: string[] = [];
+  const sandboxes = {
+    previewMerge: async () => [],
+    refresh: async () => ({ changed: false, conflicts: [] }),
+    promoteWithValidation: async (
+      sandboxID: string,
+      input: { command: string },
+    ) => {
+      promoted.push(`${sandboxID}:${input.command}`);
+      return { changedFiles: [] };
+    },
+    delete: async () => undefined,
+  };
+  const pr = {
+    id: "pr1",
+    sandboxID: "sbx.1",
+    status: "completed",
+    diff: [{ path: "seed.txt", before: "seed\n", after: "seed\nchanged\n" }],
+    buildCommand: "bun test",
+    buildEvidence: {
+      ok: true,
+      exitCode: 0,
+      output: "ok",
+      assayRole: "self-reported",
+    },
+  } as unknown as FanOutPR;
+  const outcomes = await reviewPRs({
+    prs: [pr],
+    sandboxes: sandboxes as never,
+    workspaceRoot: "/tmp/unused",
+    decide: () => ({ id: "pr1", decision: "approve" }),
+  } as never);
+  const outcome = outcomes[0]!;
+  expect(outcome.decision).toBe("approve");
+  // The promotion re-ran the SAME command: that second run is the independent
+  // half, and it is what makes the evidence warranted.
+  expect(promoted[0]).toBe("sbx.1:bun test");
+  expect(outcome.warrant).toMatchObject({ warrant: "warranted", missing: [] });
+  expect(outcome.warrant?.detail).toContain("an independent re-run");
+});

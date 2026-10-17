@@ -9,6 +9,7 @@
  * agent hands to `team_fanout`.
  */
 import {
+  prWarrant,
   reviewPRs,
   runFanOut,
   validateOwnershipMap,
@@ -150,15 +151,24 @@ export function createTeamFanoutTool(input: {
           const settlement = input.settlement?.();
           const sessionID = context.sessionID;
           if (!settlement || !sessionID) return;
+          // The notice carries the WARRANT, not just the exit code: what the
+          // worker checked was its own run (self-reported), and no independent
+          // re-run has happened yet — the review is where one does. Saying so in
+          // the notice is what stops a self-reported green from arriving as
+          // "build ok".
+          const warrant = prWarrant(pr);
           settlement.deliverForSession(sessionID, {
             subject: pr.id,
             reason: prSettlementReason(pr),
             summary:
-              `PR ${pr.id} is ready for review (${pr.status}` +
-              `${pr.buildEvidence ? `, build ${pr.buildEvidence.ok ? "ok" : "failed"}` : ""})`,
+              `PR ${pr.id} is ready for review (${pr.status})` +
+              `${pr.buildEvidence ? `, worker self-check ${pr.buildEvidence.ok ? "passed" : "failed"}` : ""}` +
+              ` · ${warrant.warrant}${warrant.missing.length ? ` · missing ${warrant.missing.join(", ")}` : ""}`,
             ...(pr.buildEvidence
-              ? { detail: `build exit ${pr.buildEvidence.exitCode}` }
-              : {}),
+              ? {
+                  detail: `${warrant.detail}; self-check exit ${pr.buildEvidence.exitCode}`,
+                }
+              : { detail: warrant.detail }),
             sourceKind: SETTLEMENT_SOURCE_KINDS.teamPr,
           });
         },

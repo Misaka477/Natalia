@@ -329,6 +329,7 @@ export class ManagedProcessRegistry {
           return await this.settleFromRecord(
             { workspaceRoot } as unknown as ToolExecutionContext,
             info,
+            "sweep",
           );
         }
         return undefined;
@@ -418,6 +419,19 @@ export class ManagedProcessRegistry {
     this.processes.clear();
   }
   private processes = new Map<string, Map<string, ManagedProcessRuntime>>();
+  /**
+   * Processes a live `wait` is blocked on.
+   *
+   * A settlement that RELEASES a waiter has already been read by the caller, so
+   * announcing it again tells the model something it just collected. The
+   * reference implementation calls this `awaited` and skips the notice.
+   *
+   * Only a settlement the OBSERVER found may consume the entry: a lazy settle
+   * (a read noticing the death first) does not emit to subscribers, so
+   * suppressing its notice would tell nobody — the waiter would time out with
+   * the model never hearing it either.
+   */
+  private readonly awaited = new Set<string>();
 
   private deadlines = new Map<string, ReturnType<typeof setTimeout>>();
   private sequences = new Map<string, number>();
@@ -515,7 +529,7 @@ export class ManagedProcessRegistry {
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
     if (info.status !== "running") {
-      const settled = await this.settleFromRecord(context, info);
+      const settled = await this.settleFromRecord(context, info, "wait");
       if (settled) return settled;
       return {
         kind: "settled" as const,
@@ -534,7 +548,7 @@ export class ManagedProcessRegistry {
     // before this wait may not have been noticed yet: the one classifier
     // runs once BEFORE the promise, where await is legal, rather than
     // inside its executor where it is not (T-03).
-    const alreadySettled = await this.settleFromRecord(context, info);
+    const alreadySettled = await this.settleFromRecord(context, info, "wait");
     if (alreadySettled) return alreadySettled;
 
     return await new Promise<ManagedProcessSettledEvent | undefined>(
@@ -582,6 +596,7 @@ export class ManagedProcessRegistry {
   private async settleFromRecord(
     context: ToolExecutionContext,
     info: ManagedProcessRuntime,
+    origin: "wait" | "sweep" | "lazy" = "lazy",
   ): Promise<ManagedProcessSettledEvent | undefined> {
     if (info.status !== "running") return undefined;
     let alive = true;
@@ -590,13 +605,13 @@ export class ManagedProcessRegistry {
     } catch {
       alive = false;
     }
-    if (!alive) return this.markTerminal(context, info, "exited");
+    if (!alive) return this.markTerminal(context, info, "exited", origin);
     if (info.pid && info.pidStartTicks) {
       const current = await processFingerprint(info.pid);
       if (current.pidStartTicks !== info.pidStartTicks) {
         info.output =
           `${info.output}\nmanaged process ownership lost: PID ${info.pid} no longer matches its persisted process fingerprint`.trim();
-        return this.markTerminal(context, info, "failed");
+        return this.markTerminal(context, info, "failed", origin);
       }
     }
     return undefined;
@@ -614,6 +629,7 @@ export class ManagedProcessRegistry {
     context: ToolExecutionContext,
     info: ManagedProcessRuntime,
     status: "exited" | "stopped" | "failed",
+    origin: "wait" | "sweep" | "lazy" = "lazy",
   ): ManagedProcessSettledEvent {
     info.status = status;
     info.endedAt = new Date().toISOString();
@@ -634,7 +650,15 @@ export class ManagedProcessRegistry {
         ? {}
         : { exitCode: info.exitCode }),
     };
-    this.notifySettled(event);
+    // Suppressed exactly when this settlement is HANDED to a waiter: the wait
+    // call itself (`origin: "wait"`), or an observer sweep that will emit to a
+    // registered waiter. A lazy settle from an ordinary read tells nobody, so its
+    // notice stands — swallowing that one left the model uninformed while the
+    // wait ran out.
+    const handedToWaiter =
+      origin === "wait" || (origin === "sweep" && this.awaited.has(info.id));
+    this.awaited.delete(info.id);
+    if (!handedToWaiter) this.notifySettled(event);
     return event;
   }
 

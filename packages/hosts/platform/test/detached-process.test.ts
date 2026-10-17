@@ -2,7 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolvePwshPath, startDetachedProcess } from "../src/index";
+import {
+  resolvePwshPath,
+  startDetachedProcess,
+  terminateChildProcessTree,
+} from "../src/index";
+
+/** Whether a pid is alive right now, answered by the OS rather than a kill(0). */
+async function processState(pid: number): Promise<"alive" | "gone"> {
+  const result = Bun.spawnSync([
+    "powershell.exe",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `if (Get-Process -Id ${pid} -ErrorAction SilentlyContinue) { 'alive' } else { 'gone' }`,
+  ]);
+  return result.stdout.toString().trim() === "alive" ? "alive" : "gone";
+}
 
 describe("startDetachedProcess", () => {
   // The posixScript launcher semantics are exercised only where they run:
@@ -56,13 +72,10 @@ describe("startDetachedProcess", () => {
       // LOCALAPPDATA, so shell discovery must not consult it.
       const root = await mkdtemp(join(tmpdir(), "natalia-detached-win-"));
       const outputPath = join(root, "out.log");
-      // The Windows branch is `cmd /c pwsh -Command …` with the worker script
-      // on an env var: a console app under DETACHED_PROCESS exits 0 without
-      // running its command, so cmd.exe is the survivor that carries it. The
-      // fixture therefore points the host at the pwsh the resolver honours
-      // (NATALIA_PWSH_EXECUTABLE), and the PID must be a REAL Windows one —
-      // not a pid echoed by the launcher script, which the env-var design
-      // makes impossible.
+      // The Windows branch is `cmd /c pwsh -Command …` with the worker script on
+      // an env var, started by the job runner (native/win/natalia-job-runner.cc).
+      // The PID must be a REAL Windows one — not a pid echoed by the launcher
+      // script, which the env-var design makes impossible.
       const pwsh =
         process.platform === "win32"
           ? resolvePwshPath(undefined, process.env)
@@ -113,15 +126,13 @@ describe("startDetachedProcess", () => {
   windowsTest(
     "the worker's console has no window",
     async () => {
-      // The window this pins: with `detached` (DETACHED_PROCESS) the launcher has
-      // no console, so pwsh — the first console app in the chain — allocated one
-      // and Windows gave it a VISIBLE terminal window titled with the launcher's
-      // command line. Measured on this host by window enumeration: detached → a
-      // new visible `CASCADIA_HOSTING_WINDOW_CLASS` window per start, and it
-      // stayed for as long as the command ran (the user's screenshot, and the
-      // pile of windows a full test run leaves behind). CREATE_NO_WINDOW (what
-      // `windowsHide` without `detached` asks for) gives the chain one console
-      // with no window, which the worker can see for itself.
+      // The window this pins: the runner spawns the target with CREATE_NO_WINDOW
+      // and is itself spawned with `windowsHide`, so the whole chain gets one
+      // console with no window. Measured on this host by window enumeration when
+      // the chain was launched `detached` (DETACHED_PROCESS): a new visible
+      // `CASCADIA_HOSTING_WINDOW_CLASS` window per start, titled with the command
+      // line, staying for as long as the command ran — the user's screenshot. The
+      // worker can see the answer for itself.
       const root = await mkdtemp(join(tmpdir(), "natalia-detached-hidden-"));
       const outputPath = join(root, "out.log");
       const report = join(root, "console.txt");
@@ -149,18 +160,109 @@ describe("startDetachedProcess", () => {
   );
 
   windowsTest(
-    "the worker outlives the launcher that started it",
+    "the worker outlives the process that started it, and the owner ends the tree",
     async () => {
-      // What `detached` was there for. The launcher is now this process's own
-      // child (Bun terminates those when the caller exits), while the worker is
-      // a grandchild and keeps running — killed here by its own pid, with no
-      // `/T`, which is exactly what the caller's exit does to the launcher.
+      // Two halves, both changed by the job owner.
+      //
+      // HALF ONE — the work outlives the app. A managed background process is
+      // persisted per workspace and re-adopted by pid after a restart, so the
+      // owner must survive the process that started it (measured separately: a
+      // detached child survives, a non-detached one does not). A short-lived
+      // helper starts the worker and exits; the owner and the worker are then
+      // checked from here, which is a different process.
       const root = await mkdtemp(join(tmpdir(), "natalia-detached-outlive-"));
       const outputPath = join(root, "out.log");
       const marker = join(root, "alive.txt");
       const pwsh = resolvePwshPath(undefined, process.env);
+      const start = Bun.spawn(
+        [
+          "bun",
+          "-e",
+          `import { startDetachedProcess } from ${JSON.stringify(new URL("../src/index.ts", import.meta.url).href)};
+           const { pid } = await startDetachedProcess(${JSON.stringify({
+             // The marker FIRST and the sleep after it: the worker must still be
+             // running when the assertions below look, and the owner lives exactly
+             // as long as the work does.
+             command: `Set-Content -Path '${marker.replaceAll("'", "''")}' -Value alive; Start-Sleep 120`,
+             cwd: root,
+             outputPath,
+             os: "win32",
+             env: { PATH: process.env.PATH },
+             hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
+           })});
+           console.log(pid);`,
+        ],
+        { stdout: "pipe", stderr: "inherit" },
+      );
+      const ownerPid = Number(
+        await new Response(start.stdout as ReadableStream).text(),
+      );
+      expect(Number.isInteger(ownerPid)).toBe(true);
+      expect(await waitForOutput(marker)).toContain("alive");
+      await Bun.sleep(1500);
+      // The starter is long gone; the owner and its worker are not.
+      expect(await processState(ownerPid)).toBe("alive");
+
+      // HALF TWO — ending the owner ends EVERYTHING under it. The tree is
+      // `owner → cmd → pwsh → ping`, and the ping is a grandchild three levels
+      // down: a parent/child snapshot walk can miss it, which is the whole
+      // reason the job exists.
+      const treeRoot = await mkdtemp(join(tmpdir(), "natalia-detached-tree-"));
+      const treeOutput = join(treeRoot, "out.log");
+      const treeMarker = join(treeRoot, "tree.txt");
+      const treePwsh = resolvePwshPath(undefined, process.env);
+      const { pid: treeOwner } = await startDetachedProcess({
+        command:
+          `$child = Start-Process cmd.exe -ArgumentList '/c','ping -n 60 127.0.0.1' -WindowStyle Hidden -PassThru; ` +
+          `[System.IO.File]::WriteAllText('${treeMarker}', "owner-pid=" + $PID + " grandchild-pid=" + $child.Id); ` +
+          `Wait-Process -Id $child.Id`,
+        posixScript: "echo 1",
+        cwd: treeRoot,
+        outputPath: treeOutput,
+        os: "win32",
+        env: { PATH: process.env.PATH },
+        hostEnv: { NATALIA_PWSH_EXECUTABLE: treePwsh },
+      });
+      const treeText = await waitForOutput(treeMarker);
+      const grandchild = Number(
+        /grandchild-pid=(\d+)/u.exec(treeText)?.[1] ?? Number.NaN,
+      );
+      expect(Number.isInteger(grandchild)).toBe(true);
+      expect(await processState(grandchild)).toBe("alive");
+
+      // The clean path: a message to the owner, which terminates the job. The
+      // old shape walked a snapshot with `taskkill /T`.
+      terminateChildProcessTree(treeOwner);
+      await Bun.sleep(2500);
+      expect(await processState(treeOwner)).toBe("gone");
+      expect(await processState(grandchild)).toBe("gone");
+
+      // And the first owner is cleaned up the same way, so no worker is left.
+      terminateChildProcessTree(ownerPid);
+      await Bun.sleep(1500);
+      expect(await processState(ownerPid)).toBe("gone");
+    },
+    60_000,
+  );
+
+  windowsTest(
+    "a killed owner still takes its whole tree with it",
+    async () => {
+      // The job's KILL_ON_JOB_CLOSE, pinned by the route that does NOT send a
+      // message. The IPC path above terminates the job explicitly, which works
+      // with or without that limit; this is the case the limit exists for — an
+      // owner that is killed outright (taskkill, a crash, the machine) leaves
+      // nothing behind. That is the difference between an owned tree and a tree
+      // that usually dies.
+      const root = await mkdtemp(join(tmpdir(), "natalia-detached-kill-"));
+      const outputPath = join(root, "out.log");
+      const treeMarker = join(root, "tree.txt");
+      const pwsh = resolvePwshPath(undefined, process.env);
       const { pid } = await startDetachedProcess({
-        command: `Start-Sleep 2; Set-Content -Path '${marker}' -Value alive`,
+        command:
+          `$child = Start-Process cmd.exe -ArgumentList '/c','ping -n 60 127.0.0.1' -WindowStyle Hidden -PassThru; ` +
+          `[System.IO.File]::WriteAllText('${treeMarker}', "grandchild-pid=" + $child.Id); ` +
+          `Wait-Process -Id $child.Id`,
         posixScript: "echo 1",
         cwd: root,
         outputPath,
@@ -168,11 +270,21 @@ describe("startDetachedProcess", () => {
         env: { PATH: process.env.PATH },
         hostEnv: { NATALIA_PWSH_EXECUTABLE: pwsh },
       });
+      const treeText = await waitForOutput(treeMarker);
+      const grandchild = Number(
+        /grandchild-pid=(\d+)/u.exec(treeText)?.[1] ?? Number.NaN,
+      );
+      expect(Number.isInteger(grandchild)).toBe(true);
+      expect(await processState(grandchild)).toBe("alive");
+
+      // No message, no tree walk: the owner is killed outright, exactly as a
+      // caller outside this process would have to do it.
       Bun.spawnSync(["taskkill", "/F", "/PID", String(pid)]);
-      const written = await waitForOutput(marker);
-      expect(written).toContain("alive");
+      await Bun.sleep(2500);
+      expect(await processState(pid)).toBe("gone");
+      expect(await processState(grandchild)).toBe("gone");
     },
-    30_000,
+    60_000,
   );
 
   windowsTest("refuses when there is no command to run", async () => {

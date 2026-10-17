@@ -124,6 +124,40 @@ async function stageBrowserExtension(outDir: string): Promise<void> {
   }
 }
 
+/**
+ * Stages the detached-process owner beside the pty bridge, and refuses when it
+ * is missing.
+ *
+ * The same bug the bridge had: a helper staged somewhere nothing reads is a
+ * helper the runtime cannot find, and a detached start that cannot find its
+ * owner is a detached start that refuses — so this throws with the build
+ * command rather than shipping a release whose background starts fall back to
+ * the old shape.
+ */
+async function stagePlatformOwner(
+  outDir: string,
+  platformDir: string,
+): Promise<void> {
+  if (!platformDir.startsWith("windows")) return;
+  const name = "natalia-job-runner.exe";
+  const source = join(
+    root,
+    "packages",
+    "hosts",
+    "platform",
+    "prebuilt",
+    "windows-x64",
+    name,
+  );
+  if (!(await Bun.file(source).exists()))
+    throw new Error(
+      `${platformDir}: the detached-process owner is not built — run platform:build-job-runner:windows before packaging`,
+    );
+  const target = join(outDir, "prebuilt", "windows-x64");
+  await mkdir(target, { recursive: true });
+  await cp(source, join(target, name));
+}
+
 async function stageTerminalNatives(
   outDir: string,
   platformDir: string,
@@ -924,6 +958,10 @@ for (const target of targets) {
     // staged last — each release keeps only the executables its platform
     // can run (a Windows release shipping Linux wezterm was the bug).
     await stageTerminalNatives(outDir, platformDir);
+    // The detached-process owner (Windows): the same install-relative tier the
+    // pty bridge uses, staged by its own step so a release that ships background
+    // processes ships the job that owns them.
+    await stagePlatformOwner(outDir, platformDir);
     // The browser bridge extension, for the browser_* tools (see the function).
     await stageBrowserExtension(outDir);
     await stageDesktopHost(outDir, platformDir);

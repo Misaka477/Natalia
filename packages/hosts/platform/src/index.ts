@@ -1,5 +1,6 @@
 export * from "./hash-tree";
 export * from "./home-paths";
+export * from "./prebuilt";
 export * from "./runtime-worker";
 export * from "./store-paths";
 export {
@@ -27,10 +28,11 @@ export {
   type DiscoveredShell,
   type ShellName,
 } from "./shell-discovery";
+import { hostPlatformTriple, hostPrebuiltDir } from "./prebuilt";
 import { ENCODING_PREAMBLE, resolvePwshPath } from "./pwsh";
 import { nataliaUserHome, usableDirectory } from "./home-paths";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, openSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { posix, win32, join } from "node:path";
 
@@ -447,9 +449,46 @@ export async function startDetachedProcess(input: {
     // and finds it empty.
     const launcher =
       "$s=$env:NATALIA_DETACHED_SCRIPT;if($s){Invoke-Expression $s}else{exit 1}";
-    const child = spawn(
-      "cmd.exe",
-      [
+    // THE OWNER OF THE TREE, and the reason this branch no longer spawns the chain
+    // itself. Windows has no process group: `taskkill /T` walks a snapshot of
+    // parent/child links and misses anything that re-parented itself, and the pid
+    // the caller kept was the launcher's — a process whose only relationship to
+    // the work was being its ancestor. The runner
+    // (`native/win/natalia-job-runner.cc`) creates a Job Object with
+    // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, starts the chain inside it, and stays
+    // alive as its owner. Killing the owner — or sending it `{"type":"terminate"}`
+    // — ends EVERY descendant at once, which is the shape the reference
+    // implementation uses for a managed subprocess.
+    const owner = detachedOwnerCommand(input.os);
+    const ownerLog = detachedOwnerLogPath(input.outputPath);
+    const ownerLogFd = openSync(ownerLog, "a");
+    const child = spawn(owner.executable, owner.args, {
+      cwd: input.cwd,
+      // The runner's OWN environment needs the two entries that let it find its
+      // system directory and its own binaries. The TARGET's environment travels
+      // in the spec below, exactly as the pty bridge's does.
+      env: {
+        SystemRoot: input.hostEnv?.SystemRoot ?? process.env.SystemRoot,
+        COMSPEC: input.hostEnv?.COMSPEC ?? process.env.COMSPEC,
+      },
+      // `detached` NOW, the opposite of what it was: the owner must OUTLIVE this
+      // process. A managed background process outlives the app (the process
+      // registry re-adopts it by pid after a restart), where the old launcher had
+      // to die with us and leave the worker running as an orphan chain.
+      // `windowsHide` keeps the CREATE_NO_WINDOW console the visible-window fix
+      // asked for, and the runner spawns the target with CREATE_NO_WINDOW too.
+      detached: true,
+      windowsHide: true,
+      // STDOUT MUST NOT BE A PIPE. Measured on this host: a detached child whose
+      // stdout is a pipe is reaped when the process that started it exits, while
+      // the same child with a file (`ignore` too) survives — so the owner's own
+      // narration goes to a file beside the worker's log. STDIN IS a pipe on
+      // purpose: that is the terminate channel, and it costs the owner nothing.
+      stdio: ["pipe", ownerLogFd, ownerLogFd],
+    });
+    const ownerSpec = {
+      file: "cmd.exe",
+      args: [
         "/c",
         pwsh,
         "-NoLogo",
@@ -458,29 +497,23 @@ export async function startDetachedProcess(input: {
         "-Command",
         launcher,
       ],
-      {
-        cwd: input.cwd,
-        env: {
-          ...(input.env ?? process.env),
-          // cmd.exe locates its own system directory through SystemRoot and
-          // itself through COMSPEC. A caller's allowlisted child environment
-          // (the sandbox resource allowlist is PATH/HOME/LANG/TERM) carries
-          // neither, and the launcher then fails with ERROR_CANT_ACCESS_FILE
-          // — measured, 0x800700e8 on every detached resource start. These
-          // two entries are the launcher's own needs, not the worker's, so
-          // they are added here rather than demanded of every caller.
-          SystemRoot: input.hostEnv?.SystemRoot ?? process.env.SystemRoot,
-          COMSPEC: input.hostEnv?.COMSPEC ?? process.env.COMSPEC,
-          NATALIA_DETACHED_SCRIPT: workerScript,
-        },
-        // `windowsHide`, NOT `detached`: CREATE_NO_WINDOW gives the chain one
-        // console with no window, where DETACHED_PROCESS made pwsh allocate a
-        // visible one. See the long note above — this is the fix for the
-        // terminal window every background start used to open.
-        windowsHide: true,
-        stdio: ["ignore", "ignore", "ignore"],
+      cwd: input.cwd,
+      env: {
+        ...(input.env ?? process.env),
+        // cmd.exe locates its own system directory through SystemRoot and itself
+        // through COMSPEC. A caller's allowlisted child environment (the sandbox
+        // resource allowlist is PATH/HOME/LANG/TERM) carries neither, and the
+        // launcher then fails with ERROR_CANT_ACCESS_FILE — measured, 0x800700e8
+        // on every detached resource start. These two entries are the launcher's
+        // own needs, not the worker's, so they are added here rather than demanded
+        // of every caller.
+        SystemRoot: input.hostEnv?.SystemRoot ?? process.env.SystemRoot,
+        COMSPEC: input.hostEnv?.COMSPEC ?? process.env.COMSPEC,
+        NATALIA_DETACHED_SCRIPT: workerScript,
       },
-    );
+    };
+    child.stdin?.write(`${JSON.stringify(ownerSpec)}\n`);
+    closeSync(ownerLogFd);
     const pid = await new Promise<number | undefined>(
       (resolvePromise, reject) => {
         const childEvents = child as unknown as NodeJS.EventEmitter;
@@ -490,13 +523,15 @@ export async function startDetachedProcess(input: {
     );
     if (pid === undefined)
       throw new Error("the detached process did not report a process id");
-    // The hand-over. Without `detached` the launcher is this process's own
-    // child, and a Bun process terminates those when it exits — while the
-    // worker (a grandchild) outlives it. So the start is only complete once the
-    // worker is RUNNING, and the worker's first statement is the log write:
-    // waiting for that file is what turns "usually started" into a guarantee.
-    // It is bounded, and a worker that never appears leaves the log empty for
-    // the caller's own poll, which is the contract both callers already use.
+    // The hand-over. The pid returned is the OWNER's: its liveness is the work's
+    // liveness and terminating it ends the whole tree, which is what the
+    // launcher's pid meant before — now with a job behind it instead of a
+    // snapshot walk. The start is only complete once the worker is RUNNING, and
+    // the worker's first statement is the log write: waiting for that file is
+    // what turns "usually started" into a guarantee. It is bounded, and a worker
+    // that never appears leaves the log empty for the caller's own poll, which is
+    // the contract both callers already use.
+    registerDetachedOwner(pid, child);
     await waitForDetachedWorker(input.outputPath);
     child.unref();
     return { pid };
@@ -555,8 +590,100 @@ export async function startDetachedProcess(input: {
  * terminated by the OS utility. A SIGKILL-only caller would leak a process that
  * outlived its timeout.
  */
+/**
+ * The detached-process OWNERS this process started, by the pid it handed out.
+ *
+ * A managed background process is terminated by the pid the caller recorded, and
+ * that pid is now the job runner's. Keeping the child handle means termination is
+ * a message to the owner (which terminates the job: every descendant at once)
+ * rather than a `taskkill /T` tree walk. A pid this process does not own — one
+ * recorded before a restart, or a process somebody else started — still takes the
+ * fallback path, which is the honest answer for a pid whose owner is unknown.
+ */
+const detachedOwners = new Map<number, ReturnType<typeof spawn>>();
+
+/** Remembers an owner and forgets it when it ends (however it ends). */
+function registerDetachedOwner(pid: number, child: ReturnType<typeof spawn>) {
+  detachedOwners.set(pid, child);
+  child.once("exit", () => detachedOwners.delete(pid));
+  child.once("error", () => detachedOwners.delete(pid));
+}
+
+/** The owner's narration and the worker's exit line, beside the worker's log. */
+function detachedOwnerLogPath(outputPath: string): string {
+  return outputPath.endsWith(".log")
+    ? `${outputPath.slice(0, -4)}.owner.log`
+    : `${outputPath}.owner.log`;
+}
+
+/**
+ * The helper that owns a detached process tree on Windows.
+ *
+ * A missing binary is a REFUSAL with its build command in the message, the same
+ * rule the terminal's pty bridge follows: a detached start that silently fell
+ * back to an unowned chain would be the old behaviour wearing the new name.
+ *
+ * @param os - the platform to resolve for; POSIX detaches through its own shell.
+ */
+export function detachedOwnerCommand(os?: NodeJS.Platform): ShellCommand {
+  const platform = os ?? process.platform;
+  const triple = hostPrebuiltDir(platform);
+  const name =
+    platform === "win32" ? "natalia-job-runner.exe" : "natalia-job-runner";
+  const path = triple ? `${triple}\\${name}` : undefined;
+  if (!path || !existsSync(path))
+    throw new Error(
+      `the detached-process owner is not built for this host: expected ${name} in ` +
+        `the platform package's prebuilt/${hostPlatformTriple(platform)}/ directory. ` +
+        `Run npm run platform:build-job-runner:windows before starting a detached process.`,
+    );
+  return { executable: path, args: [] };
+}
+
+/**
+ * Ends a detached tree by ending its owner.
+ *
+ * The message first — the runner terminates the job on receipt, which is the
+ * deterministic path — then a grace period, then the runner itself: its death
+ * closes the job's last handle, and `KILL_ON_JOB_CLOSE` does the rest. Both
+ * routes end every descendant; the message is simply the one that can say why.
+ */
+function terminateDetachedOwner(pid: number, owner: ReturnType<typeof spawn>) {
+  const message = '{"type":"terminate"}\n';
+  try {
+    if (owner.stdin && !owner.stdin.destroyed) {
+      owner.stdin.write(message);
+      const escalation = setTimeout(() => {
+        if (detachedOwners.has(pid)) {
+          try {
+            owner.kill("SIGKILL");
+          } catch {
+            // Already gone; the job closed with it.
+          }
+        }
+      }, 2_000);
+      escalation.unref();
+      return;
+    }
+  } catch {
+    // Fall through to killing the owner.
+  }
+  try {
+    owner.kill("SIGKILL");
+  } catch {
+    // Already gone.
+  }
+}
+
 export function terminateChildProcessTree(pid: number | undefined) {
   if (!pid) return;
+  // An owner this process started: end it, and the job handle closes with it —
+  // every descendant goes, including the ones a parent/child snapshot cannot see.
+  const owner = detachedOwners.get(pid);
+  if (owner) {
+    terminateDetachedOwner(pid, owner);
+    return;
+  }
   const treeKill = processTreeKillCommand(pid);
   if (treeKill) {
     // Windows has no process group, so the tree is terminated by the OS

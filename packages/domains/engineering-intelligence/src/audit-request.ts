@@ -1,6 +1,7 @@
 import { workLedgerController } from "@natalia/work-ledger";
 import type { RuntimeEvent } from "@anthelia/contracts";
 import { scanAuditRequestFacts } from "@anthelia/substrate";
+import { sessionFactEvidenceRecords } from "@anthelia/session";
 import type {
   RuntimeContext,
   SessionExecutionState,
@@ -81,6 +82,48 @@ export async function requestAuditAfterCompletion(
       .catch(() => {
         // A projection failure must never fail the audit trigger.
       });
+  // THE BRIEF. The auditor is woken with the facts she is judging, stated as
+  // facts and not as a recommendation: what the completion claims, which
+  // evidence it cites, and — the second ruler — which of those runs were the
+  // author's own. She may answer that a green does not count; saying so needs the
+  // roles to be in front of her rather than inferred from prose.
+  const cited = completion.evidenceIDs ?? [];
+  const roles = (
+    exec.factState ? sessionFactEvidenceRecords(exec.factState) : []
+  )
+    .filter((record) => cited.includes(record.id))
+    .map((record) => {
+      const validations = record.validations ?? [];
+      return {
+        id: record.id,
+        selfReportedOnly:
+          validations.length > 0 &&
+          validations.every(
+            (validation) => validation.assayRole === "self-reported",
+          ),
+      };
+    });
+  const selfReported = roles.filter((entry) => entry.selfReportedOnly).length;
+  exec.context.add({
+    id: `audit_brief:${completion.id}`,
+    role: "dynamic",
+    content: [
+      `<runtime_context source="audit_brief" trust="runtime" plan_id="${completion.taskID}">`,
+      `A completion was recorded for ${completion.taskID} (round ${round}).`,
+      `It declares ${completion.validations.length} validation(s): ${
+        completion.validations
+          .map((validation) => `${validation.result} — ${validation.command}`)
+          .join("; ") || "none"
+      }.`,
+      `It cites ${cited.length} evidence record(s)${selfReported > 0 ? `, ${selfReported} of which were SELF-REPORTED by the author (not an independent re-run)` : ""}.`,
+      ...(completion.knownGaps?.length
+        ? [`It declares these gaps: ${completion.knownGaps.join("; ")}.`]
+        : []),
+      "You judge the claim, not the person who made it.",
+      "A self-reported green is a statement about intent; you may decide it does not count, name what would (re_assay re-runs a recorded command and reports whether its verdict still holds), and say so in your audit report.",
+      `</runtime_context>`,
+    ].join("\n"),
+  });
   ctx.ports.requestNiaWake(exec);
   return { requested: true };
 }

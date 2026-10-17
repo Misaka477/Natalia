@@ -14,6 +14,13 @@ export interface StatusSnapshotController {
     provider?: StatusProvider;
     context?: StatusContextLedger;
     permissionMode?: "ask" | "auto" | "read_only";
+    /**
+     * Provider steps the session has run (one per `runtime.step_usage`). The
+     * caller owns the figure because only a session knows it; without one the
+     * snapshot carries no `steps` rather than the journal's entry count, which
+     * is a different measure under the same word.
+     */
+    steps?: number;
   }): Promise<Extract<RuntimeEvent, { type: "status.snapshot" }>>;
   schedule(): void;
   dispose(): void;
@@ -26,6 +33,12 @@ export type RuntimeStatusInput = {
   permissionMode(): "ask" | "auto" | "read_only";
   runningCount(): Promise<number>;
   publish(event: RuntimeEvent): void;
+  /**
+   * Provider steps the active session has run, when the wiring can answer.
+   * `schedule()` publishes without a session in hand, so an unwired runtime
+   * simply omits the figure instead of guessing.
+   */
+  stepCount?(): number;
   commands?: {
     list(): ContributedCommand[];
     session(sessionID: SessionID): Promise<RuntimeStatusCommandSession>;
@@ -58,6 +71,7 @@ export function createStatusSnapshotController(
     provider?: StatusProvider;
     context?: StatusContextLedger;
     permissionMode?: "ask" | "auto" | "read_only";
+    steps?: number;
   }) {
     const running = await input.runningCount();
     return statusSnapshot(
@@ -66,6 +80,7 @@ export function createStatusSnapshotController(
       input.workspaceRoot,
       overrides?.permissionMode ?? input.permissionMode(),
       running,
+      overrides?.steps ?? input.stepCount?.(),
     );
   }
 
@@ -111,6 +126,7 @@ export function statusSnapshot(
   cwd: string,
   permissionMode: "ask" | "auto" | "read_only",
   running: number,
+  steps?: number,
   platform: string = process.platform,
 ): Extract<RuntimeEvent, { type: "status.snapshot" }> {
   const status = context.journalStatus();
@@ -120,6 +136,10 @@ export function statusSnapshot(
     provider: provider?.provider ?? "not-configured",
     context: `${status.tokenEstimate} tokens`,
     step: `${status.messageCount}`,
+    // The provider-step figure rides only when a session supplied it: an
+    // absent field is "nobody counted", while the journal's entry count under
+    // the same word is how two faces came to report one run as two numbers.
+    ...(steps !== undefined ? { steps } : {}),
     permissions: permissionMode,
     cwd,
     background: `${running} running`,

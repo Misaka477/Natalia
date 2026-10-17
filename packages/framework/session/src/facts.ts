@@ -175,6 +175,7 @@ export {
   sessionFactIntelligenceFacts,
   sessionIntelligenceFactsFrom,
   sessionIntelligenceFactsFromEvents,
+  foldSessionUsageInto,
   sessionFactNaviChatMessages,
   sessionFactNiaChatMessages,
   sessionFactCollaborationEvents,

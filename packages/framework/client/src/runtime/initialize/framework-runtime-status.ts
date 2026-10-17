@@ -15,13 +15,33 @@ import {
   type SandboxService,
   type SubagentsService,
 } from "@anthelia/runtime-services";
+import {
+  emptySessionUsageTotals,
+  foldSessionUsageInto,
+} from "@anthelia/session";
 import { EGRESS_ADVISORY } from "../../egress-advisory";
 import type { RuntimeContext } from "@anthelia/substrate";
+import type { SessionExecutionState } from "@anthelia/substrate";
 import { wireProcessSettledNotices } from "./process-settled-notices";
 import { statusSnapshotController } from "@anthelia/runtime-status";
 import type { StatusSnapshotController } from "@anthelia/runtime-status";
 
 export type RuntimeStatusHandle = { close(): void };
+
+/**
+ * Provider steps this session has run: one per `runtime.step_usage`, the
+ * figure the usage bar counts.
+ *
+ * The durable fold is the authority — the same one `restoreProjection` runs
+ * for the `session.usage` event, never a second counter. `/status` and the
+ * status panel are human-triggered, so folding the session's log here costs
+ * what an attach already pays.
+ */
+function providerStepsFor(exec: SessionExecutionState): number {
+  const totals = emptySessionUsageTotals();
+  for (const event of exec.session.events) foldSessionUsageInto(totals, event);
+  return totals.main.steps;
+}
 
 export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
   const registry = ctx.state.capabilityRegistry;
@@ -64,6 +84,7 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
           provider: exec.provider,
           context: exec.context,
           permissionMode: exec.permissionMode,
+          steps: providerStepsFor(exec),
         }),
       };
     },
@@ -160,7 +181,11 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
       return [
         `provider: ${state.snapshot.provider}/${state.snapshot.model} (${state.providerSource})`,
         `context: ${state.snapshot.context}`,
-        `steps: ${state.snapshot.step}`,
+        // The provider-step figure, the same number the session usage bar
+        // counts. `snapshot.step` is the journal's entry count and stays an
+        // internal stamp: printing it here as "steps" is how one run came to
+        // be reported as 422 steps here and 140 on the usage bar.
+        `steps: ${state.snapshot.steps ?? 0}`,
         `workspace: ${state.snapshot.cwd}`,
         `background: ${state.snapshot.background}`,
       ].join("\n");

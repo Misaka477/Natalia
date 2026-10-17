@@ -2002,6 +2002,16 @@ type RuntimeEventData =
       provider: string;
       context: string;
       step: string;
+      /**
+       * Provider steps this session has run — one per `runtime.step_usage`
+       * event, the same figure the session usage bar counts. `step` above is
+       * the journal's entry count, a different measure that this codebase
+       * also spells "step" on internal stamps (checkpoints, work-graph nodes);
+       * two numbers under one word is how a session came to be reported as
+       * 422 steps on `/status` and 140 on the usage bar for the same run.
+       * A face that means steps reads THIS field.
+       */
+      steps?: number;
       permissions: string;
       cwd: string;
       background: string;

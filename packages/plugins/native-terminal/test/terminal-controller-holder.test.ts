@@ -119,7 +119,15 @@ test("a plugin reload adopts the controller and keeps the pane running", async (
   expect(processes[0]?.exited).toBe(true);
 });
 
-test("a construction change replaces the controller instead of serving stale pans", async () => {
+test("another workspace root's plugin instance never closes this root's panes", async () => {
+  // The measured defect: one process runs several workspace runtimes, and the
+  // workspace manager starts a workspace's client lazily without disposing the
+  // others. With ONE process-global slot, the second workspace's terminal plugin
+  // took the "construction change" branch and force-closed the FIRST workspace's
+  // live controller — the pane died (actor:"system" exit published into the
+  // victim's store) and every later terminal open in that workspace failed with
+  // "terminal controller is closed". Switching sessions across workspaces is
+  // what triggered it.
   const firstRoot = await mkdtemp(join(tmpdir(), "natalia-terminal-root-a-"));
   const secondRoot = await mkdtemp(join(tmpdir(), "natalia-terminal-root-b-"));
   const { factory, processes } = fakePty();
@@ -129,22 +137,44 @@ test("a construction change replaces the controller instead of serving stale pan
   await first.controller.start({
     command: "pwsh",
     cwd: firstRoot,
-    id: "term_old_root",
+    id: "term_first_root",
     sessionID: "ses_one",
   });
 
-  // A different workspace root is a real change: the held controller's panes
-  // were built for the old environment, so they end and a new controller serves.
+  // The OTHER workspace's terminal plugin instance loads (its runtime started).
   const second = adoptTerminalController(inputs(secondRoot, factory), create);
   expect(second.adopted).toBe(false);
   expect(second.controller).not.toBe(first.controller);
-  expect(processes[0]?.exited).toBe(true);
-  expect(await second.controller.list("ses_one")).toEqual([]);
+  // The first workspace's pane is untouched: it belongs to a live runtime.
+  expect(processes[0]?.exited).toBe(false);
+  expect(
+    (await first.controller.list("ses_one")).map((entry) => entry.id),
+  ).toEqual(["term_first_root"]);
 
-  const third = adoptTerminalController(inputs(secondRoot, factory), create);
-  expect(third.adopted).toBe(true);
+  // And the first root's next plugin instance still adopts ITS controller.
+  const firstAgain = adoptTerminalController(inputs(firstRoot, factory), create);
+  expect(firstAgain.adopted).toBe(true);
+  expect(firstAgain.controller).toBe(first.controller);
+
+  // A budget change inside one root still replaces that root's controller.
+  const third = adoptTerminalController(
+    inputs(secondRoot, factory, { maxPerSession: 9 }),
+    create,
+  );
+  expect(third.adopted).toBe(false);
+  expect(third.controller).not.toBe(second.controller);
+  // The replacement is adopted by the next instance that carries the SAME
+  // budgets — and a third budget is another change, not a silent mismatch.
+  const thirdAgain = adoptTerminalController(
+    inputs(secondRoot, factory, { maxPerSession: 9 }),
+    create,
+  );
+  expect(thirdAgain.adopted).toBe(true);
+  expect(thirdAgain.controller).toBe(third.controller);
 
   closeTerminalControllerForShutdown();
+  // The host's exit is the one path that kills a pane: every root's.
+  expect(processes[0]?.exited).toBe(true);
 });
 
 test("a controller that was closed is never adopted", async () => {

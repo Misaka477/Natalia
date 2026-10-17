@@ -39,11 +39,46 @@ test("moving the rung is ONE session-scoped write carrying both axes", () => {
 });
 
 test("the standing rung is the session's, with the config only as a fallback", () => {
-  const start = app.indexOf("const currentRung = () =>");
+  const start = app.indexOf("const sessionRungFromProjection = () => {");
   expect(start).toBeGreaterThan(0);
-  const body = app.slice(start, start + 400);
-  expect(body).toContain("rungFor(");
-  expect(body).toContain("sessionRung()");
+  const body = app.slice(start, start + 500);
+  // The session's own facts first: the approval mode the runtime publishes and
+  // the confinement half the session snapshot carries.
+  expect(body).toContain("state().permissionMode");
+  expect(body).toContain("state().intelligence?.confinement?.mode");
+  expect(body).toContain("rungFor({ approval, confinement })");
+  // The config only answers when the runtime has said nothing yet.
+  const fallback = app.slice(start, start + 900);
+  expect(fallback).toContain("config()?.defaultAgentMode");
+});
+
+test("the session's rung is projected as a field, not only a status word", async () => {
+  const status = await Bun.file(
+    new URL(
+      "../../../../hosts/view-store/src/status.ts",
+      import.meta.url,
+    ).pathname.replace(/^\/([A-Za-z]:)/u, "$1"),
+  ).text();
+  // `status.snapshot.permissions` is the runtime's answer on every attach;
+  // `session.permission.mode` is the durable record of a move. Folding both is
+  // what a second front end reads — the old control showed each client its own
+  // last write, so two front ends disagreed about one session's mode.
+  expect(status).toContain("state.permissionMode = event.permissions");
+  expect(status).toContain('case "session.permission.mode"');
+  const state = await Bun.file(
+    new URL(
+      "../../../../hosts/view-store/src/state.ts",
+      import.meta.url,
+    ).pathname.replace(/^\/([A-Za-z]:)/u, "$1"),
+  ).text();
+  expect(state).toContain("permissionMode?:");
+});
+
+test("a session switch drops the previous session's rung echo", () => {
+  const start = app.indexOf("const resetProjectionForSessionSwitch = () => {");
+  expect(start).toBeGreaterThan(0);
+  const body = app.slice(start, start + 1400);
+  expect(body).toContain("setSessionRung(undefined)");
 });
 
 test("the permission menu carries no 'current' suffix", () => {
@@ -62,3 +97,4 @@ test("the top bar no longer renders a danger badge", () => {
   expect(app).not.toContain("DangerBadge");
   expect(app).not.toContain("neu-danger-badge");
 });
+

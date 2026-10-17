@@ -146,6 +146,17 @@ export function applyStatusEvent(
         // "unknown host" rather than assuming either way.
         ...(event.platform ? [`host:${event.platform}`] : []),
       ];
+      // The session's approval mode as a FIELD, not just a word in the status
+      // line. The runtime publishes it on every attach, so a front end that
+      // never moved the rung itself still learns what the session stands on —
+      // which is how two front ends came to show different modes for one
+      // session (each showing its own last write, or the config's default).
+      state.permissionMode = event.permissions as AppState["permissionMode"];
+      return true;
+    // The durable record of a rung move. Replayed journals carry it, so a
+    // client that attaches after the move sees the same mode a live one does.
+    case "session.permission.mode":
+      state.permissionMode = event.mode;
       return true;
     case "context.status": {
       // Journal replay only: a live writer emits the namespaced

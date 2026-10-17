@@ -420,6 +420,16 @@ export type AppState = {
   status: string;
   footer: string;
   statusSegments: string[];
+  /**
+   * The session's approval mode as a field — the runtime's answer, not a
+   * client's memory of its own last write. `status.snapshot` carries it on
+   * every attach and the durable `session.permission.mode` records a move, so
+   * a front end that never touched the control still shows what the session
+   * stands on, and two front ends cannot disagree. Absent until the runtime
+   * says; the UI falls back to the config's mode only then, and a fresh
+   * session is exactly that case.
+   */
+  permissionMode?: "ask" | "auto" | "read_only";
   messages: MessageBlock[];
   activeTurn?: string;
   paused: boolean;

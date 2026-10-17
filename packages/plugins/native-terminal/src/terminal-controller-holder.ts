@@ -1,11 +1,12 @@
 /**
- * The live terminal controller, kept across plugin instances.
+ * The live terminal controllers, kept across plugin instances — ONE PER
+ * WORKSPACE ROOT.
  *
  * WHY THIS EXISTS. The terminal plugin is `scope: "session"` and one of the four
  * plugins that require a host input (`terminal.input`, `localTools.input`,
  * `mcp.input`, `skills.input`). Measured on the deployed runtime, writing a
  * permission setting unloaded and reloaded exactly those four:
-
+ *
  *     +785ms  terminal.action/exit   actor:"system"     (every pane killed)
  *     +886ms  plugin.update natalia-tool-terminal unloaded
  *     +905ms  plugin.update natalia-tool-terminal loaded
@@ -27,8 +28,25 @@
  * still matches, because the panes, their ptys, their screens and their
  * scrollback live inside it. `dispose()` only releases the instance's reference
  * — the service binding is released by the plugin API, as the registry requires
- * — and the one thing that really closes the controller is the host process
+ * — and the one thing that really closes the controllers is the host process
  * exiting, through {@link closeTerminalControllerForShutdown}.
+ *
+ * WHY PER ROOT. One process runs SEVERAL workspace runtimes side by side: the
+ * workspace manager starts each workspace's client lazily and never disposes the
+ * others on an activation (`activate()` only flips the marker). With ONE
+ * process-global slot, the second workspace's terminal plugin saw a different
+ * `workspaceRoot` and took the "construction change" branch — which
+ * force-closed the FIRST workspace's live controller. Measured on a live
+ * session: switching sessions across workspaces published
+ *
+ *     terminal.timeline actor:"system" action=exit     (the other workspace's pane)
+ *     rpc drift.findings failed: session not found: ses_…
+ *
+ * and every later terminal open in the first workspace died with
+ * "terminal controller is closed" (`terminal-ws error terminal controller is
+ * closed` on stderr), because its runtime's service directory still provided
+ * the corpse. A root's controller belongs to that root, so the slot is keyed by
+ * root: another root's plugin instance never touches it.
  */
 import type { RuntimeEvent } from "@anthelia/contracts";
 import type { TerminalController } from "@anthelia/runtime-services";
@@ -62,7 +80,14 @@ type HeldController = {
   inputs: TerminalControllerInputs;
 };
 
-let held: HeldController | undefined;
+/**
+ * One entry per workspace root. The map is the holder: a root's controller is
+ * adopted by that root's next plugin instance and by nobody else.
+ */
+const held = new Map<string, HeldController>();
+
+/** The entry the most recent adoption used (the test seam's view). */
+let lastKey: string | undefined;
 
 /**
  * The fields that decide whether a held controller can serve a new plugin
@@ -80,42 +105,6 @@ function sameConstructionInputs(
     left.maxPerSession === right.maxPerSession &&
     left.idleMs === right.idleMs
   );
-}
-
-/**
- * Takes the held controller when its construction input still matches, and
- * builds a fresh one otherwise (closing the one it replaces, which is a real
- * workspace/configuration change rather than a plugin reload).
- *
- * @param inputs - the construction input the new plugin instance received.
- * @param create - the controller factory.
- * @returns the adopted controller and whether it was reused.
- */
-export function adoptTerminalController(
-  inputs: TerminalControllerInputs,
-  create: (inputs: TerminalControllerInputs) => TerminalController,
-): { controller: TerminalController; adopted: boolean } {
-  if (held && sameConstructionInputs(held.inputs, inputs) && !isSpent(held)) {
-    const controller = held.controller;
-    // The new instance's input replaces the old one so later releases compare
-    // against what this instance was given, not against the first one's.
-    held = { controller: held.controller, inputs };
-    return { controller, adopted: true };
-  }
-  if (held && !isSpent(held)) {
-    // A construction change (a different workspace root, different PTY budgets)
-    // is the one case where the panes cannot be carried over: they were built
-    // for the environment the controller no longer describes.
-    try {
-      held.controller.forceCloseSync?.();
-    } catch {
-      // The host's exit path is already tearing the process down.
-    }
-  }
-  held = undefined;
-  const controller = create(inputs) as HeldController["controller"];
-  held = { controller, inputs };
-  return { controller, adopted: false };
 }
 
 /**
@@ -140,23 +129,75 @@ function isSpent(heldController: HeldController): boolean {
 }
 
 /**
+ * Takes the held controller for THIS workspace root when its construction input
+ * still matches, and builds a fresh one otherwise.
+ *
+ * A construction change (a different workspace root, different PTY budgets) is
+ * the one case where a root's panes cannot be carried over: they were built for
+ * the environment the controller no longer describes. Only THAT root's
+ * controller is replaced — another root's entry is untouched, because its panes
+ * belong to a runtime that is still alive and still providing them.
+ *
+ * @param inputs - the construction input the new plugin instance received.
+ * @param create - the controller factory.
+ * @returns the adopted controller and whether it was reused.
+ */
+export function adoptTerminalController(
+  inputs: TerminalControllerInputs,
+  create: (inputs: TerminalControllerInputs) => TerminalController,
+): { controller: TerminalController; adopted: boolean } {
+  const key = inputs.workspaceRoot;
+  const existing = held.get(key);
+  if (existing && sameConstructionInputs(existing.inputs, inputs)) {
+    if (!isSpent(existing)) {
+      // The new instance's input replaces the old one so later releases compare
+      // against what this instance was given, not against the first one's.
+      held.set(key, { controller: existing.controller, inputs });
+      lastKey = key;
+      return { controller: existing.controller, adopted: true };
+    }
+    // Spent: drop the corpse for this root and build a replacement below.
+    held.delete(key);
+  }
+  if (existing) {
+    // A budget change within the same root: that root's panes end, exactly as
+    // they did before. Another root's controller is NOT reached.
+    try {
+      existing.controller.forceCloseSync?.();
+    } catch {
+      // The host's exit path is already tearing the process down.
+    }
+    held.delete(key);
+  }
+  const controller = create(inputs) as HeldController["controller"];
+  held.set(key, { controller, inputs });
+  lastKey = key;
+  return { controller, adopted: false };
+}
+
+/**
  * Drops this plugin instance's reference to the controller WITHOUT closing it:
  * the panes stay alive for the next instance to adopt. Called from `dispose()`.
  */
 export function releaseTerminalController(
   controller: TerminalController,
 ): void {
-  if (held?.controller !== controller) return;
-  held = { controller: held.controller, inputs: held.inputs };
+  for (const [key, entry] of held) {
+    if (entry.controller !== controller) continue;
+    // The entry stays: the panes outlive the instance, and the next instance of
+    // this root adopts them.
+    held.set(key, { controller: entry.controller, inputs: entry.inputs });
+    return;
+  }
 }
 
-/** Whether a controller is currently held (test seam). */
+/** The controller the most recent adoption handed out (test seam). */
 export function heldTerminalController(): TerminalController | undefined {
-  return held?.controller;
+  return lastKey === undefined ? undefined : held.get(lastKey)?.controller;
 }
 
 /**
- * Closes the held controller for real, killing every pane's pty synchronously.
+ * Closes every held controller for real, killing every pane's pty synchronously.
  *
  * Registered on the host process's `exit` event by
  * {@link adoptTerminalController}'s caller, which is the shape the reference
@@ -164,11 +205,14 @@ export function heldTerminalController(): TerminalController | undefined {
  * synchronous work during `exit`, and killing a pty is one call.
  */
 export function closeTerminalControllerForShutdown(): void {
-  const current = held;
-  held = undefined;
-  try {
-    current?.controller.forceCloseSync?.();
-  } catch {
-    // Nothing left to report to; the process is going away.
+  const entries = [...held.values()];
+  held.clear();
+  lastKey = undefined;
+  for (const entry of entries) {
+    try {
+      entry.controller.forceCloseSync?.();
+    } catch {
+      // Nothing left to report to; the process is going away.
+    }
   }
 }

@@ -180,8 +180,16 @@ export function createProposeGenerationTool(ctx: RuntimeContext): RuntimeTool {
     output: genericToolCard({
       family: "generation",
       callSummary: "propose",
-      resultSummary: "proposed",
+      // The state the envelope reports, not the verb the call used.
+      resultSummary: (facts) =>
+        typeof facts.status === "string"
+          ? `proposed · ${facts.status}`
+          : "proposed",
       titleKey: "sessionID",
+      meta: [
+        ["status", "status"],
+        ["candidates", "candidates"],
+      ],
     }),
     async execute(input) {
       const args = input as {
@@ -276,8 +284,10 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
     output: genericToolCard({
       family: "generation",
       callSummary: "apply",
-      resultSummary: "applied",
+      resultSummary: (facts) =>
+        typeof facts.status === "string" ? facts.status : "applied",
       titleKey: "generationID",
+      meta: [["status", "status"]],
     }),
     async execute(input) {
       const args = input as {
@@ -430,8 +440,12 @@ export function createRollbackGenerationTool(ctx: RuntimeContext): RuntimeTool {
     output: genericToolCard({
       family: "generation",
       callSummary: "rollback",
-      resultSummary: "rolled back",
+      resultSummary: (facts) =>
+        typeof facts.status === "string"
+          ? `rolled back · ${facts.status}`
+          : "rolled back",
       titleKey: "generationID",
+      meta: [["status", "status"]],
     }),
     async execute(input) {
       const args = input as { to?: string; reason?: string };
@@ -516,8 +530,12 @@ export function createCancelGenerationTool(ctx: RuntimeContext): RuntimeTool {
     output: genericToolCard({
       family: "generation",
       callSummary: "cancel",
-      resultSummary: "cancelled",
+      resultSummary: (facts) =>
+        typeof facts.status === "string"
+          ? `cancelled · ${facts.status}`
+          : "cancelled",
       titleKey: "generationID",
+      meta: [["status", "status"]],
     }),
     async execute(input) {
       const args = input as { candidateID?: string; reason?: string };
@@ -563,7 +581,11 @@ export function createListGenerationCandidatesTool(
     output: genericToolCard({
       family: "generations",
       callSummary: "list",
-      resultSummary: "listed",
+      // What the call FOUND, because "listed" tells a reader nothing.
+      resultSummary: (facts) =>
+        typeof facts.candidates === "string"
+          ? `${facts.candidates} candidate${facts.candidates === "1" ? "" : "s"}`
+          : "no candidates",
       meta: [["candidates", "candidates"]],
     }),
     async execute() {

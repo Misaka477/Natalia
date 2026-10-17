@@ -180,3 +180,29 @@ test("a generic card's body is the flatten, never the raw envelope", () => {
   expect(card?.body).toContain("id: goal:1");
   expect(card?.body).toContain("rounds: 2");
 });
+
+test("a generic card can derive its summary from the envelope", () => {
+  // A static verb ("applied", "listed") is what made whole families read as a
+  // verb on every row. The factory decodes once and hands the facts to the
+  // summary, so a family says what actually happened.
+  const output = genericToolCard({
+    family: "generations",
+    callSummary: "list",
+    resultSummary: (facts) =>
+      typeof facts.candidates === "string"
+        ? `${facts.candidates} candidates`
+        : "no candidates",
+    meta: [["candidates", "candidates"]],
+  });
+  const facts = output.presentationMeta!(
+    {},
+    JSON.stringify({ candidates: 3, status: "ready" }),
+  );
+  const card = output.presentResult!({}, "unused", facts);
+  expect(card.summary).toBe("3 candidates");
+  expect(card.meta).toEqual([["candidates", "3"]]);
+  // A result that does not decode falls back to the call verb, never to a
+  // summary computed from an empty envelope.
+  const prose = output.presentResult!({}, "no session", undefined);
+  expect(prose.summary).toBe("list");
+});

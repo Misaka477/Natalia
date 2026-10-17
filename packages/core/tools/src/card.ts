@@ -45,8 +45,15 @@ export type GenericToolCardInput = {
   family: string;
   /** The call's verb — "search", "read", "propose". */
   callSummary: string;
-  /** The result's one-line state — "3 records", "paused". */
-  resultSummary: string;
+  /**
+   * The result's one-line state — "3 records", "paused".
+   *
+   * A FUNCTION when the state is IN the envelope: a static verb ("applied",
+   * "listed") is what made whole families read as a verb on every row. The
+   * factory decodes once and hands the facts over, so a family can say what
+   * actually happened without inventing a second card.
+   */
+  resultSummary: string | ((facts: Record<string, unknown>) => string);
   /**
    * The pills: label plus the envelope key it reads. A key the result does
    * not carry (or carries empty) simply does not render.
@@ -113,7 +120,11 @@ export function genericToolCard(
         kind: "generic",
         title: typeof facts.title === "string" ? facts.title : callTitle(args),
         summary:
-          facts.decoded === true ? input.resultSummary : input.callSummary,
+          facts.decoded === true
+            ? typeof input.resultSummary === "function"
+              ? input.resultSummary(facts)
+              : input.resultSummary
+            : input.callSummary,
         ...(pills.length > 0 ? { meta: pills } : {}),
         // The body is the READING, not the envelope. This factory used to hand
         // the raw result string to the card, so every tool wired through it

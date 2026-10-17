@@ -324,7 +324,12 @@ export function createConfigReload(
       const permissionMode = getPermissionMode();
       const selectedPermissionProfile = getSelectedPermissionProfile();
       for (const exec of getExecutionBySession().values()) {
-        exec.permissionMode = permissionMode;
+        // A session the HUMAN moved keeps its own rung: `permissionModeOverride`
+        // is how a session-scoped choice is told apart from the deployment
+        // default. Without this, a reload — including the reload a config write
+        // triggers — stamped the deployment's mode back over the choice, which
+        // is why moving the selector looked like it did nothing.
+        exec.permissionMode = exec.permissionModeOverride ?? permissionMode;
         exec.permissionProfile = selectedPermissionProfile;
       }
       const toolsBeforeReconcile = new Set(getTools().keys());

@@ -4659,14 +4659,22 @@ export type RuntimeClient = {
     reason?: string;
   }>;
   /**
-   * Moves THIS session's sandbox rung (the four-rung ladder: read / ask /
+   * Moves THIS session's rung (the four-rung ladder: read / ask /
    * auto in the workspace / auto everywhere).
    *
-   * Session-scoped by design, and the model is told through the same durable
+   * A rung is a PAIR — the approval axis (who asks) and the file-effect axis
+   * (how far a write may reach) — and this is the one door that moves both, as
+   * a SESSION-scoped write. It is deliberately not a config write: the
+   * workspace's own `.natalia/config.json` outranks the global file, so writing
+   * the approval axis globally was a silent no-op wherever the workspace pinned
+   * one, and it also turned a per-conversation decision into a `config.reload`
+   * for the whole runtime.
+   *
+   * The model is told through the same durable
    * `context.instructions {kind: "sandbox_rung"}` channel a generation switch
-   * uses — a model handed a wider sandbox that does not know it keeps
-   * apologising for writes it may now make. A new session starts at the
-   * deployment's rung again.
+   * uses, and the per-turn environment block states both axes — a model handed
+   * a wider sandbox that does not know it keeps apologising for writes it may
+   * now make. A new session starts at the deployment's rung again.
    *
    * `changed: false` is a real answer, not a failure: either the session
    * already ran that rung, or it is not live (a session that has not been
@@ -4675,10 +4683,18 @@ export type RuntimeClient = {
   setSandboxRung?(input: {
     sessionID?: string;
     mode: import("./schema-types").ConfinementMode;
+    /**
+     * The approval axis, when the caller is a rung selector rather than a
+     * sandbox escalation. Omitted by the escalation path, which only widens
+     * the file-effect axis.
+     */
+    approval?: "ask" | "auto" | "read_only";
   }): Promise<{
     changed: boolean;
     mode: import("./schema-types").ConfinementMode;
     previous?: import("./schema-types").ConfinementMode;
+    /** The approval axis after the write, present when the caller sent one. */
+    approval?: "ask" | "auto" | "read_only";
   }>;
   /**
    * Adds or replaces an MCP server from its config (the MCP official field

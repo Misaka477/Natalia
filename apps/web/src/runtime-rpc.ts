@@ -92,6 +92,12 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   sandboxResourceOutput: "sandbox.resource.output",
   sandboxMerge: "sandbox.merge",
   sandboxDelete: "sandbox.delete",
+  // The four-rung ladder's door. The route and the runtime face existed since
+  // the ladder landed; this row is what makes the permission selector reach the
+  // daemon at all — without it the Proxy answers `undefined`, the click writes
+  // nothing, and the control looks broken (measured: the only visible effect of a
+  // switch was the config reload the old code triggered separately).
+  setSandboxRung: "sandbox.rung.set",
   sandboxResourceStop: "sandbox.resource.stop",
   sessionList: "session.list",
   sessionTouch: "session.touch",

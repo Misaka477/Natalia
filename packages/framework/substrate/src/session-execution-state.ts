@@ -162,6 +162,21 @@ export type SessionExecutionState = {
    * moves in both directions.
    */
   sandboxModeOverride?: import("@anthelia/confinement").ConfinementMode;
+  /**
+   * The session's APPROVAL rung, when the human moved it mid-session.
+   *
+   * The other half of 洞 2's ladder. `permissionMode` above is the value the
+   * session runs with; this remembers that the HUMAN chose it for this session,
+   * which is what keeps a later `config.reload` from stamping the deployment's
+   * mode back over the choice (the reload writes `exec.permissionMode`, and
+   * without this field it had no way to tell "the config says ask" from "the
+   * human said ask for this session").
+   *
+   * Like `sandboxModeOverride` it is per-session and dies with the session: a
+   * restart starts at the deployment's rung, and the journal's
+   * `context.instructions {kind: "sandbox_rung"}` record is the durable half.
+   */
+  permissionModeOverride?: "ask" | "auto" | "read_only";
 };
 
 /** Seeds {@link SessionExecutionState.announcedTurnIDs} from the loaded journal. */

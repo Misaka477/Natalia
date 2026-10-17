@@ -59,6 +59,16 @@ test("labels are what the selector shows, and they are distinct", () => {
   expect(labels.some((label) => label.includes("系统"))).toBe(true);
 });
 
+test("no option label carries a 'current' suffix", () => {
+  // The trigger already names the standing rung and the open row carries
+  // `data-active`, so a suffix inside the label read as one long sentence:
+  // "auto（工作区）（当前）". The label is the table's, unchanged.
+  for (const rung of PERMISSION_RUNGS) {
+    expect(rung.label).not.toContain("当前");
+    expect(rung.label).toBe(rung.label.replace(/（当前）/gu, ""));
+  }
+});
+
 test("a pair maps back to its rung, and an unmapped pair maps to nothing", () => {
   for (const rung of PERMISSION_RUNGS)
     expect(

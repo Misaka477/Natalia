@@ -4523,11 +4523,28 @@ export async function handleRPCMessage(
         typeof (params as { sessionID?: unknown }).sessionID === "string"
           ? (params as { sessionID: string }).sessionID
           : undefined;
+      // The rung's APPROVAL axis, when the caller is a rung selector rather than
+      // a sandbox escalation. Validated here so a typo cannot reach the runtime
+      // as a mode nothing resolves.
+      const approval = (params as { approval?: unknown }).approval;
+      if (
+        approval !== undefined &&
+        (typeof approval !== "string" ||
+          !(["ask", "auto", "read_only"] as readonly string[]).includes(
+            approval,
+          ))
+      )
+        throw invalidParams(
+          "sandbox.rung.set.params.approval must be one of ask, auto, read_only",
+        );
       return {
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: await client.setSandboxRung?.({
           mode: mode as (typeof CONFINEMENT_MODES)[number],
+          ...(approval
+            ? { approval: approval as "ask" | "auto" | "read_only" }
+            : {}),
           ...(sessionID ? { sessionID } : {}),
         }),
       };

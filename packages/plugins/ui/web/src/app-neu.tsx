@@ -14,11 +14,7 @@ import { type AppState, cloneState } from "@natalia/view-store";
 import { cloneStateInWorker } from "./clone-state-worker-client";
 import type { ConfinementMode } from "@anthelia/contracts";
 import { panelScopeKey } from "./panel-scope";
-import {
-  PERMISSION_RUNGS,
-  availableRungs,
-  rungForConfig,
-} from "./permission-rungs";
+import { PERMISSION_RUNGS, availableRungs, rungFor } from "./permission-rungs";
 import {
   createSignal,
   createEffect,
@@ -70,7 +66,6 @@ import { WorkspacePanel } from "./workspace-panel";
 import { WorkspaceSettingsPanel } from "./workspace-settings-panel";
 import { NeuSelect } from "./components/NeuSelect";
 import { StatusPanel } from "./status-panel";
-import { DangerBadge } from "./danger-badge";
 import { SearchPanel } from "./search-panel";
 import { HelpPanel } from "./help-panel";
 import { StashPanel } from "./stash-panel";
@@ -2606,28 +2601,61 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   );
 
   /**
-   * The session's sandbox rung, as the runtime accepted it.
+   * The session's rung, as the runtime accepted it.
    *
-   * Held here because moving the rung is a session-scoped WRITE with an answer
-   * (`changed`), and `status.snapshot` does not carry it yet: the display falls
-   * back to what the config says (approval axis + the deployment's mode) until
-   * the human moves it, and to this signal afterwards.
+   * A rung is a PAIR (approval axis + file-effect axis) and it is SESSION-scoped,
+   * which is why this signal holds both halves:
+   *
+   *   - the answer to the write (`setSandboxRung({mode, approval})`) is the only
+   *     place the pair arrives together; and
+   *   - the config cannot supply it. `resolveConfig` merges
+   *     defaults -> global -> project, so the workspace's own
+   *     `.natalia/config.json` outranks a global write — the version of this
+   *     control that wrote `updateConfig(scope:"global")` was a no-op wherever
+   *     the workspace pinned `defaultAgentMode`, which is why moving it only
+   *     produced a reload notice. Measured: the axes read back unchanged after
+   *     the write, and `currentRung()` stayed on `ask`.
+   *
+   * Until the human moves it (or a session loads with a mode of its own), the
+   * display falls back to what the config says — the deployment's answer, which
+   * is also what a new session starts on.
    */
-  const [sessionSandboxRung, setSessionSandboxRung] = createSignal<
-    ConfinementMode | undefined
+  const [sessionRung, setSessionRung] = createSignal<
+    | { approval: "ask" | "auto" | "read_only"; confinement: ConfinementMode }
+    | undefined
+  >(undefined);
+  /**
+   * Why the last rung switch did not take, when it did not.
+   *
+   * A control that silently does nothing is the failure this whole path is
+   * about: the runtime face was missing from the web client, the click wrote
+   * nothing, and the only thing the human saw was a config reload somewhere else.
+   */
+  const [permissionProblem, setPermissionProblem] = createSignal<
+    string | undefined
   >(undefined);
   /** The rung the controls are standing on. */
   const currentRung = () =>
-    rungForConfig({
-      agentMode: config()?.defaultAgentMode,
-      confinement:
-        sessionSandboxRung() ??
-        (config()?.confinement as { mode?: ConfinementMode } | undefined)?.mode,
-    });
+    rungFor(
+      sessionRung() ?? {
+        approval:
+          (config()?.defaultAgentMode as
+            | "ask"
+            | "auto"
+            | "read_only"
+            | undefined) ?? "ask",
+        confinement:
+          (config()?.confinement as { mode?: ConfinementMode } | undefined)
+            ?.mode ?? "workspace-write",
+      },
+    );
+  // The menu shows the four rungs and no "current" suffix: the trigger already
+  // names the standing rung, and the option rows carry `data-active` for the
+  // highlight. The suffix made two of the four rows read as one long sentence.
   const permissionOptions = () =>
     availableRungs(config()?.agentModes).map((rung) => ({
       value: rung.id,
-      label: `${rung.label}${currentRung()?.id === rung.id ? "（当前）" : ""}`,
+      label: rung.label,
     }));
 
   // The PLUGIN side panels (terminal, todo, files) have NO scope key at all.
@@ -2646,38 +2674,58 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // sessionID+runtimeURL), so a key here could only do harm.
 
   /**
-   * Move to a rung: BOTH axes, in one act.
+   * Move to a rung: BOTH axes, in ONE session-scoped write.
    *
-   * The approval side is the deployment's (`defaultAgentMode`, global — what
-   * the control used to write and all it used to write). The sandbox side is
-   * the SESSION's rung, through the runtime's own ladder, which is the only
-   * place a wider scope is granted: the composition profile's row outranks the
-   * config inside the runtime, so a config write alone would have looked like
-   * it worked and changed nothing.
+   * Not a config write, and that is the fix rather than a shortcut. The previous
+   * version patched `defaultAgentMode` + `confinement.mode` at global scope and
+   * then re-read the config, which could not work on a workspace whose own
+   * `.natalia/config.json` pins those keys: `resolveConfig` merges
+   * defaults -> global -> project, so the project row won, the readback never
+   * moved, `exec.permissionMode` never moved either (so the model's per-turn
+   * `Permission mode:` line kept saying the old thing), and the only visible
+   * effect was the `config.reload` the write itself triggered.
+   *
+   * `setSandboxRung({mode, approval})` moves the session's two axes and tells the
+   * model through the durable `context.instructions` notice; the per-turn
+   * environment block then states the pair, so the agent knows what it may do
+   * without the system prompt changing under the cached prefix.
    */
   async function changePermission(rungID: string) {
     const rung = PERMISSION_RUNGS.find((candidate) => candidate.id === rungID);
     if (!rung) return;
-    await props.ctx.runtime.updateConfig?.({
-      patch: {
-        defaultAgentMode: rung.agentMode,
-        // Recorded too, so a deployment whose profile does not pin a mode
-        // follows the rung without a session in flight.
-        confinement: { mode: rung.confinement },
-      },
-      scope: "global",
-    } as never);
-    const next = await props.ctx.runtime.configGet?.();
-    if (next) setConfig(next);
-    const applied = await props.ctx.runtime.setSandboxRung?.({
-      mode: rung.confinement,
-      ...(selectedSessionID() || state().sessionID
-        ? { sessionID: selectedSessionID() || state().sessionID }
-        : {}),
+    const sessionID = selectedSessionID() || state().sessionID;
+    const call = props.ctx.runtime.setSandboxRung;
+    // A rung is a runtime WRITE, and the label may only say what the runtime
+    // answered. This is not defensive noise: the web client's RPC table was
+    // missing this method, so `?.()` returned `undefined` and the old control
+    // looked like it did nothing while writing only the config. A missing face is
+    // a refusal the human can see, not a silent no-op.
+    if (!call) {
+      setPermissionProblem("当前 runtime 不支持切换权限模式");
+      return;
+    }
+    let applied: Awaited<ReturnType<typeof call>> | undefined;
+    try {
+      applied = await call({
+        mode: rung.confinement,
+        approval: rung.approval,
+        ...(sessionID ? { sessionID } : {}),
+      });
+    } catch (error) {
+      setPermissionProblem(
+        `切换权限模式失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    setPermissionProblem(undefined);
+    // The answer carries the axes the session now stands on. `changed: false` is
+    // legitimate (already on that rung); a THROWN call is not, and neither is a
+    // missing answer — both leave the label where it was.
+    if (!applied) return;
+    setSessionRung({
+      approval: applied.approval ?? rung.approval,
+      confinement: applied.mode,
     });
-    // The answer says whether the ladder MOVED; either way the rung the
-    // session is standing on is the one that was asked for.
-    if (applied) setSessionSandboxRung(applied.mode);
   }
 
   async function updateChatProfile(next: ChatModelProfile) {
@@ -3471,13 +3519,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
               The world is not beautiful; therefore it is.
             </span>
           </div>
-          {/*
-            The danger indicator (sandbox study §6b①): a persistent,
-            pre-attentive badge in the app chrome — never inside the PTY
-            stream. It reads the session snapshot's confinement posture,
-            which is journal-derived; the audit trail reads the same fact.
-          */}
-          <DangerBadge confinement={state().intelligence?.confinement} />
         </div>
         <div class="neu-topbar-right">
           <button
@@ -4254,6 +4295,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       menuPosition="top"
                     />
                   </div>
+                  {/* A switch that did not take says so. A control that looks
+                      alive while writing nothing is the exact failure this path
+                      had before the runtime face was wired. */}
+                  <Show when={permissionProblem()}>
+                    <div class="neu-rollback-banner">
+                      <span>{permissionProblem()}</span>
+                    </div>
+                  </Show>
                   <Show when={pendingRollback()}>
                     <div class="neu-rollback-banner">
                       <span>已准备回滚：{pendingRollback()!.label}</span>

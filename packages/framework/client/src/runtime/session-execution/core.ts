@@ -4,7 +4,7 @@ import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import { sessionRunCoordinator } from "@anthelia/session";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
-import { applySandboxRungGrant } from "../sandbox-rung";
+import { applySandboxRungGrant, applySessionRung } from "../sandbox-rung";
 import type { TurnController } from "@anthelia/turn-orchestration";
 type Surface = Pick<
   RuntimeServiceClient,
@@ -183,11 +183,35 @@ export function createCoreSurface(
      * is told through the same `context.instructions` record and the journal
      * keeps the same audit line.
      */
+    /**
+     * Move this session's rung (the four-rung ladder): both axes, one act.
+     *
+     * The ladder's own module already knew how to move the file-effect axis and
+     * had no caller; this is the door the selector needs. When the caller sends
+     * an `approval` too (the selector does, a sandbox escalation does not) the
+     * APPROVAL axis moves with it — session-scoped, so the model is told through
+     * the same `context.instructions` record and the per-turn environment block
+     * states the pair. A config write is not used here on purpose: the
+     * workspace's own config outranks the global file, so a global write of the
+     * approval axis was a no-op wherever the workspace pinned one (measured), and
+     * it turned a per-conversation decision into a `config.reload`.
+     */
     async setSandboxRung(input) {
       await ctx.ports.getReady();
       const sessionID = (input.sessionID ??
         ctx.ports.getActiveExec()?.session.id) as SessionID | undefined;
       if (!sessionID) return { changed: false, mode: input.mode };
+      if (input.approval) {
+        const moved = applySessionRung(ctx, sessionID, {
+          approval: input.approval,
+          confinement: input.mode,
+        });
+        return {
+          changed: moved?.changed ?? false,
+          mode: input.mode,
+          approval: input.approval,
+        };
+      }
       const previous = ctx.ports
         .getExecutionBySession()
         .get(sessionID)?.sandboxModeOverride;

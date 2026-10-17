@@ -425,32 +425,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg);
   color: var(--neu-accent);
 }
-/* The danger indicator (sandbox study §6b①): pre-attentive, persistent,
-   never dismissible by a stray click. The escalated variant is the
-   quieter marker — the full-danger session is the loud one. */
-.neu-danger-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 10px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  cursor: help;
-  user-select: none;
-}
-.neu-danger-badge {
-  background: color-mix(in srgb, var(--neu-warning) 22%, transparent);
-  color: var(--neu-warning);
-  border: 1px solid color-mix(in srgb, var(--neu-warning) 55%, transparent);
-}
-.neu-danger-badge[data-danger="true"] {
-  background: color-mix(in srgb, var(--neu-danger) 22%, transparent);
-  color: var(--neu-danger);
-  border: 1px solid color-mix(in srgb, var(--neu-danger) 65%, transparent);
-}
-
 .neu-workspace-popup-danger {
   color: var(--neu-error);
 }

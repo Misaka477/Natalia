@@ -85,6 +85,67 @@ export function applySandboxRungGrant(
   return { from, to: mode };
 }
 
+/** The human's session rung: both axes of 洞 2's ladder, as one act. */
+export type SessionRung = {
+  /** The APPROVAL axis — who asks before a write. */
+  approval: "ask" | "auto" | "read_only";
+  /** The FILE-EFFECT axis — how far a write may reach. */
+  confinement: ConfinementMode;
+};
+
+/**
+ * Move the session's rung: both axes, one write, one notice.
+ *
+ * This is the door the selector needs, and it is deliberately SESSION-scoped
+ * rather than a config write. The two axes are separate fields on the config
+ * (`defaultAgentMode` + `confinement.mode`), but a config write is the wrong
+ * instrument in three measured ways:
+ *
+ *   - the workspace's own `.natalia/config.json` outranks the global file
+ *     (`resolveConfig` merges defaults -> global -> project), so a global write
+ *     of the approval axis was a silent no-op wherever the workspace pinned one
+ *     — the selector moved, the readback did not, and `exec.permissionMode`
+ *     never changed at all;
+ *   - a config write is a `config.reload` for the whole runtime, which the user
+ *     sees as a reload notice without anything moving;
+ *   - a rung is a decision about THIS conversation, not about every future one:
+ *     a new session must start at the deployment's rung.
+ *
+ * The approval half is `permissionModeOverride` on top of `permissionMode`, so a
+ * later `config.reload` refreshes the deployment default underneath a session
+ * that never chose, and leaves a session that did choose alone.
+ */
+export function applySessionRung(
+  ctx: RuntimeContext,
+  sessionID: SessionID,
+  rung: SessionRung,
+): { changed: boolean; rung: SessionRung } | undefined {
+  const exec = ctx.ports.getExecutionBySession().get(sessionID);
+  if (!exec) return undefined;
+  const fromApproval = exec.permissionMode;
+  const fromConfinement = exec.sandboxModeOverride;
+  const approvalMoved = fromApproval !== rung.approval;
+  const confinementMoved = fromConfinement !== rung.confinement;
+  exec.permissionMode = rung.approval;
+  exec.permissionModeOverride = rung.approval;
+  exec.sandboxModeOverride = rung.confinement;
+  // The approval axis has its own event (the UI's status line reads it), and it
+  // is published even when only the sandbox axis moved: the pair is what the
+  // selector shows, and a half-updated view is the bug this whole change is
+  // about.
+  ctx.ports.publishForSession(exec, {
+    type: "session.permission.mode",
+    mode: rung.approval,
+  });
+  publishSandboxRungNotice(ctx, exec, {
+    to: rung.confinement,
+    ...(fromConfinement ? { from: fromConfinement } : {}),
+    approval: rung.approval,
+    ...(approvalMoved ? { fromApproval } : {}),
+  });
+  return { changed: approvalMoved || confinementMoved, rung };
+}
+
 /**
  * The notice: a `context.instructions` record of kind `sandbox_rung`, the
  * same durable latest-win channel a generation switch rides. The summary
@@ -95,7 +156,13 @@ export function applySandboxRungGrant(
 export function publishSandboxRungNotice(
   ctx: RuntimeContext,
   exec: SessionExecutionState,
-  input: { from?: ConfinementMode; to: ConfinementMode },
+  input: {
+    from?: ConfinementMode;
+    to: ConfinementMode;
+    /** The approval axis, when the switch moved it too (the selector's rung). */
+    approval?: "ask" | "auto" | "read_only";
+    fromApproval?: "ask" | "auto" | "read_only";
+  },
 ): void {
   const revision = nextContextInstructionsRevision(exec.session.events);
   ctx.ports.publishForSession(exec, {
@@ -106,15 +173,35 @@ export function publishSandboxRungNotice(
     revision,
     summary:
       `the human moved this session's sandbox rung to ${rungLabel(input.to)}` +
-      (input.from ? ` (was ${rungLabel(input.from)})` : ""),
+      (input.from ? ` (was ${rungLabel(input.from)})` : "") +
+      (input.approval ? `; approval is now ${input.approval}` : ""),
     detail: [
       `rung ${input.to}: ${rungMeaning(input.to)}`,
       ...(input.from
         ? [`previously rung ${input.from}: ${rungMeaning(input.from)}`]
         : []),
+      ...(input.approval
+        ? [
+            `approval ${input.approval}: ${approvalMeaning(input.approval)}` +
+              (input.fromApproval && input.fromApproval !== input.approval
+                ? ` (was ${input.fromApproval})`
+                : ""),
+          ]
+        : []),
       "the change is scoped to this session; a new session starts at the deployment's rung",
     ],
   });
+}
+
+function approvalMeaning(mode: "ask" | "auto" | "read_only"): string {
+  switch (mode) {
+    case "read_only":
+      return "every tool that writes is refused outright";
+    case "ask":
+      return "each write asks the human first";
+    case "auto":
+      return "writes proceed without asking";
+  }
 }
 
 /** The rung's number in the ladder (the human's vocabulary). */

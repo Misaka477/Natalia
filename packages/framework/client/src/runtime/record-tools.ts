@@ -354,6 +354,119 @@ export function createRecordValidationTool(
  * report structure that answers "is it really done, what evidence is
  * missing". Safe prose only — never a diff or file content.
  */
+/** Whether a re-run changes what the record claimed. Pure, so it is testable. */
+export function reAssayVerdict(
+  before: string | undefined,
+  after: "passed" | "failed" | "timed_out" | "not_run",
+): { changed: boolean; note: string } {
+  if (before === after)
+    return { changed: false, note: `the verdict still holds: ${after}` };
+  if (before === undefined)
+    return {
+      changed: false,
+      note: `no previous verdict; this run says ${after}`,
+    };
+  return {
+    changed: true,
+    note: `the verdict changed: ${before} then ${after}`,
+  };
+}
+
+/**
+ * `re_assay` — run a recorded validation again and report whether its verdict
+ * still holds.
+ *
+ * This is the entry point behind the first ruler: evidence that cannot be
+ * re-run is a claim. The record already carries what is needed — the command,
+ * the verdict, the duration and (since the seam spills) the complete output — so
+ * re-running it is the one operation that turns "we ran a check once" into "this
+ * is checkable by anyone".
+ */
+export function createReAssayTool(
+  ctx: RuntimeContext,
+): import("@anthelia/tools").RuntimeTool {
+  return {
+    name: "re_assay",
+    description:
+      "Run a recorded validation again and report whether its verdict still holds. Use it when a green is being relied on later — after a rebase, after an environment change, or when a completion cites an old evidenceID. Returns the command, the previous verdict, the new verdict, whether they differ, and the new bounded summary.",
+    requiresApproval: true,
+    timeoutSec: DEFAULT_VALIDATION_TIMEOUT_SEC,
+    maxTimeoutSec: MAX_VALIDATION_TIMEOUT_SEC,
+    parameters: {
+      type: "object",
+      properties: {
+        evidenceID: {
+          type: "string",
+          description:
+            "The evidenceID a previous record_validation returned (also the id a completion cites).",
+        },
+        timeoutSec: {
+          type: "number",
+          description: `Optional budget in seconds for this re-run. Defaults to ${DEFAULT_VALIDATION_TIMEOUT_SEC}; values above ${MAX_VALIDATION_TIMEOUT_SEC} are clamped.`,
+        },
+      },
+      required: ["evidenceID"],
+      additionalProperties: false,
+    },
+    output: validationRunCard(),
+    async execute(parsed, context) {
+      const args = parsed as { evidenceID?: string; timeoutSec?: number };
+      const exec = resolveExec(ctx, context.sessionID);
+      if (!exec) return "no session";
+      if (!args.evidenceID?.trim())
+        return "re_assay requires the evidenceID a validation returned";
+      await ensureCompleteSessionFactState(ctx, exec);
+      const records = exec.factState
+        ? sessionFactEvidenceRecords(exec.factState)
+        : [];
+      const record = records.find((entry) => entry.id === args.evidenceID);
+      if (!record)
+        return `no evidence record ${args.evidenceID} in this session; re-run the check with record_validation instead`;
+      const original = record.validations?.[0];
+      if (!original)
+        return `evidence ${args.evidenceID} carries no validation command to re-run`;
+      const startedAt = performance.now();
+      const run = await runValidationCommand(
+        original.command,
+        ctx.ports.getWorkspaceRoot(),
+        context.timeoutSec ??
+          ctx.ports.getTsRuntimeConfig?.()?.runtime.tools
+            .validationTimeoutSec ??
+          DEFAULT_VALIDATION_TIMEOUT_SEC,
+        context.signal,
+      );
+      const after: "passed" | "failed" | "timed_out" | "not_run" =
+        run.outcome === "exited"
+          ? run.exitCode === 0
+            ? "passed"
+            : "failed"
+          : run.outcome === "timed_out"
+            ? "timed_out"
+            : "not_run";
+      const verdict = reAssayVerdict(original.result, after);
+      return JSON.stringify({
+        evidenceID: record.id,
+        command: original.command,
+        before: original.result,
+        after,
+        ...verdict,
+        durationMs: Math.round(performance.now() - startedAt),
+        safeSummary: run.safeSummary,
+        ...(run.completeOutputPath
+          ? {
+              completeOutputPath: relative(
+                ctx.ports.getWorkspaceRoot(),
+                run.completeOutputPath,
+              )
+                .split(sep)
+                .join("/"),
+            }
+          : {}),
+      });
+    },
+  };
+}
+
 export function createRecordCompletionTool(
   ctx: RuntimeContext,
 ): import("@anthelia/tools").RuntimeTool {

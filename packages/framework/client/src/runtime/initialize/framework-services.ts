@@ -120,6 +120,7 @@ import {
   createRecordCompletionTool,
   createRecordDecisionTool,
   createRecordValidationTool,
+  createReAssayTool,
 } from "../record-tools";
 import {
   createMutationRegistry,
@@ -494,6 +495,7 @@ export async function wireFrameworkServices(
     createWorkGraphQueryTool(ctx),
     // EI §8.4: model-facing journal record tools.
     createRecordValidationTool(ctx),
+    createReAssayTool(ctx),
     createRecordCompletionTool(ctx),
     createRecordDecisionTool(ctx),
     createConstitutionProposeTool(ctx),

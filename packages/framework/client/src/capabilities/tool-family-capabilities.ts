@@ -135,6 +135,7 @@ export function runtimeToolNames(): string[] {
     "read_media_file",
     "record_completion",
     "record_decision",
+    "re_assay",
     "record_validation",
     "rollback_generation",
     "run_shell",

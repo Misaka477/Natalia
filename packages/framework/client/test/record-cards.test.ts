@@ -16,6 +16,7 @@
 import { expect, test } from "bun:test";
 import {
   completionVerdictCard,
+  reAssayVerdict,
   validationRunCard,
 } from "../src/runtime/record-tools";
 
@@ -147,4 +148,26 @@ test("a judge-able completion says so, and an unclassified one says which", () =
     undefined,
   );
   expect(unknown?.summary).toBe("缺证据 · unclassified");
+});
+
+test("a re-assay reports whether the verdict moved, and says which way", () => {
+  // The first ruler in code: a green that nobody can re-check is a claim. The
+  // comparison is pure, so the wording and the verdict are pinned here rather
+  // than inferred from a live run.
+  expect(reAssayVerdict("passed", "passed")).toEqual({
+    changed: false,
+    note: "the verdict still holds: passed",
+  });
+  expect(reAssayVerdict("passed", "failed")).toEqual({
+    changed: true,
+    note: "the verdict changed: passed then failed",
+  });
+  // A record with no previous verdict cannot "change" — it has nothing to differ
+  // from, and saying so is the honest answer.
+  expect(reAssayVerdict(undefined, "failed")).toEqual({
+    changed: false,
+    note: "no previous verdict; this run says failed",
+  });
+  // A timeout is its own verdict, not a flavour of failure.
+  expect(reAssayVerdict("passed", "timed_out").changed).toBe(true);
 });

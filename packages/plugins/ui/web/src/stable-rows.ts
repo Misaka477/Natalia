@@ -73,18 +73,24 @@ export function collapseDuplicateTranscriptRows<
     id: string;
     role: string;
     content: string;
+    /** The row's text read live, when the host keeps the object stable. */
+    contentLive?: () => string;
     toolCalls?: readonly unknown[];
   },
 >(rows: readonly T[]): T[] {
   const out: T[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
+    // A streaming row carries an empty placeholder `content` and its text lives
+    // behind `contentLive`: reading the placeholder here collapsed every
+    // streaming row together, because their display text was all "".
+    const content = row.contentLive?.() ?? row.content;
     // Tool cards also carry role "assistant" with an empty `content`; they are
     // distinct records and must never be collapsed together just because that
     // display text is empty.
     if (
       (row.role !== "assistant" && row.role !== "thinking") ||
-      row.content.length === 0 ||
+      content.length === 0 ||
       (row.toolCalls?.length ?? 0) > 0
     ) {
       out.push(row);
@@ -93,7 +99,7 @@ export function collapseDuplicateTranscriptRows<
     const turnID = row.id.startsWith("turn_")
       ? (row.id.split(":")[0] ?? row.id)
       : row.id;
-    const key = `${turnID}\u0000${row.role}\u0000${row.content}`;
+    const key = `${turnID}\u0000${row.role}\u0000${content}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(row);

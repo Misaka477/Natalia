@@ -153,6 +153,24 @@ export function toolCallRow(tool: ToolBlockLike): ToolCall {
   };
 }
 
+/**
+ * A row's content, read through the live accessor when the host supplies one.
+ *
+ * Every render site uses this instead of `message.content` so a streaming row
+ * updates its text node rather than being rebuilt with a new object.
+ */
+export function messageContent(message: Message): string {
+  return message.contentLive?.() ?? message.content;
+}
+
+/**
+ * A tool row's current value, read through the live accessor when the host
+ * supplies one.
+ */
+export function toolCallView(toolCall: ToolCall): ToolCall {
+  return toolCall.live?.() ?? toolCall;
+}
+
 /** The reassembled arguments, or undefined when there are none / they are not JSON. */
 function parseArguments(
   argumentsRaw: string | undefined,
@@ -216,6 +234,16 @@ export interface ToolCall {
   /** The tool's self-projected card, when it declared one. */
   card?: ToolCallCard;
   /**
+   * This row's current value, read at render time.
+   *
+   * A tool call streams twice — its arguments arrive in fragments while the
+   * call is being formed, and its result arrives when the call settles — so a
+   * host that rebuilt the `ToolCall` to carry either change remounted the whole
+   * card per delta. The host keeps the row object stable and returns the fresh
+   * derivation here; the card reads every field through it.
+   */
+  live?: () => ToolCall;
+  /**
    * The call's parsed arguments — the DURABLE half of a keyed card's input
    * (ask_user's question and options live here, its result holds only the
    * answers). Carried so a replayed event renders exactly like a live one:
@@ -250,6 +278,21 @@ export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  /**
+   * The row's content, read at render time instead of carried by identity.
+   *
+   * A streaming row's text changes on every delta, so a host that rebuilt the
+   * `Message` object to carry the new text destroyed the row's DOM per delta:
+   * the action row (copy / fork / rollback) flickered under the cursor, a click
+   * landed on a node the next delta had already replaced, and `data-message-id`
+   * left the document (so `scrollToIndex` could not find the row). A host keeps
+   * the row object stable and supplies this accessor; the render derives the
+   * text from it, so only the text node updates.
+   *
+   * Absent for a host that builds rows from a finished value (`content` is then
+   * the whole answer) and for every row recorded before the accessor existed.
+   */
+  contentLive?: () => string;
   timestamp?: string;
   status?: "running" | "completed" | "error" | "done" | "failed";
   /** A user input injected into a running turn rather than starting one. */

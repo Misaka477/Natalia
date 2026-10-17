@@ -37,6 +37,7 @@ import {
   feedbackToggle,
   toolCallRow,
   type Attachment,
+  type ToolCall,
   type PagedTranscriptState,
   type TranscriptHandle,
 } from "@natalia/ui-kit";
@@ -2960,6 +2961,37 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     { signature: RowSignature; value: Message }
   >();
 
+  /**
+   * The live message objects, keyed by row id.
+   *
+   * A row's identity answers "is this still the same row", never "what does it
+   * say now" — the text of the row being streamed changes on every delta. The
+   * row objects below therefore carry an EMPTY `content` plus a `contentLive`
+   * accessor that reads this map, so a delta updates one text node instead of
+   * replacing the row's DOM (which flickered the copy/fork/rollback row under
+   * the cursor and made clicks land on a node the next delta had removed).
+   */
+  const liveMessages = createMemo(() => {
+    const messages = state().natalia.messages;
+    const map = new Map<string, (typeof messages)[number]>();
+    for (const msg of messages) map.set(msg.id, msg);
+    return map;
+  });
+  /** One row's current text, through the live map (empty when the row left). */
+  const liveContent = (id: string): string => {
+    const live = liveMessages().get(id);
+    return live ? live.text + (live.pendingText || "") : "";
+  };
+  /**
+   * One tool row's current call, through the live map.
+   *
+   * Same rule as `liveContent`: a tool call streams twice (its arguments arrive
+   * in fragments, then its result), so neither belongs in the row's identity.
+   */
+  const liveToolCall = (id: string): ToolCall | undefined => {
+    const live = liveMessages().get(id)?.tool;
+    return live ? toolCallRow(live) : undefined;
+  };
   const mainMessages = createMemo<Message[]>(() => {
     const list = state().natalia.messages;
     const active = state().natalia.activeTurn;
@@ -2984,56 +3016,52 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           const pendingRequestID = pendingByMessageID().get(msg.id);
           return {
             id: msg.id,
+            // Identity only. The arguments, the result, the card and its facts
+            // all MOVE while the call streams — carrying them here rebuilt the
+            // card's DOM on every delta (the newest card flickered, and a click
+            // landing between two deltas hit a node that no longer existed).
+            // They ride `live` on the ToolCall instead.
             signature: [
               tool.name,
-              tool.result,
-              tool.summary,
-              tool.status,
-              // The arguments stream in fragments, so a row first cached
-              // mid-stream would pin a ToolCall with no parsed arguments
-              // forever (the signature never changed) — the keyed cards
-              // derive from them, so they are part of the row's identity.
-              tool.argumentsRaw,
-              // The card and its structured facts are what the row RENDERS
-              // (R0), and the legacy metadata blob is the replay fallback the
-              // decode reads. Every field the derivation depends on belongs
-              // in the signature — one that misses a field pins a stale row
-              // forever, which is the argumentsRaw lesson applied to the
-              // new slots.
-              tool.card,
-              tool.meta,
-              tool.metadata,
               status,
               Boolean(active),
               isLast,
               pendingRequestID,
             ],
-            create: () => ({
-              id: msg.id,
-              role: "assistant",
-              content: "",
-              status,
-              ...(pendingRequestID
-                ? {
-                    actions: [
-                      {
-                        label: "处理",
-                        primary: true,
-                        onClick: () => {
-                          // The pending tab is gone (T4-4): the request's
-                          // home is the composer takeover now. Focusing it
-                          // also un-minimizes, so the button always lands on
-                          // the card rather than on a collapsed strip.
-                          setPendingTakeoverMinimized(false);
-                          setPendingTakeoverFocus(pendingRequestID);
-                          props.ctx.pending.controller.focus(pendingRequestID);
+            create: () => {
+              const initial = toolCallRow(tool);
+              return {
+                id: msg.id,
+                role: "assistant",
+                content: "",
+                status,
+                ...(pendingRequestID
+                  ? {
+                      actions: [
+                        {
+                          label: "处理",
+                          primary: true,
+                          onClick: () => {
+                            // The pending tab is gone (T4-4): the request's
+                            // home is the composer takeover now. Focusing it
+                            // also un-minimizes, so the button always lands on
+                            // the card rather than on a collapsed strip.
+                            setPendingTakeoverMinimized(false);
+                            setPendingTakeoverFocus(pendingRequestID);
+                            props.ctx.pending.controller.focus(
+                              pendingRequestID,
+                            );
+                          },
                         },
-                      },
-                    ],
-                  }
-                : {}),
-              toolCalls: [toolCallRow(tool)],
-            }),
+                      ],
+                    }
+                  : {}),
+                // The row object stays; the card reads through `live`.
+                toolCalls: [
+                  { ...initial, live: () => liveToolCall(msg.id) ?? initial },
+                ],
+              };
+            },
           };
         }
         const role =
@@ -3048,7 +3076,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           msg.role === "user" && msg.attachments?.length
             ? msg.attachments
             : undefined;
-        const content = msg.text + (msg.pendingText || "");
+
         const goalRound =
           msg.role === "system" ? parseGoalRoundPrompt(msg.text) : undefined;
         const status = active && isLast ? "running" : undefined;
@@ -3070,15 +3098,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           streaming,
           text: msg.text,
         });
+        // The signature answers identity only: text / pendingText / content are
+        // the row's CONTENT and change on every streaming delta, so carrying
+        // them here rebuilt the row's DOM per delta.
         return {
           id: msg.id,
           signature: [
             role,
             msg.role,
-            msg.text,
-            msg.pendingText ?? "",
             msg.reasoningVisible,
-            content,
             status,
             steering,
             streaming,
@@ -3109,7 +3137,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             ...(feedbackRowActions.length
               ? { actions: feedbackRowActions }
               : {}),
-            content,
+            // Empty on purpose: the text is read live, never carried here.
+            content: "",
+            contentLive: () => liveContent(msg.id),
             status,
             steering,
             streaming,
@@ -3288,6 +3318,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         }
         const role =
           msg.role === "user" ? ("user" as const) : ("assistant" as const);
+
         const content = msg.text + (msg.pendingText || "");
         const streaming = Boolean(activity && isLast && msg.role !== "user");
         const attachments =

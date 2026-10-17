@@ -11,7 +11,9 @@ import type { JSX } from "solid-js";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import {
+  messageContent,
   relativizePath,
+  toolCallView,
   toolRowLabel,
   type Attachment,
   type Message,
@@ -900,18 +902,21 @@ function estimateAttachmentHeight(attachment: Attachment): number {
  */
 export function estimateMessageHeight(message: Message): number {
   let height = MESSAGE_BASE_HEIGHT;
+  // The row's content is read through the live accessor: a streaming row keeps
+  // the same object, so `message.content` alone would be the empty placeholder.
+  const content = messageContent(message);
 
   // Thinking replaces the ordinary body in MessageRow, so use its own block
   // metrics plus the thought text line count.
   if (message.thinking) {
-    height +=
-      THINKING_BLOCK_HEIGHT + estimateMarkdownBodyHeight(message.content);
-  } else if (message.content !== "") {
-    height += estimateMarkdownBodyHeight(message.content);
+    height += THINKING_BLOCK_HEIGHT + estimateMarkdownBodyHeight(content);
+  } else if (content !== "") {
+    height += estimateMarkdownBodyHeight(content);
   }
 
   for (const toolCall of message.toolCalls ?? []) {
-    const output = toolCall.output ?? toolCall.summary ?? "";
+    const live = toolCallView(toolCall);
+    const output = live.output ?? live.summary ?? "";
     // The collapsed height is the default view: the cap plus the fold
     // toggle (S2 — every output is capped unless the reader opens it).
     height +=
@@ -959,6 +964,22 @@ function MessageGroup(props: {
   rowRef?: (el: HTMLDivElement) => void;
   style?: JSX.CSSProperties;
 }) {
+  /**
+   * What the copy button copies: the row's prose, or — for a tool row, whose
+   * prose is empty — the answers its cards draw. A tool row used to copy the
+   * empty string, so the button did nothing on every tool card.
+   */
+  const copyText = (): string => {
+    const content = messageContent(props.message);
+    if (content.length > 0) return content;
+    return (props.message.toolCalls ?? [])
+      .map((toolCall) => {
+        const live = toolCallView(toolCall);
+        return live.output ?? live.summary ?? "";
+      })
+      .filter((entry) => entry.length > 0)
+      .join("\n");
+  };
   const setRowRef = (el: HTMLDivElement) => {
     // Solid can call the ref before dynamic data-* attributes are patched.
     // data-index is kept for diagnostics and tests; rows are no longer
@@ -985,33 +1006,33 @@ function MessageGroup(props: {
       />
       <Show when={props.message.role !== "system"}>
         <div class="natalia-message-group-actions">
-          <button
-            type="button"
-            class="natalia-message-icon-btn"
-            title="复制内容"
-            onClick={() =>
-              navigator.clipboard?.writeText(props.message.content)
-            }
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <rect
-                x="5.5"
-                y="5.5"
-                width="7"
-                height="7"
-                rx="1.5"
-                stroke="currentColor"
-                stroke-width="1.3"
-              />
-              <path
-                d="M10.5 4.5H11.5A1.5 1.5 0 0 1 13 6V11"
-                stroke="currentColor"
-                stroke-width="1.3"
-                stroke-linecap="round"
-              />
-            </svg>
-            <span>复制</span>
-          </button>
+          <Show when={copyText()}>
+            <button
+              type="button"
+              class="natalia-message-icon-btn"
+              title="复制内容"
+              onClick={() => navigator.clipboard?.writeText(copyText())}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <rect
+                  x="5.5"
+                  y="5.5"
+                  width="7"
+                  height="7"
+                  rx="1.5"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                />
+                <path
+                  d="M10.5 4.5H11.5A1.5 1.5 0 0 1 13 6V11"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span>复制</span>
+            </button>
+          </Show>
           {/* The message's own actions (the transcript's rating pair) ride
               the same row as copy/fork/rollback — the reference harness puts
               its like/dislike pair between copy and branch, and one hover
@@ -1556,7 +1577,11 @@ function ToolCallCard(props: {
   /** The attachment-URL loader, for a media read's renderer (audit ⑦). */
   loadAttachmentUrl?: (attachment: Attachment) => Promise<string>;
 }) {
-  const card = props.toolCall.card;
+  // The row object is stable while the call streams (its arguments arrive in
+  // fragments, then its result): every field is read through the live view so
+  // the card updates in place instead of being remounted per delta.
+  const view = (): ToolCall => toolCallView(props.toolCall);
+  const card = (): ToolCard | undefined => view().card;
   // The expansion survives a virtual-list unmount: the signal seeds from
   // the row-keyed store and writes through on every toggle, so scrolling
   // away and back restores what the reader asked for (audit ③).
@@ -1580,7 +1605,7 @@ function ToolCallCard(props: {
   const mediaAttachment = (): Attachment => {
     // The card's kind is `read`; the media fields ride that variant. The
     // narrow is local to this accessor so the union stays exhaustive.
-    const read = card as Extract<ToolCard, { kind: "read" }> | undefined;
+    const read = card() as Extract<ToolCard, { kind: "read" }> | undefined;
     return {
       id: read?.attachmentID,
       path: read?.path ?? "",
@@ -1588,8 +1613,13 @@ function ToolCallCard(props: {
       mediaType: read?.mediaType,
     } as Attachment;
   };
+  /** Whether the card carries a media surface (audit ⑦/⑧). */
+  const hasMedia = (): boolean => {
+    const current = card();
+    return current?.kind === "read" && current.mediaType !== undefined;
+  };
   const mediaSurface = () => {
-    const read = card as Extract<ToolCard, { kind: "read" }> | undefined;
+    const read = card() as Extract<ToolCard, { kind: "read" }> | undefined;
     const mediaType = read?.mediaType ?? "";
     if (mediaType.startsWith("image/"))
       return (
@@ -1608,11 +1638,11 @@ function ToolCallCard(props: {
       </div>
     );
   };
-  const rowLabel = () => toolRowLabel(props.toolCall.name);
+  const rowLabel = () => toolRowLabel(view().name);
   // The tool's own title, when it says something the label does not: a path, a
   // query, a job id. A title that merely repeats the label is dropped.
   const titleExtra = () => {
-    const title = card?.title;
+    const title = card()?.title;
     if (!title) return "";
     // A path title is relativized for the row (P3.3): the short form is
     // what a scanner reads; the full path stays in the card body.
@@ -1643,9 +1673,7 @@ function ToolCallCard(props: {
   // output as plain lines rather than a reading, which is the honest
   // answer for a row nobody projected.
   const bodyLines = (): ToolCardLine[] =>
-    card
-      ? renderCard(card, props.toolCall)
-      : plainCardLines(props.toolCall.output ?? "");
+    card ? renderCard(card()!, view()) : plainCardLines(view().output ?? "");
   /**
    * The command itself, as the card's first body lines — but only once the
    * reader has opened the card.
@@ -1661,15 +1689,26 @@ function ToolCallCard(props: {
    * It stays out of the collapsed window so a collapsed card is unchanged, and
    * the fold toggle counts these lines in its promise (see `totalLineCount`),
    * because a control that promises N lines and delivers N is the whole point.
+   *
+   * ONLY a `terminal` card's title is a command. Every card kind carries a
+   * title (a path, an id, a task), and drawing `$ <title>` in front of those
+   * told the reader a task id was the command that ran: `record_validation`'s
+   * card put its `taskID` behind a shell prompt while the command it really ran
+   * appeared nowhere.
    */
   const commandLines = (): ToolCardLine[] => {
-    const title = card?.title;
-    if (!title || !expanded()) return [];
-    return plainCardLines(`$ ${title}`);
+    const current = card();
+    if (current?.kind !== "terminal" || !current.title || !expanded())
+      return [];
+    return plainCardLines(`$ ${current.title}`);
   };
   /** Every line the card can show, command included, for the toggle's count. */
-  const commandLineCount = () =>
-    card?.title ? plainCardLines(`$ ${card.title}`).length : 0;
+  const commandLineCount = () => {
+    const current = card();
+    return current?.kind === "terminal" && current.title
+      ? plainCardLines(`$ ${current.title}`).length
+      : 0;
+  };
   const totalLineCount = () => bodyLines().length + commandLineCount();
   const output = () =>
     allLines()
@@ -1737,27 +1776,31 @@ function ToolCallCard(props: {
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.
-  const heading = () => card?.title ?? props.toolCall.name;
-  const summary = () => card?.summary ?? props.toolCall.summary;
-  const failed = () =>
-    props.toolCall.status === "failed" ||
-    // The structured exit code once a family projects one (R1), the exit
-    // facet before that: a non-zero exit is a failed row either way.
-    (card?.kind === "terminal" &&
-      card.exitCode !== undefined &&
-      card.exitCode !== 0) ||
-    (card?.meta ?? []).some(
-      ([label, value]) => label === "exit" && value !== "0",
+  const heading = () => card()?.title ?? view().name;
+  const summary = () => card()?.summary ?? view().summary;
+  const failed = () => {
+    const current = card();
+    return (
+      view().status === "failed" ||
+      // The structured exit code once a family projects one (R1), the exit
+      // facet before that: a non-zero exit is a failed row either way.
+      (current?.kind === "terminal" &&
+        current.exitCode !== undefined &&
+        current.exitCode !== 0) ||
+      (current?.meta ?? []).some(
+        ([label, value]) => label === "exit" && value !== "0",
+      )
     );
+  };
 
   return (
     <div
       class="natalia-tool-card"
-      data-kind={card?.kind}
+      data-kind={card()?.kind}
       data-state={failed() ? "error" : undefined}
     >
       <div class="natalia-tool-header">
-        <ToolKindIcon kind={card?.kind} />
+        <ToolKindIcon kind={card()?.kind} />
         {/* The family label leads, and the model's sentence follows it — the
             shape the reference rows use. The tool's own title (the command, the path)
             is what the EXPANDED card is for, so it does not lead here. */}
@@ -1770,7 +1813,7 @@ function ToolCallCard(props: {
             `title` attribute is the hover form: the span itself is clipped by
             CSS, and the full text is what the expanded card shows. */}
         <Show when={titleExtra()}>
-          <span class="natalia-tool-title" title={card?.title}>
+          <span class="natalia-tool-title" title={card()?.title}>
             {titleExtra()}
           </span>
         </Show>
@@ -1779,27 +1822,26 @@ function ToolCallCard(props: {
             session's summed `toolMs` cannot tell those apart, so the figure
             belongs on the row. Absent while running and on a row recorded
             before the field existed: no confident 0. */}
-        <Show when={props.toolCall.durationMs !== undefined}>
+        <Show when={view().durationMs !== undefined}>
           <span class="natalia-tool-duration" title="本次工具调用的耗时">
-            {formatToolDuration(props.toolCall.durationMs!)}
+            {formatToolDuration(view().durationMs!)}
           </span>
         </Show>
         <span
           classList={{
             "natalia-badge": true,
             "natalia-badge-error": failed(),
-            "natalia-badge-success": props.toolCall.status === "completed",
-            "natalia-badge-default":
-              !failed() && props.toolCall.status !== "completed",
+            "natalia-badge-success": view().status === "completed",
+            "natalia-badge-default": !failed() && view().status !== "completed",
           }}
         >
-          {props.toolCall.status ?? "tool"}
+          {view().status ?? "tool"}
         </span>
       </div>
       {/* The tool's structured facets, as label:value pills. */}
-      <Show when={(card?.meta ?? []).length > 0}>
+      <Show when={(card()?.meta ?? []).length > 0}>
         <div class="natalia-tool-meta">
-          <For each={card!.meta!}>
+          <For each={card()!.meta!}>
             {([label, value]) => (
               <span class="natalia-tool-meta-item">
                 <span class="natalia-tool-meta-label">{label}</span>
@@ -1809,7 +1851,7 @@ function ToolCallCard(props: {
           </For>
         </div>
       </Show>
-      <Show when={card?.kind === "read" && card.mediaType !== undefined}>
+      <Show when={hasMedia()}>
         <div class="natalia-tool-media">{mediaSurface()}</div>
       </Show>
       <Show when={output()}>
@@ -1979,7 +2021,8 @@ export function MessageRow(props: MessageRowProps) {
               fallback={
                 <Show
                   when={
-                    props.message.content || !props.message.toolCalls?.length
+                    messageContent(props.message) ||
+                    !props.message.toolCalls?.length
                   }
                 >
                   <Show
@@ -1987,7 +2030,7 @@ export function MessageRow(props: MessageRowProps) {
                     fallback={
                       <div
                         class="natalia-message-text"
-                        innerHTML={formatContent(props.message.content)}
+                        innerHTML={formatContent(messageContent(props.message))}
                       />
                     }
                   >
@@ -2000,7 +2043,7 @@ export function MessageRow(props: MessageRowProps) {
                     */}
                     <div
                       class="natalia-message-text"
-                      textContent={props.message.content}
+                      textContent={messageContent(props.message)}
                     />
                     <div class="natalia-streaming-indicator">
                       <div class="natalia-streaming-dot" />
@@ -2017,8 +2060,10 @@ export function MessageRow(props: MessageRowProps) {
                 <div
                   class="natalia-thinking-text"
                   {...(messageTextMode(props.message) === "plain"
-                    ? { textContent: props.message.content }
-                    : { innerHTML: formatContent(props.message.content) })}
+                    ? { textContent: messageContent(props.message) }
+                    : {
+                        innerHTML: formatContent(messageContent(props.message)),
+                      })}
                 />
               </div>
             </Show>

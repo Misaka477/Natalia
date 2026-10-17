@@ -1,5 +1,5 @@
 /**
- * The command is reachable.
+ * The command is reachable — and only a command is drawn as one.
  *
  * Measured defect this pins: a `run_shell` card showed
  * `Start-Process -FilePath 'D:/Software_Development/mini...` — the card's title
@@ -13,6 +13,12 @@
  * command rides the card's own fold, so the toggle's promise counts it — a
  * control that promises N lines and delivers N is the rule this card already
  * lives by.
+ *
+ * The `$` prefix belongs to the `terminal` kind ALONE. Every card kind carries a
+ * title — a path, an id, a task — and drawing `$ <title>` in front of those told
+ * the reader a task id was the command that ran: `record_validation`'s card put
+ * its `taskID` behind a shell prompt (`$ fourier-contour-video`) while the
+ * command it actually ran appeared nowhere.
  */
 import { expect, test } from "bun:test";
 
@@ -23,16 +29,18 @@ const kit = await Bun.file(
   ),
 ).text();
 
-test("the command is a body line of the EXPANDED card, not only a clipped header", () => {
+test("the command is a body line of the EXPANDED terminal card, not only a clipped header", () => {
   const at = kit.indexOf("const commandLines = (): ToolCardLine[] => {");
   expect(at).toBeGreaterThan(0);
   const body = kit.slice(at, at + 700);
+  // Only a terminal card's title IS a command.
+  expect(body).toContain('current?.kind !== "terminal"');
   // Prefixed the way a shell prompt reads, so a reader cannot mistake the
   // command for output.
-  expect(body).toContain("`$ ${title}`");
+  expect(body).toContain("`$ ${current.title}`");
   // Only when open: the collapsed card is unchanged, and the header's clipped
   // title plus a hover is the collapsed form.
-  expect(body).toContain("if (!title || !expanded()) return [];");
+  expect(body).toContain("!expanded()");
   // It rides the same line list the cap and the fold read.
   expect(kit).toContain(
     "const allLines = () => [...commandLines(), ...bodyLines()];",
@@ -61,6 +69,6 @@ test("the fold toggle's count includes the command, and a card with no output st
 
 test("the header's clipped title carries the full command as its hover", () => {
   expect(kit).toContain(
-    '<span class="natalia-tool-title" title={card?.title}>',
+    '<span class="natalia-tool-title" title={card()?.title}>',
   );
 });

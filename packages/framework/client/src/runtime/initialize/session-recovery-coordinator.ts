@@ -384,8 +384,16 @@ export class SessionRecoveryCoordinator {
 
     const recoveredPermissionMode =
       this.sqliteRecovery?.permissionMode ?? projection.permissionMode;
-    if (recoveredPermissionMode && scope.activeExec)
+    if (recoveredPermissionMode && scope.activeExec) {
       scope.activeExec.permissionMode = recoveredPermissionMode;
+      // The override rides with it. Without this the human's rung survived only
+      // until the next config write, whose reload does
+      // `exec.permissionMode = exec.permissionModeOverride ?? permissionMode` —
+      // an absent override silently put the deployment's default back, so a
+      // session the human had moved to `auto` fell back to the config's
+      // `read_only` with no notice.
+      scope.activeExec.permissionModeOverride = recoveredPermissionMode;
+    }
   }
 
   /**

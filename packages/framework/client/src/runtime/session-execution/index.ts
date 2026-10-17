@@ -357,6 +357,13 @@ export function createSessionExecution(
         recovery?.permissionMode ??
         projection.permissionMode ??
         getDefaultPermissionMode(),
+      // The human's own rung rides the same durable event the approval mode
+      // does (`session.permission.mode`), so a session that was moved to `auto`
+      // still reports `auto` after a restart — and, with the override restored,
+      // the next config reload cannot stamp the deployment's default over it
+      // (`exec.permissionMode = exec.permissionModeOverride ?? permissionMode`).
+      permissionModeOverride:
+        recovery?.permissionMode ?? projection.permissionMode,
       permissionProfile: getDefaultPermissionProfile(),
       selectedAgent: projection.selectedAgent
         ? getAgentRegistry()?.select(projection.selectedAgent)

@@ -5,6 +5,7 @@ export * from "./project-docs";
 export * from "./redaction";
 export * from "./validation";
 export * from "./junit";
+export * from "./sarif";
 export * from "./self-review";
 export * from "./run-scorer";
 export * from "./skill-lifecycle";

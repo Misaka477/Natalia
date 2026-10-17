@@ -435,6 +435,10 @@ export async function createSubagentSupport(
                 tools: allowToolCalls ? toolSchemas : undefined,
                 toolChoice: allowToolCalls ? undefined : "none",
                 signal: runner.signal,
+                // The child's identity rides the request, so a consumer routes
+                // by WHO is asking rather than by what the prompt says — the
+                // text is exactly what compaction rewrites.
+                agentID: runner.agentId,
               }),
             runner.signal,
           );

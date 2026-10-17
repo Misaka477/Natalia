@@ -15,10 +15,7 @@ import {
   type SandboxService,
   type SubagentsService,
 } from "@anthelia/runtime-services";
-import {
-  emptySessionUsageTotals,
-  foldSessionUsageInto,
-} from "@anthelia/session";
+import { projectSession } from "@anthelia/session";
 import { EGRESS_ADVISORY } from "../../egress-advisory";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
@@ -32,15 +29,21 @@ export type RuntimeStatusHandle = { close(): void };
  * Provider steps this session has run: one per `runtime.step_usage`, the
  * figure the usage bar counts.
  *
- * The durable fold is the authority — the same one `restoreProjection` runs
- * for the `session.usage` event, never a second counter. `/status` and the
- * status panel are human-triggered, so folding the session's log here costs
- * what an attach already pays.
+ * CACHED like the session snapshot's own projection, because this call site is
+ * not rare: `runtimeStatus` and every `/status` refresh ask for it, and a
+ * full-log fold per ask slowed whole acceptance scenarios into their timeouts
+ * (measured — the plan build/verify/switch pair went red on exactly this).
+ * The cache is keyed by the event count, the same guard `snapshot.ts` uses, so
+ * a grown session refolds and an unchanged one costs a comparison.
  */
 function providerStepsFor(exec: SessionExecutionState): number {
-  const totals = emptySessionUsageTotals();
-  for (const event of exec.session.events) foldSessionUsageInto(totals, event);
-  return totals.main.steps;
+  const events = exec.session.events;
+  const cached = exec.snapshotProjection;
+  if (cached && cached.eventCount === events.length)
+    return cached.value.usage.main.steps;
+  const projection = projectSession(exec.session);
+  exec.snapshotProjection = { eventCount: events.length, value: projection };
+  return projection.usage.main.steps;
 }
 
 export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {

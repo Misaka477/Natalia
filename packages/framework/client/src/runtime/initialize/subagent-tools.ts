@@ -24,7 +24,37 @@ import {
   REPEAT_MAX,
   REPEAT_WINDOW_MS,
 } from "../tool-execution/repeat-guard";
-import { boundToolOutput, defaultToolCard, toolResultSummary } from "@anthelia/tools";
+import { defaultToolCard, toolResultSummary } from "@anthelia/tools";
+
+/** The head kept from an oversized child result. ZCode's number, comparable. */
+const CHILD_RESULT_HEAD_BYTES = 32 * 1024;
+/** The tail kept from an oversized child result. */
+const CHILD_RESULT_TAIL_BYTES = 32 * 1024;
+
+/**
+ * Bounds one child tool result for the model, stating the cut.
+ *
+ * The in-memory twin of the main path's `boundToolOutput`: the same head+tail
+ * shape the reference harness uses (ZCode cuts every tool's final output to
+ * 32 KB head + 32 KB tail and reports `truncated`), without the spill file the
+ * main path writes — a child's workspace is a candidate worktree, and spill
+ * bytes in it change what the candidate IS.
+ *
+ * @param result - the child's tool result text.
+ * @returns the bounded text: the original when it fits, else head + notice + tail.
+ */
+function boundToolResultForModel(result: string): string {
+  const totalBytes = Buffer.byteLength(result, "utf8");
+  const budget = CHILD_RESULT_HEAD_BYTES + CHILD_RESULT_TAIL_BYTES;
+  if (totalBytes <= budget) return result;
+  const buffer = Buffer.from(result, "utf8");
+  const head = buffer.subarray(0, CHILD_RESULT_HEAD_BYTES).toString("utf8");
+  const tail = buffer
+    .subarray(buffer.length - CHILD_RESULT_TAIL_BYTES)
+    .toString("utf8");
+  const omitted = totalBytes - CHILD_RESULT_HEAD_BYTES - CHILD_RESULT_TAIL_BYTES;
+  return `${head}\n…\n(Omitted ${omitted} bytes of ${totalBytes}. The full result is recorded on this tool call; re-run it with a narrower window to see the rest.)\n…\n${tail}`;
+}
 
 export async function createSubagentTools(
   ctx: RuntimeContext,
@@ -194,21 +224,23 @@ export async function createSubagentTools(
       });
       const finalizedResult =
         tool.output?.finalizeContent?.(completeResult) ?? completeResult;
-      // THE SAME RESULT GATE THE MAIN PATH USES. A subagent executes its tools
-      // directly too, so without this it bypassed `boundToolOutput` exactly as
-      // the chat streams did — measured: one unbounded tool result reached a
-      // provider request that was then refused with "The input you provided is
-      // invalid". Every agent runs the same bound: the full text is spilled to
-      // `<workspace>/.natalia/tool-output/` and the model is handed page 1 with
-      // the marker naming the next page, which is the reference harnesses'
-      // shape (DSH's spill policy with a locator and retrieval hint; ZCode's
-      // uniform head+tail with a truncated ref).
-      const bounded = await boundToolOutput(
-        input.childWorkspaceRoot,
-        finalizedResult,
-      );
+      // THE SAME RESULT GATE THE MAIN PATH USES, with a different store behind
+      // it. The main path spills an oversized result to
+      // `<workspace>/.natalia/tool-output/`, which is right there: the
+      // workspace is the user's. A subagent's workspace is its CANDIDATE
+      // WORKTREE — spill files written into it land in the diff the candidate
+      // is judged on, and the plan acceptance tests caught exactly that
+      // (build → verify → switch went red the moment this path started
+      // spilling). The reference harness spills outside the workspace for the
+      // same reason.
+      //
+      // So this path bounds the result IN MEMORY — head + tail with a notice
+      // naming the size and how to get the rest — and persists nothing. Same
+      // guarantee (one tool result can never fill a provider request), no bytes
+      // written into a candidate.
+      const bounded = boundToolResultForModel(finalizedResult);
       const result = scope.redactToolOutput(
-        bounded.text,
+        bounded,
         scope.redactToolOutputEnabled(input.exec),
       );
       // The same order the main path uses (R1): the facts are computed once

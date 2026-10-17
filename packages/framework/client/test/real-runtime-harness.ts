@@ -540,6 +540,8 @@ export function subagentCompactionProvider(): StreamingProvider & {
   compactionCalls: number;
 } {
   let compactionCalls = 0;
+  /** The scripted child's agent id, bound once (see the branch below). */
+  let childAgentID: string | undefined;
   return {
     provider: "scripted-subagent-compaction",
     model: "scripted-subagent-compaction-model",
@@ -588,18 +590,26 @@ export function subagentCompactionProvider(): StreamingProvider & {
         yield { type: "done" };
         return;
       }
-      const hasCompactedSummary = request.messages.some((message) =>
-        message.content.includes("Natalia compacted context summary"),
-      );
-      const isChild =
-        (hasCompactedSummary ||
-          (request.messages[0]?.role === "system" &&
-            request.messages[0].content.includes(
-              "focused Natalia TS/Bun subagent",
-            ))) &&
+      // The child is identified by WHO is asking — the request's `agentID`,
+      // bound ONCE from the task text before anything can rewrite it.
+      //
+      // Binding, rather than re-reading the text on every request, is what
+      // survives compaction: the summary rewrites the task text, so a
+      // text-sniffing branch stopped matching its own child and the run
+      // diverged. The reference harness has the same shape (a live session id
+      // binds to a recorded child script, and the text is never read again).
+      // It also keeps the other scenarios sharing this provider on their own
+      // branches: they never carry this task's text, so they never bind.
+      if (
+        childAgentID === undefined &&
+        request.agentID !== undefined &&
         request.messages.some((message) =>
           message.content.includes("child compaction task"),
-        );
+        )
+      )
+        childAgentID = request.agentID;
+      const isChild =
+        childAgentID !== undefined && request.agentID === childAgentID;
       if (
         isChild &&
         !request.messages.some((message) => message.role === "tool")

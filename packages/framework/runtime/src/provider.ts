@@ -556,6 +556,25 @@ export type ProviderStreamRequest = {
    * Legacy inline data URLs remain supported during migration.
    */
   resolveAttachment?: (attachment: ProviderAttachmentRef) => Promise<string>;
+  /**
+   * The session this request belongs to, when the caller is a session. The
+   * durable identity a consumer routes by.
+   */
+  sessionID?: string;
+  /**
+   * The agent that issued it: a subagent's own id, absent for the main agent.
+   *
+   * WHY THIS EXISTS. A consumer that needed to tell a child's request from its
+   * parent's had to sniff the prompt — the measured failure was a test harness
+   * keying its scripted child on `messages.some(m => m.content.includes(...))`,
+   * which compaction rewrites, so the child stopped matching its own branch and
+   * the run diverged. The reference harness routes by identity instead: its
+   * replay binds a live session id to a recorded child script and never reads
+   * the message text to decide. Carrying the id here is the same rule on our
+   * side of the seam — an opaque id the runtime already stamps on every event,
+   * now also on the request the provider sees.
+   */
+  agentID?: string;
 };
 
 export const MAX_STEPS_PROMPT = `CRITICAL - MAXIMUM STEPS REACHED

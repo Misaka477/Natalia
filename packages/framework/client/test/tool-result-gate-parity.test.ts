@@ -82,12 +82,31 @@ test("nia's chat turn runs the same bound", async () => {
   );
 });
 
-test("a subagent's tool call runs the same bound", async () => {
+test("a subagent's tool call runs the same bound, in memory", async () => {
+  // The same guarantee, a different store: the main path spills an oversized
+  // result into the user's workspace, but a child's workspace is its CANDIDATE
+  // WORKTREE — spill bytes there change what the candidate IS, which the plan
+  // acceptance tests caught the moment this path started spilling. The child
+  // bounds head+tail in memory instead, with the notice naming the size.
   await site(
     ["framework", "client", "src", "runtime", "initialize", "subagent-tools.ts"],
     "const completeResult = await tool.execute(parsed, {",
-    "boundToolOutput(",
+    "boundToolResultForModel(",
   );
+  const text = await source(
+    "framework",
+    "client",
+    "src",
+    "runtime",
+    "initialize",
+    "subagent-tools.ts",
+  );
+  // No spill write on this path.
+  expect(text).not.toContain("await boundToolOutput(");
+  // And the bound is real: head + tail + an explicit omitted-bytes notice.
+  expect(text).toContain("CHILD_RESULT_HEAD_BYTES = 32 * 1024");
+  expect(text).toContain("CHILD_RESULT_TAIL_BYTES = 32 * 1024");
+  expect(text).toContain("Omitted ${omitted} bytes of ${totalBytes}");
 });
 
 /*

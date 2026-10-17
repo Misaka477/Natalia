@@ -5,7 +5,13 @@
  * class (./shell) without importing this barrel — importing it would be a
  * cycle.
  */
-export { RUN_OUTPUT_MAX_BYTES, ShellExecutor } from "./shell";
+export {
+  RUN_OUTPUT_MAX_BYTES,
+  ShellExecutor,
+  forgetShellChild,
+  terminateShellChildren,
+  trackShellChild,
+} from "./shell";
 export { BashLocalExecutor } from "./bash-local";
 export {
   NATALIA_ENV_PREFIX,

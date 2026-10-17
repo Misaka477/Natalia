@@ -41,6 +41,53 @@ import {
 } from "./types";
 import { applyShellEnv } from "./shell-env";
 
+/**
+ * The children this process still owns.
+ *
+ * A foreground command whose caller dies — the window closes, the host is
+ * stopped — used to survive: on Windows a child is not in a job object, so it
+ * outlives the parent that spawned it, and the only thing that ever killed one
+ * was the abort/timeout path. The set lets the process termination path take
+ * them with it, and it is the same mechanism a test can drive directly.
+ */
+const liveChildren = new Set<number>();
+
+/** Track one spawned child so teardown can terminate it. */
+export function trackShellChild(pid: number | undefined): void {
+  if (pid !== undefined) liveChildren.add(pid);
+}
+
+/** Stop tracking a child that already ended. */
+export function forgetShellChild(pid: number | undefined): void {
+  if (pid !== undefined) liveChildren.delete(pid);
+}
+
+/**
+ * Terminate every child this process still owns, whole trees.
+ *
+ * Called from the process-exit hook and available to a test. Best-effort per
+ * child: one failure does not abandon the rest.
+ */
+export function terminateShellChildren(): number {
+  let stopped = 0;
+  for (const pid of [...liveChildren]) {
+    try {
+      terminateChildProcessTree(pid);
+      stopped += 1;
+    } catch {
+      // already gone
+    }
+    liveChildren.delete(pid);
+  }
+  return stopped;
+}
+
+// A normal exit takes the children with it. `exit` handlers must be
+// synchronous, and tree termination is (taskkill /T, SIGKILL to the group).
+process.once("exit", () => {
+  terminateShellChildren();
+});
+
 /** Where the policy lives: everything here is shell-independent. */
 /**
  * The bound on one run's stream, in bytes. The value matches the process
@@ -121,6 +168,7 @@ export abstract class ShellExecutor {
     const spawned = this.spawnSpec(spec, request);
     if ("error" in spawned) return spawned.error;
     const child = spawned.child;
+    trackShellChild(child.pid);
 
     const stdoutStream = new BoundedStream();
     const stderrStream = new BoundedStream();
@@ -184,6 +232,7 @@ export abstract class ShellExecutor {
         clearTimeout(timer);
         request?.signal?.removeEventListener("abort", abort);
         closeSpill();
+        forgetShellChild(child.pid);
         result();
       };
 
@@ -285,6 +334,7 @@ export abstract class ShellExecutor {
         spawned.error.confinementRefusal ?? "the command could not be started",
       );
     const child = spawned.child;
+    trackShellChild(child.pid);
 
     const outputListeners = new Set<
       (chunk: string, stream: "stdout" | "stderr") => void
@@ -300,6 +350,7 @@ export abstract class ShellExecutor {
       for (const listener of outputListeners) listener(String(chunk), "stderr");
     });
     childEvents(child).on("exit", (code: number | null, signal?: number) => {
+      forgetShellChild(child.pid);
       for (const listener of exitListeners)
         listener({ exitCode: code, signal });
     });

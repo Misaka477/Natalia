@@ -12,6 +12,7 @@ import type {
 } from "@anthelia/contracts";
 import { type AppState, cloneState } from "@natalia/view-store";
 import { cloneStateInWorker } from "./clone-state-worker-client";
+import { structuralClone } from "./structural-clone";
 import type { ConfinementMode } from "@anthelia/contracts";
 import { panelScopeKey } from "./panel-scope";
 import { PERMISSION_RUNGS, availableRungs, rungFor } from "./permission-rungs";
@@ -1152,6 +1153,19 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
 
   let projectionFramePending = false;
   let suppressProjectionClones = false;
+  /**
+   * The snapshot this component handed Solid last frame.
+   *
+   * The structural clone reuses THIS frame's unchanged branches by identity,
+   * which is what keeps the transcript's rows mounted: Solid's `<For>` keys by
+   * element identity, so a full deep clone per animation frame rebuilt every
+   * visible row while the model streamed (the card toolbar flickered under the
+   * cursor, and a click landed on a node that had been replaced between
+   * mousedown and mouseup — the image preview never opened). `undefined` until
+   * the first frame, and stale after any direct `setState` (a session switch, a
+   * hydration), which only costs one full clone.
+   */
+  let lastProjectedSnapshot: AppState | undefined;
   onCleanup(
     props.ctx.projection.subscribe((next) => {
       const replaying = (
@@ -1173,13 +1187,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         projectionFramePending = false;
         void (async () => {
           let projected: AppState;
+          const live = props.ctx.projection.getState();
           try {
-            projected = await cloneStateInWorker(
-              props.ctx.projection.getState(),
-            );
+            projected = lastProjectedSnapshot
+              ? structuralClone(lastProjectedSnapshot, live)
+              : await cloneStateInWorker(live);
           } catch {
-            projected = cloneState(props.ctx.projection.getState());
+            projected = lastProjectedSnapshot
+              ? structuralClone(lastProjectedSnapshot, live)
+              : cloneState(live);
           }
+          lastProjectedSnapshot = projected;
           const setStart = performance.now();
           setState(projected);
           const setMs = performance.now() - setStart;
@@ -2048,6 +2066,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       setChatDraft("");
       setMainAttachments([]);
       setChatAttachments([]);
+      // The previous session's rung is not this session's: the echo of a write
+      // belongs to the session it was written for, and the projection supplies
+      // the standing rung for whichever session is now shown.
+      setSessionRung(undefined);
       const projected = cloneState(props.ctx.projection.getState());
       setState(projected);
     };
@@ -2635,8 +2657,32 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [permissionProblem, setPermissionProblem] = createSignal<
     string | undefined
   >(undefined);
+  /**
+   * The rung the SESSION stands on, read from the projection.
+   *
+   * The runtime publishes the session's approval mode on every attach
+   * (`status.snapshot.permissions`) and records a move durably
+   * (`session.permission.mode`); the confinement half rides the session
+   * snapshot's `confinement.mode`. Reading them is what makes the control
+   * honest: a front end that never touched it shows the session's own mode
+   * instead of the config's default, two front ends cannot disagree, and a
+   * restart shows the mode the human chose (measured: CEF showed
+   * `auto（工作区）` while a second front end showed the placeholder for the
+   * same session, because each showed its own last write or the config).
+   *
+   * Absent only when the runtime has said nothing yet — a brand-new session,
+   * or a front end attached before the first snapshot — which is when the
+   * config's mode is the honest answer.
+   */
+  const sessionRungFromProjection = () => {
+    const approval = state().permissionMode;
+    const confinement = state().intelligence?.confinement?.mode;
+    if (!approval || !confinement) return undefined;
+    return rungFor({ approval, confinement });
+  };
   /** The rung the controls are standing on. */
   const currentRung = () =>
+    sessionRungFromProjection() ??
     rungFor(
       sessionRung() ?? {
         approval:
@@ -2653,11 +2699,21 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // The menu shows the four rungs and no "current" suffix: the trigger already
   // names the standing rung, and the option rows carry `data-active` for the
   // highlight. The suffix made two of the four rows read as one long sentence.
-  const permissionOptions = () =>
-    availableRungs(config()?.agentModes).map((rung) => ({
-      value: rung.id,
-      label: rung.label,
-    }));
+  //
+  // The standing rung is always offered, even when the config's `agentModes`
+  // cannot name it: hiding it left the trigger with a value no option matched,
+  // which rendered as the "选择权限" placeholder — the control looked unset
+  // while the session was running on `auto（工作区）`.
+  const permissionOptions = () => {
+    const listed = availableRungs(config()?.agentModes);
+    const standing = currentRung();
+    if (!standing || listed.some((rung) => rung.id === standing.id))
+      return listed.map((rung) => ({ value: rung.id, label: rung.label }));
+    return [
+      ...listed.map((rung) => ({ value: rung.id, label: rung.label })),
+      { value: standing.id, label: standing.label },
+    ];
+  };
 
   // The PLUGIN side panels (terminal, todo, files) have NO scope key at all.
   //

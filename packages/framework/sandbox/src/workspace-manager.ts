@@ -4,12 +4,20 @@ import {
   mkdir,
   readdir,
   readFile,
+  readlink,
   realpath,
   rename,
   rm,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep as pathSeparator,
+} from "node:path";
 import { spawnSync } from "node:child_process";
 import type {
   ExecutionTarget,
@@ -1071,14 +1079,50 @@ function removeChangesForPath(changes: SandboxChange[], path: string) {
   }
 }
 
+/**
+ * Whether a path is inside a root — by COMPONENTS, not by prefix.
+ *
+ * `candidate.startsWith(root)` said yes to `<root>-evil` (and to
+ * `C:\jailbox` for the root `C:\jail`), which is the containment bug this
+ * helper exists to not repeat: the sandbox's own prefix comparison.
+ */
+export function isInsideRoot(root: string, candidate: string): boolean {
+  const normalizedRoot = resolve(root);
+  const normalized = resolve(candidate);
+  if (normalized === normalizedRoot) return true;
+  return normalized.startsWith(
+    normalizedRoot.endsWith(pathSeparator)
+      ? normalizedRoot
+      : normalizedRoot + pathSeparator,
+  );
+}
+
 async function rejectSymlinkEscape(root: string, target: string) {
   let cursor = dirname(target);
-  while (cursor.startsWith(root)) {
+  while (isInsideRoot(root, cursor)) {
     try {
       const stats = await lstat(cursor);
       if (stats.isSymbolicLink()) {
-        const real = await realpath(cursor);
-        if (!real.startsWith(root))
+        let real: string | undefined;
+        try {
+          real = await realpath(cursor);
+        } catch (error) {
+          // A DANGLING link, and this used to be treated as safe: realpath
+          // throws ENOENT, the catch below swallowed it, and the path walked
+          // through unexamined. Measured on the hosted Windows runner
+          // (2026-10-17), where `symlink("/tmp", <sandbox>/out)` resolves to
+          // `C:\tmp` on the current drive and does not exist: the containment
+          // test failed because NOTHING was blocked. A link that cannot be
+          // resolved is not a link that is safe — so it fails closed, except
+          // for the one case that cannot escape: a dangling link whose target
+          // is itself inside the root.
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          const text = await readlink(cursor).catch(() => undefined);
+          const lexical = text ? resolve(dirname(cursor), text) : undefined;
+          if (!lexical || !isInsideRoot(root, lexical))
+            throw new Error("sandbox symlink escape blocked");
+        }
+        if (real !== undefined && !isInsideRoot(root, real))
           throw new Error("sandbox symlink escape blocked");
       }
     } catch (error) {

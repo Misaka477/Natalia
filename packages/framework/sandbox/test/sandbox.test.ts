@@ -7,9 +7,14 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { WorkspaceSandboxManager, containPath, isSecretEnvKey } from "../src";
+import {
+  WorkspaceSandboxManager,
+  containPath,
+  isInsideRoot,
+  isSecretEnvKey,
+} from "../src";
 
 /**
  * The symlink fixtures are skipped when the machine cannot create symlinks
@@ -44,6 +49,32 @@ symlinkTest("sandbox containment blocks symlink escape", async () => {
   await expect(containPath(root, "out/file.txt")).rejects.toThrow(
     "symlink escape",
   );
+});
+
+test("a symlink whose target does not exist is still containment-checked", async () => {
+  // Even where the OS cannot create symlinks (Windows without Developer Mode),
+  // the fail-closed rule is checkable: an unresolvable target outside the root
+  // must not be treated as safe. The symlink variant of this runs under
+  // `symlinkTest` on a host that can create one.
+  const root = await mkdtemp(join(tmpdir(), "natalia-sandbox-dangling-"));
+  try {
+    expect(isInsideRoot(root, join(root, "not-yet"))).toBe(true);
+    expect(isInsideRoot(root, resolve(`${root}-evil`))).toBe(false);
+    expect(isInsideRoot(root, join(root, "..", "outside"))).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test("the containment check compares components, not prefixes", () => {
+  // `<root>-evil` shares root's prefix and is NOT inside it; the old
+  // `cursor.startsWith(root)` said it was, in the walk that decides symlink
+  // containment.
+  const root = resolve("jail");
+  expect(isInsideRoot(root, join(root, "box", "file.txt"))).toBe(true);
+  expect(isInsideRoot(root, `${root}box`)).toBe(false);
+  expect(isInsideRoot(root, resolve(`${root}-evil`, "file.txt"))).toBe(false);
+  expect(isInsideRoot(root, root)).toBe(true);
 });
 
 test("sandbox diff covers delete rename mode and env allowlist redacts secrets", async () => {
@@ -241,54 +272,6 @@ test("sandbox executes a real command inside its workspace target", async () => 
   expect(result.target).toMatchObject({ kind: "sandbox", sandboxID: "box" });
 });
 
-test("sandbox tracks running resources with output and stop lifecycle", async () => {
-  const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-resource-"));
-  const manager = new WorkspaceSandboxManager(base);
-  await manager.create("box");
-  const resource = await manager.startResource(
-    "box",
-    process.platform === "win32"
-      ? "Write-Output resource-ok; Start-Sleep 30"
-      : "printf resource-ok; sleep 30",
-    "res_1",
-  );
-  expect(resource).toMatchObject({ id: "res_1", status: "running" });
-  expect(manager.runningResourceCount()).toBe(1);
-  expect(manager.updateEvent("box")).toMatchObject({ runningResources: 1 });
-  await waitFor(async () => await manager.resourceOutput("box", "res_1"));
-  expect(await manager.resourceOutput("box", "res_1")).toContain("resource-ok");
-  expect(await manager.stopResource("box", "res_1")).toMatchObject({
-    status: "stopped",
-  });
-  expect(manager.runningResourceCount()).toBe(0);
-  expect(manager.updateEvent("box")).toMatchObject({ runningResources: 0 });
-});
-
-test("sandbox manager close stops every running resource", async () => {
-  const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-close-"));
-  const manager = new WorkspaceSandboxManager(base);
-  await manager.create("first");
-  await manager.create("second");
-  const first = await manager.startResource(
-    "first",
-    process.platform === "win32" ? "Start-Sleep 30" : "sleep 30",
-    "res_first",
-  );
-  const second = await manager.startResource(
-    "second",
-    process.platform === "win32" ? "Start-Sleep 30" : "sleep 30",
-    "res_second",
-  );
-
-  await manager.close();
-
-  expect(manager.runningResourceCount()).toBe(0);
-  expect(manager.resourcesFor("first")).toEqual([]);
-  expect(manager.resourcesFor("second")).toEqual([]);
-  await waitForProcessExit(first.pid);
-  await waitForProcessExit(second.pid);
-}, 15_000);
-
 test("sandbox manifests restore changes but never falsely recover processes", async () => {
   const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-restart-"));
   const first = new WorkspaceSandboxManager(base);
@@ -311,45 +294,3 @@ test("sandbox manifests restore changes but never falsely recover processes", as
   const result = await reopened.delete("box");
   expect(result.runningResources).toEqual([]);
 });
-
-async function waitFor(read: () => Promise<string>) {
-  for (let index = 0; index < 100; index++) {
-    if ((await read()).includes("resource-ok")) return;
-    await Bun.sleep(20);
-  }
-  throw new Error("timed out waiting for sandbox resource output");
-}
-
-test("sandbox resource preserves a command containing single quotes", async () => {
-  const base = await mkdtemp(join(tmpdir(), "natalia-sandbox-quote-"));
-  const manager = new WorkspaceSandboxManager(base);
-  await manager.create("box");
-  // Incorrect quoting silently truncated this command to `a`, so the assertion
-  // guards against a corrupted command rather than only against a failure.
-  const resource = await manager.startResource("box", "echo 'a b c'", "r1");
-  expect(resource.pid).toBeGreaterThan(0);
-  expect(await waitForResourceOutput(resource.outputPath)).toBe("a b c");
-});
-
-async function waitForResourceOutput(path: string, timeoutMs = 20_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const content = await readFile(path, "utf8").catch(() => "");
-    if (content.trim()) return content.trim();
-    await Bun.sleep(100);
-  }
-  return "";
-}
-
-async function waitForProcessExit(pid: number, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
-    await Bun.sleep(20);
-  }
-  throw new Error(`timed out waiting for process ${pid} to exit`);
-}

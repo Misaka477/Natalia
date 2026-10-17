@@ -574,6 +574,9 @@ function spawnWithPythonPty(options: PtySpawnOptions): PtyProcess {
   return spawnPtyBridge(
     spawn("python3", ["-u", "-c", PYTHON_PTY_BRIDGE], {
       stdio: ["pipe", "pipe", "inherit"],
+      // Harmless where there is no console to allocate; on Windows it is the
+      // difference between a bridge and a bridge plus a window.
+      windowsHide: true,
     }),
     options,
   );
@@ -611,7 +614,10 @@ function spawnWithRustBridge(options: PtySpawnOptions): PtyProcess {
       `the pty bridge is not built: run native-terminal:build-pty-bridge (expected ${candidates[0]})`,
     );
   return spawnPtyBridge(
-    spawn(helper, [], { stdio: ["pipe", "pipe", "inherit"] }),
+    spawn(helper, [], {
+      stdio: ["pipe", "pipe", "inherit"],
+      windowsHide: true,
+    }),
     options,
   );
 }
@@ -630,8 +636,17 @@ function spawnWithConptyBridge(options: PtySpawnOptions): PtyProcess {
     throw new Error(
       `the ConPTY bridge is not built: run native-terminal:build-conpty:windows (expected ${helper})`,
     );
+  // `windowsHide` is NOT optional here. The bridge is a CONSOLE-subsystem exe
+  // (PE subsystem 3, measured), so spawning it from this GUI process without
+  // CREATE_NO_WINDOW makes Windows allocate a VISIBLE console window — one per
+  // pane, which is the "terminal windows keep popping up" report. The pseudo
+  // console it creates for the shell inside is a different thing and stays
+  // windowless either way.
   return spawnPtyBridge(
-    spawn(helper, [], { stdio: ["pipe", "pipe", "inherit"] }),
+    spawn(helper, [], {
+      stdio: ["pipe", "pipe", "inherit"],
+      windowsHide: true,
+    }),
     options,
   );
 }

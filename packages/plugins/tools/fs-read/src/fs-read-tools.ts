@@ -577,7 +577,12 @@ export function imageReadTool(): RuntimeTool {
           title: requireObject(args).path as string,
           summary: "image attached",
           mediaType: mediaTypeOf(requireObject(args).path as string),
-          attachmentID: attachmentIDFromResult(value),
+          // The path, not an attachment id: see `attachedPathFromResult`. The
+          // client loads the thumbnail from the workspace copy the model read,
+          // through the same read authorization the tool itself used.
+          path:
+            attachedPathFromResult(value) ??
+            (requireObject(args).path as string),
           meta: [["result", value]],
         };
       },
@@ -634,10 +639,19 @@ function mediaTypeOf(path: string): string | undefined {
   return MEDIA_TYPES[path.slice(dot).toLowerCase()];
 }
 
-/** The attachment id the runtime's result sentence carries, when it does. */
-function attachmentIDFromResult(value: string): string | undefined {
-  // The result is `image attached: <attachment-id>` (the runtime's own
-  // sentence). A shape change must fail loud rather than guess an id.
+/**
+ * The workspace path the runtime's result sentence names.
+ *
+ * The sentence is `image attached: <path>` (the runtime's own, see `execute`),
+ * and this is what the reader's thumbnail is loaded from. It used to be put in
+ * the card's `attachmentID` slot on the theory that the sentence carried an
+ * attachment id; it never has — `attachImage` only hands the bytes to the next
+ * provider step and returns void — so the client asked the runtime for an
+ * attachment named `E:\…\x.png`, was refused with "attachment is not referenced
+ * by session", and every read-image card showed 加载失败 (measured: 20+
+ * `rpc attachment.dataUrl failed` diagnostics in one session).
+ */
+function attachedPathFromResult(value: string): string | undefined {
   const match = /^image attached: (.+)$/u.exec(value.trim());
   return match?.[1];
 }

@@ -1,0 +1,74 @@
+fix(terminal,media): a shell pane stays alive, no console window, read image previews
+
+Four measured defects from one session, and one hole found while verifying them.
+
+1. A PANE WHOSE COMMAND IS A SHELL WITH SWITCHES DIED AT ONCE. The model opened a
+   pane with `command: "powershell -NoLogo -NoProfile"` — its own words for "give
+   me PowerShell" — and `interactiveShellArgv` treated any extra word as a
+   command, so the pane spawned
+   `pwsh -NoLogo -NoProfile -NonInteractive -Command "…; powershell -NoLogo
+   -NoProfile"`: the inner shell has nothing to read and exits immediately. The
+   journal shows it: `terminal.timeline started actor:"model" status:"running"`
+   at 07:03:07.988, then `action:"exit" actor:"system"` at 07:03:08.719 (+731ms),
+   after which every `interactive_terminal_send_line`/`snapshot` answered
+   "terminal session has exited". Flags are not a command: a shell name followed
+   only by switches now becomes the integrated interactive pane, with the
+   caller's switches deduped in front of `-Command`. `cmd.exe` had the same fate
+   by another route (no integration script → wrapped as a one-shot command) and
+   now spawns as itself; a NON-shell with switches (`echo -n`) still stays a
+   command, so the rule did not simply weaken.
+
+2. EVERY PANE START OPENED A CONSOLE WINDOW. `natalia-conpty-bridge.exe` is a
+   CONSOLE-subsystem binary (PE subsystem 3, measured), and the controller
+   spawned it with no `windowsHide`, so Windows allocated a visible console for
+   it — one per pane. All three bridge spawns (python, rust, conpty) now pass
+   `windowsHide: true`; the pseudo console the bridge creates for the shell is a
+   different object and stays windowless either way.
+
+3. EVERY READ-IMAGE CARD SAID 加载失败. `read_media_file`'s result sentence is
+   `image attached: <absolute path>`, and the card put that string in
+   `attachmentID` — so the client asked the runtime for an attachment by that
+   name and was refused with "attachment is not referenced by session"
+   (measured: 20+ `rpc attachment.dataUrl failed` diagnostics in one session).
+   The card now carries the file's `path`, and `attachment.dataUrl` serves a
+   workspace media file from where it lives.
+
+4. `run_shell` ROWS SAID "Bash" ON A POWERSHELL HOST. The label came from a table
+   borrowed from the reference implementation's POSIX environment. It is "Shell"
+   now: the family label names the kind of tool, and the card's title carries the
+   command, whichever shell this host has.
+
+THE HOLE FOUND WHILE VERIFYING 3: with only `authorizeWorkspaceRead` in place the
+deployed route served `C:\Windows\win.ini` as base64 for a caller that claimed
+`image/png` — the permission RULES are a permissive read policy, not a boundary.
+The route now also requires the realpath'd target to stay inside the realpath'd
+workspace (`escapesDir`, extracted to `attachment-paths.ts` and pinned, including
+the `root2` prefix case and a symlink leaving the tree), and it serves image/video
+types only. The refusal records its reason: `refusing to preview a path outside
+the workspace: C:\Windows\win.ini`.
+
+Test: `bun test packages/framework/client/test/attachment-paths.test.ts
+packages/framework/client/test/real-runtime-b.test.ts
+packages/plugins/native-terminal/test packages/plugins/ui/kit/test
+packages/plugins/tools/fs-read/test` — 317 pass, 9 skip, 0 fail. New pins:
+`pane-shell-flags.test.ts` (a shell with only switches stays interactive, no
+`-NonInteractive`, no nesting; `cmd.exe` is itself; `echo -n` and
+`exec bash --norc` stay commands), `windows-spawn-and-media.test.ts` (every bridge
+spawn hides its console; the read card hands over a path not an id; the runtime
+routes media through the authorization), `attachment-paths.test.ts` (the
+containment predicate and the symlink case).
+
+Live on the deployed build (`E:\Natalia`, RPC `nativeTerminal.*` + journal):
+- `nativeTerminal.start {command: "powershell -NoLogo -NoProfile"}` →
+  `status:"running"` after 4s, with `shellPID: 8028` (the handshake named the
+  shell inside, so the integration loaded) — the shape that died at +731ms;
+- visible console windows before/after: 1 → 1 (none opened) across two pane
+  starts;
+- a default `pwsh` pane echoed `VERIFY_PANE_OK` through write+read;
+- `attachment.dataUrl {path: E:\Development\1111\fourier\prev_A.png}` →
+  `data:image/png;base64,…` (92082 chars); `C:\Windows\win.ini` → refused, and
+  the journal records why;
+- the transcript's family labels read `Shell` (no `Bash`).
+Old recorded cards still ask by the path-as-id they recorded, so replaying that
+session keeps failing its thumbnails: history is not rewritten, and the fix
+applies to reads from now on.

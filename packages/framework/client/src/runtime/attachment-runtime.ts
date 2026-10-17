@@ -7,6 +7,9 @@
  * files into the user workspace.
  */
 import type { LocalAttachment, SessionID } from "@anthelia/contracts";
+import { readFile, realpath } from "node:fs/promises";
+import { resolve } from "node:path";
+import { escapesDir } from "./attachment-paths";
 import { sessionStoreController } from "@anthelia/session-store";
 import { attachmentService } from "@anthelia/attachments";
 import type { RuntimeContext } from "@anthelia/substrate";
@@ -61,6 +64,40 @@ export function createAttachmentRuntime(
           "attachmentDataUrl requires path+mediaType or attachmentID+sessionID",
         );
       const filename = input.path.split(/[\\/]/u).pop() ?? "attachment";
+      // A WORKSPACE media path (a file the model read with read_media_file) is
+      // served from where it lives, not from the attachment store. The store-only
+      // branch below is why every read-image card said 加载失败: the tool's result
+      // sentence names the file (`image attached: E:\…\x.png`), the client asked
+      // for it, and `attachmentDataURL` refused it with "attachment store path
+      // escapes root" (measured; 20+ diagnostics in one session).
+      //
+      // TWO gates, and the workspace one is not optional. The permission rules
+      // are a permissive read policy (`auto` allows reads), so they are NOT a
+      // boundary: measured, `{path: "C:\\Windows\\win.ini", mediaType:
+      // "image/png"}` was served as base64 with only the rule check in place.
+      // The boundary is the workspace root, resolved through realpath so a
+      // symlink cannot step outside it — the same containment `attachmentDataURL`
+      // applies to the store, for the same reason.
+      //
+      // Only media types are served: this route draws a picture or a clip, it is
+      // not a general file reader.
+      if (
+        input.mediaType.startsWith("image/") ||
+        input.mediaType.startsWith("video/")
+      ) {
+        const root = await realpath(ctx.ports.getWorkspaceRoot());
+        const target = await realpath(resolve(root, input.path));
+        if (escapesDir(root, target))
+          throw new Error(
+            `refusing to preview a path outside the workspace: ${input.path}`,
+          );
+        await ctx.ports.authorizeWorkspaceRead({
+          toolName: "read_media_file",
+          paths: [target],
+        });
+        const bytes = await readFile(target);
+        return `data:${input.mediaType};base64,${bytes.toString("base64")}`;
+      }
       return await attachments.dataURL({
         id: "",
         path: input.path,

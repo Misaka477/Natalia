@@ -247,10 +247,15 @@ test("an edit's marked hunk is what the card carries, marks included", () => {
 });
 
 test("toolRowLabel gives every tool its family label", () => {
-  // The collapsed row reads `<Label> · <the sentence the model wrote>`, the
-  // shape the reference rows use (`Bash · Verify all three families in dist`). Without
+  // The collapsed row reads `<Label> · <the sentence the model wrote>`. Without
   // this table the row leads with the raw command, which is what our rows did.
-  expect(toolRowLabel("run_shell")).toBe("Bash");
+  //
+  // `run_shell` is "Shell", not the reference implementation's "Bash": the
+  // command runs under whatever shell this host has (pwsh 7, Windows PowerShell
+  // 5.1, Git bash, sh), and this row printed "Bash" for a PowerShell command on
+  // Windows. The label names the KIND of tool; the card's title carries the
+  // command.
+  expect(toolRowLabel("run_shell")).toBe("Shell");
   expect(toolRowLabel("read_file")).toBe("Read");
   expect(toolRowLabel("read_media_file")).toBe("Read");
   expect(toolRowLabel("image_read")).toBe("Read");

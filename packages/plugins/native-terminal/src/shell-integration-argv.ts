@@ -257,10 +257,84 @@ export function interactiveShellArgv(
     // the shell as `[Console`). bash and zsh compose with extra arguments
     // (`--rcfile` is additive), which is why the rule is PowerShell's.
     const name = shellName(file);
-    if ((name === "pwsh" || name === "powershell") && rest.length > 0) continue;
+    if ((name === "pwsh" || name === "powershell") && rest.length > 0) {
+      // FLAGS are not a command. `powershell -NoLogo -NoProfile` is a person
+      // (or a model) naming the shell they want and its switches — the same
+      // shape VS Code's own profile has — and treating it as a command spawned
+      // `pwsh -NonInteractive -Command "…; powershell -NoLogo -NoProfile"`,
+      // where the inner shell has nothing to read and exits at once: the pane
+      // died 731ms after start (measured: `terminal.timeline exit actor:system`
+      // right after a `status:"running"` start, then every later send_line said
+      // "terminal session has exited"). The integration's flags stay in front of
+      // `-Command`; the caller's duplicates are dropped so `-NoLogo` appears once.
+      if (!rest.every(isShellFlagWord)) continue;
+      return mergeShellFlags(integrated.argv, rest);
+    }
     return [...integrated.argv, ...rest];
   }
+  // A shell we have NO integration script for is still an interactive pane.
+  // `cmd.exe` is the case that matters on Windows: with no script its argv fell
+  // through to the executor, which wrapped it as `pwsh -NonInteractive -Command
+  // "…; cmd.exe"` — the same immediate death as above. No markers is the honest
+  // outcome for a shell we do not integrate; a pane that exits is not.
+  //
+  // Only a KNOWN shell name qualifies. `echo -n` also ends in flags, and
+  // spawning it as a pane would be a pane that runs once and dies — the same
+  // bug wearing the opposite mask.
+  const bare = words[0];
+  if (bare !== undefined && words.slice(1).every(isShellFlagWord)) {
+    const resolved = resolveShellPath(bare, os);
+    const file = resolved[0];
+    if (file !== undefined && KNOWN_SHELLS.has(shellName(file)))
+      return [...resolved, ...words.slice(1)];
+  }
   return undefined;
+}
+
+/** Shell executables whose name alone means "this pane is a shell". */
+const KNOWN_SHELLS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "fish",
+  "pwsh",
+  "powershell",
+  "cmd",
+  "nu",
+  "elvish",
+  "xonsh",
+]);
+
+/** A word that is a switch rather than a command to run (`-NoLogo`, `/k`, `--norc`). */
+function isShellFlagWord(word: string): boolean {
+  return /^[-/][A-Za-z]/u.test(word);
+}
+
+/**
+ * The integration argv with the caller's own switches folded in.
+ *
+ * Everything before `-Command` is flags; everything from `-Command` on is the
+ * script. A caller's flag that is already present is dropped (the integration's
+ * copy is the one that matters), and the rest go immediately before `-Command`
+ * so PowerShell still takes the integration's script as its command.
+ */
+function mergeShellFlags(
+  argv: readonly string[],
+  flags: readonly string[],
+): string[] {
+  const commandAt = argv.indexOf("-Command");
+  if (commandAt < 0) return [...argv, ...flags];
+  const head = argv.slice(0, commandAt);
+  const tail = argv.slice(commandAt);
+  const merged = [...head];
+  for (const flag of flags) {
+    const name = flag.split(/[=:]/u)[0]!;
+    if (head.some((existing) => existing.split(/[=:]/u)[0] === name)) continue;
+    merged.push(flag);
+  }
+  return [...merged, ...tail];
 }
 
 /**

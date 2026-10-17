@@ -23,7 +23,13 @@ export type { ToolCard };
  * honest answer for a tool nobody has classified yet.
  */
 const TOOL_ROW_LABELS: Record<string, string> = {
-  run_shell: "Bash",
+  // "Shell", not "Bash". The command runs under whatever shell this host has —
+  // pwsh 7, Windows PowerShell 5.1, Git bash or sh — and calling every one of
+  // them Bash was a label borrowed from the reference implementation's POSIX
+  // environment, printed on a Windows row that ran PowerShell. The card's title
+  // carries the command itself, so the family label only has to say what KIND of
+  // thing ran.
+  run_shell: "Shell",
   process_start: "Process",
   process_list: "Process",
   process_status: "Process",

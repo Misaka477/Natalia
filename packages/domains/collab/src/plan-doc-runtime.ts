@@ -274,7 +274,45 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
         );
         return { written: true, planID: existing.planID };
       }
-      return { written: true, planID: input.planID };
+      // A WRITE REGISTERS. Until this, only `plan_doc_mark` minted an index
+      // entry, so a plan written and not marked was invisible to every reader —
+      // `plan_doc_list` answered `[]` while the document sat on disk, and a
+      // completion citing its task found no plan to audit. The identity comes
+      // from the caller (the front-matter `planID`), and a re-write of the same
+      // path keeps the same id because it is matched by documentPath above.
+      const planID =
+        input.planID ??
+        `${planIDForPath(documentPath)}_${Date.now().toString(36)}`;
+      const now = new Date().toISOString();
+      const record: IndexEntry = {
+        planID,
+        title: input.title?.trim() || planID,
+        documentPath,
+        // `draft`, not `marked`: writing a plan says it exists, not that anyone
+        // accepted it. A mark is a status action on a registered plan.
+        status: "draft",
+        // A write is the main agent creating the plan; a user-authored mark
+        // still records its own source through `planDocMark`.
+        createdBy: "main_agent",
+        createdAt: now,
+        updatedAt: now,
+        revision: 1,
+      };
+      entries[planID] = record;
+      await writeIndex(ctx, entries);
+      publish(
+        requireWorkLedger().buildPlanDocCreated({
+          id: `${planID}:created:${ctx.ports.nextPlanSequence()}`,
+          planID,
+          title: record.title,
+          documentPath: record.documentPath,
+          createdBy: record.createdBy,
+          status: record.status,
+          createdAt: record.createdAt,
+        }),
+        input.sessionID,
+      );
+      return { written: true, planID, registered: true };
     },
 
     async planDocMark(input) {

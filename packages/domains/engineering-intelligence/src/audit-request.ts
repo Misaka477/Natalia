@@ -21,11 +21,32 @@ export async function requestAuditAfterCompletion(
   ctx: RuntimeContext,
   exec: SessionExecutionState,
   completion: Extract<RuntimeEvent, { type: "completion.recorded" }>,
-): Promise<void> {
+): Promise<{ requested: boolean; reason?: string }> {
   const auditFacts = await scanAuditRequestFacts(ctx, exec, completion.taskID);
-  if (auditFacts.triggerEventIDs.includes(completion.id)) return;
+  if (auditFacts.triggerEventIDs.includes(completion.id))
+    return {
+      requested: false,
+      reason: "already requested for this completion",
+    };
   const ledger = ctx.state.serviceDirectory.getOptional(workLedgerController);
-  if (!ledger) return;
+  if (!ledger) return { requested: false, reason: "no work-ledger service" };
+  // A completion whose task has NO REGISTERED PLAN triggers nothing.
+  //
+  // This used to fire anyway ("there is just no lifecycle to project"), and the
+  // cost was measured: four `audit.requested` for a task whose plan index was
+  // empty, four wake-ups of an auditor with nothing to read, and no line in the
+  // record saying why. An audit is a review of a plan's claim; without the plan
+  // it is a ritual, and a ritual that wakes another agent is worse than silence —
+  // so this refuses and SAYS SO instead.
+  const plans = await ctx.ports.planDocRuntime
+    ?.planDocList?.(exec.session.id)
+    .catch(() => undefined);
+  const registered = plans?.some((plan) => plan.planID === completion.taskID);
+  if (!registered)
+    return {
+      requested: false,
+      reason: `no registered plan for ${completion.taskID}: call plan_doc_write (which registers the plan document) before claiming the task complete, or record the completion with a taskKind and knownGaps so the claim stands on its own`,
+    };
   const round = auditFacts.count + 1;
   ctx.ports.publishForSession(
     exec,
@@ -61,4 +82,5 @@ export async function requestAuditAfterCompletion(
         // A projection failure must never fail the audit trigger.
       });
   ctx.ports.requestNiaWake(exec);
+  return { requested: true };
 }

@@ -586,7 +586,13 @@ export function createRecordCompletionTool(
         recordedAt,
       });
       ctx.ports.publishForSession(exec, completionEvent);
-      await requestAuditAfterCompletion(ctx, exec, completionEvent);
+      // A refused audit is information, not silence: the completion still stands
+      // on its own claim, and the caller is told why no reviewer was woken.
+      const audit = await requestAuditAfterCompletion(
+        ctx,
+        exec,
+        completionEvent,
+      );
       const workLedger = requireWorkLedger(ctx);
       if (workLedger) {
         // E4: the completion is itself a validation-class node; the
@@ -720,6 +726,7 @@ export function createRecordCompletionTool(
         ...(args.evidenceIDs?.length
           ? { citedEvidence: args.evidenceIDs }
           : {}),
+        audit,
       });
     },
   };

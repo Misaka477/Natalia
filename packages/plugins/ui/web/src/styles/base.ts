@@ -1315,7 +1315,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
    is explicit about it: streaming with an EMPTY draft shows Stop, and with a
    draft the send key stays the ordinary send key — the message is queued
    (showStopControl = canStop && !hasDraftToSubmit), so "queued" is a delivery
-   mode, not a dangerous action. DSH spells the same vocabulary
+   mode, not a dangerous action. The reference harness spells the same one
    (BusyEnterBehavior = 'queue' | 'steer'). This rule used to paint the key
    --neu-error and give it INSET shadows while a turn ran, which read as a
    pressed, refused control; the delivery mode is what the tooltip says

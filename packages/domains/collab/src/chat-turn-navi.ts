@@ -657,7 +657,7 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
           // `<workspace>/.natalia/tool-output/` and paged at 50 KB.
           //
           // One gate for the whole runtime, not one per stream: the reference
-          // harnesses put the bound on the RESULT (DSH's spill policy with a
+          // harnesses put the bound on the RESULT (a spill policy with a
           // token budget and a locator; ZCode's uniform head+tail 32 KB with a
           // truncated ref), and a chat stream is not a reason to have a second,
           // weaker rule. The full text still reaches the model — the marker

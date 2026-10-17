@@ -7,7 +7,7 @@
  * same vocabulary without recoloring the key: ZCode's composer shows Stop only
  * for an empty draft while streaming (`showStopControl = canStop &&
  * !hasDraftToSubmit`) and keeps the ordinary send key for a draft, which is
- * queued; DSH's `BusyEnterBehavior` is `'queue' | 'steer'`, a delivery mode
+ * queued; the reference harness spells the same choice as queue or steer, a
  * rather than a danger. So "send while running" is a NORMAL action whose
  * meaning rides the tooltip, and the color stays the accent's. Stop keeps the
  * red: it is the control that interrupts the turn.

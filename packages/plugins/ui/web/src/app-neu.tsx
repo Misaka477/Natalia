@@ -3601,7 +3601,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     >
       <header class="neu-topbar">
         <div class="neu-topbar-left">
-          <span class="neu-topbar-logo">N</span>
+          {/* The app's own mark, not a letter. `/brand.png` is the shell's
+              stable copy — generated from `assets/source/natalia-icon.svg` by
+              `scripts/build-app-icons.ts` into `apps/web/public/`, which Vite
+              copies verbatim. Root-relative because this UI ships as a plugin
+              bundle served by the runtime from a different origin, so neither
+              a hashed asset name nor a bundle-relative path would resolve. */}
+          <img class="neu-topbar-logo" src="/brand.png" alt="Natalia" />
           <div class="neu-topbar-meta">
             <span class="neu-topbar-title">Natalia</span>
             <span class="neu-topbar-sub">

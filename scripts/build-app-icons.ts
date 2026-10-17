@@ -39,13 +39,25 @@ import { optimize } from "svgo";
 import { Resvg } from "@resvg/resvg-js";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const SOURCE_SVG = join(ROOT, "assets", "source", "natalia-icon.svg");
 const ICONS_DIR = join(ROOT, "assets", "icons");
 const ICON_HEADER = join(ROOT, "apps", "cef-desktop", "src", "app_icon_png.h");
 const FAVICON = join(ROOT, "apps", "web", "favicon.svg");
+/**
+ * The web shell's own copy of the mark, at the size the top bar draws it.
+ *
+ * Vite copies `public/` into the build output verbatim, so this file lands at
+ * `<web root>/brand.png` and the static server already serves `.png`. The web
+ * UI is a PLUGIN bundle served by the runtime from a different origin than the
+ * shell, so it cannot reference a hashed asset name or a bundle-relative path —
+ * a stable, root-relative `/brand.png` is the only form that resolves. The top
+ * bar used to draw a blue rounded square with the letter N in it, which is a
+ * placeholder, not the app's icon.
+ */
+const WEB_BRAND = join(ROOT, "apps", "web", "public", "brand.png");
 
 /** Matches the corner radius the icon set has always carried. */
 const CORNER_FRACTION = 0.22;
@@ -53,6 +65,8 @@ const PNG_SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
 /** The PNG embedded in the desktop app for its window icon. */
 const EMBED_SIZE = 128;
+/** The size the web top bar draws. */
+const WEB_BRAND_SIZE = 64;
 
 const VARIANTS = {
   head: { viewBox: "150 0 850 850" },
@@ -240,6 +254,18 @@ async function main(): Promise<number> {
   );
   await writeFavicon(svg);
   console.log(`  favicon apps/web/favicon.svg (variant: ${variant})`);
+  // The web shell's own copy of the mark at the size the top bar draws it.
+  // Vite copies `public/` into the build output verbatim, so this lands at
+  // `<web root>/brand.png` and the static server already serves `.png` — the
+  // one form the UI can reference (a plugin bundle is served by the runtime
+  // from a different origin, so a hashed asset name or a bundle-relative path
+  // would not resolve).
+  const brand = rendered.get(WEB_BRAND_SIZE)!;
+  await mkdir(dirname(WEB_BRAND), { recursive: true });
+  await writeFile(WEB_BRAND, brand);
+  console.log(
+    `  brand   apps/web/public/brand.png (icon-${WEB_BRAND_SIZE}.png, ${brand.byteLength} bytes)`,
+  );
   return 0;
 }
 

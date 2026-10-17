@@ -68,6 +68,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   gap: 12px;
   min-width: 0;
 }
+/* The app's own mark at the top bar's size. The blue square with a letter in
+   it was a placeholder; this element now carries the image, so it keeps the
+   rounded frame and drops the color and the type. */
 .neu-topbar-logo {
   width: 34px;
   height: 34px;
@@ -75,10 +78,8 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: var(--neu-accent);
-  color: var(--neu-on-accent);
-  font-weight: 700;
-  font-size: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 .neu-topbar-meta {
   display: flex;

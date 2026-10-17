@@ -23,6 +23,15 @@ type EditableModel = {
   reasoning: boolean;
   image: boolean;
   contextWindow?: number;
+  /**
+   * The model's maximum OUTPUT tokens, beside the window it is carved out of.
+   *
+   * Separate on purpose: a 1M-token window with a 32k reply cap reserves 32k, it
+   * does not earn a 1M reply budget. The runtime's context budget reserves this
+   * number, so leaving it unset means the reserve comes from a formula the
+   * operator never chose.
+   */
+  maxOutputTokens?: number;
 };
 
 type ModelRow = EditableModel;
@@ -309,6 +318,10 @@ export function ModelPanel(props: {
         typeof model.limits?.contextWindow === "number"
           ? model.limits.contextWindow
           : undefined,
+      maxOutputTokens:
+        typeof model.limits?.maxOutputTokens === "number"
+          ? model.limits.maxOutputTokens
+          : undefined,
     }));
     const providerModels = rawModelRows.length
       ? rawModelRows
@@ -326,6 +339,10 @@ export function ModelPanel(props: {
               contextWindow:
                 typeof entry.limits?.contextWindow === "number"
                   ? entry.limits.contextWindow
+                  : undefined,
+              maxOutputTokens:
+                typeof entry.limits?.maxOutputTokens === "number"
+                  ? entry.limits.maxOutputTokens
                   : undefined,
             };
           });
@@ -477,6 +494,12 @@ export function ModelPanel(props: {
           Number.isFinite(model.contextWindow) &&
           model.contextWindow > 0
             ? model.contextWindow
+            : undefined,
+        maxOutputTokens:
+          typeof model.maxOutputTokens === "number" &&
+          Number.isFinite(model.maxOutputTokens) &&
+          model.maxOutputTokens > 0
+            ? model.maxOutputTokens
             : undefined,
       }));
     const targetID = providerName().trim() || editingProvider() || "";
@@ -806,6 +829,26 @@ export function ModelPanel(props: {
                         const value = Number(event.currentTarget.value);
                         updateModel(index, {
                           contextWindow:
+                            Number.isFinite(value) && value > 0
+                              ? value
+                              : undefined,
+                        });
+                      }}
+                    />
+                    {/* The reply cap sits beside the window it comes out of: the
+                        runtime reserves this many tokens, so a model with a 1M
+                        window and a 32k cap reserves 32k. */}
+                    <input
+                      class="neu-form-input"
+                      type="number"
+                      min="1"
+                      placeholder="最大输出"
+                      title="单次回复最多 tokens（从上下文窗口里预留）"
+                      value={model().maxOutputTokens ?? ""}
+                      onInput={(event) => {
+                        const value = Number(event.currentTarget.value);
+                        updateModel(index, {
+                          maxOutputTokens:
                             Number.isFinite(value) && value > 0
                               ? value
                               : undefined,

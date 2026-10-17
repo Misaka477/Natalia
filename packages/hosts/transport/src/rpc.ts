@@ -4727,6 +4727,8 @@ export async function handleRPCMessage(
                   name?: string;
                   reasoning?: boolean;
                   image?: boolean;
+                  contextWindow?: number | "auto";
+                  maxOutputTokens?: number;
                 }>,
               }
             : {}),

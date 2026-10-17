@@ -356,6 +356,14 @@ export function createSelectionSurface(
                   },
                   limits: {
                     contextWindow: model.contextWindow ?? "auto",
+                    // The output ceiling travels beside the window: it is what the
+                    // budget reserves, so a model whose window is configured but
+                    // whose reply cap is not would reserve a formula-derived
+                    // number the operator never chose.
+                    ...(typeof model.maxOutputTokens === "number" &&
+                    model.maxOutputTokens > 0
+                      ? { maxOutputTokens: model.maxOutputTokens }
+                      : {}),
                   },
                   status: "stable",
                   source: "manual",

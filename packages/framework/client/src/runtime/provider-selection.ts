@@ -64,7 +64,7 @@ export function defaultContextStatusConfig(): RuntimeContextStatusConfig {
   };
 }
 
-async function resolveContextStatusConfig(
+export async function resolveContextStatusConfig(
   config: ConfigV4,
   provider: StreamingProvider | undefined,
   resolver: ContextWindowResolver,
@@ -86,17 +86,15 @@ async function resolveContextStatusConfig(
     assertContextBudgetInvariants(budget);
     return budget;
   };
-  if (!selectedRef && !config.defaultModel)
-    return applyPolicy(defaultContextStatusConfig());
+  const resolvedRef =
+    selectedRef ?? config.defaultModel ?? soleConfiguredModelRef(config);
+  if (!resolvedRef) return applyPolicy(defaultContextStatusConfig());
   const resolveStart = performance.now();
   const mark = (name: string) =>
     perfLog(
-      `[perf] resolveContextStatusConfig.${name} model=${selectedRef ?? config.defaultModel} +${(performance.now() - resolveStart).toFixed(1)}ms`,
+      `[perf] resolveContextStatusConfig.${name} model=${resolvedRef} +${(performance.now() - resolveStart).toFixed(1)}ms`,
     );
-  const effective = resolveEffectiveModel(
-    config,
-    selectedRef ?? config.defaultModel!,
-  );
+  const effective = resolveEffectiveModel(config, resolvedRef);
   if (!effective) return applyPolicy(defaultContextStatusConfig());
   mark("effective");
   const executingModel = provider?.model ?? effective.ref.model;
@@ -113,6 +111,13 @@ async function resolveContextStatusConfig(
     model: executingModel,
     baseURL: providerConfig?.connection?.baseURL,
     apiKey: providerConfig?.connection?.apiKey,
+    // The configured window is passed ONLY when the provider's executing model is
+    // the one the config names. That gate is a safety rule, not an oversight:
+    // `real-runtime-a`'s "context budget follows the executing model instead of a
+    // mismatched configured default" pins it, because believing a configured
+    // 500k window for a provider that only serves 64k would overflow the provider
+    // rather than the other way round. What was missing is the case where the
+    // config names a model and NOTHING selected one (`soleConfiguredModelRef`).
     explicitContextWindow: selectionMatchesProvider
       ? effective.limits.contextWindow
       : undefined,
@@ -139,6 +144,8 @@ async function resolveContextStatusConfig(
     configuredReserved:
       effective.limits.reservedOutputTokens ??
       config.context.reservedOutputTokens,
+    // The model's own output ceiling, under the same name-match rule as the
+    // window: a mismatched executing model must not inherit this one's reserve.
     explicitMaxOutputTokens: selectionMatchesProvider
       ? effective.limits.maxOutputTokens
       : undefined,
@@ -156,9 +163,14 @@ async function resolveContextStatusConfig(
     thresholdPercent:
       effective.limits.compactionThresholdPercent ??
       config.context.compactionThresholdPercent,
+    // A DECLARED output ceiling is honoured; a discovered one is capped. The 20k
+    // guard exists so a provider-reported limit cannot eat a small window — but an
+    // operator who typed "最大输出 32768" in the model settings means it, and the
+    // model's own catalog value is the same kind of declaration. Both are still
+    // bounded by the window.
     reserved: Math.min(
       effectiveWindow,
-      reserved.source === "config"
+      reserved.source === "config" || reserved.source === "explicit_output"
         ? reserved.tokens
         : Math.min(20_000, reserved.tokens),
     ),
@@ -173,6 +185,37 @@ async function resolveContextStatusConfig(
   // Config-time invariant: a preserved tail above the compaction threshold can
   // never be satisfied, so reject it here instead of spinning at runtime.
   return applyPolicy(budget);
+}
+
+/**
+ * The model a config stands for when NOTHING selected one.
+ *
+ * A deployment can be configured with exactly one model and no
+ * `defaultModel` — that is a complete, unambiguous configuration, and the
+ * provider selection already uses it to answer "what do the turns run on". The
+ * context budget did not: with `defaultModel` null and no per-session selection
+ * it fell straight to the conservative 32,000-token fallback, so an operator who
+ * had configured a 999,997-token window saw the meter divide their real usage by
+ * 32,000 and report "121%" (measured). One configured model is an answer;
+ * several are ambiguous and stay on the conservative default.
+ *
+ * @param config - the resolved runtime configuration.
+ * @returns `provider/model` when exactly one enabled model is configured.
+ */
+function soleConfiguredModelRef(config: ConfigV4): string | undefined {
+  const refs: string[] = [];
+  for (const [providerID, provider] of Object.entries(
+    config.catalog?.providers ?? {},
+  )) {
+    for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+      // `deprecated` still resolves (a session may be pinned to it); only a
+      // catalog entry whose provider is gone is unusable, and that cannot appear
+      // in its own provider's list.
+      if (!model) continue;
+      refs.push(`${providerID}/${modelID}`);
+    }
+  }
+  return refs.length === 1 ? refs[0] : undefined;
 }
 
 function shouldProbeProviderMetadata(baseURL?: string) {

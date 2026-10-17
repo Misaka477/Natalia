@@ -4771,7 +4771,14 @@ export type RuntimeClient = {
       name?: string;
       reasoning?: boolean;
       image?: boolean;
-      contextWindow?: number;
+      /** The model's context window in tokens. `"auto"` means "detect it". */
+      contextWindow?: number | "auto";
+      /**
+       * The model's maximum OUTPUT tokens — the reserve this runtime keeps out of
+       * the window for the reply. Distinct from the window: a 1M-context model
+       * with a 32k output cap reserves 32k, it does not get a 1M reply budget.
+       */
+      maxOutputTokens?: number;
     }>;
   }): Promise<{ saved: boolean }>;
   /**

@@ -55,6 +55,7 @@ export {
   type WorkContractAcceptedEvent,
   type WorkContractDraftedEvent,
   type WorkContractFields,
+  resolveValidationClasses,
 } from "./work-contract";
 export {
   evaluatePlanTaskState,

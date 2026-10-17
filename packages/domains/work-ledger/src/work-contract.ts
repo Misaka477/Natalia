@@ -367,6 +367,95 @@ export function validationClassesFor(
   return classes;
 }
 
+/** The evidence classes a validation command can claim, by name. */
+export const EVIDENCE_CLASSES = [
+  "validation:any",
+  "validation:install",
+  "validation:typecheck",
+  "validation:test",
+  "validation:parser",
+] as const;
+
+export type EvidenceClass = (typeof EVIDENCE_CLASSES)[number];
+
+export type ResolvedValidationClasses = {
+  /** Every class the run earns — the union of what it declared and what its text supports. */
+  classes: EvidenceClass[];
+  /**
+   * WHO decided: the project/caller's declaration, the command text, or both.
+   * The auditor reads this before weighing a green: a run classified only by
+   * its own text is a guess about a command name, not a statement about intent.
+   */
+  source: "declared+text" | "declared" | "text";
+  /** Set when a declaration contradicts the command text; the run then earns nothing. */
+  refused?: string;
+};
+
+/**
+ * Resolve the evidence classes for one run: DECLARED first, text as a check.
+ *
+ * The text matcher below is a name-guesser — it knows `bun test` and `ctest` and
+ * nothing else — and using it as the authority is how a C project whose tests run
+ * `make check` ends up permanently unable to show `validation:test`. So a caller
+ * may DECLARE what its command covers, and the text only CROSS-CHECKS when it
+ * recognizes the command:
+ *
+ *   - unrecognised text (only `validation:any`): the declaration stands, source
+ *     is `declared` — the platform admits it does not know this command.
+ *   - recognised text: the declaration must not exceed it — a run of `tsc` that
+ *     claims `validation:test` is refused, because the one thing the text does
+ *     prove is that no test runner ran.
+ *   - no declaration at all: the old text-only answer, source `text`.
+ */
+export function resolveValidationClasses(input: {
+  command: string | undefined;
+  passed: boolean;
+  declared?: readonly string[];
+}): ResolvedValidationClasses {
+  const declared = (input.declared ?? []).filter(
+    (entry): entry is EvidenceClass =>
+      (EVIDENCE_CLASSES as readonly string[]).includes(entry),
+  );
+  // A run that did not pass earns nothing, declared or not.
+  if (!input.passed)
+    return { classes: [], source: declared.length > 0 ? "declared" : "text" };
+  const textClasses = validationClassesFor(input.command, input.passed);
+  if (declared.length === 0)
+    return { classes: textClasses as EvidenceClass[], source: "text" };
+  const recognised = textClasses.length > 1;
+  if (recognised) {
+    // Two families are mutually exclusive claims: a command the text recognises
+    // as a test run cannot also be claiming a typecheck, and vice versa. A
+    // REFINEMENT (a parser class on top of a recognised test run) is fine — the
+    // text cannot know whether those tests are parser tests.
+    const claimsTest =
+      declared.includes("validation:test") ||
+      declared.includes("validation:parser");
+    const claimsTypecheck = declared.includes("validation:typecheck");
+    const textTests = textClasses.includes("validation:test");
+    const textTypechecks = textClasses.includes("validation:typecheck");
+    const contradiction =
+      (claimsTest && textTypechecks && !textTests) ||
+      (claimsTypecheck && textTests && !textTypechecks);
+    if (contradiction)
+      return {
+        classes: [],
+        source: "declared+text",
+        refused: `the command text says otherwise: it ran a known check (${textClasses.join(", ")}), so it cannot also claim ${claimsTest ? "validation:test" : "validation:typecheck"}`,
+      };
+  }
+  const merged = [
+    ...new Set<EvidenceClass>([
+      ...(textClasses as EvidenceClass[]),
+      ...declared,
+    ]),
+  ];
+  return {
+    classes: merged,
+    source: recognised ? "declared+text" : "declared",
+  };
+}
+
 /**
  * The completion card's judgment (EI §8.8): given the task kind and the
  * evidence actually recorded, which required evidence classes are still

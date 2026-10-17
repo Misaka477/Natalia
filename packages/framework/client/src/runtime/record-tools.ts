@@ -9,6 +9,7 @@
  */
 import { optionalString, type ToolOutputDefinition } from "@anthelia/tools";
 import {
+  resolveValidationClasses,
   validationClassesFor,
   workLedgerController,
 } from "@natalia/work-ledger";
@@ -102,6 +103,21 @@ export function createRecordValidationTool(
           type: "number",
           description: `Optional budget in seconds for this run. Defaults to ${DEFAULT_VALIDATION_TIMEOUT_SEC}; values above ${MAX_VALIDATION_TIMEOUT_SEC} are clamped. A run killed at its budget is recorded timed_out — never passed.`,
         },
+        covers: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "validation:any",
+              "validation:install",
+              "validation:typecheck",
+              "validation:test",
+              "validation:parser",
+            ],
+          },
+          description:
+            "What this run establishes, when the command name does not say it (for example a project whose tests run `make check`). The platform cross-checks a declaration against a command it recognises and refuses a contradiction; an unrecognised command is accepted as declared.",
+        },
         knownGaps: {
           type: "array",
           items: { type: "string" },
@@ -121,6 +137,7 @@ export function createRecordValidationTool(
         objective?: string;
         command?: string;
         timeoutSec?: number;
+        covers?: string[];
         knownGaps?: string[];
       };
       const exec = resolveExec(ctx, context.sessionID);
@@ -264,7 +281,12 @@ export function createRecordValidationTool(
       // classes, and the caller could not tell what its validation bought
       // until the card came back `missing` with no explanation. Now the
       // record says which classes it carries.
-      const satisfies = validationClassesFor(args.command, result === "passed");
+      const resolved = resolveValidationClasses({
+        command: args.command,
+        passed: result === "passed",
+        ...(args.covers ? { declared: args.covers } : {}),
+      });
+      const satisfies = resolved.classes;
       return JSON.stringify({
         recorded: true,
         evidenceID,
@@ -272,6 +294,10 @@ export function createRecordValidationTool(
         result,
         safeSummary: outcome.safeSummary,
         satisfies,
+        // WHO decided the classes: a run classified only by its own command text
+        // is a guess about a name, not a statement about intent.
+        satisfiesSource: resolved.source,
+        ...(resolved.refused ? { satisfiesRefused: resolved.refused } : {}),
         durationMs: Math.round(performance.now() - startedAt),
         ...(artifactRef ? { artifactRef } : {}),
       });
@@ -693,6 +719,7 @@ export function validationRunCard(): ToolOutputDefinition {
         "durationMs",
         "safeSummary",
         "artifactRef",
+        "satisfiesSource",
       ])
         if (facts[key] !== undefined) picked[key] = facts[key];
       if (Array.isArray(facts.satisfies)) picked.satisfies = facts.satisfies;

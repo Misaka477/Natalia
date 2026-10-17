@@ -1535,6 +1535,21 @@ function renderCard(card: ToolCard, toolCall: ToolCall): ToolCardLine[] {
   }
 }
 
+/**
+ * A tool call's own duration, short enough to sit on a card header.
+ *
+ * `12ms · 1.2s · 2m 05s` — the same three magnitudes the running clock uses,
+ * because a reader comparing the two should not meet two spellings of one
+ * measurement.
+ */
+function formatToolDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.round((ms % 60_000) / 1000);
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 function ToolCallCard(props: {
   toolCall: ToolCall;
   expansionKey: string;
@@ -1757,6 +1772,19 @@ function ToolCallCard(props: {
         <Show when={titleExtra()}>
           <span class="natalia-tool-title" title={card?.title}>
             {titleExtra()}
+          </span>
+        </Show>
+        {/* What the call cost, in the runner's own measurement. A turn can be
+            long while every individual call inside it is short — and the
+            session's summed `toolMs` cannot tell those apart, so the figure
+            belongs on the row. Absent while running and on a row recorded
+            before the field existed: no confident 0. */}
+        <Show when={props.toolCall.durationMs !== undefined}>
+          <span
+            class="natalia-tool-duration"
+            title="本次工具调用的耗时"
+          >
+            {formatToolDuration(props.toolCall.durationMs!)}
           </span>
         </Show>
         <span

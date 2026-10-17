@@ -768,6 +768,9 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
             // Pairs this result with the assistant toolCalls entry when the
             // history is rebuilt for the next turn (issue: P30).
             ...(call.id ? { toolCallID: call.id } : {}),
+            // This call's own wall clock — the same figure the main path and a
+            // subagent stamp on their settled rows.
+            durationMs: performance.now() - toolStart,
             at: new Date().toISOString(),
           });
           setPhase("waiting");

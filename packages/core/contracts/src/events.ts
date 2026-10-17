@@ -638,6 +638,13 @@ type ChatEventData<Namespace extends ChatEventNamespace> =
       toolCallID?: string;
       startedAt?: number;
       endedAt?: number;
+      /**
+       * How long this one call took, ms — the same figure the main path and a
+       * subagent stamp on their settled `tool.update` rows. A chat turn
+       * executes its tools directly, so without this its cards were the only
+       * ones in the app with no cost reading at all.
+       */
+      durationMs?: number;
       at: string;
     }
   | {
@@ -742,6 +749,8 @@ type LegacyChatEventData =
       meta?: Record<string, unknown>;
       startedAt?: number;
       endedAt?: number;
+      /** How long this one call took, ms — the same figure the namespaced form carries. */
+      durationMs?: number;
       at: string;
       channel?: ChatChannel;
     }
@@ -1245,6 +1254,18 @@ type RuntimeEventData =
       thoughtSignature?: string;
       startedAt?: number;
       endedAt?: number;
+      /**
+       * How long this ONE call took, in ms — the runner's own wall clock,
+       * measured from the tool start to its settled result.
+       *
+       * The session's `session.usage` carries `toolMs`, a SUM over every tool of
+       * every turn, so "which call ate the time" had no answer: a turn read as
+       * 37 minutes with nothing on a card to say whether one command held it or
+       * thirty did. Each settled `tool.update` now states its own figure, and
+       * the card shows it. Absent while the call is still running, and on an
+       * event recorded before this field existed.
+       */
+      durationMs?: number;
     }
   | {
       type: "policy.decision";

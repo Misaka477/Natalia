@@ -94,6 +94,14 @@ export type ToolBlock = {
   result?: string;
   startedAt?: number;
   endedAt?: number;
+  /**
+   * How long this one call took, ms — the runner's own measurement, carried
+   * from the settled `tool.update`. The card shows it; a reader no longer has
+   * to subtract `endedAt - startedAt` (two clocks that may not even agree
+   * across a replay), and the session's summed `toolMs` stops being the only
+   * answer to "where did the time go".
+   */
+  durationMs?: number;
   metadata?: Record<string, unknown>;
   /** Accumulated raw arguments, so a consumer can show what was requested. */
   argumentsRaw: string;

@@ -242,6 +242,9 @@ export async function createSubagentTools(
         card: projectedRender ?? defaultToolCard(tool.name, result),
         ...(projectedMeta ? { meta: projectedMeta } : {}),
         endedAt: Date.now(),
+        // This call's own wall clock, the same figure the main path stamps —
+        // `startedAt` above is the instant the row opened.
+        durationMs: Date.now() - startedAt,
       });
       runner.log(`tool ${tool.name}: ${result.slice(0, 240)}`);
       return result;

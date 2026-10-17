@@ -111,6 +111,12 @@ export type ToolBlockLike = {
   /** The reassembled raw arguments (streamed in fragments by the runtime). */
   argumentsRaw?: string;
   /**
+   * How long this one call took, ms — carried from the settled `tool.update`
+   * (or the chat/ subagent publishers' own `durationMs`), so the row can state
+   * its cost instead of leaving a reader to subtract two timestamps.
+   */
+  durationMs?: number;
+  /**
    * The tool's own card, carried on the event's structured slot (UI
    * refactor R0). Absent on an event recorded before the slot existed —
    * those fall back to the legacy `metadata.render` blob, which is the
@@ -141,6 +147,7 @@ export function toolCallRow(tool: ToolBlockLike): ToolCall {
     output: raw,
     status: tool.status,
     summary: card?.summary ?? toolResultSummary(raw),
+    ...(tool.durationMs !== undefined ? { durationMs: tool.durationMs } : {}),
     ...(card ? { card } : {}),
     ...(args ? { arguments: args } : {}),
   };
@@ -199,6 +206,13 @@ export interface ToolCall {
   output?: string;
   status?: string;
   summary?: string;
+  /**
+   * How long this one call took, ms, as the runner measured it. The card shows
+   * it beside the status; absent on a call still running and on a row recorded
+   * before the field existed (the card then shows nothing rather than a
+   * confident 0).
+   */
+  durationMs?: number;
   /** The tool's self-projected card, when it declared one. */
   card?: ToolCallCard;
   /**

@@ -222,6 +222,10 @@ export async function runExecuteStage(
   const projectedCall = tool.output?.presentCall?.(
     tryParseToolArguments(call.arguments),
   );
+  // The one clock this call is measured against: the same instant the row
+  // starts, so the settled event's `durationMs` and the card's `startedAt` are
+  // the same measurement, never two.
+  const startedAtMs = Date.now();
   publish({
     type: "tool.update",
     id: toolID,
@@ -229,7 +233,7 @@ export async function runExecuteStage(
     callID: call.id,
     status: "running",
     summary: "running",
-    startedAt: Date.now(),
+    startedAt: startedAtMs,
 
     ...(projectedCall ? { card: projectedCall } : {}),
   });
@@ -509,6 +513,9 @@ export async function runExecuteStage(
           : {}),
       },
       endedAt: Date.now(),
+      // This call's own wall clock, so a card can say what it cost without a
+      // reader subtracting two timestamps (or trusting the turn's total).
+      durationMs: Date.now() - startedAtMs,
     });
     publishWorkGraphToolCall(turnID, call.id, tool.name, "succeeded");
     // Only after success: a write that failed did not change the workspace, and
@@ -603,6 +610,9 @@ export async function runExecuteStage(
         ? { thoughtSignature: call.thoughtSignature }
         : {}),
       endedAt: Date.now(),
+      // A failed call took time too — the figure is a fact about the call, not
+      // a reward for succeeding.
+      durationMs: Date.now() - startedAtMs,
     });
     // A failed call is as much a fact as a successful one; the error text stays
     // out of the graph.

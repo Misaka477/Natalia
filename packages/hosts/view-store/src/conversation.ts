@@ -581,6 +581,9 @@ function upsertTool(
     ...(event.result !== undefined ? { result: event.result } : {}),
     ...(event.startedAt !== undefined ? { startedAt: event.startedAt } : {}),
     ...(event.endedAt !== undefined ? { endedAt: event.endedAt } : {}),
+    // The call's own cost as the runner measured it — the card reads this
+    // rather than subtracting two timestamps the client may not share.
+    ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
     ...(event.metadata !== undefined ? { metadata: event.metadata } : {}),
     // The structured slots (R0): a later event supersedes the card from an
     // earlier phase of the same call — the result card over the call card —
@@ -1003,6 +1006,9 @@ function applyAgentChatEvent(
           ? { startedAt: event.startedAt }
           : {}),
         ...(event.endedAt !== undefined ? { endedAt: event.endedAt } : {}),
+        ...(event.durationMs !== undefined
+          ? { durationMs: event.durationMs }
+          : {}),
       };
       upsertInto(
         target.messages,

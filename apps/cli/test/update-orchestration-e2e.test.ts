@@ -15,12 +15,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import { nataliaHomeJoin } from "@anthelia/platform";
-import {
-  createRuntimeDaemonStore,
-  daemonToken,
-  registerRuntimeDaemon,
-} from "@natalia/transport/host";
+import { daemonToken, registerRuntimeDaemon } from "@natalia/transport/host";
 import { createRealRuntimeClient } from "@natalia/client";
+import { daemonStore } from "../src/command-helpers";
 import { createHttpTransportHost } from "../src/transport-host";
 
 /**
@@ -94,9 +91,16 @@ posixTest(
     // question ("draining, not flipped") answers with the wrong binary. The
     // child gets `NATALIA_HOME` in its env for the same reason.
     const dataHome = join(scratch, "data");
-    const store = createRuntimeDaemonStore({
-      dir: nataliaHomeJoin({ env: { NATALIA_HOME: dataHome } }, "run"),
-    });
+    // The CLI's OWN store construction, not a bare `createRuntimeDaemonStore`:
+    // the registration's `version` is what `runtimeDaemonStatus` compares to
+    // decide `incompatible` (do not drain a daemon that is not this build), so a
+    // fixture that registers with the transport's default marker makes the CLI
+    // read its own live daemon as incompatible — no drain, the flip lands while
+    // the turn is gated, and this test's question answers with the wrong binary
+    // (measured: CI run 39075088766, after the CLI started passing its version).
+    const store = daemonStore(
+      nataliaHomeJoin({ env: { NATALIA_HOME: dataHome } }, "run"),
+    );
     const token = await daemonToken(store);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

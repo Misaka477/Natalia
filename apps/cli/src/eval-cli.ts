@@ -2,13 +2,12 @@ import { readExternalBenchmark } from "@natalia/assay";
 import { runExternalBenchmark } from "@natalia/assay";
 import { callRuntimeRPC } from "@natalia/transport";
 import {
-  createRuntimeDaemonStore,
   daemonToken,
   readRuntimeDaemonRegistration,
 } from "@natalia/transport/host";
 import { createLocalSessionService } from "@anthelia/session-store";
 import type { RuntimeEvent } from "@anthelia/contracts";
-import { daemonDir } from "./command-helpers";
+import { daemonStore } from "./command-helpers";
 
 /**
  * G-c's outer half at the CLI: the frozen benchmark's tasks, listed
@@ -122,7 +121,7 @@ export async function evalRun(argv: string[]): Promise<{
   failed: number;
   outcomes: unknown[];
 }> {
-  const store = createRuntimeDaemonStore({ dir: daemonDir() });
+  const store = daemonStore();
   const registration = await readRuntimeDaemonRegistration(store);
   const taskIDs: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {

@@ -1,10 +1,9 @@
 import { callRuntimeRPC } from "@natalia/transport";
 import {
-  createRuntimeDaemonStore,
   daemonToken,
   readRuntimeDaemonRegistration,
 } from "@natalia/transport/host";
-import { daemonDir } from "./command-helpers";
+import { daemonStore } from "./command-helpers";
 import type { RuntimeSkillCatalogEntry } from "@anthelia/contracts";
 
 /**
@@ -35,7 +34,7 @@ const USAGE =
 
 /** The daemon's URL and token, or undefined when none is running. */
 async function daemonConnection() {
-  const store = createRuntimeDaemonStore({ dir: daemonDir() });
+  const store = daemonStore();
   const registration = await readRuntimeDaemonRegistration(store);
   if (!registration) return undefined;
   return { url: registration.url, token: await daemonToken(store) };

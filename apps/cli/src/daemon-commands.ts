@@ -2,7 +2,6 @@ import { createRealRuntimeClient } from "@natalia/client";
 import { pluginStoreRoot } from "./official-plugins";
 import { ensureNataliaConfigPath, nataliaConfigPath } from "./config-home";
 import {
-  createRuntimeDaemonStore,
   daemonToken,
   registerRuntimeDaemon,
   runtimeDaemonStatus,
@@ -13,6 +12,7 @@ import { createPluginUiResolver } from "./plugin-ui";
 import {
   valueAfter,
   daemonDir,
+  daemonStore,
   waitSignal,
   settleShutdown,
   exitAfterShutdown,
@@ -36,9 +36,9 @@ export async function handleDaemonCommands(argv: string[]) {
   switch (subcommand) {
     case "daemon":
     case "--daemon-serve": {
-      const store = createRuntimeDaemonStore({
-        dir: valueAfter(argv, "--daemon-dir") ?? daemonDir(),
-      });
+      const store = daemonStore(
+        valueAfter(argv, "--daemon-dir") ?? daemonDir(),
+      );
       // The port is the first argument after the subcommand. It used to be read one
       // position further along, so neither form could actually choose a port.
       const requestedPort = valueAfter(argv, subcommand);
@@ -75,13 +75,7 @@ export async function handleDaemonCommands(argv: string[]) {
     case "daemon-status":
     case "--daemon-status": {
       console.log(
-        JSON.stringify(
-          await runtimeDaemonStatus(
-            createRuntimeDaemonStore({ dir: daemonDir() }),
-          ),
-          null,
-          2,
-        ),
+        JSON.stringify(await runtimeDaemonStatus(daemonStore()), null, 2),
       );
       break;
     }
@@ -89,13 +83,7 @@ export async function handleDaemonCommands(argv: string[]) {
     case "daemon-stop":
     case "--daemon-stop": {
       console.log(
-        JSON.stringify(
-          await stopRuntimeDaemon(
-            createRuntimeDaemonStore({ dir: daemonDir() }),
-          ),
-          null,
-          2,
-        ),
+        JSON.stringify(await stopRuntimeDaemon(daemonStore()), null, 2),
       );
       break;
     }

@@ -1,4 +1,6 @@
 import { nataliaHomePath } from "@anthelia/platform";
+import { createRuntimeDaemonStore } from "@natalia/transport/host";
+import { NATALIA_VERSION } from "./version";
 
 export function valueAfter(argv: string[], flag: string, offset = 0) {
   const index = argv.indexOf(flag);
@@ -12,6 +14,23 @@ export function withoutOption(argv: string[], flag: string) {
 
 export function daemonDir() {
   return nataliaHomePath("run");
+}
+
+/**
+ * The daemon store, carrying THIS build's version.
+ *
+ * `createRuntimeDaemonStore` defaults the version to the TS build marker
+ * (`0.0.0-ts7`), and every CLI caller used to take the default — so a shipped
+ * `natalia.exe` that answers `--version` with `0.0.0-m13` registered itself as
+ * `0.0.0-ts7` (measured on the installed 0.0.0-m13 build, 2026-10-18). The
+ * version is what `runtimeDaemonStatus` compares to decide whether a running
+ * daemon belongs to this build: with a constant on both sides that comparison
+ * could never fail, so an app upgraded underneath a live daemon would keep
+ * talking to the old one. Writer and readers share this one construction so
+ * they cannot disagree again.
+ */
+export function daemonStore(dir: string = daemonDir()) {
+  return createRuntimeDaemonStore({ dir, version: NATALIA_VERSION });
 }
 
 function positiveEnvNumber(name: string, fallback: number): number {

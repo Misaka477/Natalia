@@ -1,11 +1,10 @@
 import { EGRESS_ADVISORY } from "@natalia/client";
 import {
-  createRuntimeDaemonStore,
   daemonToken,
   readRuntimeDaemonRegistration,
   runtimeDaemonStatus,
 } from "@natalia/transport/host";
-import { daemonDir } from "./command-helpers";
+import { daemonStore } from "./command-helpers";
 import {
   DEFAULT_UPDATE_CHANNEL_URL,
   resolveChannel,
@@ -323,7 +322,7 @@ export async function handleLocalCommands(argv: string[]) {
       // The daemon store IS the detection (its own status is the
       // liveness authority: pid + protocol version, stale records
       // self-clean). What the store knows, the update never asks for.
-      const store = createRuntimeDaemonStore({ dir: daemonDir() });
+      const store = daemonStore();
       const daemonStatus = await runtimeDaemonStatus(store);
       if (
         daemonStatus.state === "stale" ||
@@ -569,7 +568,7 @@ export async function handleLocalCommands(argv: string[]) {
           process.exit(1);
         }
         const count = positiveInt(valueAfter(argv, "--count"), 4, "count");
-        const store = createRuntimeDaemonStore({ dir: daemonDir() });
+        const store = daemonStore();
         const registration = await readRuntimeDaemonRegistration(store);
         if (!registration) {
           console.error(

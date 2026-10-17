@@ -823,6 +823,12 @@ test("record_completion and record_decision write durable journal facts", async 
               taskID: "plan:1:s1",
               objective: "split the system prompt",
               changeSummary: "static persona and dynamic runtime context",
+              // This fixture proves the journal write, not the check: the
+              // statement gate refuses a claim that is both unwarranted and
+              // silent, so the fixture states what it does not cover.
+              knownGaps: [
+                "fixture: the write path is under test, not the check",
+              ],
             },
           },
         },
@@ -1221,6 +1227,8 @@ test("the read surfaces paginate with a cursor (B6)", async () => {
                 taskID: "plan:1:s1",
                 objective: "first slice",
                 changeSummary: "done",
+                // Same reason: this fixture proves the read surfaces paginate.
+                knownGaps: ["fixture: pagination is under test, not the check"],
               }),
             },
           ],

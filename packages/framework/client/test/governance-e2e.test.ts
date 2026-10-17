@@ -76,7 +76,12 @@ test("Phase 0 E2E: record tools land journal facts that agree across projections
                   safeSummary: "the validation runner returned success",
                 },
               ],
-              knownGaps: [],
+              // The fixture records a completion to prove the write path, not to
+              // claim verified work — and the statement gate refuses a claim that
+              // is both unwarranted and silent. Declaring that is the honest path.
+              knownGaps: [
+                "fixture: the write path is under test, not the check",
+              ],
               rollbackState: "clean",
               changePaths: [
                 "packages/framework/client/src/runtime/record-tools.ts",

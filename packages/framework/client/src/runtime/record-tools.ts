@@ -559,6 +559,63 @@ export function createRecordCompletionTool(
         return "record_completion requires taskID, objective and changeSummary";
       const recordedAt = new Date().toISOString();
       const completionID = `completion:${Date.now().toString(36)}:${ctx.ports.nextCompletionSequence()}`;
+      // THE GATE, and its shape is the point: a claim may be unwarranted as long
+      // as it SAYS SO. A completion whose evidence matrix is unsatisfied is
+      // refused when it also acknowledges nothing — that is the silent claim, the
+      // one a reader cannot tell from a verified one. Declaring the gap
+      // (`knownGaps`) or a human validation is the honest path and passes.
+      //
+      // The gate is on the STATEMENT, never on the fact: refusing because a
+      // check failed would deadlock a model that cannot fix the check.
+      await ensureCompleteSessionFactState(ctx, exec);
+      const preflightEvidence = exec.factState
+        ? sessionFactEvidenceRecords(exec.factState)
+        : [];
+      const preflightCard = requireWorkLedger(ctx)!.evaluateCompletionCard({
+        objective: args.objective.trim(),
+        ...(args.changePaths?.length ? { changes: args.changePaths } : {}),
+        ...(args.taskKind
+          ? {
+              taskKind:
+                args.taskKind as import("@natalia/work-ledger").TaskKind,
+            }
+          : {}),
+        evidenceRefs: args.evidenceIDs ?? [],
+        resolvedEvidenceClasses: (args.evidenceIDs ?? []).flatMap(
+          (evidenceID) => {
+            const record = preflightEvidence.find(
+              (entry) => entry.id === evidenceID,
+            );
+            if (
+              !record ||
+              record.status !== "validated" ||
+              !record.validations?.length
+            )
+              return [];
+            return record.validations.flatMap((validation) =>
+              validationClassesFor(
+                validation.command,
+                validation.result === "passed",
+              ),
+            );
+          },
+        ),
+        validations: args.validations ?? [],
+      });
+      const acknowledges =
+        (args.knownGaps?.length ?? 0) > 0 ||
+        Boolean(args.humanValidation?.trim());
+      if (preflightCard.missing.length > 0 && !acknowledges)
+        return JSON.stringify({
+          recorded: false,
+          refusal:
+            "this completion claims a finished task without the evidence its task kind requires, and says nothing about the gap — that is the one claim a reader cannot tell from a verified one",
+          kind: preflightCard.kind,
+          classifiedBy: preflightCard.classifiedBy,
+          missingEvidence: preflightCard.missing,
+          note: preflightCard.note,
+          hint: `record the missing validation with record_validation and cite its evidenceID, or declare the gap in knownGaps (or humanValidation) so the claim states what it does not cover`,
+        });
       const completionEvent = ledger.buildCompletionRecorded({
         id: completionID,
         taskID: args.taskID.trim(),

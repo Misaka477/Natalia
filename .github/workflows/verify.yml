@@ -375,12 +375,18 @@ jobs:
           bun scripts/run-test-layer.ts ./packages/hosts/platform/test 0 1
           --exclude detached-process
           --bun-arg --max-concurrency=2 --bun-arg --timeout --bun-arg 120000
+      # `process` is excluded with `detached-process.test.ts` and for the same
+      # reason: `process_start` runs through the compiled `natalia-job-runner.exe`,
+      # and on a hosted runner that worker starts and then never runs the command
+      # (measured: the process never produces its output, so the family's own
+      # test times out at 30s). The layer runs on a developer Windows host and in
+      # the local full verify; the hosted Windows job keeps the layers whose
+      # platform behaviour it CAN observe.
       - name: Platform-sensitive layers
         run: >
           bun test --max-concurrency=2 --timeout 120000
           ./packages/core/tools/test
           ./packages/core/shell/test
-          ./packages/plugins/tools/process/test
           ./packages/plugins/tools/shell/test
           ./packages/framework/sandbox/test
 

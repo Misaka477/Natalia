@@ -74,15 +74,19 @@ test("run_shell runs a command inside the workspace and reports exit", async () 
   expect(result).toContain("stderr:\nerr");
 });
 
-test("run_shell rejects on a failing command with its output", async () => {
+test("a failing command is its answer, not a rejected call", async () => {
+  // A non-zero exit is what the command REPORTED: the exit status and the
+  // output come back as one value. It used to throw, which turned "the tests
+  // are red" into an error string (the caller could only recover the code by
+  // matching prose) and sent the call down the failure path, which published
+  // the text unredacted and unbounded.
   const root = await mkdtemp(join(tmpdir(), "natalia-tool-shell-"));
-  await expect(
-    runShell(
-      "exit 3",
-      { workspaceRoot: root, settings: {} } as never,
-      runShellTimeoutSec,
-    ),
-  ).rejects.toThrow(/exit=3/u);
+  const result = await runShell(
+    "exit 3",
+    { workspaceRoot: root, settings: {} } as never,
+    runShellTimeoutSec,
+  );
+  expect(result).toContain("exit=3");
 });
 
 test("run_shell projects a terminal card from its output definition", () => {

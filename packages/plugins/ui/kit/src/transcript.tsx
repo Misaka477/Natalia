@@ -1787,9 +1787,12 @@ function ToolCallCard(props: {
       (current?.kind === "terminal" &&
         current.exitCode !== undefined &&
         current.exitCode !== 0) ||
-      (current?.meta ?? []).some(
-        ([label, value]) => label === "exit" && value !== "0",
-      )
+      (current?.meta ?? []).some(([label, value]) => {
+        // A non-zero exit status, or a run whose own recorded result is
+        // `failed` (a validation records a result, not an exit code).
+        if (label === "exit") return value !== "0";
+        return label === "result" && value === "failed";
+      })
     );
   };
 

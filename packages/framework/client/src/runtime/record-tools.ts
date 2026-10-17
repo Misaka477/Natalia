@@ -7,7 +7,7 @@
  * same pure builders the surfaces use — the event vocabulary stays the
  * journal-face one and no prompt ever carries the正文.
  */
-import { genericToolCard, type ToolOutputDefinition } from "@anthelia/tools";
+import { optionalString, type ToolOutputDefinition } from "@anthelia/tools";
 import {
   validationClassesFor,
   workLedgerController,
@@ -98,11 +98,7 @@ export function createRecordValidationTool(
       required: ["taskID", "objective", "command"],
       additionalProperties: false,
     },
-    output: evidenceRecordCard({
-      family: "evidence",
-      callSummary: "validate",
-      titleKey: "taskID",
-    }),
+    output: validationRunCard(),
     async execute(parsed, context) {
       const args = parsed as {
         taskID?: string;
@@ -233,6 +229,7 @@ export function createRecordValidationTool(
         result,
         safeSummary: outcome.safeSummary,
         satisfies,
+        durationMs: Math.round(performance.now() - startedAt),
         ...(artifactRef ? { artifactRef } : {}),
       });
     },
@@ -304,11 +301,7 @@ export function createRecordCompletionTool(
       required: ["taskID", "objective", "changeSummary"],
       additionalProperties: false,
     },
-    output: evidenceRecordCard({
-      family: "completion",
-      callSummary: "record",
-      titleKey: "taskID",
-    }),
+    output: completionVerdictCard(),
     async execute(parsed, context) {
       const args = parsed as {
         taskID?: string;
@@ -485,6 +478,7 @@ export function createRecordCompletionTool(
       })();
       return JSON.stringify({
         recorded: true,
+        taskID: args.taskID.trim(),
         completionID,
         card,
         ...(args.evidenceIDs?.length
@@ -599,6 +593,206 @@ export function createRecordDecisionTool(
           }),
         );
       return JSON.stringify({ recorded: true });
+    },
+  };
+}
+
+/**
+ * `record_validation`'s card — a validation RUN, drawn the way a CI run reads.
+ *
+ * The command is the object, so it is the title (a `terminal` card, which is
+ * also the only kind the kit prefixes with `$`). The state is the result the
+ * run reached, the facets are the identities it minted, and the body is the
+ * run's own output summary plus what the evidence satisfies.
+ *
+ * What this replaces: one shared factory whose title was the `taskID` and whose
+ * summary was the literal "validate", so the row read
+ * `record_validation · task … · fourier-contour-video` with `$ fourier-contour-video`
+ * drawn under its own taskID — the command that actually ran appeared nowhere,
+ * and the run's output, its duration and its evidence classes were all dropped
+ * because the shared meta filter did not name them.
+ */
+export function validationRunCard(): ToolOutputDefinition {
+  const factsOf = (value: string): Record<string, unknown> => {
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+        ? (decoded as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  };
+  const commandOf = (args: unknown): string | undefined =>
+    args && typeof args === "object"
+      ? (optionalString((args as Record<string, unknown>).command) ?? undefined)
+      : undefined;
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const parsed =
+        args && typeof args === "object"
+          ? (args as Record<string, unknown>)
+          : {};
+      return {
+        kind: "terminal",
+        title: commandOf(args) ?? "validation",
+        summary: optionalString(parsed.objective) ?? "validate",
+      };
+    },
+    presentationMeta(_args, value) {
+      const facts = factsOf(value);
+      const picked: Record<string, unknown> = {};
+      for (const key of [
+        "result",
+        "taskID",
+        "evidenceID",
+        "durationMs",
+        "safeSummary",
+        "artifactRef",
+      ])
+        if (facts[key] !== undefined) picked[key] = facts[key];
+      if (Array.isArray(facts.satisfies)) picked.satisfies = facts.satisfies;
+      return picked;
+    },
+    presentResult(args, value, meta) {
+      const facts = meta ?? factsOf(value);
+      const result =
+        typeof facts.result === "string" ? facts.result : "recorded";
+      const satisfies = Array.isArray(facts.satisfies)
+        ? (facts.satisfies as unknown[]).filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
+      const lines: string[] = [];
+      if (typeof facts.safeSummary === "string" && facts.safeSummary)
+        lines.push(facts.safeSummary);
+      if (satisfies.length > 0)
+        lines.push(`satisfies · ${satisfies.join(", ")}`);
+      if (typeof facts.artifactRef === "string")
+        lines.push(`full output · ${facts.artifactRef}`);
+      const facets: Array<[string, string]> = [["result", result]];
+      if (typeof facts.taskID === "string") facets.push(["task", facts.taskID]);
+      if (typeof facts.evidenceID === "string")
+        facets.push(["evidence", facts.evidenceID]);
+      if (typeof facts.durationMs === "number")
+        facets.push(["took", `${(facts.durationMs / 1000).toFixed(1)}s`]);
+      return {
+        kind: "terminal",
+        title: commandOf(args) ?? "validation",
+        summary: result,
+        ...(lines.length > 0 ? { body: lines.join("\n") } : {}),
+        meta: facets,
+      };
+    },
+  };
+}
+
+/**
+ * `record_completion`'s card — the VERDICT, not the id.
+ *
+ * Title is the task, the summary is whether the claim is judge-able (and what
+ * is missing when it is not), and the body is the claim itself (objective,
+ * change summary, validations, gaps, rollback state) followed by the verdict's
+ * own explanation. `judgeable` and `missing` are the whole point of the
+ * completion card and this row used to show neither — it showed
+ * `completion · completion:mvcd0wau:3` and nothing else, because the shared
+ * factory's meta filter never looked inside the `card` the tool returns.
+ */
+export function completionVerdictCard(): ToolOutputDefinition {
+  const argsRecord = (args: unknown): Record<string, unknown> =>
+    args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const factsOf = (value: string): Record<string, unknown> => {
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+        return {};
+      const record = decoded as Record<string, unknown>;
+      const card =
+        record.card && typeof record.card === "object"
+          ? (record.card as Record<string, unknown>)
+          : {};
+      return {
+        ...(record.taskID === undefined ? {} : { taskID: record.taskID }),
+        ...(record.completionID === undefined
+          ? {}
+          : { completionID: record.completionID }),
+        ...(card.judgeable === undefined ? {} : { judgeable: card.judgeable }),
+        ...(Array.isArray(card.missing) ? { missing: card.missing } : {}),
+        ...(typeof card.kind === "string" ? { taskKind: card.kind } : {}),
+        ...(typeof record.whyMissing === "string"
+          ? { whyMissing: record.whyMissing }
+          : {}),
+      };
+    } catch {
+      return {};
+    }
+  };
+  const titleOf = (args: unknown, facts: Record<string, unknown>): string =>
+    (typeof facts.taskID === "string" ? facts.taskID : undefined) ??
+    optionalString(argsRecord(args).taskID) ??
+    "completion";
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      return {
+        kind: "generic",
+        title: titleOf(args, {}),
+        summary: "record completion",
+      };
+    },
+    presentationMeta(_args, value) {
+      return factsOf(value);
+    },
+    presentResult(args, value, meta) {
+      const facts = meta ?? factsOf(value);
+      const parsed = argsRecord(args);
+      const missing = Array.isArray(facts.missing)
+        ? (facts.missing as unknown[]).filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
+      const judgeable = facts.judgeable === true;
+      const lines: string[] = [];
+      if (typeof parsed.objective === "string" && parsed.objective)
+        lines.push(`objective · ${parsed.objective}`);
+      if (typeof parsed.changeSummary === "string" && parsed.changeSummary)
+        lines.push(`changed · ${parsed.changeSummary}`);
+      for (const validation of Array.isArray(parsed.validations)
+        ? (parsed.validations as Array<Record<string, unknown>>)
+        : []) {
+        const command =
+          typeof validation.command === "string" ? validation.command : "check";
+        const result =
+          typeof validation.result === "string" ? validation.result : "unknown";
+        lines.push(`validation · ${result} · ${command}`);
+      }
+      for (const gap of Array.isArray(parsed.knownGaps)
+        ? (parsed.knownGaps as unknown[])
+        : [])
+        if (typeof gap === "string") lines.push(`gap · ${gap}`);
+      if (typeof parsed.rollbackState === "string")
+        lines.push(`rollback · ${parsed.rollbackState}`);
+      if (missing.length > 0)
+        lines.push(`missing evidence · ${missing.join(", ")}`);
+      if (typeof facts.whyMissing === "string" && facts.whyMissing)
+        lines.push(facts.whyMissing);
+      if (typeof facts.completionID === "string")
+        lines.push(`completion · ${facts.completionID}`);
+      const facets: Array<[string, string]> = [
+        ["judgeable", judgeable ? "yes" : "no"],
+      ];
+      if (typeof facts.taskKind === "string")
+        facets.push(["kind", facts.taskKind]);
+      return {
+        kind: "generic",
+        title: titleOf(args, facts),
+        summary: judgeable
+          ? "judgeable"
+          : `缺证据 · ${missing.join(", ") || "unclassified"}`,
+        ...(lines.length > 0 ? { body: lines.join("\n") } : {}),
+        meta: facets,
+      };
     },
   };
 }

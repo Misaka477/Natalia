@@ -113,7 +113,11 @@ function runShellTool(): RuntimeTool {
         const stdout =
           value.match(/stdout:\n([\s\S]*?)(?:\nstderr:|\n?$)/u)?.[1] ?? "";
         const stderr = value.match(/stderr:\n([\s\S]*?)$/u)?.[1] ?? "";
-        const exitCode = Number(/exit=(-?\d+)/u.exec(value)?.[1] ?? "0");
+        // The exit status the command really reported. This used to default to
+        // "0", so a result carrying no parseable exit (a signal death reads
+        // `exit=null`) showed a confident success pill; it now reads "?" and
+        // the row is marked failed.
+        const exit = /exit=(-?\d+)/u.exec(value)?.[1] ?? "?";
         return {
           kind: "terminal",
           title: typeof command === "string" ? command : "command",
@@ -124,7 +128,8 @@ function runShellTool(): RuntimeTool {
           body: [stdout, stderr && `stderr:\n${stderr}`]
             .filter(Boolean)
             .join("\n"),
-          meta: [["exit", String(exitCode)]],
+          ...(exit === "?" ? {} : { exitCode: Number(exit) }),
+          meta: [["exit", exit]],
         };
       },
     },

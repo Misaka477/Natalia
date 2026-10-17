@@ -155,6 +155,28 @@ test("the generic card factory decodes the envelope once (R4)", () => {
       ["status", "accepted"],
       ["total", "3"],
     ],
+    // The body is the READING of whatever text it is handed — POISON is not
+    // JSON, so it passes through untouched.
     body: "POISON",
   });
+});
+
+test("a generic card's body is the flatten, never the raw envelope", () => {
+  // Measured: every tool wired through this factory (the goal and generation
+  // families) expanded to a bare JSON dump, while a presenter-less tool got the
+  // shared `key: value` flatten from the contracts leaf. A card that answers
+  // with an envelope owes the reader the same reading.
+  const output = genericToolCard({
+    family: "goal",
+    callSummary: "read",
+    resultSummary: "read",
+  });
+  const card = output.presentResult!(
+    {},
+    JSON.stringify({ id: "goal:1", status: "active", rounds: 2 }),
+  );
+  expect(card.body).not.toContain('{"');
+  expect(card.body).not.toContain('":');
+  expect(card.body).toContain("id: goal:1");
+  expect(card.body).toContain("rounds: 2");
 });

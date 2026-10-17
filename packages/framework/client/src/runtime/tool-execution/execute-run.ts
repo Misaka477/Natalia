@@ -577,6 +577,17 @@ export async function runExecuteStage(
     )
       mutationRegistry?.forget(call.id);
     const message = error instanceof Error ? error.message : String(error);
+    // A failure carries output too — a thrown command result is `exit=N` plus
+    // two output tails — and this path used to publish it raw: no redaction, no
+    // byte bound, and the same text twice (`summary` AND `result`). A failing
+    // command could therefore put tens of kilobytes of unredacted stderr into
+    // the journal while the success path of the very same tool was bounded and
+    // redacted. Both paths now run the same two steps.
+    const boundedFailure = await boundToolOutput(
+      workspaceRoot,
+      redactToolOutput(message, redactToolOutputEnabled(exec)),
+    );
+    const failureText = boundedFailure.text;
     // The failing seam, in the OPERATIONS LOG (audit 缺口 4). A failed call
     // already reached the model and the work graph, but neither is where an
     // operator looks when a turn goes wrong: a merge that could not validate,
@@ -603,12 +614,36 @@ export async function runExecuteStage(
       name: tool.name,
       callID: call.id,
       status: "failed",
-      summary: message,
-      result: message,
+      // The row's one line is the FIRST line (the tool's own verdict); the
+      // bounded text rides `result` once instead of being written twice.
+      summary: failureText.split("\n", 1)[0] ?? failureText,
+      result: failureText,
       argumentsDelta: call.arguments,
       ...(call.thoughtSignature
         ? { thoughtSignature: call.thoughtSignature }
         : {}),
+      // A bounded failure names its spill file, the same metadata the success
+      // path publishes, so the full text stays reachable.
+      metadata: {
+        ...(boundedFailure.outputPath
+          ? {
+              outputPath: boundedFailure.outputPath,
+              ...(boundedFailure.truncated
+                ? {
+                    truncated: true,
+                    page: boundedFailure.page,
+                    totalPages: boundedFailure.totalPages,
+                    ...(boundedFailure.nextPagePath
+                      ? { nextPagePath: boundedFailure.nextPagePath }
+                      : {}),
+                    ...(boundedFailure.totalBytes === undefined
+                      ? {}
+                      : { totalBytes: boundedFailure.totalBytes }),
+                  }
+                : {}),
+            }
+          : {}),
+      },
       endedAt: Date.now(),
       // A failed call took time too — the figure is a fact about the call, not
       // a reward for succeeding.
@@ -624,9 +659,9 @@ export async function runExecuteStage(
         toolCallID: call.id,
         arguments: call.arguments,
       },
-      error: message,
+      error: failureText,
     });
-    throw new Error(message);
+    throw new Error(failureText);
   } finally {
     releaseWriteLock?.();
     if (executionAudited && exec)

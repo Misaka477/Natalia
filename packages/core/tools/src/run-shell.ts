@@ -88,8 +88,13 @@ export async function runShell(
   ]
     .filter(Boolean)
     .join("\n");
-  if (run.exitCode === 0) return output;
-  throw new Error(output);
+  // A NON-ZERO EXIT IS THE COMMAND'S ANSWER, not a failure of the call: the
+  // exit status and the output are the result, carried as one value. Throwing
+  // here used to turn "the tests are red" into an error string, so the caller
+  // could only recover the code by matching prose — and the failure path
+  // skipped redaction and the output bound entirely. Only the three outcomes
+  // above throw, because each means the command never got to answer.
+  return output;
 }
 
 /**

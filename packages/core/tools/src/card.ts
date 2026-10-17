@@ -14,6 +14,7 @@
  * that does not decode degrades to the summary rather than throwing (a
  * throwing presenter takes the whole transcript row down).
  */
+import { toolResultBody } from "@anthelia/contracts";
 import type { ToolOutputDefinition } from "./types";
 import { optionalString, requireObject } from "./arguments";
 
@@ -114,7 +115,12 @@ export function genericToolCard(
         summary:
           facts.decoded === true ? input.resultSummary : input.callSummary,
         ...(pills.length > 0 ? { meta: pills } : {}),
-        body: value,
+        // The body is the READING, not the envelope. This factory used to hand
+        // the raw result string to the card, so every tool wired through it
+        // (the goal and generation families) expanded to a bare JSON dump while
+        // a presenter-less tool got the shared flatten. The flatten lives in the
+        // contracts leaf so a card and a fallback cannot drift.
+        body: toolResultBody(value),
       };
     },
   };

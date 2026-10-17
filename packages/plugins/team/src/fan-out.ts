@@ -65,7 +65,18 @@ export type FanOutPR = {
    * Build evidence: a validation command run in the candidate worktree before
    * the PR is ready. Present when a build command was configured.
    */
-  buildEvidence?: { ok: boolean; exitCode: number; output: string };
+  buildEvidence?: {
+    ok: boolean;
+    exitCode: number;
+    output: string;
+    /**
+     * WHOSE run this was. It is the worker's own check inside its candidate —
+     * `self-reported`, always: the party whose work it is ran the command. An
+     * independent re-run at the PR boundary is the other role, and only that one
+     * can make a claim warranted.
+     */
+    assayRole: "self-reported";
+  };
   /**
    * The command this PR's promotion must be validated with — the one its
    * evidence was produced with, or the one the lead supplied for it. Recorded
@@ -74,6 +85,44 @@ export type FanOutPR = {
    */
   buildCommand?: string;
 };
+
+/**
+ * What a PR's evidence is worth, in the vocabulary the rest of Assay uses.
+ *
+ * The worker's own check is a `self-reported` run; the promotion's validation of
+ * the same command is the `authoritative` one, because it runs outside the author
+ * on the tree that would land. A PR with only the self-reported half is
+ * `unwarranted` — not because the worker lied, but because nobody independent has
+ * measured it yet, and a reviewer must be able to see the difference.
+ */
+export function prWarrant(
+  pr: FanOutPR,
+  authoritative?: { ok: boolean; command: string },
+): { warrant: "warranted" | "unwarranted"; missing: string[]; detail: string } {
+  if (!pr.buildEvidence && !authoritative)
+    return {
+      warrant: "unwarranted",
+      missing: ["any validation run"],
+      detail: "no command ran, so there is nothing to weigh",
+    };
+  if (!authoritative)
+    return {
+      warrant: "unwarranted",
+      missing: ["an independent re-run"],
+      detail: `only the worker's self-reported check exists${pr.buildCommand ? ` (${pr.buildCommand})` : ""}`,
+    };
+  if (!authoritative.ok)
+    return {
+      warrant: "unwarranted",
+      missing: ["a passing independent run"],
+      detail: `the independent re-run of ${authoritative.command} did not pass`,
+    };
+  return {
+    warrant: "warranted",
+    missing: [],
+    detail: `an independent re-run of ${authoritative.command} passed`,
+  };
+}
 
 /**
  * Spawns every task as a sandboxed sub-agent, waits for all of them, and
@@ -161,6 +210,10 @@ async function buildPR(
             ok: false,
             exitCode: -1,
             output: "validate failed",
+          }))
+          .then((evidence) => ({
+            ...evidence,
+            assayRole: "self-reported" as const,
           }))
       : undefined;
   return {

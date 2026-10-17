@@ -5,6 +5,7 @@ export {
   TEAM_MODE_DIRECTIVE,
 } from "./agent-team-prompts";
 export {
+  prWarrant,
   prSettlementReason,
   reviewPRs,
   runFanOut,

@@ -8,6 +8,7 @@ import type { SandboxToolService, SubagentToolService } from "@anthelia/tools";
 import { SnapshotSandboxTestManager as SnapshotSandboxManager } from "@natalia/testing";
 import { SubagentRegistry } from "@anthelia/subagents";
 import {
+  prWarrant,
   prSettlementReason,
   reviewPRs,
   runFanOut,
@@ -44,13 +45,23 @@ test("a PR's settlement reason is its own table, pure", () => {
   expect(
     prSettlementReason({
       ...base,
-      buildEvidence: { ok: false, exitCode: 2, output: "nope" },
+      buildEvidence: {
+        ok: false,
+        exitCode: 2,
+        output: "nope",
+        assayRole: "self-reported",
+      },
     }),
   ).toBe("failed");
   expect(
     prSettlementReason({
       ...base,
-      buildEvidence: { ok: true, exitCode: 0, output: "ok" },
+      buildEvidence: {
+        ok: true,
+        exitCode: 0,
+        output: "ok",
+        assayRole: "self-reported",
+      },
     }),
   ).toBe("ready");
   expect(prSettlementReason({ ...base, status: "failed" })).toBe("failed");
@@ -785,4 +796,74 @@ test("a candidate the refresh leaves conflicted is reported, not promoted", asyn
     "conflicts with the host's newer commits",
   );
   expect(outcomes[0]?.reason).toContain("output.txt");
+});
+
+test("a PR's warrant names who measured it", () => {
+  const base = {
+    id: "pr1",
+    sandboxID: "sbx.1",
+    status: "completed" as const,
+    diff: [],
+  };
+  // Only the worker's own check: a statement about intent, not a measurement.
+  expect(
+    prWarrant(
+      {
+        ...base,
+        buildCommand: "bun test",
+        buildEvidence: {
+          ok: true,
+          exitCode: 0,
+          output: "ok",
+          assayRole: "self-reported",
+        },
+      },
+      undefined,
+    ),
+  ).toEqual({
+    warrant: "unwarranted",
+    missing: ["an independent re-run"],
+    detail: "only the worker's self-reported check exists (bun test)",
+  });
+  // The independent re-run at the boundary is what makes it warranted.
+  expect(
+    prWarrant(
+      {
+        ...base,
+        buildCommand: "bun test",
+        buildEvidence: {
+          ok: true,
+          exitCode: 0,
+          output: "ok",
+          assayRole: "self-reported",
+        },
+      },
+      { ok: true, command: "bun test" },
+    ),
+  ).toEqual({
+    warrant: "warranted",
+    missing: [],
+    detail: "an independent re-run of bun test passed",
+  });
+  // A failed independent run is unwarranted even though the worker's passed.
+  expect(
+    prWarrant(
+      {
+        ...base,
+        buildEvidence: {
+          ok: true,
+          exitCode: 0,
+          output: "ok",
+          assayRole: "self-reported",
+        },
+      },
+      { ok: false, command: "bun test" },
+    ).warrant,
+  ).toBe("unwarranted");
+  // Nothing ran at all: say that, instead of pretending an absence is a pass.
+  expect(prWarrant(base, undefined)).toEqual({
+    warrant: "unwarranted",
+    missing: ["any validation run"],
+    detail: "no command ran, so there is nothing to weigh",
+  });
 });

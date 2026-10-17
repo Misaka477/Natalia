@@ -430,6 +430,15 @@ export type AppState = {
    * session is exactly that case.
    */
   permissionMode?: "ask" | "auto" | "read_only";
+  /**
+   * The active turn's durable start, epoch ms, read from the turn's own
+   * `turn.submitted.at`. A per-session fact rather than a client's "first time
+   * I saw this turn", so switching to a running session continues its clock and
+   * a mid-turn reload starts from the turn's real beginning. Undefined when the
+   * turn carries no start (a journal written before the field), which the UI
+   * reports as unknown instead of inventing one.
+   */
+  activeTurnStartedAt?: number;
   messages: MessageBlock[];
   activeTurn?: string;
   paused: boolean;

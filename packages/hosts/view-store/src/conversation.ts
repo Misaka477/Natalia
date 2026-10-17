@@ -279,6 +279,17 @@ export function applyConversationEvent(
       // second user row with the same id corrupts virtualizer keys and makes
       // the whole turn appear duplicated.
       if (state.messages.some((block) => block.id === messageID)) return true;
+      // The turn's own start, from the durable event. The status bar's running
+      // clock reads THIS, so switching to a running session (or reloading
+      // mid-turn) continues the turn's elapsed time instead of restarting it —
+      // the reference harness reads the same figure off the turn record
+      // (`location.turn.start?.time`). A journal written before the field has no
+      // start; the projection then carries none, and the UI says so rather than
+      // pretending the turn began when the client looked.
+      if (event.at) {
+        const startedAt = Date.parse(event.at);
+        if (Number.isFinite(startedAt)) state.activeTurnStartedAt = startedAt;
+      }
       state.streams[streamID(event.id, "thinking")] = newStream();
       state.streams[streamID(event.id, "assistant")] = newStream();
       state.messages.push({

@@ -1065,6 +1065,16 @@ type RuntimeEventData =
       byteLength: number;
       lineCount: number;
       sha256: string;
+      /**
+       * When the turn actually started, as an ISO instant the publisher stamps
+       * at the publish. The durable start of the turn's clock: a client that
+       * switches to a running session, or reloads mid-turn, reads the turn's
+       * own start instead of the moment it first noticed the turn — which is
+       * what reset the "Running command · Ns" readout to zero. Absent in a
+       * journal written before the field existed; a consumer then has no
+       * durable start and must say so rather than invent one.
+       */
+      at?: string;
       /** Admission intent. Queued turns are durable but have not started yet. */
       delivery?: "next-turn" | "next-step";
       /** Runtime-generated wake boundary; never human-authored input. */

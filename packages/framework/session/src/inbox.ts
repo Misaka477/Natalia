@@ -92,6 +92,13 @@ export function buildInputUpdated(
 /**
  * Builds the `turn.submitted` fact for a turn that is actually starting. The
  * id matches the admitted input that produced it.
+ *
+ * `at` is the turn's durable start: the runtime stamps it here, at the publish,
+ * so every consumer — the clock in the status bar, a client that attaches
+ * mid-turn — reads the turn's own beginning rather than the moment it first saw
+ * the turn. The reference harness derives the same figure from the turn record
+ * (`location.turn.start?.time`), which is why its running clock survives a tab
+ * switch and a reload.
  */
 export function buildSubmittedTurn(input: {
   id: string;
@@ -100,12 +107,14 @@ export function buildSubmittedTurn(input: {
   resources?: PromptResourceMention[];
   agents?: PromptAgentMention[];
   internal?: boolean;
+  at?: string;
 }): Extract<RuntimeEvent, { type: "turn.submitted" }> {
   return {
     type: "turn.submitted",
     id: input.id,
     text: input.text,
     ...inputDigest(input.text),
+    ...(input.at ? { at: input.at } : {}),
     ...(input.internal ? { internal: true } : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     ...(input.resources?.length ? { resources: input.resources } : {}),

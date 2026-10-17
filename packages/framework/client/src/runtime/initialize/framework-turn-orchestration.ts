@@ -42,6 +42,11 @@ function buildAnnouncedTurn(
   return buildSubmittedTurn({
     id,
     text,
+    // The turn's durable start, stamped where the turn is announced. A client
+    // that switches to this session (or reloads mid-turn) reads the turn's own
+    // beginning from here; before this field the clock started when a client
+    // first noticed the turn, so switching sessions reset it to zero.
+    at: new Date().toISOString(),
     attachments: input?.attachments,
     resources: input?.resources,
     agents: input?.agents,

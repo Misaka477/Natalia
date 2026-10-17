@@ -1098,9 +1098,26 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
   }
 
+  /**
+   * The turn clock's start.
+   *
+   * The durable start is the projection's own `activeTurnStartedAt` (the turn's
+   * `turn.submitted.at`), which is what this reads. The local signal is a
+   * fallback for a turn that carries no start — a journal written before the
+   * field existed — and it is keyed by turn id (`legacyTurnStartKey`) so that
+   * switching sessions neither restarts a running turn's clock (the old
+   * "first time I saw activeTurn" heuristic set it on every switch) nor shows
+   * another session's elapsed time as this one's.
+   */
   const activeTurnStartedAt = createSignal<number | undefined>(undefined);
   const [activeTurnStartedAtValue, setActiveTurnStartedAt] =
     activeTurnStartedAt;
+  const [legacyTurnStartKey, setLegacyTurnStartKey] = createSignal<
+    string | undefined
+  >(undefined);
+  /** The start the running clock counts from, or undefined when unknown. */
+  const turnStartAt = () =>
+    state().activeTurnStartedAt ?? activeTurnStartedAtValue();
   const [modelOpen, setModelOpen] = createSignal(false);
   const [modelCatalog, setModelCatalog] = createSignal<
     RuntimeModelCatalogEntry[]
@@ -1207,9 +1224,19 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           if (projected.workspaces.length)
             mergeProjectedWorkspaces(projected.workspaces);
           const currentTurn = projected.activeTurn;
-          if (currentTurn && activeTurnStartedAtValue() === undefined) {
-            setActiveTurnStartedAt(Date.now());
-          } else if (!currentTurn && activeTurnStartedAtValue() !== undefined) {
+          // The turn's durable start is the projection's; the local signal only
+          // remembers a turn that carries none (a journal written before the
+          // field existed), and it is keyed by the turn id so switching sessions
+          // neither restarts a running turn's clock nor shows another session's
+          // elapsed time as this one's.
+          const durableStart = projected.activeTurnStartedAt;
+          if (currentTurn && durableStart === undefined) {
+            if (legacyTurnStartKey() !== currentTurn) {
+              setLegacyTurnStartKey(currentTurn);
+              setActiveTurnStartedAt(Date.now());
+            }
+          } else if (!currentTurn) {
+            setLegacyTurnStartKey(undefined);
             setActiveTurnStartedAt(undefined);
             setTurnElapsedMs(0);
           }
@@ -2070,6 +2097,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       // belongs to the session it was written for, and the projection supplies
       // the standing rung for whichever session is now shown.
       setSessionRung(undefined);
+      // The turn clock belongs to the session too: drop the legacy echo so the
+      // next session starts from its own turn's durable start.
+      setLegacyTurnStartKey(undefined);
+      setActiveTurnStartedAt(undefined);
+      setTurnElapsedMs(0);
       const projected = cloneState(props.ctx.projection.getState());
       setState(projected);
     };
@@ -2078,8 +2110,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     });
     onCleanup(() => unsubscribePanels?.());
     const elapsedTimer = setInterval(() => {
-      if (activeTurnStartedAtValue() !== undefined)
-        setTurnElapsedMs(Date.now() - activeTurnStartedAtValue()!);
+      const start = turnStartAt();
+      if (start !== undefined) setTurnElapsedMs(Date.now() - start);
       if (naviChatActivity()?.startedAt)
         setChatElapsedMs(Date.now() - naviChatActivity()!.startedAt);
     }, 1000);
@@ -4260,7 +4292,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                     </Show>
                     <span class="neu-activity-label">
                       {state().natalia.activeTurn
-                        ? `${activityLabel()} · ${formatDuration(turnElapsedMs())}`
+                        ? `${activityLabel()} · ${
+                            turnStartAt() === undefined
+                              ? "计时未知"
+                              : formatDuration(turnElapsedMs())
+                          }`
                         : "idle"}
                     </span>
                   </div>

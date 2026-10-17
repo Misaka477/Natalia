@@ -96,6 +96,11 @@ export function createSessionAdmission(
     const submitted: SubmittedTurn = buildSubmittedTurn({
       id,
       text,
+      // The turn's durable start, stamped where the turn is published. A client
+      // that switches to this session (or reloads) reads the turn's own
+      // beginning from here; before this field the clock started when a client
+      // first noticed the turn, so switching sessions reset it to zero.
+      at: new Date().toISOString(),
       attachments,
       resources: input.resources,
       agents: input.agents,

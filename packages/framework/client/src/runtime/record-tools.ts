@@ -19,7 +19,7 @@ import {
   projectedDriftFindings,
 } from "@anthelia/session";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { requestAuditAfterCompletion } from "@natalia/engineering-intelligence";
 import type {
   GovernanceLedgerController,
@@ -170,9 +170,18 @@ export function createRecordValidationTool(
               : "not_run";
         safeSummary = run.safeSummary;
 
-        // EI E2 artifact refs: a run whose output exceeds the summary is
-        // persisted (redacted + bounded) so the evidence can reference it.
-        if (run.artifactText.length > run.safeSummary.length) {
+        // The artifact is the run's COMPLETE stream, written by the seam as it
+        // ran — not a copy of the bounded tail. A copied tail is a file that
+        // looks complete and is not, which is the one thing a re-assay cannot
+        // recover from.
+        if (run.completeOutputPath)
+          artifactRef = relative(
+            ctx.ports.getWorkspaceRoot(),
+            run.completeOutputPath,
+          )
+            .split(sep)
+            .join("/");
+        else if (run.artifactText.length > run.safeSummary.length) {
           const name = `validation:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`;
           // The name is an ID, not a path component: the colons that
           // separate its parts are legal in a POSIX file name but are

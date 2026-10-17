@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ShellExecutor } from "@anthelia/shell";
 import { selectExecutor } from "@anthelia/shell";
 import { redactToolOutput } from "./redaction";
@@ -38,6 +40,13 @@ export type ValidationOutcome =
   | "spawn-failed";
 
 export type ValidationRun = {
+  /**
+   * Where the run's COMPLETE stdout lives, when the workspace could hold it.
+   *
+   * The artifact an evidence record points at has to be the whole output: a copy
+   * of the served tail is a file that looks complete and is not.
+   */
+  completeOutputPath?: string;
   outcome: ValidationOutcome;
   /** The status the command reported; absent unless the outcome is `exited`. */
   exitCode?: number;
@@ -74,10 +83,12 @@ export async function runValidationCommand(
     workdir: cwd,
     timeoutMs: seconds * 1000,
   });
+  const spill = spillTargets(cwd);
   const run = await executor.run(spec, {
     command,
     workspaceRoot: cwd,
     ...(signal ? { signal } : {}),
+    ...(spill ? { spillTo: spill } : {}),
   });
   const totalBytes =
     (run.outputBytes?.stdout.total ?? 0) + (run.outputBytes?.stderr.total ?? 0);
@@ -110,5 +121,27 @@ export async function runValidationCommand(
         : safeSummary,
     artifactText: `${bounded}${note}`,
     totalBytes,
+    ...(spill ? { completeOutputPath: spill.stdout } : {}),
   };
+}
+
+/**
+ * The two artifact files a run's complete streams are written to, or undefined
+ * when the workspace cannot hold them (a read-only candidate): the evidence then
+ * references the bounded text and says so.
+ */
+function spillTargets(
+  cwd: string,
+): { stdout: string; stderr: string } | undefined {
+  try {
+    const dir = join(cwd, ".natalia", "artifacts");
+    mkdirSync(dir, { recursive: true });
+    const stem = join(
+      dir,
+      `validation-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+    return { stdout: `${stem}.stdout.log`, stderr: `${stem}.stderr.log` };
+  } catch {
+    return undefined;
+  }
 }

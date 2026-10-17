@@ -120,8 +120,18 @@ test("a capped command's result carries its truncation note", async () => {
   // same flood is 60002 bytes there and 60000 on POSIX. The note's
   // shape — a total, a window, and the instruction to re-run narrower —
   // is the contract.
-  expect(output).toMatch(
-    /\[stdout truncated: showing the last \d+ of \d+ bytes; re-run narrower to see the rest\]/u,
+  // The note names the COMPLETE stream and tells the reader how to page it: the
+  // tail is a page, and the file behind it holds everything the bound dropped.
+  const note =
+    /\[stdout truncated: showing the last \d+ of \d+ bytes; the complete stream is at (.+?) — read it with offset\/limit\]/u.exec(
+      output,
+    );
+  expect(note).not.toBeNull();
+  const spillPath = note![1]!;
+  expect(await Bun.file(spillPath).exists()).toBe(true);
+  // The whole flood is in that file, not just the served tail.
+  expect((await Bun.file(spillPath).text()).length).toBeGreaterThanOrEqual(
+    60_000,
   );
   // A command inside the bound says nothing about truncation.
   const small = await runShell("echo tiny", context(), 30);

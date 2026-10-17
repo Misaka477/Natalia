@@ -22,6 +22,15 @@ export type ShellExecRequest = {
   workspaceRoot?: string | undefined;
   /** Kill the command when this fires. */
   signal?: AbortSignal | undefined;
+  /**
+   * Files that receive the COMPLETE output, while the result keeps only a tail.
+   *
+   * The bound is a delivery decision, not a retention one: without somewhere to
+   * put the rest, `BoundedStream`'s tail is all that survives and the head of a
+   * long build is gone — the caller cannot page through what was never kept.
+   * Supplied by the caller because only it knows the workspace it may write in.
+   */
+  spillTo?: { stdout: string; stderr: string } | undefined;
   /** Bytes to write to stdin before closing it. */
   stdin?: string | undefined;
   /**

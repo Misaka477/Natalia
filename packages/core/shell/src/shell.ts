@@ -24,6 +24,7 @@
  * would mean two copies of policy that drift.
  */
 import { spawn } from "node:child_process";
+import { createWriteStream, type WriteStream } from "node:fs";
 import { wrapConfinedCommand } from "@anthelia/confinement";
 import type { ConfinementMode } from "@anthelia/confinement";
 import { terminateChildProcessTree } from "@anthelia/platform";
@@ -123,6 +124,38 @@ export abstract class ShellExecutor {
 
     const stdoutStream = new BoundedStream();
     const stderrStream = new BoundedStream();
+    // The complete streams, when the caller named files for them: the tail in
+    // memory is the model-facing page, the file is what a reader can page
+    // THROUGH. A write failure is swallowed — losing the record must never fail
+    // the command it was recording.
+    const spill = request?.spillTo;
+    const openSpill = (path: string | undefined): WriteStream | undefined => {
+      if (!spill || !path) return undefined;
+      try {
+        return createWriteStream(path, { flags: "a" });
+      } catch {
+        return undefined;
+      }
+    };
+    const stdoutSpill = openSpill(spill?.stdout);
+    const stderrSpill = openSpill(spill?.stderr);
+    const writeSpill = (stream: WriteStream | undefined, chunk: string) => {
+      if (!stream) return;
+      try {
+        stream.write(chunk);
+      } catch {
+        // best effort: the spill is a convenience, not the command's contract
+      }
+    };
+    const closeSpill = () => {
+      for (const stream of [stdoutSpill, stderrSpill]) {
+        try {
+          stream?.end();
+        } catch {
+          // already gone
+        }
+      }
+    };
     const boundedRun = (): ShellRunResult => {
       const stdout = stdoutStream.served();
       const stderr = stderrStream.served();
@@ -150,6 +183,7 @@ export abstract class ShellExecutor {
         settled = true;
         clearTimeout(timer);
         request?.signal?.removeEventListener("abort", abort);
+        closeSpill();
         result();
       };
 
@@ -175,9 +209,11 @@ export abstract class ShellExecutor {
 
       childEvents(child).stdout?.on("data", (chunk) => {
         stdoutStream.append(String(chunk));
+        writeSpill(stdoutSpill, String(chunk));
       });
       childEvents(child).stderr?.on("data", (chunk) => {
         stderrStream.append(String(chunk));
+        writeSpill(stderrSpill, String(chunk));
       });
       childEvents(child).on("error", (error: Error) => {
         if (settled) return;

@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { clampTimeout, selectExecutor } from "@anthelia/shell";
 import { ShellEnvRegistry } from "@anthelia/shell";
 import type { ToolExecutionContext } from "./types";
@@ -40,6 +42,10 @@ export async function runShell(
   context: ToolExecutionContext,
   timeoutSec: number,
 ) {
+  // Where the COMPLETE streams go. The tail the model reads is a page; without a
+  // file behind it the head of a long build is gone rather than merely unread,
+  // and no pager can walk back to it.
+  const spill = spillTargets(context.workspaceRoot);
   const spec = shell.resolve({
     command,
     workdir: context.workspaceRoot,
@@ -63,6 +69,7 @@ export async function runShell(
     confinement: context.confinement,
     workspaceRoot: context.workspaceRoot,
     signal: context.signal,
+    ...(spill ? { spillTo: spill } : {}),
   });
 
   if (run.outcome === "spawn-failed")
@@ -84,7 +91,7 @@ export async function runShell(
     // model reads "the command produced 60KB and you are seeing the last
     // 20KB" rather than mistaking the tail for the whole output and acting
     // on a page it was never told was a page.
-    ...truncationNotes(run),
+    ...truncationNotes(run, spill),
   ]
     .filter(Boolean)
     .join("\n");
@@ -102,25 +109,48 @@ export async function runShell(
  * wording names the remedy the way the other capped readers do — re-run
  * narrower — because this command surface has no page parameter to offer.
  */
-function truncationNotes(run: {
-  outputBytes?: {
-    stdout: { served: number; total: number };
-    stderr: { served: number; total: number };
-  };
-}): string[] {
+function truncationNotes(
+  run: {
+    outputBytes?: {
+      stdout: { served: number; total: number };
+      stderr: { served: number; total: number };
+    };
+  },
+  spill?: { stdout: string; stderr: string },
+): string[] {
   const bounds = run.outputBytes;
   if (!bounds) return [];
   const notes: string[] = [];
-  for (const [name, bound] of [
-    ["stdout", bounds.stdout],
-    ["stderr", bounds.stderr],
+  for (const [name, bound, path] of [
+    ["stdout", bounds.stdout, spill?.stdout],
+    ["stderr", bounds.stderr, spill?.stderr],
   ] as const) {
     if (bound.total <= bound.served) continue;
     notes.push(
-      `[${name} truncated: showing the last ${bound.served} of ${bound.total} bytes; re-run narrower to see the rest]`,
+      path
+        ? `[${name} truncated: showing the last ${bound.served} of ${bound.total} bytes; the complete stream is at ${path} — read it with offset/limit]`
+        : `[${name} truncated: showing the last ${bound.served} of ${bound.total} bytes; re-run narrower to see the rest]`,
     );
   }
   return notes;
+}
+
+/**
+ * The two files a run's complete output is written to, or undefined when the
+ * workspace cannot hold them (a read-only sandbox): the bound then degrades to
+ * the old re-run-narrower advice instead of losing the command.
+ */
+function spillTargets(
+  workspaceRoot: string,
+): { stdout: string; stderr: string } | undefined {
+  try {
+    const dir = join(workspaceRoot, ".natalia", "tool-output");
+    mkdirSync(dir, { recursive: true });
+    const stem = join(dir, `stream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+    return { stdout: `${stem}.stdout.log`, stderr: `${stem}.stderr.log` };
+  } catch {
+    return undefined;
+  }
 }
 
 export { clampTimeout };

@@ -35,6 +35,28 @@ export const FS_READ_PLUGIN_ID = "natalia-tool-fs-read";
 export const READ_LINE_LIMIT = 2000;
 
 /**
+ * The read's BYTE ceiling, the second half of the window.
+ *
+ * `READ_LINE_LIMIT` bounds the line count and says nothing about bytes, and a
+ * minified file defeats it completely: a 313-line, 1.6 MB HTML page returned
+ * itself inside one 2000-line window — 1.5 MB, roughly 378k tokens, in a single
+ * tool result. The provider refused the next request with "The input you
+ * provided is invalid" and the turn died at 486k tokens, in a session whose
+ * budget believed the window was 1M.
+ *
+ * The reference harnesses put the cap on the RESULT rather than on the line
+ * count: ZCode's file read is bounded by a hard 256 KB (`fileService.ts`,
+ * `MAX_TEXT_READ_BYTES`) and reports `truncated` with `totalBytes`, and every
+ * tool's final output is uniformly cut to head+tail 32 KB with a locator for
+ * on-demand retrieval. This is the read-side gate; the uniform result gate
+ * lives in the runtime's tool-result path.
+ *
+ * 256 KB is the reference's number, kept so the two implementations can be
+ * compared rather than tuned independently.
+ */
+export const READ_BYTE_LIMIT = 256 * 1024;
+
+/**
  * The `read_media_file` result envelope: the four facets the model-facing
  * JSON carries, plus the detected media kind.
  */
@@ -363,7 +385,31 @@ function readFileTool(): RuntimeTool {
         throw new Error(`read_file offset is out of range: ${offset}`);
 
       const end = Math.min(totalLines, offset - 1 + length);
-      const page = lines.slice(offset - 1, end).join("\n");
+      // The BYTE cap, beside the line cap. A line count bounds nothing when a
+      // file is minified: `fourier_contour.html` has 313 lines and 1.6 MB, so a
+      // 2000-line window returned the whole file — 1.5 MB / ~378k tokens in ONE
+      // tool result, which the provider refused with "The input you provided is
+      // invalid" (a 400) and killed the turn. Measured on a live session: the
+      // same run had succeeded at ~107k tokens and died at 486k.
+      //
+      // The reference harnesses cap the RESULT, not the line count: ZCode's file
+      // read carries a hard 256 KB limit and reports `truncated` + `totalBytes`
+      // (`fileService.ts`), and every tool's final output is uniformly cut to
+      // head+tail 32 KB with a `truncated.ref` for on-demand retrieval. This is
+      // the first of those two gates, in the tool that owns the read.
+      //
+      // The cut is at a LINE boundary, so the page stays valid JSON rows, and
+      // the footer names where to resume — the model continues with the offset
+      // the same way it does for the line window.
+      let last = end;
+      let bytes = 0;
+      for (let index = offset - 1; index < end; index += 1) {
+        const lineBytes = Buffer.byteLength(`${lines[index]}\n`, "utf8");
+        if (bytes + lineBytes > READ_BYTE_LIMIT) break;
+        bytes += lineBytes;
+        last = index + 1;
+      }
+      const page = lines.slice(offset - 1, last).join("\n");
       // The kernel's tool contract returns the model-facing STRING; the
       // window facts ride as JSON text, the shape glob and grep already use
       // (`search-tools.ts`). The model reads `content` (with its footer);
@@ -380,16 +426,16 @@ function readFileTool(): RuntimeTool {
       //     where to resume from.
       // The card's `totalLines`/`truncated` come from the same two numbers, so
       // the text and the UI can never disagree about the window.
-      if (end === totalLines)
+      if (last === totalLines)
         return JSON.stringify({
           content: `${page}\n\n(End of file - total ${totalLines} lines)`,
           totalLines,
           truncated: false,
         });
 
-      const next = end + 1;
+      const next = last + 1;
       return JSON.stringify({
-        content: `${page}\n\n(Showing lines ${offset}-${end} of ${totalLines}. Use offset=${next} to continue.)`,
+        content: `${page}\n\n(Showing lines ${offset}-${last} of ${totalLines}. Use offset=${next} to continue.)`,
         totalLines,
         truncated: true,
       });

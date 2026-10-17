@@ -1,4 +1,5 @@
 import { parseToolArguments, validateToolParameters } from "@anthelia/tools";
+import { boundToolOutput } from "@anthelia/tools";
 import {
   MAX_STEPS_PROMPT,
   MISSING_FINAL_RESPONSE_FALLBACK,
@@ -646,6 +647,27 @@ export function createNaviChatTurn(ctx: RuntimeContext) {
           } finally {
             timing.addToolMs(performance.now() - toolStart);
           }
+          // THE SAME RESULT GATE THE MAIN PATH USES. A chat turn executes its
+          // tools directly, so without this it bypassed `boundToolOutput`
+          // entirely: the measured failure was a `read_file` of a minified HTML
+          // page returning 1,513,973 characters (~378k tokens) in ONE tool
+          // result, and the next request (486k tokens) was refused with
+          // "The input you provided is invalid" — the turn died while the main
+          // agent's identical reads were being spilled to
+          // `<workspace>/.natalia/tool-output/` and paged at 50 KB.
+          //
+          // One gate for the whole runtime, not one per stream: the reference
+          // harnesses put the bound on the RESULT (DSH's spill policy with a
+          // token budget and a locator; ZCode's uniform head+tail 32 KB with a
+          // truncated ref), and a chat stream is not a reason to have a second,
+          // weaker rule. The full text still reaches the model — the marker
+          // names the page to read next — and the durable event below keeps the
+          // complete result either way.
+          const bounded = await boundToolOutput(
+            getWorkspaceRoot(),
+            redactToolOutput(result, true),
+          );
+          result = bounded.text;
           publish({
             type: "navi.chat.tool.used",
             id: `${input.responseMessageID}:tool:${nextChatSequence()}`,

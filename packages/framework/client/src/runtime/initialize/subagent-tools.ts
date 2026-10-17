@@ -24,7 +24,7 @@ import {
   REPEAT_MAX,
   REPEAT_WINDOW_MS,
 } from "../tool-execution/repeat-guard";
-import { defaultToolCard, toolResultSummary } from "@anthelia/tools";
+import { boundToolOutput, defaultToolCard, toolResultSummary } from "@anthelia/tools";
 
 export async function createSubagentTools(
   ctx: RuntimeContext,
@@ -194,8 +194,21 @@ export async function createSubagentTools(
       });
       const finalizedResult =
         tool.output?.finalizeContent?.(completeResult) ?? completeResult;
-      const result = scope.redactToolOutput(
+      // THE SAME RESULT GATE THE MAIN PATH USES. A subagent executes its tools
+      // directly too, so without this it bypassed `boundToolOutput` exactly as
+      // the chat streams did — measured: one unbounded tool result reached a
+      // provider request that was then refused with "The input you provided is
+      // invalid". Every agent runs the same bound: the full text is spilled to
+      // `<workspace>/.natalia/tool-output/` and the model is handed page 1 with
+      // the marker naming the next page, which is the reference harnesses'
+      // shape (DSH's spill policy with a locator and retrieval hint; ZCode's
+      // uniform head+tail with a truncated ref).
+      const bounded = await boundToolOutput(
+        input.childWorkspaceRoot,
         finalizedResult,
+      );
+      const result = scope.redactToolOutput(
+        bounded.text,
         scope.redactToolOutputEnabled(input.exec),
       );
       // The same order the main path uses (R1): the facts are computed once

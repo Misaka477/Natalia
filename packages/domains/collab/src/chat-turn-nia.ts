@@ -1,4 +1,5 @@
 import { parseToolArguments, validateToolParameters } from "@anthelia/tools";
+import { boundToolOutput } from "@anthelia/tools";
 import {
   MAX_STEPS_PROMPT,
   MISSING_FINAL_RESPONSE_FALLBACK,
@@ -733,6 +734,16 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
           } finally {
             timing.addToolMs(performance.now() - toolStart);
           }
+          // THE SAME RESULT GATE THE MAIN PATH USES — see the note in
+          // chat-turn-navi.ts. A chat turn executes its tools directly, so
+          // without this line the audit stream bypassed `boundToolOutput`
+          // completely and could put an unbounded result into one provider
+          // request.
+          const bounded = await boundToolOutput(
+            getWorkspaceRoot(),
+            redactToolOutput(result, true),
+          );
+          result = bounded.text;
           publish({
             type: "nia.chat.tool.used",
             id: `${input.responseMessageID}:tool:${nextChatSequence()}`,

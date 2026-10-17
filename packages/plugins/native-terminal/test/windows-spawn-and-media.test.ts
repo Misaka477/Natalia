@@ -51,25 +51,31 @@ test("every PTY bridge spawn hides its console window", () => {
   }
 });
 
-test("the read-image card hands over a path, not an attachment id", () => {
-  const tool = readFileSync(
-    join(
-      repoRoot,
-      "packages",
-      "plugins",
-      "tools",
-      "fs-read",
-      "src",
-      "fs-read-tools.ts",
-    ),
-    "utf8",
+test("the read-image card hands over a path, not an attachment id", async () => {
+  // BEHAVIOUR, not source text. The first version of this pin asserted the
+  // formatted source contained `path: attachedPathFromResult`, and a prettier
+  // pass that split the line at the `??` broke it on CI while the code was
+  // correct. Calling the tool's own presenter is what the client does.
+  const { imageReadTool } = await import("@natalia/plugin-tool-fs-read");
+  const tool = imageReadTool();
+  const output = tool.output as {
+    presentResult(
+      args: unknown,
+      value: string,
+      meta?: Record<string, unknown>,
+    ): Record<string, unknown>;
+  };
+  const imagePath = "E:\\w\\pic.png";
+  const card = output.presentResult(
+    { path: imagePath },
+    `image attached: ${imagePath}`,
   );
-  // The fabricated id is gone, and the path is set instead.
-  expect(tool).not.toContain("attachmentID: attachmentIDFromResult");
-  expect(tool).toContain("path: attachedPathFromResult");
-  // The comment must name what the sentence really is, so the next reader does
-  // not restore the old assumption.
-  expect(tool).toContain("image attached: <path>");
+  // The card names the file so the client can load the thumbnail from it…
+  expect(card.path).toBe(imagePath);
+  expect(card.mediaType).toBe("image/png");
+  // …and never claims that path is an attachment ID (the defect: the client then
+  // asked the runtime for an attachment by that name and was refused).
+  expect(card.attachmentID).toBeUndefined();
 });
 
 test("the runtime serves a workspace media path through the read authorization", () => {

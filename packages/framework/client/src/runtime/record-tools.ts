@@ -33,6 +33,8 @@ import {
   DEFAULT_VALIDATION_TIMEOUT_SEC,
   MAX_VALIDATION_TIMEOUT_SEC,
   runValidationCommand,
+  validationRunToJUnitXml,
+  type ValidationOutcome,
 } from "@natalia/engineering-intelligence";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
@@ -165,6 +167,8 @@ export function createRecordValidationTool(
       // reports no exit code and `exitCode ?? 0` read that as zero.
       type RunResult = "passed" | "failed" | "timed_out" | "not_run";
       let result: RunResult = "not_run";
+      let runOutcome: ValidationOutcome | undefined;
+      let runExitCode: number | undefined;
       let safeSummary = "validation command did not run";
       let artifactRef: string | undefined;
       try {
@@ -177,6 +181,8 @@ export function createRecordValidationTool(
             DEFAULT_VALIDATION_TIMEOUT_SEC,
           context.signal,
         );
+        runOutcome = run.outcome;
+        if (run.exitCode !== undefined) runExitCode = run.exitCode;
         result =
           run.outcome === "exited"
             ? run.exitCode === 0
@@ -225,6 +231,43 @@ export function createRecordValidationTool(
         }
       } catch (error) {
         safeSummary = `validation runner failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+      // The run also leaves the format CI already parses, beside its artifact: a
+      // reader outside this product should not need our vocabulary, and a
+      // re-assay can diff two documents. `timed_out` maps to <error> there, so a
+      // slow suite never exports as a red one.
+      let junitRef: string | undefined;
+      if (runOutcome) {
+        try {
+          const xml = validationRunToJUnitXml({
+            suite: args.taskID.trim(),
+            cases: [
+              {
+                name: args.command.trim(),
+                outcome: runOutcome,
+                ...(runExitCode === undefined ? {} : { exitCode: runExitCode }),
+                durationMs: Math.round(performance.now() - startedAt),
+                summary: safeSummary,
+              },
+            ],
+          });
+          const relativeJunit = `.natalia/artifacts/${`junit_${Date.now().toString(36)}_${ctx.ports.nextEvidenceSequence()}`.replace(/[^a-zA-Z0-9_-]/gu, "_")}.xml`;
+          await mkdir(
+            join(ctx.ports.getWorkspaceRoot(), ".natalia", "artifacts"),
+            {
+              recursive: true,
+            },
+          );
+          await writeFile(
+            join(ctx.ports.getWorkspaceRoot(), relativeJunit),
+            xml,
+            "utf8",
+          );
+          junitRef = relativeJunit;
+        } catch {
+          // An export that cannot be written must not fail the validation record.
+          junitRef = undefined;
+        }
       }
       const outcome = ledger.boundValidationOutcome({
         command: redactToolOutput(args.command, true),
@@ -300,6 +343,7 @@ export function createRecordValidationTool(
         ...(resolved.refused ? { satisfiesRefused: resolved.refused } : {}),
         durationMs: Math.round(performance.now() - startedAt),
         ...(artifactRef ? { artifactRef } : {}),
+        ...(junitRef ? { junitRef } : {}),
       });
     },
   };

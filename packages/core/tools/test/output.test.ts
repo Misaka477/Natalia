@@ -175,8 +175,8 @@ test("a generic card's body is the flatten, never the raw envelope", () => {
     {},
     JSON.stringify({ id: "goal:1", status: "active", rounds: 2 }),
   );
-  expect(card.body).not.toContain('{"');
-  expect(card.body).not.toContain('":');
-  expect(card.body).toContain("id: goal:1");
-  expect(card.body).toContain("rounds: 2");
+  expect(card?.body).not.toContain('{"');
+  expect(card?.body).not.toContain('":');
+  expect(card?.body).toContain("id: goal:1");
+  expect(card?.body).toContain("rounds: 2");
 });

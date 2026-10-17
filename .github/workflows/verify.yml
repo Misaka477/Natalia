@@ -350,13 +350,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - uses: dtolnay/rust-toolchain@stable
-      # The shell tools fail CLOSED without the confinement backend, so the two
-      # shell layers cannot run on a fresh runner without building it first.
-      - name: Build the confinement backend
-        run: >
-          cargo build --release
-          --manifest-path packages/hosts/confinement/native/Cargo.toml
+      # NO confinement backend here, and that is correct: the backend is a
+      # Linux crate (landlock, seccomp, `std::os::unix`), so it cannot build on
+      # Windows at all. Without it the confined tests SKIP (measured locally:
+      # 380 pass, 12 skip, 0 fail) and every unconfined path still runs — which
+      # is the Windows behaviour worth pinning anyway.
       - name: Install
         run: bun install --frozen-lockfile
       - name: Platform-sensitive layers

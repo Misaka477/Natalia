@@ -77,6 +77,12 @@ test("the client prefers the NATIVE daemon when one is named", async () => {
   // The preference, proven by a fingerprint: a stand-in daemon that
   // answers with values no real daemon would (count 42, a hit with pack
   // 7) — if the client spawned it, it must have taken the native path.
+  // The stand-in proves the PREFERENCE half, and the preference is expressed
+  // by the native client: without the pack-index build artifact there is
+  // nothing to prefer, and the fallback half below is the whole proof. (CI is
+  // the environment that does not build it — this test used to fail there,
+  // because it had never run there.)
+  if (!nativePackIndexAvailable()) return;
   const root = await mkdtemp(join(tmpdir(), "daemon-native-"));
   dirs.push(root);
   const bin = join(root, "fingerprint-daemon");

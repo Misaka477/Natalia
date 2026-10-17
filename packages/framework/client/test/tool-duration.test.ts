@@ -107,8 +107,10 @@ test("the projection carries it and the card renders it, with no confident zero"
   const kit = await source("plugins", "ui", "kit", "src", "transcript.tsx");
   // Rendered only when the event carried one: a running call and a replayed
   // pre-field event show nothing rather than "0ms".
-  expect(kit).toContain("props.toolCall.durationMs !== undefined");
-  expect(kit).toContain("formatToolDuration(props.toolCall.durationMs!)");
+  // Through the live view (a stable row reads its moving parts at render time),
+  // which is still "only when the event carried one".
+  expect(kit).toContain("view().durationMs !== undefined");
+  expect(kit).toContain("formatToolDuration(view().durationMs!)");
   const message = await source("plugins", "ui", "kit", "src", "message.ts");
   expect(message).toContain(
     "...(tool.durationMs !== undefined ? { durationMs: tool.durationMs } : {})",

@@ -292,7 +292,7 @@ function browserOpenTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "open",
+          summary: "open tab",
         };
       },
       presentResult: browserCard({ callSummary: "open" }),
@@ -434,7 +434,7 @@ function browserScanTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "scan",
+          summary: "scan page",
         };
       },
       presentResult: browserCard({ callSummary: "scan" }),
@@ -483,7 +483,7 @@ function browserExecuteJsTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "execute js",
+          summary: "run script",
         };
       },
       presentResult: browserCard({ callSummary: "execute js" }),
@@ -528,7 +528,9 @@ function browserNavigateTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "navigate",
+          summary: optionalString(requireObject(args).url)
+            ? "navigate · ${requireObject(args).url as string}"
+            : "navigate",
         };
       },
       presentResult: browserCard({ callSummary: "navigate" }),
@@ -574,7 +576,8 @@ function browserClickTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "click",
+          // WHERE: coordinates alone leave the reader guessing which part of the page.
+          summary: "click (${requireObject(args).x}, ${requireObject(args).y})",
         };
       },
       presentResult: browserCard({ callSummary: "click" }),
@@ -618,7 +621,11 @@ function browserInputTool(): RuntimeTool {
         return {
           kind: "generic",
           title: optionalString(requireObject(args).url) ?? "browser",
-          summary: "input",
+          // WHAT was typed, and where.
+          summary:
+            typeof requireObject(args).text === "string"
+              ? "type ${requireObject(args).text as string}"
+              : "type",
         };
       },
       presentResult: browserCard({ callSummary: "input" }),

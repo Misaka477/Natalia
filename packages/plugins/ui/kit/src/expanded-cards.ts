@@ -1,25 +1,36 @@
 /**
- * Which tool cards the reader expanded, keyed by row.
+ * Which tool cards the reader expanded, keyed by the CALL, not by a position.
  *
- * The transcript is a virtual list: a row scrolled out of the viewport
- * unmounts, and its `expanded` local signal died with it. The 2026-10-13
- * audit watched a reader expand a 202-line read, scroll away, come back,
- * and find the card collapsed again — the expansion the reader asked for
- * silently undid itself (audit ③). Expansion is row-scoped truth, not
- * component state, so it lives here keyed by the card's row id and a
- * remount reads it back.
+ * The reference implementation keys its tool rows by the event's own `callId`
+ * (`call:${callId}`) and keeps the disclosure in the row component's local state;
+ * a row's identity is therefore durable and its open state cannot move onto a
+ * neighbour. This module is the same idea for a list that re-mounts its rows: the
+ * durable call id is the key, and a position is only the fallback for a row that
+ * has none (a hand-built row in a test, or a host that skipped the projection).
  *
- * The key is the message id plus the call's index inside it: a message can
- * carry several tool calls, and the durable `ToolCall` shape has no id of
- * its own. One key per rendered card, stable across a remount because both
- * halves are durable facts.
+ * The key used to be `${messageID}:${index}` unconditionally — and while each
+ * message carries exactly one call today, an index is a POSITION: the moment a
+ * message gains or loses a call before this one, the same card reads a different
+ * key and the reader's expansion is either lost or applied to its neighbour.
  */
 
 const expandedCards = new Set<string>();
 
-/** The row key of one tool call: the message's id plus its index. */
-export function toolCardKey(messageID: string, index: number): string {
-  return `${messageID}:${index}`;
+/**
+ * The row key of one tool call: its durable id when the projection carries one,
+ * otherwise the message id plus the call's index in that message.
+ *
+ * @param toolCall - the row's call, for its `callID`.
+ * @param messageID - the enclosing message's durable id.
+ * @param index - the call's position inside that message.
+ * @returns the key the expansion state is stored under.
+ */
+export function toolCardKey(
+  toolCall: { callID?: string } | undefined,
+  messageID: string,
+  index: number,
+): string {
+  return toolCall?.callID ? `call:${toolCall.callID}` : `${messageID}:${index}`;
 }
 
 /** Whether the reader expanded this card (collapsed by default). */

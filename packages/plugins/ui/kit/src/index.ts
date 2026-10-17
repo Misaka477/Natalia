@@ -9,6 +9,16 @@ export {
 export type { TranscriptHandle, TranscriptProps } from "./transcript";
 export { ContextMeter } from "./context-meter";
 export type { ContextUsageView } from "./context-meter";
+// The image preview is a SHELL overlay, not a row's child: the row is a stacking
+// context, so a preview rendered inside it cannot paint above later rows or the
+// side column. A host renders `ImagePreviewHost` once; a thumbnail only opens.
+export { ImagePreviewHost } from "./image-preview-host";
+export {
+  closeImagePreview,
+  imagePreview,
+  openImagePreview,
+  type ImagePreview,
+} from "./image-preview";
 export {
   dedupeVirtualItems,
   duplicateValues,

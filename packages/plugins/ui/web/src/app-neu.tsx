@@ -28,6 +28,7 @@ import {
 } from "solid-js";
 import {
   ContextMeter,
+  ImagePreviewHost,
   PagedTranscriptController,
   PendingBadge,
   Transcript,
@@ -3680,6 +3681,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           </div>
         </Show>
       </header>
+      {/*
+        The image preview lives HERE, at the shell root: one instance for the whole
+        app, a sibling of the panes. Inside a message it could not paint above the
+        following messages or the right column — `.neu-pane .natalia-message` is a
+        stacking context (`position: relative; z-index: 1`), so the overlay's own
+        z-index was scoped to one row and the preview came up with cards and the
+        side column on top of it.
+      */}
+      <ImagePreviewHost />
       <div class="neu-app">
         {/* Left session tree */}
         {leftVisible() ? (

@@ -2,6 +2,7 @@ import {
   For,
   Show,
   createEffect,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -33,7 +34,9 @@ import {
   visibleOutputLines,
 } from "./head-tail-cap";
 import { isCardExpanded, setCardExpanded, toolCardKey } from "./expanded-cards";
+import { openImagePreview } from "./image-preview";
 import { TailScrollController } from "./scroll-controller";
+import { windowedIndex, windowedMessages } from "./virtual-window";
 import {
   decideMeasurementFollow,
   evaluateTailScroll,
@@ -338,6 +341,23 @@ export function Transcript(props: TranscriptProps) {
     const first = virtualItems()[0];
     return first ? Math.max(0, first.start) : 0;
   };
+  /**
+   * The rows the virtual window covers, as the transcript's OWN message objects.
+   *
+   * `<For>` keys by ELEMENT IDENTITY, and `virtualItems()` hands back freshly
+   * built `{index, start, size, key}` objects on every recompute — so keying the
+   * rows by them destroyed and rebuilt every visible row on every measurement,
+   * every scroll and every projection tick. Measured: a tool card went away and
+   * came back as a different DOM node while the app sat idle, which is how the
+   * fold button's click landed on a detached node ("sometimes it does nothing")
+   * and how each re-mount re-ran the media loader into an RPC storm. `slice`
+   * keeps the SAME message references, so a recompute that covers the same rows
+   * reuses them — the reference implementation's rule, expressed for Solid.
+   */
+  const visibleStart = () => windowedIndex(virtualItems(), 0);
+  const visibleMessages = createMemo(() =>
+    windowedMessages(props.messages, virtualItems()),
+  );
   const bottomSpacer = () => {
     const items = virtualItems();
     const last = items.at(-1);
@@ -787,21 +807,18 @@ export function Transcript(props: TranscriptProps) {
                 style={{ height: `${topSpacer()}px` }}
               />
             </Show>
-            <For each={virtualItems()}>
-              {(item) =>
-                item === undefined ||
-                props.messages[item.index] === undefined ? null : (
-                  <MessageGroup
-                    message={props.messages[item.index]!}
-                    virtualIndex={item.index}
-                    assistantName={props.assistantName}
-                    assistantInitial={props.assistantInitial}
-                    loadAttachmentUrl={props.loadAttachmentUrl}
-                    onFork={props.onFork}
-                    onRollback={props.onRollback}
-                  />
-                )
-              }
+            <For each={visibleMessages()}>
+              {(message, position) => (
+                <MessageGroup
+                  message={message}
+                  virtualIndex={windowedIndex(virtualItems(), position())}
+                  assistantName={props.assistantName}
+                  assistantInitial={props.assistantInitial}
+                  loadAttachmentUrl={props.loadAttachmentUrl}
+                  onFork={props.onFork}
+                  onRollback={props.onRollback}
+                />
+              )}
             </For>
             <Show when={bottomSpacer() > 0}>
               <div
@@ -1129,7 +1146,6 @@ function AttachmentImage(props: {
   const [status, setStatus] = createSignal<
     "idle" | "loading" | "loaded" | "error"
   >("idle");
-  const [lightbox, setLightbox] = createSignal(false);
   const box = imageBox(props.attachment);
   const load = () => {
     const type = props.attachment.mediaType ?? "";
@@ -1185,51 +1201,27 @@ function AttachmentImage(props: {
   );
 
   return (
-    <>
-      <Show when={status() === "loaded" && src()} fallback={placeholder()}>
-        <button
-          type="button"
-          class="natalia-message-image-button"
-          onClick={() => setLightbox(true)}
-        >
-          <img
-            class="natalia-message-image"
-            src={src()}
-            alt={props.attachment.name}
-            width={box.width}
-            height={box.height}
-            loading="lazy"
-          />
-        </button>
-      </Show>
-      <Show when={lightbox()}>
-        <div
-          class="natalia-message-lightbox"
-          style={{
-            position: "fixed",
-            inset: "0",
-            "z-index": "80",
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            padding: "24px",
-            background: "rgba(0,0,0,0.78)",
-            cursor: "zoom-out",
-          }}
-          onClick={() => setLightbox(false)}
-        >
-          <img
-            src={src()}
-            alt={props.attachment.name}
-            style={{
-              "max-width": "min(92vw, 1200px)",
-              "max-height": "92vh",
-              "object-fit": "contain",
-            }}
-          />
-        </div>
-      </Show>
-    </>
+    <Show when={status() === "loaded" && src()} fallback={placeholder()}>
+      <button
+        type="button"
+        class="natalia-message-image-button"
+        // The overlay is the SHELL's (see `image-preview.ts`): this row is a
+        // stacking context, so a preview rendered here could not paint above the
+        // following messages or the right column.
+        onClick={() =>
+          openImagePreview({ src: src(), name: props.attachment.name })
+        }
+      >
+        <img
+          class="natalia-message-image"
+          src={src()}
+          alt={props.attachment.name}
+          width={box.width}
+          height={box.height}
+          loading="lazy"
+        />
+      </button>
+    </Show>
   );
 }
 
@@ -1997,7 +1989,7 @@ export function MessageRow(props: MessageRowProps) {
             {(toolCall, index) => (
               <ToolCallCard
                 toolCall={toolCall}
-                expansionKey={toolCardKey(props.message.id, index())}
+                expansionKey={toolCardKey(toolCall, props.message.id, index())}
                 loadAttachmentUrl={props.loadAttachmentUrl}
               />
             )}

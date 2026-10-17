@@ -100,6 +100,8 @@ export function relativizePath(path: string, cwd?: string): string {
  */
 export type ToolBlockLike = {
   name: string;
+  /** The event's own id for this call, when the projection carries one. */
+  callID?: string;
   status: string;
   /** The event's stored summary — a HINT, never trusted for display. */
   summary: string;
@@ -135,6 +137,7 @@ export function toolCallRow(tool: ToolBlockLike): ToolCall {
   const args = parseArguments(tool.argumentsRaw);
   return {
     name: tool.name,
+    ...(tool.callID ? { callID: tool.callID } : {}),
     output: raw,
     status: tool.status,
     summary: card?.summary ?? toolResultSummary(raw),
@@ -183,6 +186,16 @@ export type ToolCallCard = ToolCard;
 
 export interface ToolCall {
   name: string;
+  /**
+   * The call's durable id, straight from the event (`ToolBlock.callID`).
+   *
+   * This is the identity a card is keyed by. The reference implementation keys
+   * its tool rows by exactly this (`call:${callId}`), and a row keyed by a
+   * POSITION instead — a message index — silently moves its state onto a
+   * neighbour the moment the list shifts. Absent on a hand-built row (a test, a
+   * host that skipped the fold); the expansion key falls back to position then.
+   */
+  callID?: string;
   output?: string;
   status?: string;
   summary?: string;

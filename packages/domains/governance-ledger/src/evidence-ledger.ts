@@ -25,6 +25,15 @@ export type ValidationOutcome = {
   /** EI E2: a ref to the stored (redacted) full output of the run. */
   artifactRef?: string;
   durationMs?: number;
+  /**
+   * WHO ran it: the party whose work this check is about (self-reported), or an
+   * independent party that re-ran it on the submitted tree (authoritative).
+   *
+   * The second ruler, recorded rather than assumed: an auditor must be able to
+   * see that a green came from its author, because a self-reported green is a
+   * statement about intent and an authoritative one is a measurement.
+   */
+  assayRole?: "self-reported" | "authoritative";
 };
 
 export type EvidenceInput = {
@@ -126,6 +135,7 @@ export function boundValidationOutcome(input: {
   safeSummary: string;
   artifactRef?: string;
   durationMs?: number;
+  assayRole?: "self-reported" | "authoritative";
 }): ValidationOutcome {
   return {
     command: input.command,
@@ -135,6 +145,7 @@ export function boundValidationOutcome(input: {
     ...(input.durationMs !== undefined
       ? { durationMs: Math.max(0, Math.round(input.durationMs)) }
       : {}),
+    ...(input.assayRole ? { assayRole: input.assayRole } : {}),
   };
 }
 

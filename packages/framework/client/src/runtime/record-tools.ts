@@ -105,6 +105,12 @@ export function createRecordValidationTool(
           type: "number",
           description: `Optional budget in seconds for this run. Defaults to ${DEFAULT_VALIDATION_TIMEOUT_SEC}; values above ${MAX_VALIDATION_TIMEOUT_SEC} are clamped. A run killed at its budget is recorded timed_out — never passed.`,
         },
+        assayRole: {
+          type: "string",
+          enum: ["self-reported", "authoritative"],
+          description:
+            "Who is running this check. `authoritative` means an independent re-run on the submitted tree — use re_assay for that; `self-reported` means the author checking its own work. Defaults to authoritative when the caller is the main agent.",
+        },
         covers: {
           type: "array",
           items: {
@@ -140,6 +146,7 @@ export function createRecordValidationTool(
         command?: string;
         timeoutSec?: number;
         covers?: string[];
+        assayRole?: "self-reported" | "authoritative";
         knownGaps?: string[];
       };
       const exec = resolveExec(ctx, context.sessionID);
@@ -269,11 +276,17 @@ export function createRecordValidationTool(
           junitRef = undefined;
         }
       }
+      // Who is speaking, recorded rather than assumed: a green from the author is
+      // a statement about intent, a green from an independent re-run is a
+      // measurement, and an auditor must be able to tell them apart.
+      const assayRole: "self-reported" | "authoritative" =
+        args.assayRole === "self-reported" ? "self-reported" : "authoritative";
       const outcome = ledger.boundValidationOutcome({
         command: redactToolOutput(args.command, true),
         result,
         safeSummary,
         ...(artifactRef ? { artifactRef } : {}),
+        ...(assayRole ? { assayRole } : {}),
         durationMs: performance.now() - startedAt,
       });
       const repoRefs = await captureRepositoryEvidenceFields(
@@ -340,6 +353,7 @@ export function createRecordValidationTool(
         // WHO decided the classes: a run classified only by its own command text
         // is a guess about a name, not a statement about intent.
         satisfiesSource: resolved.source,
+        assayRole,
         ...(resolved.refused ? { satisfiesRefused: resolved.refused } : {}),
         durationMs: Math.round(performance.now() - startedAt),
         ...(artifactRef ? { artifactRef } : {}),
@@ -699,6 +713,12 @@ export function createRecordCompletionTool(
         evidenceID: string;
         resolved: "passed-validation" | "not-a-validation" | "unknown-id";
         satisfies: string[];
+        /**
+         * True when every validation behind this id was SELF-REPORTED — the
+         * author checking its own work. The ruler is recorded, not assumed: a
+         * reader weighing this green is told who ran it.
+         */
+        selfReportedOnly: boolean;
       }> = [];
       for (const evidenceID of args.evidenceIDs ?? []) {
         const record = evidenceRecords.find((entry) => entry.id === evidenceID);
@@ -707,6 +727,7 @@ export function createRecordCompletionTool(
             evidenceID,
             resolved: "unknown-id",
             satisfies: [],
+            selfReportedOnly: false,
           });
           continue;
         }
@@ -715,6 +736,7 @@ export function createRecordCompletionTool(
             evidenceID,
             resolved: "not-a-validation",
             satisfies: [],
+            selfReportedOnly: false,
           });
           continue;
         }
@@ -730,6 +752,9 @@ export function createRecordCompletionTool(
           evidenceID,
           resolved: "passed-validation",
           satisfies: classes,
+          selfReportedOnly: record.validations.every(
+            (validation) => validation.assayRole === "self-reported",
+          ),
         });
       }
       const card = requireWorkLedger(ctx)!.evaluateCompletionCard({

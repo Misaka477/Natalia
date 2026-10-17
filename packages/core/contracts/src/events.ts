@@ -1560,6 +1560,13 @@ type RuntimeEventData =
         /** EI E2: a ref to the stored (redacted) full output of the run. */
         artifactRef?: string;
         durationMs?: number;
+        /**
+         * Who ran it: the author checking its own work (`self-reported`) or an
+         * independent re-run on the submitted tree (`authoritative`). Absent on
+         * events recorded before the field existed, which reads as the weaker of
+         * the two — never as authoritative.
+         */
+        assayRole?: "self-reported" | "authoritative";
       }>;
       knownGaps?: string[];
       /** EI E2: when the evidence was recorded (the journal id is opaque). */

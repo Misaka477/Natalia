@@ -46,6 +46,13 @@ export const validationRunSchema = z.object({
    */
   result: z.enum(["passed", "failed", "skipped", "timed_out", "not_run"]),
   durationMs: z.number().int().positive().optional(),
+  /**
+   * Who ran it. `self-reported` is the author checking its own work — a
+   * statement about intent; `authoritative` is an independent re-run on the
+   * submitted tree — a measurement. An auditor reads this before weighing a
+   * green, and a completion that cites only self-reported evidence says so.
+   */
+  assayRole: z.enum(["self-reported", "authoritative"]).optional(),
   outputArtifact: z.string().optional(),
   safeSummary: z.string(),
 });

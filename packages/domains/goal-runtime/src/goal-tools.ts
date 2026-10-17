@@ -102,8 +102,18 @@ export function goalTools(
     output: genericToolCard({
       family: "goal",
       callSummary: "read",
-      resultSummary: "read",
-      meta: [["phase", "phase"]],
+      // The state the goal is in: a bare verb told a reader nothing.
+      resultSummary: (facts) =>
+        typeof facts.phase === "string"
+          ? `phase · ${facts.phase}`
+          : typeof facts.status === "string"
+            ? facts.status
+            : "no goal",
+      meta: [
+        ["phase", "phase"],
+        ["rounds", "rounds"],
+        ["status", "status"],
+      ],
     }),
     async execute(_parsed, context) {
       const exec = execFor(sessionID(context));
@@ -145,7 +155,10 @@ export function goalTools(
     output: genericToolCard({
       family: "goal",
       callSummary: "create",
-      resultSummary: "created",
+      resultSummary: (facts) =>
+        typeof facts.status === "string"
+          ? `created · ${facts.status}`
+          : "created",
       titleKey: "objective",
       meta: [["rounds", "maxGoalRounds"]],
     }),
@@ -226,9 +239,18 @@ export function goalTools(
     output: genericToolCard({
       family: "goal",
       callSummary: "update",
-      resultSummary: "updated",
+      // The action AND the state it left behind.
+      resultSummary: (facts) =>
+        typeof facts.action === "string"
+          ? typeof facts.status === "string"
+            ? `${facts.action} · ${facts.status}`
+            : facts.action
+          : "updated",
       titleKey: "goalID",
-      meta: [["action", "action"]],
+      meta: [
+        ["action", "action"],
+        ["status", "status"],
+      ],
     }),
     async execute(parsed, context) {
       const args = (parsed ?? {}) as Params;

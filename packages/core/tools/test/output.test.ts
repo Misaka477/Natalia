@@ -199,10 +199,10 @@ test("a generic card can derive its summary from the envelope", () => {
     JSON.stringify({ candidates: 3, status: "ready" }),
   );
   const card = output.presentResult!({}, "unused", facts);
-  expect(card.summary).toBe("3 candidates");
-  expect(card.meta).toEqual([["candidates", "3"]]);
+  expect(card?.summary).toBe("3 candidates");
+  expect(card?.meta).toEqual([["candidates", "3"]]);
   // A result that does not decode falls back to the call verb, never to a
   // summary computed from an empty envelope.
   const prose = output.presentResult!({}, "no session", undefined);
-  expect(prose.summary).toBe("list");
+  expect(prose?.summary).toBe("list");
 });

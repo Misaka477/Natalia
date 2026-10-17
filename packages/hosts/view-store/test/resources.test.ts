@@ -340,6 +340,15 @@ test("context status and compaction banner follow the runtime", () => {
   ]);
   expect(state.context).toMatchObject({ used: 100, max: 200 });
   expect(state.compactionBanner?.kind).toBe("compacting");
+  // The START is a row as well: a session read later must show that its context
+  // was rewritten, not only what it was rewritten to.
+  expect(
+    state.messages.some(
+      (block) =>
+        block.text.includes("compacting context: 100 of 200 tokens") &&
+        block.status === "compacting",
+    ),
+  ).toBe(true);
 
   state = projectEvents(
     [

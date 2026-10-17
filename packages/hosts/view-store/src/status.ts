@@ -259,6 +259,18 @@ export function applyStatusEvent(
         text: `Compacting after ${event.trigger} · before ${event.beforeTokens}/${event.maxTokens} · reserved ${event.reservedTokens}`,
       };
       state.footer = state.compactionBanner.text;
+      // The START is a transcript row too, under the same id the outcome uses,
+      // so the reader sees it running and then sees what it came to. A banner
+      // only exists in the client that is looking at the moment it fires: a
+      // session read later showed a compaction had rewritten its context with
+      // nothing saying when.
+      upsertBlock(
+        state,
+        event.id,
+        "system",
+        `compacting context: ${event.beforeTokens} of ${event.maxTokens} tokens (after ${event.trigger})`,
+        "compacting",
+      );
       return true;
     case "compaction.end":
       state.compactionBanner = undefined;

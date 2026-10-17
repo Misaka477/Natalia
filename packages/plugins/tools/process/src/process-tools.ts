@@ -1179,7 +1179,7 @@ function processWaitTool(registry: ManagedProcessRegistry): RuntimeTool {
     }),
     async execute(input, context) {
       const args = requireObject(input);
-      const timeoutMs = numberOr(args.timeoutMs, DEFAULT_PROCESS_WAIT_MS);
+      const timeoutMs = clampedWaitMs(args.timeoutMs, DEFAULT_PROCESS_WAIT_MS);
       const settled = await registry.wait(
         requireString(args.id, "id"),
         context,
@@ -1312,7 +1312,7 @@ function processReadyTool(registry: ManagedProcessRegistry): RuntimeTool {
         await registry.waitForReady(
           requireString(args.id, "id"),
           context,
-          numberOr(args.timeoutMs, 30000),
+          clampedWaitMs(args.timeoutMs, 30_000),
         ),
         null,
         2,
@@ -1560,6 +1560,20 @@ export const DEFAULT_PROCESS_POLL_MS = 5_000;
  * decide between waiting again and moving on.
  */
 export const DEFAULT_PROCESS_WAIT_MS = 300_000;
+
+/**
+ * The ceiling a model-supplied wait is clamped to.
+ *
+ * A wait holds the tool call, and the tool call holds the turn — so an
+ * unbounded `timeoutMs` is an unbounded turn. `numberOr` parses and does not
+ * clamp, so a model that asked for a day held the runtime open for a day.
+ */
+export const MAX_PROCESS_WAIT_MS = 600_000;
+
+/** Clamp one model-supplied wait into [0, MAX_PROCESS_WAIT_MS]. */
+function clampedWaitMs(value: unknown, fallback: number): number {
+  return Math.min(MAX_PROCESS_WAIT_MS, Math.max(0, numberOr(value, fallback)));
+}
 
 /** Everything the observer needs, injected so it can be driven by a clock. */
 export interface ProcessObserverOptions {

@@ -172,8 +172,24 @@ function runShellTool(): RuntimeTool {
               },
               { approver: context.sandboxApprover, toolName: "run_shell" },
             );
+      /**
+       * The refusal a confined call earns when the kernel stopped it.
+       *
+       * A denial is a REFUSAL, not a command answer: the command started and the
+       * sandbox stopped it, and the caller has to be told that a wider mode
+       * exists. It is named the way every sandbox-enforcing family names it, and
+       * the sanctioned retry rides along only while a wider mode actually exists.
+       */
+      const denialRefusal = (text: string, mode: ConfinementMode) => {
+        const hint =
+          WIDER_MODES[mode].length > 0
+            ? `\n${escalationHintMarker("command")}`
+            : "";
+        return new Error(`${text}\n${sandboxDenialMarker(mode)}${hint}`);
+      };
+      let result: string;
       try {
-        return await runShell(
+        result = await runShell(
           requireString(args.command, "command"),
           { ...context, confinement },
           timeoutSec,
@@ -183,20 +199,17 @@ function runShellTool(): RuntimeTool {
         if (
           confinement !== "danger-full-access" &&
           DENIAL_PATTERN.test(message)
-        ) {
-          // The kernel refused a write inside a confined call: name the mode
-          // the way every sandbox-enforcing family names it, and offer the
-          // sanctioned retry only while a wider mode actually exists.
-          const hint =
-            WIDER_MODES[confinement].length > 0
-              ? `\n${escalationHintMarker("command")}`
-              : "";
-          throw new Error(
-            `${message}\n${sandboxDenialMarker(confinement)}${hint}`,
-          );
-        }
+        )
+          throw denialRefusal(message, confinement);
         throw error;
       }
+      // The SAME classification for a denial that came back as a result. A
+      // non-zero exit is the command's own answer now, so a sandboxed write the
+      // kernel refused reaches here instead of the catch above — and when the
+      // hint lived only in the catch, it silently stopped being offered.
+      if (confinement !== "danger-full-access" && DENIAL_PATTERN.test(result))
+        throw denialRefusal(result, confinement);
+      return result;
     },
   };
 }

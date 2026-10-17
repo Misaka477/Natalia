@@ -357,6 +357,13 @@ jobs:
       # is the Windows behaviour worth pinning anyway.
       - name: Install
         run: bun install --frozen-lockfile
+      # The detached-process owner is a compiled helper: without it every
+      # `startDetachedProcess` call refuses with "the detached-process owner is
+      # not built for this host" — which is what this job failed with on its
+      # first run, because a fresh runner has no prebuilt/ directory. The image
+      # ships clang-cl (Visual Studio's LLVM), which is what the script uses.
+      - name: Build the detached-process owner
+        run: npm run platform:build-job-runner:windows
       - name: Platform-sensitive layers
         run: >
           bun test --max-concurrency=2 --timeout 120000

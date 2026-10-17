@@ -255,6 +255,22 @@ export const runtimeConfigSchema = z.object({
     })
     .default({}),
   timeouts: timeoutSchema.default({}),
+  /**
+   * Tool-execution budgets the deployment owns.
+   *
+   * `validationTimeoutSec` is the default wall-clock budget for one
+   * `record_validation` run; `validationMaxTimeoutSec` is the ceiling a
+   * model-supplied `timeoutSec` is clamped to. Both are configuration because
+   * the honest default depends on the project — a 5-second unit suite and a
+   * 40-minute integration suite cannot share one number, and a constant inside
+   * the domain layer is not configurability.
+   */
+  tools: z
+    .object({
+      validationTimeoutSec: z.number().int().positive().default(120),
+      validationMaxTimeoutSec: z.number().int().positive().default(1800),
+    })
+    .default({}),
   maxAttemptsPerStep: z.number().int().positive().optional(),
   /**
    * Max in-flight provider requests per provider id, keyed by provider. This is

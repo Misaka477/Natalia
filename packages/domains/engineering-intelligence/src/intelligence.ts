@@ -75,7 +75,10 @@ import {
   sessionWindowEvents,
 } from "@anthelia/substrate";
 import { redactToolOutput } from "./redaction";
-import { runValidationCommand } from "./validation";
+import {
+  DEFAULT_VALIDATION_TIMEOUT_SEC,
+  runValidationCommand,
+} from "./validation";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
 import type { SessionStoreController } from "@anthelia/session-store";
 import type { WorkLedgerController } from "@natalia/work-ledger";
@@ -1236,15 +1239,27 @@ export function createIntelligenceSurface(
       )
         return { recorded: false as const };
       const startedAt = performance.now();
-      let result: "passed" | "failed" | "skipped" = "failed";
+      // The same closed vocabulary the tool uses: a run that was killed at its
+      // budget established nothing, so it may not be recorded as `failed` (the
+      // check ran and said no) and certainly not as `passed` (which is what
+      // `exitCode ?? 0` produced for a killed process).
+      let result: "passed" | "failed" | "skipped" | "timed_out" | "not_run" =
+        "not_run";
       let safeSummary = "validation command did not run";
       try {
         const run = await runValidationCommand(
           input.command,
           ctx.ports.getWorkspaceRoot(),
-          input.timeoutSec ?? 120,
+          input.timeoutSec ?? DEFAULT_VALIDATION_TIMEOUT_SEC,
         );
-        result = run.exitCode === 0 ? "passed" : "failed";
+        result =
+          run.outcome === "exited"
+            ? run.exitCode === 0
+              ? "passed"
+              : "failed"
+            : run.outcome === "timed_out"
+              ? "timed_out"
+              : "not_run";
         safeSummary = run.safeSummary;
       } catch (error) {
         safeSummary = `validation runner failed: ${error instanceof Error ? error.message : String(error)}`;

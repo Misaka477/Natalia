@@ -5299,7 +5299,13 @@ export type RuntimeClient = {
     sessionID?: string,
   ): Promise<{
     recorded: boolean;
-    result?: "passed" | "failed";
+    /**
+     * How the run ended. `timed_out` and `not_run` are the outcomes where the
+     * command never got to answer — a run killed at its budget established
+     * nothing, so a caller must not read it as `failed` (the check ran and said
+     * no) and never as `passed`.
+     */
+    result?: "passed" | "failed" | "skipped" | "timed_out" | "not_run";
     safeSummary?: string;
   }>;
   /** The completion cards, projected from the journal (P2 E4). */

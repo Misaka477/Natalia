@@ -518,6 +518,10 @@ function agentCleanupTool(): RuntimeTool {
   );
 }
 
+/** How long `agent_wait` blocks by default, and the ceiling it clamps to. */
+export const SUBAGENT_WAIT_DEFAULT_MS = 120_000;
+export const SUBAGENT_WAIT_MAX_MS = 600_000;
+
 function agentWaitTool(): RuntimeTool {
   return {
     name: "agent_wait",
@@ -598,8 +602,17 @@ function agentWaitTool(): RuntimeTool {
         (args.until as string) === "any_terminal"
           ? "any_terminal"
           : "all_terminal";
-      const timeoutMs =
-        typeof args.timeoutMs === "number" ? args.timeoutMs : 120_000;
+      // Clamped, not parsed: a wait holds the tool call and the call holds the
+      // turn, so an unbounded model-supplied timeout is an unbounded turn.
+      const timeoutMs = Math.min(
+        SUBAGENT_WAIT_MAX_MS,
+        Math.max(
+          0,
+          typeof args.timeoutMs === "number"
+            ? args.timeoutMs
+            : SUBAGENT_WAIT_DEFAULT_MS,
+        ),
+      );
       const registry = requireSubagents(context);
       const results = await registry.wait(
         ids,

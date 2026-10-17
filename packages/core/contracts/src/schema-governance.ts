@@ -35,7 +35,16 @@ export const decisionScopeSchema = z.enum(["session", "workspace"]);
 export const validationRunSchema = z.object({
   command: z.string(),
   target: z.string(),
-  result: z.enum(["passed", "failed", "skipped"]),
+  /**
+   * How the run ended.
+   *
+   * `passed` / `failed` are the command's own answer (its exit status);
+   * `skipped` means it was not applicable. `timed_out` and `not_run` are the
+   * two outcomes that mean the command never got to answer — a run killed at
+   * its budget established nothing, so it must never be recorded as `failed`
+   * (which reads as "the check ran and said no") let alone as `passed`.
+   */
+  result: z.enum(["passed", "failed", "skipped", "timed_out", "not_run"]),
   durationMs: z.number().int().positive().optional(),
   outputArtifact: z.string().optional(),
   safeSummary: z.string(),

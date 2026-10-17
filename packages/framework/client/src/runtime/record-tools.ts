@@ -26,7 +26,13 @@ import type {
   WorkLedgerController,
 } from "@natalia/collab";
 import { redactToolOutput } from "@natalia/engineering-intelligence";
-import { runValidationCommand } from "@natalia/engineering-intelligence";
+// The budget constants live with the runner, so the tool and the
+// runtime-recorded path cannot disagree about a default.
+import {
+  DEFAULT_VALIDATION_TIMEOUT_SEC,
+  MAX_VALIDATION_TIMEOUT_SEC,
+  runValidationCommand,
+} from "@natalia/engineering-intelligence";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import type {
@@ -70,9 +76,12 @@ export function createRecordValidationTool(
 ): import("@anthelia/tools").RuntimeTool {
   return {
     name: "record_validation",
-    description:
-      "Run a validation command (test runner, typechecker, linter) in the workspace and record the result as durable evidence. Use it after implementing a step so the work has evidence, not claims. Returns passed/failed, a bounded safe summary, and the evidenceID — pass that evidenceID to record_completion's evidenceIDs so the completion card is judge-able. The command runs with the same approval boundary as run_shell.",
-    requiresApproval: true,
+    // Declared as a PAIR so the runtime's own deadline guard reads them
+    // (`timeoutSec` alone would be taken as a fixed budget the model cannot
+    // move). The command runs under the shell seam, which terminates the whole
+    // process tree at this budget.
+    timeoutSec: DEFAULT_VALIDATION_TIMEOUT_SEC,
+    maxTimeoutSec: MAX_VALIDATION_TIMEOUT_SEC,
     parameters: {
       type: "object",
       properties: {
@@ -89,6 +98,10 @@ export function createRecordValidationTool(
           description:
             "The command to run in the workspace (for example `bun test packages/framework/runtime`).",
         },
+        timeoutSec: {
+          type: "number",
+          description: `Optional budget in seconds for this run. Defaults to ${DEFAULT_VALIDATION_TIMEOUT_SEC}; values above ${MAX_VALIDATION_TIMEOUT_SEC} are clamped. A run killed at its budget is recorded timed_out — never passed.`,
+        },
         knownGaps: {
           type: "array",
           items: { type: "string" },
@@ -98,12 +111,16 @@ export function createRecordValidationTool(
       required: ["taskID", "objective", "command"],
       additionalProperties: false,
     },
+    description:
+      "Run a validation command (test runner, typechecker, linter) in the workspace and record the result as durable evidence. Use it after implementing a step so the work has evidence, not claims. Returns passed/failed, a bounded safe summary, and the evidenceID — pass that evidenceID to record_completion's evidenceIDs so the completion card is judge-able. The command runs with the same approval boundary as run_shell.",
+    requiresApproval: true,
     output: validationRunCard(),
     async execute(parsed, context) {
       const args = parsed as {
         taskID?: string;
         objective?: string;
         command?: string;
+        timeoutSec?: number;
         knownGaps?: string[];
       };
       const exec = resolveExec(ctx, context.sessionID);
@@ -124,21 +141,38 @@ export function createRecordValidationTool(
       // completion card permanently judgeable:false / missing
       // validation:test (T-02).
       const evidenceID = `evidence:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`;
-      let result: "passed" | "failed" | "skipped" = "failed";
+      // The vocabulary the record uses for how the run ended. `timed_out` and
+      // `not_run` are first-class: a run killed at its budget established
+      // nothing, so it may not be recorded as `failed` (the check ran and said
+      // no) — and the old code recorded it as `passed`, because a killed process
+      // reports no exit code and `exitCode ?? 0` read that as zero.
+      type RunResult = "passed" | "failed" | "timed_out" | "not_run";
+      let result: RunResult = "not_run";
       let safeSummary = "validation command did not run";
       let artifactRef: string | undefined;
       try {
         const run = await runValidationCommand(
           args.command,
           ctx.ports.getWorkspaceRoot(),
-          120,
+          context.timeoutSec ??
+            ctx.ports.getTsRuntimeConfig?.()?.runtime.tools
+              .validationTimeoutSec ??
+            DEFAULT_VALIDATION_TIMEOUT_SEC,
+          context.signal,
         );
-        result = run.exitCode === 0 ? "passed" : "failed";
+        result =
+          run.outcome === "exited"
+            ? run.exitCode === 0
+              ? "passed"
+              : "failed"
+            : run.outcome === "timed_out"
+              ? "timed_out"
+              : "not_run";
         safeSummary = run.safeSummary;
 
         // EI E2 artifact refs: a run whose output exceeds the summary is
         // persisted (redacted + bounded) so the evidence can reference it.
-        if (run.fullOutput.length > run.safeSummary.length) {
+        if (run.artifactText.length > run.safeSummary.length) {
           const name = `validation:${Date.now().toString(36)}:${ctx.ports.nextEvidenceSequence()}`;
           // The name is an ID, not a path component: the colons that
           // separate its parts are legal in a POSIX file name but are
@@ -156,7 +190,7 @@ export function createRecordValidationTool(
                 recursive: true,
               },
             );
-            await writeFile(absolute, run.fullOutput, "utf8");
+            await writeFile(absolute, run.artifactText, "utf8");
             artifactRef = relative;
           } catch {
             // A failed artifact write must not fail the validation record.

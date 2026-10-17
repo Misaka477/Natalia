@@ -21,12 +21,12 @@ import {
 } from "@anthelia/session";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { requestAuditAfterCompletion } from "@natalia/engineering-intelligence";
+import { requestAuditAfterCompletion } from "@natalia/assay";
 import type {
   GovernanceLedgerController,
   WorkLedgerController,
 } from "@natalia/collab";
-import { redactToolOutput } from "@natalia/engineering-intelligence";
+import { redactToolOutput } from "@natalia/assay";
 // The budget constants live with the runner, so the tool and the
 // runtime-recorded path cannot disagree about a default.
 import {
@@ -35,7 +35,7 @@ import {
   runValidationCommand,
   validationRunToJUnitXml,
   type ValidationOutcome,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
 import { ensureCompleteSessionFactState } from "@anthelia/substrate";
 import type {

@@ -44,9 +44,7 @@
       ],
       "@anthelia/contracts": ["packages/core/contracts/src/index.ts"],
       "@anthelia/diff-wasm": ["packages/framework/diff-wasm/src/index.ts"],
-      "@natalia/engineering-intelligence": [
-        "packages/domains/engineering-intelligence/src/index.ts"
-      ],
+      "@natalia/assay": ["packages/domains/assay/src/index.ts"],
       "@natalia/example-ui-plugin": [
         "packages/examples/ui-plugin/src/index.ts"
       ],

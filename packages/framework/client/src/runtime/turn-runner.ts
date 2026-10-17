@@ -27,7 +27,7 @@ import type {
   SessionExecutionState,
 } from "@anthelia/substrate";
 import { activePlanForExec } from "@natalia/collab";
-import { loadProjectDocumentsSync } from "@natalia/engineering-intelligence";
+import { loadProjectDocumentsSync } from "@natalia/assay";
 import { compositionProfile } from "@anthelia/composition";
 import { effectiveConfinementMode } from "./tool-execution/execute-context";
 import { logOf } from "@anthelia/operation-log";

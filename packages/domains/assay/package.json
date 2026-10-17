@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@natalia/engineering-intelligence",
+  "name": "@natalia/assay",
   "version": "0.0.0-m13",
   "private": true,
   "type": "module",

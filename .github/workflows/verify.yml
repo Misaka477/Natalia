@@ -204,7 +204,7 @@ jobs:
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 ./packages/domains/collab/test \
                               ./packages/domains/goal-runtime/test \
-                              ./packages/domains/engineering-intelligence/test ./packages/domains/goal/test
+                              ./packages/domains/assay/test ./packages/domains/goal/test
           - layer: "domains-2"
             dirs: >-
               bun test --max-concurrency=4 --timeout 60000 ./packages/domains/work-ledger/test \

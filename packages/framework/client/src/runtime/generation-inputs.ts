@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { agentSystemPrompt } from "@natalia/agent-prompts";
-import { loadProjectDocumentsSync } from "@natalia/engineering-intelligence";
+import { loadProjectDocumentsSync } from "@natalia/assay";
 import {
   compositionProfile,
   type CompositionProfile,

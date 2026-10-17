@@ -4,7 +4,7 @@
  * The work ledger (plan, drift and work graph event writers) is a
  * framework-internal subsystem, not a plugin: this module constructs the
  * controller directly and contributes it as the `work-ledger.controller`
- * service so engineering-intelligence and tool-execution members resolve it
+ * service so Assay and tool-execution members resolve it
  * unchanged.
  */
 import { createWorkLedgerController } from "@natalia/work-ledger";

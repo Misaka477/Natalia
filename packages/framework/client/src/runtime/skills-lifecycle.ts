@@ -2,7 +2,7 @@
  * The skill lifecycle's runtime face: the protected set's switch and the
  * garbage collector's dry run.
  *
- * The GC's law lives in the engineering-intelligence domain
+ * The GC's law lives in the Assay domain
  * (`skillGcReport` — pure, unit-tested); what lives here is the wiring it
  * was built waiting for: the usage facts. `skill.activated` events are
  * journaled by the runtime (plugin-assembly.ts), so this face folds them
@@ -19,7 +19,7 @@ import {
   skillGcReport,
   skillUsageFromEvents,
   type SkillGcReport,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
 import { skillService } from "@anthelia/runtime-services";

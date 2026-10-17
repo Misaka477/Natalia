@@ -45,7 +45,7 @@
     "@natalia/collab": "workspace:*",
     "@natalia/collaboration": "workspace:*",
     "@natalia/context-ledger": "workspace:*",
-    "@natalia/engineering-intelligence": "workspace:*",
+    "@natalia/assay": "workspace:*",
     "@natalia/goal": "workspace:*",
     "@natalia/goal-runtime": "workspace:*",
     "@natalia/governance-ledger": "workspace:*",

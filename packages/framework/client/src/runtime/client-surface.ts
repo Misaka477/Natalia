@@ -9,7 +9,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import {
   createIntelligenceSurface,
   createFeedbackSurface,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import { createAttachmentRuntime } from "./attachment-runtime";
 import { createSubagentRuntime } from "./subagent-runtime";
 import { createMcpRuntime } from "./mcp-runtime";

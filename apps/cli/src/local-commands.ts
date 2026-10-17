@@ -12,7 +12,7 @@ import {
   resolveUpdateHome,
   updateProgram,
 } from "@natalia/installer";
-// What survives of the engineering-intelligence surface in this CLI: the
+// What survives of the Assay surface in this CLI: the
 // verdict pipe's request/parse (the user's ruling — Natalia's consumption
 // side stays), the per-capability benchmark synthesis (C-class), and D5's
 // run-scorer (the two numbers). The generation engine's scoring, judging,
@@ -24,7 +24,7 @@ import {
   groupRunsByPrompt,
   scoreRun,
   segmentTurns,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import { createLocalSessionService } from "@anthelia/session-store";
 import { consultRecords, consultSummary } from "@natalia/collaboration";
 import { evalListLines, evalRun } from "./eval-cli";

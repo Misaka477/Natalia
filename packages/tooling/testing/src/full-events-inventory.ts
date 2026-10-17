@@ -72,7 +72,7 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "constitution/work-contract/drift ternaries + two request-marker scans counted with them",
   },
-  "packages/domains/engineering-intelligence/src/intelligence.ts": {
+  "packages/domains/assay/src/intelligence.ts": {
     count: 26,
     cls: "state-first",
     note: "the EI folds are fact-first with resident fallbacks; one store.history paged read, the override-grant merge (instance + session, deduped by id), the growth branch's folds (the completions/unbacked-task derivation's reads, the writer's idempotence guard, the proposal reader), the prompt-run-groups scorer (segmentTurns/scoreRun/groupRunsByPrompt — a defensive replay fold, no fork), the external-benchmark folds (the internal aggregate beside the baseline, the join record's turn-window read, the join reader), the correction-patterns read (the three safe sources clustered), and the promotion's reads (the triggers' assembly's own facts, the writer's idempotence guard, the promotions reader) ride the same class family",

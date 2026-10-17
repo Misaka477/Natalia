@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RunScore } from "@natalia/engineering-intelligence";
+import type { RunScore } from "@natalia/assay";
 
 /**
  * D6b — the external-benchmark adapter (G-c, "先内后外"): the

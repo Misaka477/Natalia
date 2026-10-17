@@ -1,5 +1,5 @@
-import { readExternalBenchmark } from "@natalia/engineering-intelligence";
-import { runExternalBenchmark } from "@natalia/engineering-intelligence";
+import { readExternalBenchmark } from "@natalia/assay";
+import { runExternalBenchmark } from "@natalia/assay";
 import { callRuntimeRPC } from "@natalia/transport";
 import {
   createRuntimeDaemonStore,

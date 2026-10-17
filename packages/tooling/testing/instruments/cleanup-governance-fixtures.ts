@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Remove the deterministic CEF smoke fixtures that were written by the
- * engineering-intelligence smoke harness.
+ * Assay smoke harness.
  *
  * This is intentionally narrow: it requires an explicit session id and only
  * matches the exact fixture prose/ids used by the smoke, so a user's real

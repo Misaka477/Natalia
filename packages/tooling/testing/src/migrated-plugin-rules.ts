@@ -356,10 +356,12 @@ export function findClientProductDependencyViolation(
 const clientClosureAllowlist = [
   "agent",
   "agent-prompts",
+  // The Assay domain (formerly engineering-intelligence): the CI-shaped
+  // statement checker the client's record tools and turn runner call.
+  "assay",
   "attachments",
   "capability",
   "collab",
-  "engineering-intelligence",
   "goal-runtime",
   "checkpoint",
   "collaboration",

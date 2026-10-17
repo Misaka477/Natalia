@@ -11,7 +11,7 @@ import {
   lastFinishedTurnID,
   verdictAlreadyRequested,
   verdictWakeDue,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import {
   admittedInputs,
   admitInput,

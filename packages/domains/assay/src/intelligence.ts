@@ -84,7 +84,7 @@ import type { SessionStoreController } from "@anthelia/session-store";
 import type { WorkLedgerController } from "@natalia/work-ledger";
 
 /**
- * The `ClientSurfaceOptions` the engineering-intelligence surface shares with
+ * The `ClientSurfaceOptions` the Assay surface shares with
  * the other client surfaces. Declared here (instead of importing the
  * client-surface copy) so the runtime feature stays self-contained; the shape
  * is the subset of runtime client options consumed by this feature.

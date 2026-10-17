@@ -12,7 +12,7 @@ import { createTitleGeneration } from "../title-generation";
 import {
   createSelfReview,
   pluginOverridesForSuggestions,
-} from "@natalia/engineering-intelligence";
+} from "@natalia/assay";
 import { buildGeneration, storeGeneration } from "@anthelia/composition";
 import { sharedObjectStore } from "@anthelia/object-store";
 import { resolveWorkspaceObjectsRoot } from "@anthelia/platform";

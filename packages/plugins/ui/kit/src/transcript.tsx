@@ -1631,8 +1631,33 @@ function ToolCallCard(props: {
     card
       ? renderCard(card, props.toolCall)
       : plainCardLines(props.toolCall.output ?? "");
+  /**
+   * The command itself, as the card's first body lines — but only once the
+   * reader has opened the card.
+   *
+   * The header carries the title (the command, the path) clipped by CSS with an
+   * ellipsis, and until now that was the ONLY place it appeared: a `run_shell`
+   * card whose command was three lines long showed
+   * `Start-Process -FilePath 'D:/Software_Development/mini...` with no tooltip,
+   * no wrap and no disclosure, so the full command was unreachable. The
+   * expanded card is where a title belongs — the reference rows put the command
+   * in the body and keep the header to the family label plus the summary.
+   *
+   * It stays out of the collapsed window so a collapsed card is unchanged, and
+   * the fold toggle counts these lines in its promise (see `totalLineCount`),
+   * because a control that promises N lines and delivers N is the whole point.
+   */
+  const commandLines = (): ToolCardLine[] => {
+    const title = card?.title;
+    if (!title || !expanded()) return [];
+    return plainCardLines(`$ ${title}`);
+  };
+  /** Every line the card can show, command included, for the toggle's count. */
+  const commandLineCount = () =>
+    card?.title ? plainCardLines(`$ ${card.title}`).length : 0;
+  const totalLineCount = () => bodyLines().length + commandLineCount();
   const output = () =>
-    bodyLines()
+    allLines()
       .map((entry) => entry.line)
       .join("\n");
   const outputLines = () => output().split("\n");
@@ -1648,7 +1673,10 @@ function ToolCallCard(props: {
   // fold toggle naming what is hidden, and a tail slice — the reference
   // implementation's shape, so a long output reads as a window into
   // something longer rather than a wall of text.
-  const allLines = () => bodyLines();
+  //
+  // The command rides these lines when the card is open (see `commandLines`),
+  // so the expanded card shows what was run above what it printed.
+  const allLines = () => [...commandLines(), ...bodyLines()];
   const cap = () =>
     headTailCap(allLines().length, CHAT_OUTPUT_MAX_LINES, expanded());
   // A single over-long line (the one-line JSON shape) has no head/tail to
@@ -1684,7 +1712,12 @@ function ToolCallCard(props: {
     return window().head;
   };
   const tailLines = () => (longSingle() ? [] : window().tail);
-  const hiddenCount = () => (longSingle() ? 1 : Math.max(0, cap().hidden));
+  // The command counts as hidden while the card is closed: a card whose output
+  // is empty still has something to reveal, and without this the fold toggle
+  // never appeared for it — the full command stayed unreachable.
+  const hiddenCount = () =>
+    (longSingle() ? 1 : Math.max(0, cap().hidden)) +
+    (expanded() ? 0 : commandLineCount());
   const isCollapsed = () => hiddenCount() > 0 && !expanded();
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
@@ -1718,9 +1751,13 @@ function ToolCallCard(props: {
           <span class="natalia-tool-summary">{summary()}</span>
         </Show>
         {/* A title that carries information the label does not (a file path)
-            still shows, as the trailing fragment rather than the lead. */}
+            still shows, as the trailing fragment rather than the lead. The
+            `title` attribute is the hover form: the span itself is clipped by
+            CSS, and the full text is what the expanded card shows. */}
         <Show when={titleExtra()}>
-          <span class="natalia-tool-title">{titleExtra()}</span>
+          <span class="natalia-tool-title" title={card?.title}>
+            {titleExtra()}
+          </span>
         </Show>
         <span
           classList={{
@@ -1776,7 +1813,7 @@ function ToolCallCard(props: {
                 class="natalia-tool-output-toggle"
                 onClick={toggleExpanded}
               >
-                {`展开全部（${outputLines().length} 行，已折叠 ${hiddenCount()} 行）`}
+                {`展开全部（${totalLineCount()} 行，已折叠 ${hiddenCount()} 行）`}
               </button>
             </Show>
             <Show when={isCollapsed()}>

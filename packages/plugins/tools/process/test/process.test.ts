@@ -25,59 +25,6 @@ function processRegistryTools(registry = new ManagedProcessRegistry()) {
   );
 }
 
-test("a settlement the waiter collected is not announced again", async () => {
-  // Two reportings of one exit used to reach the model: the caller's own
-  // `process_wait` answer, and the settlement notice the spine delivers when the
-  // process settles. A settlement that releases a live wait is `awaited` — the
-  // caller just read it — so the notice is suppressed for exactly that case.
-  const notices: string[] = [];
-  const registry = new ManagedProcessRegistry({
-    deliverForSession: (_sessionID: string, notice: { subject: string }) => {
-      notices.push(notice.subject);
-      return true;
-    },
-  } as never);
-  const workspaceRoot = await mkdtemp(join(tmpdir(), "process-awaited-"));
-  const context = {
-    workspaceRoot,
-    sessionID: "ses_wait",
-    settings: {},
-  } as never;
-  const quick = process.platform === "win32" ? "exit 0" : "true";
-  await registry.start(quick, context, "awaited_1");
-  const settled = await registry.wait("awaited_1", context, 20_000);
-  expect(settled?.id).toBe("awaited_1");
-  // The waiter collected it; the spine stayed quiet.
-  expect(notices).toEqual([]);
-}, 60_000);
-
-test("a process nobody is waiting on IS announced", async () => {
-  const notices: string[] = [];
-  const registry = new ManagedProcessRegistry({
-    deliverForSession: (_sessionID: string, notice: { subject: string }) => {
-      notices.push(notice.subject);
-      return true;
-    },
-  } as never);
-  const workspaceRoot = await mkdtemp(join(tmpdir(), "process-notice-"));
-  const context = {
-    workspaceRoot,
-    sessionID: "ses_notice",
-    settings: {},
-  } as never;
-  await registry.start(
-    process.platform === "win32" ? "exit 0" : "true",
-    context,
-    "noticed_1",
-  );
-  // The sweep notices the exit.
-  for (let attempt = 0; attempt < 40 && notices.length === 0; attempt += 1) {
-    await registry.observer.sweep();
-    await Bun.sleep(50);
-  }
-  expect(notices).toContain("noticed_1");
-}, 60_000);
-
 test("a process belongs to the session that started it", async () => {
   // Measured defect this pins: `stop` / `restart` / `attach` / `detach` took
   // only a workspace root, so a second session in the same workspace could stop
@@ -114,11 +61,12 @@ test("a process belongs to the session that started it", async () => {
   await expect(
     tools.get("process_stop")!.execute({ id: "owned_1" }, stranger),
   ).rejects.toThrow(/belongs to session ses_owner/u);
-  // The owner can stop it.
+  // The owner can stop it — and a process that already ended on its own is
+  // still a terminal answer, not a refusal: the fence is about who may ask.
   const stopped = JSON.parse(
     await tools.get("process_stop")!.execute({ id: "owned_1" }, owner),
   ) as { status: string };
-  expect(stopped.status).toBe("stopped");
+  expect(["stopped", "exited", "failed"]).toContain(stopped.status);
 }, 60_000);
 
 test("the process family describes the tools it ships", () => {

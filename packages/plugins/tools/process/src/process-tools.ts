@@ -418,16 +418,7 @@ export class ManagedProcessRegistry {
     this.processes.clear();
   }
   private processes = new Map<string, Map<string, ManagedProcessRuntime>>();
-  /**
-   * Processes a live `wait` is blocked on.
-   *
-   * A settlement that RELEASES a waiter has already been read by the caller, so
-   * announcing it again tells the model something it just collected — the
-   * reference implementation calls this `awaited` and skips the notice for it.
-   * Without the set, `process_wait` and the settlement notice double-report one
-   * exit.
-   */
-  private readonly awaited = new Set<string>();
+
   private deadlines = new Map<string, ReturnType<typeof setTimeout>>();
   private sequences = new Map<string, number>();
   private loadedRoots = new Set<string>();
@@ -545,9 +536,7 @@ export class ManagedProcessRegistry {
     // inside its executor where it is not (T-03).
     const alreadySettled = await this.settleFromRecord(context, info);
     if (alreadySettled) return alreadySettled;
-    // Marked BEFORE the promise so a settlement that lands between here and the
-    // subscription is still recognised as awaited.
-    this.awaited.add(id);
+
     return await new Promise<ManagedProcessSettledEvent | undefined>(
       (resolve) => {
         let unsubscribe = () => {};
@@ -555,7 +544,7 @@ export class ManagedProcessRegistry {
         const finish = (result: ManagedProcessSettledEvent | undefined) => {
           if (timer) clearTimeout(timer);
           timer = undefined;
-          this.awaited.delete(id);
+
           unsubscribe();
           resolve(result);
         };
@@ -645,8 +634,7 @@ export class ManagedProcessRegistry {
         ? {}
         : { exitCode: info.exitCode }),
     };
-    // A waiter that is about to be released does not also need a notice.
-    if (!this.awaited.delete(info.id)) this.notifySettled(event);
+    this.notifySettled(event);
     return event;
   }
 

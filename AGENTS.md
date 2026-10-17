@@ -71,8 +71,10 @@ the reference.
 - The full suite takes about nine minutes. Do not rerun it to "check". One
   full `npm run verify` before claiming done, and quote the parts that
   matter.
-- On Windows, remove `dist/ts/client-test-workspaces` after a full suite
-  run, or `guard:test-workspaces` fails on EBUSY leftovers.
+- `guard:test-workspaces` checks the property statically (every file importing
+  `plugin-test-helpers` must call `useWorkspaceCleanup()`) and reclaims the
+  workspaces teardown could not unlink on Windows. A green suite stays green;
+  a forgotten call is still red.
 
 ### 9. History
 
@@ -153,8 +155,9 @@ AI agent 在本仓库工作的规则。[CONTRIBUTING.md](CONTRIBUTING.md) 是工
   目录。
 - 全量套件约 9 分钟。不要为了「检查一下」反复跑全量。收尾跑一次 `npm run verify`，
   并引用其中关键部分的输出。
-- Windows 上跑完全量套件后，删掉 `dist/ts/client-test-workspaces`，否则
-  `guard:test-workspaces` 会因 EBUSY 残留失败。
+- `guard:test-workspaces` 静态检查这条性质（每个 import 了 `plugin-test-helpers`
+  的文件必须调用 `useWorkspaceCleanup()`），并回收 Windows 上 teardown 删不掉的
+  目录。绿套件保持绿；漏了 hook 仍然红。
 
 ### 9. 历史
 

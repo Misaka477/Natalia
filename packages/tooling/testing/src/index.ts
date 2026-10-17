@@ -2,6 +2,7 @@ export * from "./data";
 export * from "./official-plugin-fixtures";
 export * from "./service-graph";
 export * from "./provider-fixtures";
+export * from "./test-workspace-hygiene";
 export {
   SnapshotSandboxManager as SnapshotSandboxTestManager,
   WorktreeSandboxManager as WorktreeSandboxTestManager,

@@ -37,6 +37,19 @@ const officialPluginDistribution = resolve(
   import.meta.dir,
   "../../../../dist/ts/plugins",
 );
+// The checkout's host-helper tier. An official plugin is a BUNDLE whose
+// `import.meta.dir` is its own directory inside `dist/ts/plugin-store/…`, so it
+// cannot reach `packages/hosts/platform/prebuilt/` on its own, and under
+// `bun test` the install-root tier points at bun itself rather than a release.
+// Measured: `process_start` answered "the detached-process owner is not built
+// for this host" while the binary sat in the checkout. The override names the
+// tier explicitly; a release never needs it (its install root already holds
+// `prebuilt/<triple>/`).
+process.env.NATALIA_PREBUILT_DIR ??= resolve(
+  import.meta.dir,
+  "../../../../packages/hosts/platform/prebuilt",
+  `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : process.platform}-${process.arch}`,
+);
 const officialPluginTestWorkspaces = resolve(
   "dist",
   "ts",

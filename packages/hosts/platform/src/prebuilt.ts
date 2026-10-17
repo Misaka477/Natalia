@@ -40,6 +40,15 @@ function isBunEmbeddedPath(dir: string): boolean {
  * The directory a host helper is loaded from, or undefined when this host has
  * none — a checkout that has not run the build, or a platform with no helper.
  *
+ * `NATALIA_PREBUILT_DIR` wins outright when it names an existing directory.
+ * That tier exists for the one caller the rest of this search cannot serve: a
+ * PLUGIN BUNDLE, whose `import.meta.dir` is the bundle's own directory inside
+ * `dist/ts/plugin-store/…` rather than the platform package's. Tier 1 does not
+ * save it either, because under `bun test` `process.execPath` is bun itself.
+ * Measured: the process tool refused every `process_start` with "the
+ * detached-process owner is not built for this host" while the binary sat in
+ * the checkout, and the release tree was unaffected (tier 1 holds there).
+ *
  * @param os - the platform to resolve for (runtime check, never baked in).
  * @param packageRoot - the host package's own directory, for the checkout tier.
  */
@@ -48,6 +57,8 @@ export function hostPrebuiltDir(
   packageRoot: string = dirname(import.meta.dir),
 ): string | undefined {
   const triple = hostPlatformTriple(os);
+  const override = process.env.NATALIA_PREBUILT_DIR;
+  if (override && existsSync(override)) return override;
   const candidates = [dirname(process.execPath), dirname(process.argv[0] ?? "")]
     .filter((dir) => dir.length > 0 && !isBunEmbeddedPath(dir))
     .map((dir) => join(dir, "prebuilt", triple));

@@ -221,7 +221,12 @@ test("a tool can extend its timeout through a bounded per-call argument", async 
 test("runtime status counts managed background processes", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-runtime-background-"));
   const handled = new Set<string>();
-  const client = createRealRuntimeClient({
+  // The process tools are a PLUGIN's (`natalia-tool-process`, session scope), so
+  // the runtime has to be the official one: a bare client answers the model's
+  // `process_start` with "Unknown tool", the count stays 0, and the test fails
+  // on the platform where the tool genuinely comes from the plugin rather than
+  // from the built-in surface.
+  const client = createOfficialRuntimeClient({
     workspaceRoot: root,
     sessionID: "ses_runtime_background",
     permissionMode: "auto",

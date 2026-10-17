@@ -25,6 +25,10 @@ function formatMs(ms: number): string {
  * decode throughput. Session-scoped like the Work Graph: it reads the currently
  * active session's state, so switching sessions switches the figures. Cost is
  * intentionally absent (the user computes it).
+ *
+ * `steps` counts PROVIDER steps — one per `runtime.step_usage`, the same
+ * authority the runtime's status snapshot now reports, so the bar and
+ * `/status` cannot describe one run with two numbers.
  */
 export function SessionUsageBar(props: {
   state?: AppState;
@@ -46,7 +50,7 @@ export function SessionUsageBar(props: {
     <div class="session-usage-bar">
       <span
         class="session-usage-seg"
-        title="Turns / provider steps this session"
+        title="本会话轮数 / provider 步数（每次模型调用计一步）"
       >
         {view().turns} 轮 · {view().steps} 步
       </span>

@@ -1299,10 +1299,21 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   transform: scale(0.82);
   opacity: 0.85;
 }
+/* A running turn does NOT restyle the send key. ZCode's composer state machine
+   is explicit about it: streaming with an EMPTY draft shows Stop, and with a
+   draft the send key stays the ordinary send key — the message is queued
+   (showStopControl = canStop && !hasDraftToSubmit), so "queued" is a delivery
+   mode, not a dangerous action. DSH spells the same vocabulary
+   (BusyEnterBehavior = 'queue' | 'steer'). This rule used to paint the key
+   --neu-error and give it INSET shadows while a turn ran, which read as a
+   pressed, refused control; the delivery mode is what the tooltip says
+   ("发送并注入当前轮"), and the color stays the accent's. Stop keeps the red —
+   it is the control that actually interrupts the turn. */
 .neu-pane .natalia-composer-submit[data-busy="true"] {
-  color: var(--neu-error);
-  background: var(--neu-error-soft);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  color: var(--neu-accent);
+  background: var(--neu-bg-light);
+  box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+    -3px -3px 6px var(--neu-shadow-light);
 }
 .neu-pane .natalia-composer-stop {
   width: 34px;

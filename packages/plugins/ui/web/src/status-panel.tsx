@@ -265,6 +265,20 @@ export function StatusPanel(props: {
                     {statusData()?.context ?? "—"}
                   </span>
                 </div>
+                {/* Provider steps, the same figure the session usage bar
+                      counts — one per `runtime.step_usage`. The runtime's
+                      `step` field is the journal's entry count, a different
+                      measure that used to be printed as "steps" and made one
+                      run read as 422 here and 140 on the usage bar. */}
+                <div class="neu-status-card">
+                  <span class="neu-status-card-label">步数</span>
+                  <span
+                    class="neu-status-card-value"
+                    title="provider 步数：每次模型调用计一步"
+                  >
+                    {statusData()?.steps ?? "—"}
+                  </span>
+                </div>
               </div>
             </Show>
             <Show when={tab() === "diagnostics"}>

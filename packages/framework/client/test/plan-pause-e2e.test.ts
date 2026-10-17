@@ -203,7 +203,12 @@ test("a terminal plan refuses pause and resume (T-20)", async () => {
         event.type === "plan.doc.status",
     )
     .map((event) => event.status);
-  expect(statuses).toEqual(["completed"]);
+  // The plan's own history now starts at its REGISTRATION (`draft` on the write,
+  // `marked` when it was marked), so the assertion is about what this test is
+  // for: the terminal status is not resurrected by a refused pause.
+  expect(statuses.at(-1)).toBe("completed");
+  expect(statuses).not.toContain("paused");
+  expect(statuses).not.toContain("executing");
   const list = await client.planDocList!();
   expect(list.find((plan) => plan.planID === planID)?.status).toBe("completed");
   await client.dispose?.();

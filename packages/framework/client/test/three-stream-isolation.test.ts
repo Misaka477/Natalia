@@ -552,6 +552,12 @@ test("a completion wakes Nia; a status write alone wakes nobody (the cut)", asyn
                   taskID: completionTaskID,
                   objective: "close the audit line",
                   changeSummary: "one trigger, projected lifecycle",
+                  // The completion gate judges the STATEMENT (B10b): this
+                  // fixture runs no check at all, so it says so instead of
+                  // claiming an evidence class it never produced.
+                  knownGaps: [
+                    "fixture: the audit line is under test, not the evidence",
+                  ],
                 }),
               },
             ],
@@ -657,7 +663,15 @@ test("a completion wakes Nia; a status write alone wakes nobody (the cut)", asyn
           (event as { planID?: string }).planID === marked.planID,
       )
       .map((event) => (event as { status: string }).status);
-    expect(lifecycle).toEqual(["awaiting_audit", "auditing", "completed"]);
+    // The plan's own history now starts at its registration: the write created
+    // it as `draft` (a `plan.doc.created` fact, not a status row) and the mark
+    // published `marked`. The audit chain after it is unchanged.
+    expect(lifecycle).toEqual([
+      "marked",
+      "awaiting_audit",
+      "auditing",
+      "completed",
+    ]);
     // The cut: writing the status (the OLD trigger's own input) wakes
     // nobody — no new wake request appears, before vs after the write. The
     // write is now REFUSED outright (T-20: a completed plan is terminal, so

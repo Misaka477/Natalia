@@ -39,8 +39,11 @@ export async function requestAuditAfterCompletion(
   // record saying why. An audit is a review of a plan's claim; without the plan
   // it is a ritual, and a ritual that wakes another agent is worse than silence —
   // so this refuses and SAYS SO instead.
+  // Listed WITHOUT a session filter: the index is workspace-scoped, and a plan
+  // registered by a client seam (or before this session existed) belongs to no
+  // session — filtering by one hid exactly the plans this gate must find.
   const plans = await ctx.ports.planDocRuntime
-    ?.planDocList?.(exec.session.id)
+    ?.planDocList?.()
     .catch(() => undefined);
   const registered = plans?.some((plan) => plan.planID === completion.taskID);
   if (!registered)

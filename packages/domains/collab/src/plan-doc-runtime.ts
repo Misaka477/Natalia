@@ -334,7 +334,44 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       const existing = Object.values(entries).find(
         (entry) => entry.documentPath === relativePlanPath(ctx, targetPath),
       );
-      if (existing) return { marked: true, planID: existing.planID };
+      if (existing) {
+        // A mark on a REGISTERED plan is a status action, not a second
+        // registration: `plan_doc_write` registered it as `draft`, and marking
+        // it is what lifts that to `marked`. The id never changes.
+        if (existing.status === "draft") {
+          const now = new Date().toISOString();
+          entries[existing.planID] = {
+            ...existing,
+            status: "marked",
+            updatedAt: now,
+            markedAt: now,
+          };
+          await writeIndex(ctx, entries);
+          publish(
+            requireWorkLedger().buildPlanDocStatus({
+              id: `${existing.planID}:status:${ctx.ports.nextPlanSequence()}`,
+              planID: existing.planID,
+              status: "marked",
+              at: now,
+            }),
+            input.sessionID,
+          );
+          // The graph node is emitted at MARKING (the 2026-10-07 gap pass), and
+          // marking is now reachable from the registered path as well — a plan
+          // written and then marked must still appear in `work_graph_query`.
+          const markedExec = sessionExec(input.sessionID);
+          if (markedExec)
+            publish(
+              requireWorkLedger().planNode({
+                planID: existing.planID,
+                title: existing.title,
+                sessionID: markedExec.session.id,
+              }),
+              input.sessionID,
+            );
+        }
+        return { marked: true, planID: existing.planID };
+      }
       const planID = `${planIDForPath(relativePlanPath(ctx, targetPath))}_${Date.now().toString(36)}`;
       const now = new Date().toISOString();
       const record: IndexEntry = {

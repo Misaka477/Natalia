@@ -49,7 +49,9 @@ test("the delivery mode rides the tooltip, and Stop keeps the red", async () => 
       "$1",
     ),
   ).text();
-  expect(composer).toContain('title={props.busy ? "发送并注入当前轮" : "发送"}');
+  expect(composer).toContain(
+    'title={props.busy ? "发送并注入当前轮" : "发送"}',
+  );
   // The interrupt control is the red one, and it is a separate control.
   expect(composer).toContain("natalia-composer-stop");
   const stopRule = styles.slice(

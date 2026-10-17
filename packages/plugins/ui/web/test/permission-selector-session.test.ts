@@ -97,4 +97,3 @@ test("the top bar no longer renders a danger badge", () => {
   expect(app).not.toContain("DangerBadge");
   expect(app).not.toContain("neu-danger-badge");
 });
-

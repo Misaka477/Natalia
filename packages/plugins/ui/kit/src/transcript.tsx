@@ -1780,10 +1780,7 @@ function ToolCallCard(props: {
             belongs on the row. Absent while running and on a row recorded
             before the field existed: no confident 0. */}
         <Show when={props.toolCall.durationMs !== undefined}>
-          <span
-            class="natalia-tool-duration"
-            title="本次工具调用的耗时"
-          >
+          <span class="natalia-tool-duration" title="本次工具调用的耗时">
             {formatToolDuration(props.toolCall.durationMs!)}
           </span>
         </Show>

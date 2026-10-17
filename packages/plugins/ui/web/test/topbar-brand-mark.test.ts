@@ -28,7 +28,14 @@ test("the top bar renders the image, and no letter", async () => {
 });
 
 test("the logo frame keeps its shape and drops the placeholder styling", async () => {
-  const styles = await source("plugins", "ui", "web", "src", "styles", "base.ts");
+  const styles = await source(
+    "plugins",
+    "ui",
+    "web",
+    "src",
+    "styles",
+    "base.ts",
+  );
   const at = styles.indexOf(".neu-topbar-logo {");
   expect(at).toBeGreaterThan(0);
   const rule = styles.slice(at, styles.indexOf("}", at));
@@ -42,10 +49,14 @@ test("the mark comes from the icon master, not a hand-drawn copy", async () => {
   // `repo` here is the `packages` directory (four levels up from this test);
   // the generator and the shell's public dir sit one level above it.
   const root = join(repo, "..");
-  const script = await Bun.file(join(root, "scripts", "build-app-icons.ts")).text();
+  const script = await Bun.file(
+    join(root, "scripts", "build-app-icons.ts"),
+  ).text();
   // One source, one generator: the web copy is rendered from the same variant
   // as every other icon output, not duplicated by hand.
-  expect(script).toContain("const WEB_BRAND = join(ROOT, \"apps\", \"web\", \"public\", \"brand.png\")");
+  expect(script).toContain(
+    'const WEB_BRAND = join(ROOT, "apps", "web", "public", "brand.png")',
+  );
   expect(script).toContain("const WEB_BRAND_SIZE = 64");
   expect(script).toContain("const brand = rendered.get(WEB_BRAND_SIZE)!");
   // And the generated file is in the tree the shell serves.

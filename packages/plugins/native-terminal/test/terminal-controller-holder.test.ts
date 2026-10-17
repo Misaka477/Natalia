@@ -152,7 +152,10 @@ test("another workspace root's plugin instance never closes this root's panes", 
   ).toEqual(["term_first_root"]);
 
   // And the first root's next plugin instance still adopts ITS controller.
-  const firstAgain = adoptTerminalController(inputs(firstRoot, factory), create);
+  const firstAgain = adoptTerminalController(
+    inputs(firstRoot, factory),
+    create,
+  );
   expect(firstAgain.adopted).toBe(true);
   expect(firstAgain.controller).toBe(first.controller);
 

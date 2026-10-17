@@ -38,11 +38,25 @@ test("the contract carries the duration on both tool-event shapes", async () => 
 test("every agent path measures its own call", async () => {
   const sites: Array<[string[], string]> = [
     [
-      ["framework", "client", "src", "runtime", "tool-execution", "execute-run.ts"],
+      [
+        "framework",
+        "client",
+        "src",
+        "runtime",
+        "tool-execution",
+        "execute-run.ts",
+      ],
       "durationMs: Date.now() - startedAtMs",
     ],
     [
-      ["framework", "client", "src", "runtime", "initialize", "subagent-tools.ts"],
+      [
+        "framework",
+        "client",
+        "src",
+        "runtime",
+        "initialize",
+        "subagent-tools.ts",
+      ],
       "durationMs: Date.now() - startedAt",
     ],
     [
@@ -73,18 +87,23 @@ test("the main path times a FAILED call too, not just a successful one", async (
   // are the same measurement rather than two.
   expect(text).toContain("const startedAtMs = Date.now()");
   expect(text).toContain("startedAt: startedAtMs");
-  expect((text.match(/durationMs: Date\.now\(\) - startedAtMs/gu) ?? []).length).toBe(
-    2,
-  );
+  expect(
+    (text.match(/durationMs: Date\.now\(\) - startedAtMs/gu) ?? []).length,
+  ).toBe(2);
 });
 
 test("the projection carries it and the card renders it, with no confident zero", async () => {
   const state = await source("hosts", "view-store", "src", "state.ts");
   expect(state).toContain("durationMs?: number");
-  const conversation = await source("hosts", "view-store", "src", "conversation.ts");
-  expect((conversation.match(/durationMs/gu) ?? []).length).toBeGreaterThanOrEqual(
-    2,
+  const conversation = await source(
+    "hosts",
+    "view-store",
+    "src",
+    "conversation.ts",
   );
+  expect(
+    (conversation.match(/durationMs/gu) ?? []).length,
+  ).toBeGreaterThanOrEqual(2);
   const kit = await source("plugins", "ui", "kit", "src", "transcript.tsx");
   // Rendered only when the event carried one: a running call and a replayed
   // pre-field event show nothing rather than "0ms".

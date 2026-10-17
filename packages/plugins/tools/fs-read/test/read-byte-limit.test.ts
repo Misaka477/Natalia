@@ -35,7 +35,9 @@ test("a minified file's read is bounded by BYTES, not by lines", async () => {
   await writeFile(join(root, "min.html"), `${line}\n`.repeat(40), "utf8");
 
   const { readFileTools } = await import("../src/fs-read-tools");
-  const tool = readFileTools.find((candidate) => candidate.name === "read_file")!;
+  const tool = readFileTools.find(
+    (candidate) => candidate.name === "read_file",
+  )!;
   const result = JSON.parse(
     await tool.execute({ path: "min.html" }, { workspaceRoot: root } as never),
   ) as { content: string; totalLines: number; truncated: boolean };
@@ -57,7 +59,9 @@ test("a small file is untouched by the byte ceiling", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-read-small-"));
   await writeFile(join(root, "small.txt"), "a\nb\nc\n", "utf8");
   const { readFileTools } = await import("../src/fs-read-tools");
-  const tool = readFileTools.find((candidate) => candidate.name === "read_file")!;
+  const tool = readFileTools.find(
+    (candidate) => candidate.name === "read_file",
+  )!;
   const result = JSON.parse(
     await tool.execute({ path: "small.txt" }, { workspaceRoot: root } as never),
   ) as { content: string; truncated: boolean };

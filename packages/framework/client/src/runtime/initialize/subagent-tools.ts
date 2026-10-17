@@ -52,7 +52,8 @@ function boundToolResultForModel(result: string): string {
   const tail = buffer
     .subarray(buffer.length - CHILD_RESULT_TAIL_BYTES)
     .toString("utf8");
-  const omitted = totalBytes - CHILD_RESULT_HEAD_BYTES - CHILD_RESULT_TAIL_BYTES;
+  const omitted =
+    totalBytes - CHILD_RESULT_HEAD_BYTES - CHILD_RESULT_TAIL_BYTES;
   return `${head}\n…\n(Omitted ${omitted} bytes of ${totalBytes}. The full result is recorded on this tool call; re-run it with a narrower window to see the rest.)\n…\n${tail}`;
 }
 

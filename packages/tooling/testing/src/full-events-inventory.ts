@@ -102,11 +102,12 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "resident-defaults and a telemetry field pass in the wire",
   },
-  "packages/framework/client/src/runtime/initialize/framework-runtime-status.ts": {
-    count: 1,
-    cls: "derivation",
-    note: "providerStepsFor: the status snapshot's provider-step figure, folded once and cached on the exec keyed by event count (the same guard snapshot.ts uses) — a derivation over what is resident, never a per-refresh rescan",
-  },
+  "packages/framework/client/src/runtime/initialize/framework-runtime-status.ts":
+    {
+      count: 1,
+      cls: "derivation",
+      note: "providerStepsFor: the status snapshot's provider-step figure, folded once and cached on the exec keyed by event count (the same guard snapshot.ts uses) — a derivation over what is resident, never a per-refresh rescan",
+    },
   "packages/framework/client/src/runtime/initialize/finalize.ts": {
     count: 1,
     cls: "explicit-history",

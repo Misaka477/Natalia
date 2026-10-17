@@ -33,11 +33,7 @@ async function source(...segments: string[]): Promise<string> {
 }
 
 /** The execution site of one agent surface: the call and the gate beside it. */
-async function site(
-  path: string[],
-  call: string,
-  gate: string,
-): Promise<void> {
+async function site(path: string[], call: string, gate: string): Promise<void> {
   const text = await source(...path);
   const at = text.indexOf(call);
   expect(at, `${path.join("/")} executes tools at ${call}`).toBeGreaterThan(0);
@@ -63,7 +59,9 @@ test("natalia's own path is the gate's home", async () => {
   expect(at).toBeGreaterThan(0);
   // The bound wraps the redacted, finalized content — the order the other
   // surfaces now copy.
-  expect(text.slice(at, at + 260)).toContain("redactToolOutput(finalizedContent");
+  expect(text.slice(at, at + 260)).toContain(
+    "redactToolOutput(finalizedContent",
+  );
 });
 
 test("navi's chat turn runs the same bound", async () => {
@@ -89,7 +87,14 @@ test("a subagent's tool call runs the same bound, in memory", async () => {
   // acceptance tests caught the moment this path started spilling. The child
   // bounds head+tail in memory instead, with the notice naming the size.
   await site(
-    ["framework", "client", "src", "runtime", "initialize", "subagent-tools.ts"],
+    [
+      "framework",
+      "client",
+      "src",
+      "runtime",
+      "initialize",
+      "subagent-tools.ts",
+    ],
     "const completeResult = await tool.execute(parsed, {",
     "boundToolResultForModel(",
   );

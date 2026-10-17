@@ -33,7 +33,13 @@ test("an unchanged branch keeps the previous snapshot's identity", () => {
   // And a row that did not move is the same object across frames.
   const streamed = structuralClone(
     second,
-    state([{ id: "a", text: "hi" }, { id: "b", text: "partial" }], 1),
+    state(
+      [
+        { id: "a", text: "hi" },
+        { id: "b", text: "partial" },
+      ],
+      1,
+    ),
   );
   expect(streamed.rows[0]).toBe(second.rows[0]);
   expect(streamed.rows[1]).not.toBe(second.rows[1]);

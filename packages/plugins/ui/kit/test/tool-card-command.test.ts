@@ -34,7 +34,9 @@ test("the command is a body line of the EXPANDED card, not only a clipped header
   // title plus a hover is the collapsed form.
   expect(body).toContain("if (!title || !expanded()) return [];");
   // It rides the same line list the cap and the fold read.
-  expect(kit).toContain("const allLines = () => [...commandLines(), ...bodyLines()];");
+  expect(kit).toContain(
+    "const allLines = () => [...commandLines(), ...bodyLines()];",
+  );
 });
 
 test("the fold toggle's count includes the command, and a card with no output still opens", () => {
@@ -42,7 +44,9 @@ test("the fold toggle's count includes the command, and a card with no output st
   // delivers exactly N.
   const at = kit.indexOf("const totalLineCount = () =>");
   expect(at).toBeGreaterThan(0);
-  expect(kit.slice(at, at + 160)).toContain("bodyLines().length + commandLineCount()");
+  expect(kit.slice(at, at + 160)).toContain(
+    "bodyLines().length + commandLineCount()",
+  );
   // Hidden lines include the command while closed, which is what makes the
   // toggle appear for a card whose output is empty.
   const hidden = kit.indexOf("const hiddenCount = () =>");
@@ -50,9 +54,13 @@ test("the fold toggle's count includes the command, and a card with no output st
   expect(kit.slice(hidden, hidden + 260)).toContain(
     "(expanded() ? 0 : commandLineCount())",
   );
-  expect(kit).toContain("展开全部（${totalLineCount()} 行，已折叠 ${hiddenCount()} 行）");
+  expect(kit).toContain(
+    "展开全部（${totalLineCount()} 行，已折叠 ${hiddenCount()} 行）",
+  );
 });
 
 test("the header's clipped title carries the full command as its hover", () => {
-  expect(kit).toContain('<span class="natalia-tool-title" title={card?.title}>');
+  expect(kit).toContain(
+    '<span class="natalia-tool-title" title={card?.title}>',
+  );
 });

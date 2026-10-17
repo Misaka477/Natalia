@@ -707,10 +707,33 @@ export class ManagedProcessRegistry {
     return `${info.output}\n[output truncated; showing the last ${served} of ${totalBytes} bytes; full output at ${info.outputPath}]`;
   }
 
+  /**
+   * A process belongs to the session that started it.
+   *
+   * Ids are predictable and the registry is per WORKSPACE, so without this a
+   * second session in the same workspace could stop the first one's dev server
+   * (measured: `stop`/`restart`/`attach`/`detach` took only a workspace root).
+   * The reference implementation fences by owner session for exactly this
+   * reason: the boundary is authorization, not secrecy. A record written before
+   * the field existed carries no owner and stays manageable by anyone.
+   */
+  private assertOwner(
+    info: ManagedProcessRuntime,
+    context: ToolExecutionContext,
+  ) {
+    const owner = info.startedBySessionID;
+    const caller = context.sessionID;
+    if (!owner || !caller || owner === caller) return;
+    throw new Error(
+      `process ${info.id} belongs to session ${owner}; this session cannot change it (read it with process_status or process_output instead)`,
+    );
+  }
+
   async stop(id: string, context: ToolExecutionContext) {
     await this.load(context);
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
+    this.assertOwner(info, context);
     this.clearDeadline(this.deadlineKey(context, id));
     if (info.status === "running" && info.pid)
       await stopProcessTree(
@@ -734,6 +757,10 @@ export class ManagedProcessRegistry {
   }
 
   async restart(id: string, context: ToolExecutionContext) {
+    await this.load(context);
+    const record = this.workspaceProcesses(context).get(id);
+    if (!record) throw new Error(`process not found: ${id}`);
+    this.assertOwner(record, context);
     const current = await this.get(id, context);
     if (current.status === "running") await this.stop(id, context);
     this.workspaceProcesses(context).delete(id);
@@ -749,6 +776,7 @@ export class ManagedProcessRegistry {
     await this.load(context);
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
+    this.assertOwner(info, context);
     info.attached = true;
     await this.save(context);
     await this.settleFromRecord(context, info);
@@ -759,6 +787,7 @@ export class ManagedProcessRegistry {
     await this.load(context);
     const info = this.workspaceProcesses(context).get(id);
     if (!info) throw new Error(`process not found: ${id}`);
+    this.assertOwner(info, context);
     info.attached = false;
     await this.save(context);
     await this.settleFromRecord(context, info);

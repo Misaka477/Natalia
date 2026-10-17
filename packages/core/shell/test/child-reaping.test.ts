@@ -31,8 +31,15 @@ function alive(pid: number): boolean {
 
 test("terminateShellChildren stops a command still running", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "shell-reap-"));
-  const spec = executor.resolve({ command: slow, workdir: cwd, timeoutMs: 60_000 });
-  const started = await executor.start(spec, { command: slow, workspaceRoot: cwd });
+  const spec = executor.resolve({
+    command: slow,
+    workdir: cwd,
+    timeoutMs: 60_000,
+  });
+  const started = await executor.start(spec, {
+    command: slow,
+    workspaceRoot: cwd,
+  });
   const pid = started.pid;
   expect(pid).toBeDefined();
   // A detached POSIX child is in its own group; the Windows child is a real

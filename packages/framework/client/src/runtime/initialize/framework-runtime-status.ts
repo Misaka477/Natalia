@@ -19,7 +19,7 @@ import { projectSession } from "@anthelia/session";
 import { EGRESS_ADVISORY } from "../../egress-advisory";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
-import { wireProcessSettledNotices } from "./process-settled-notices";
+
 import { statusSnapshotController } from "@anthelia/runtime-status";
 import type { StatusSnapshotController } from "@anthelia/runtime-status";
 
@@ -128,13 +128,13 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
   // The controller binds through the service directory; the owner stays for
   // the commands contributions below.
   ctx.state.serviceDirectory.provide(statusSnapshotController, controller);
-  // Managed-process exits reach the session that started them. Wired here
-  // because this is where the capability registry is already in hand.
-  const unwatchProcesses = wireProcessSettledNotices(ctx, {
-    service: <T>(name: string) => registry.service<T>(name),
-    onServiceUpdate: (listener: () => void) =>
-      registry.onServiceUpdate(listener),
-  });
+  // Managed-process exits reach the session that started them through the
+  // SETTLEMENT spine (`ManagedProcessRegistry.notifySettled` → `deliverSettlement`
+  // → a durable notice plus a next-step injection or a woken turn). They used to
+  // arrive twice: a second subscription appended a `process_settled:<id>` dynamic
+  // entry for the same exit, so the model read two tellings of one fact — the
+  // thing that file's own comment set out to prevent.
+  const unwatchProcesses = () => {};
   owner.contribute("commands", "help", {
     name: "help",
     title: "Help",

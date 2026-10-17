@@ -146,7 +146,10 @@ function spillTargets(
   try {
     const dir = join(workspaceRoot, ".natalia", "tool-output");
     mkdirSync(dir, { recursive: true });
-    const stem = join(dir, `stream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+    const stem = join(
+      dir,
+      `stream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    );
     return { stdout: `${stem}.stdout.log`, stderr: `${stem}.stderr.log` };
   } catch {
     return undefined;

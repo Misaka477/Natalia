@@ -25,6 +25,49 @@ function processRegistryTools(registry = new ManagedProcessRegistry()) {
   );
 }
 
+test("a process belongs to the session that started it", async () => {
+  // Measured defect this pins: `stop` / `restart` / `attach` / `detach` took
+  // only a workspace root, so a second session in the same workspace could stop
+  // the first one's dev server. The fence is authorization — the ids are
+  // predictable — and a record written before the field existed stays open.
+  const registry = new ManagedProcessRegistry();
+  const tools = processRegistryTools(registry);
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "process-owner-"));
+  const owner = {
+    workspaceRoot,
+    sessionID: "ses_owner",
+    settings: {},
+  } as never;
+  const stranger = {
+    workspaceRoot,
+    sessionID: "ses_stranger",
+    settings: {},
+  } as never;
+  const started = JSON.parse(
+    await tools.get("process_start")!.execute(
+      {
+        command: process.platform === "win32" ? "Start-Sleep 20" : "sleep 20",
+        description: "Hold a process for the ownership check",
+        id: "owned_1",
+      },
+      owner,
+    ),
+  ) as { id: string };
+  expect(started.id).toBe("owned_1");
+  // A read is still workspace-wide: the reader may look, not change.
+  await expect(
+    tools.get("process_status")!.execute({ id: "owned_1" }, stranger),
+  ).resolves.toContain("owned_1");
+  await expect(
+    tools.get("process_stop")!.execute({ id: "owned_1" }, stranger),
+  ).rejects.toThrow(/belongs to session ses_owner/u);
+  // The owner can stop it.
+  const stopped = JSON.parse(
+    await tools.get("process_stop")!.execute({ id: "owned_1" }, owner),
+  ) as { status: string };
+  expect(stopped.status).toBe("stopped");
+}, 60_000);
+
 test("the process family describes the tools it ships", () => {
   const family = processToolFamily();
   expect(family.id).toBe("process");

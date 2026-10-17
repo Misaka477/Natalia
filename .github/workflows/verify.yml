@@ -392,12 +392,16 @@ jobs:
           bun scripts/run-test-layer.ts ./packages/plugins/tools/shell/test 0 1
           --exclude parameter-descriptions
           --bun-arg --max-concurrency=2 --bun-arg --timeout --bun-arg 120000
+      # NO blank lines inside a `run: >` block: a folded scalar turns one into a
+      # newline, so the next path became a PowerShell command of its own and the
+      # step died with "The term './packages/framework/sandbox/test' is not
+      # recognized" AFTER all three layers had passed (measured on the
+      # windows-substrate job, 2026-10-17).
       - name: Platform-sensitive layers
         run: >
           bun test --max-concurrency=2 --timeout 120000
           ./packages/core/tools/test
           ./packages/core/shell/test
-
           ./packages/framework/sandbox/test
 
   guards:

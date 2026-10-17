@@ -786,6 +786,17 @@ export type ToolExecutionContext = {
     paths: string[];
   }) => Promise<void>;
   onSandboxEvent?: (event: { type: string; [key: string]: unknown }) => void;
+  /**
+   * The tool's own progress line, for a call that takes minutes.
+   *
+   * A long call used to be a black box for the READER: the row said "running" for
+   * nine minutes and nothing else — no elapsed time, no phase, no sign of life —
+   * and the only way to learn what was happening was to leave the product and read
+   * a log file. This is the channel that fixes it at the source: the tool says what
+   * it is doing, the runtime republishes it on the same row, and the card shows it.
+   * A tool that never calls it behaves exactly as before.
+   */
+  reportProgress?: (update: { summary: string }) => void;
   onWorkspaceChange?: (changes: SandboxChangeView[]) => void;
   /**
    * The runtime's resolved config, by name (the D2 `runtime.config` service),

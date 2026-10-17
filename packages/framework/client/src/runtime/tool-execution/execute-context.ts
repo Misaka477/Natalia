@@ -206,6 +206,19 @@ export function buildToolExecutionContext(input: BuildContextInput) {
     subagents,
     terminal,
     sandboxes,
+    // The tool's own progress line: the same row, republished while it runs. A
+    // nine-minute validation that says "running" and nothing else is the black
+    // box this closes — and it closes it in the product, not in a log file.
+    reportProgress: (update: { summary: string }) => {
+      publish({
+        type: "tool.update",
+        id: toolID,
+        name: tool.name,
+        callID: call.id,
+        status: "running",
+        summary: update.summary,
+      });
+    },
     ...(attachImage ? { attachImage } : {}),
     workspaceReadAuthorize: (request: { toolName: string; paths: string[] }) =>
       authorizeWorkspaceRead(request, exec),

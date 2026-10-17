@@ -176,6 +176,21 @@ export function createRecordValidationTool(
       let result: RunResult = "not_run";
       let runOutcome: ValidationOutcome | undefined;
       let runExitCode: number | undefined;
+      // A validation can run for minutes, so the row says what it is doing while
+      // it does it: elapsed time and the command, refreshed every few seconds on
+      // the SAME row. Before this the row said "running" and nothing else, and a
+      // reader had no way to tell a slow suite from a hung one without leaving
+      // the product for a log file.
+      const progressStart = Date.now();
+      const progressTimer = context.reportProgress
+        ? setInterval(() => {
+            const elapsed = Math.round((Date.now() - progressStart) / 1000);
+            context.reportProgress?.({
+              summary: `running ${(args.command ?? "").trim()} · ${Math.floor(elapsed / 60) > 0 ? `${Math.floor(elapsed / 60)}m ` : ""}${elapsed % 60}s elapsed`,
+            });
+          }, 3000)
+        : undefined;
+      progressTimer?.unref?.();
       let safeSummary = "validation command did not run";
       let artifactRef: string | undefined;
       try {
@@ -188,6 +203,7 @@ export function createRecordValidationTool(
             DEFAULT_VALIDATION_TIMEOUT_SEC,
           context.signal,
         );
+        if (progressTimer) clearInterval(progressTimer);
         runOutcome = run.outcome;
         if (run.exitCode !== undefined) runExitCode = run.exitCode;
         result =
@@ -237,6 +253,7 @@ export function createRecordValidationTool(
           }
         }
       } catch (error) {
+        if (progressTimer) clearInterval(progressTimer);
         safeSummary = `validation runner failed: ${error instanceof Error ? error.message : String(error)}`;
       }
       // The run also leaves the format CI already parses, beside its artifact: a

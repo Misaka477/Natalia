@@ -4,6 +4,7 @@ import type {
   InitializeOptions,
   RuntimeContext,
   RuntimeEvent,
+  RuntimeContextStatusConfig,
   SandboxService,
   SessionExecutionState,
   SessionID,
@@ -28,6 +29,7 @@ import { pathWithinDomains } from "../sandbox-policy";
 
 import { sandboxSelfDiffTool } from "@anthelia/sandbox";
 import { uniqueProviderToolCallIds } from "@anthelia/runtime";
+import { resolveSubagentModel } from "./subagent-model-profile";
 
 import type { RuntimeContextLedger } from "@natalia/context-ledger";
 
@@ -203,10 +205,17 @@ export async function installSubagents(
     runner: SubagentRunnerContext,
     exec: SessionExecutionState,
     activeProvider: StreamingProvider,
+    activeContextConfig: RuntimeContextStatusConfig,
   ) {
     await acquireSandboxedSubagentSlot(runner.signal);
     try {
-      await runSandboxedSubagentInner(task, runner, exec, activeProvider);
+      await runSandboxedSubagentInner(
+        task,
+        runner,
+        exec,
+        activeProvider,
+        activeContextConfig,
+      );
     } finally {
       releaseSandboxedSubagentSlot();
       await releaseSubagentSteering(runner);
@@ -217,6 +226,7 @@ export async function installSubagents(
     runner: SubagentRunnerContext,
     exec: SessionExecutionState,
     activeProvider: StreamingProvider,
+    activeContextConfig: RuntimeContextStatusConfig,
   ) {
     const record = subagentsController.get(runner.agentId);
     if (!record)
@@ -289,7 +299,6 @@ export async function installSubagents(
     );
     const repeatedCalls = new Map<string, number[]>();
     const maxSubagentSteps = scope.effectiveMaxSteps(exec);
-    const activeContextConfig = { ...exec.runtimeContextConfig };
     for (let step = 1; step <= maxSubagentSteps; step++) {
       const isLastStep =
         Number.isFinite(maxSubagentSteps) && step >= maxSubagentSteps;
@@ -468,12 +477,32 @@ export async function installSubagents(
       const parentSessionID = record?.parentSessionID;
       if (!parentSessionID) throw new Error("subagent has no parent session");
       const exec = await scope.ensureExecution(parentSessionID as SessionID);
-      const activeProvider = exec.provider;
+      // The child's OWN model, when `modelProfile` names one: its provider AND
+      // its window, resolved through the same path the session uses. A child on
+      // the parent's budget is either compacted far too early or believes in a
+      // window its model does not have — and this says which one happened.
+      const model = await resolveSubagentModel({
+        ...(record?.modelProfile ? { profile: record.modelProfile } : {}),
+        inheritedProvider: exec.provider as StreamingProvider,
+        inheritedBudget: exec.runtimeContextConfig,
+        ...(scope.tsRuntimeConfig ? { config: scope.tsRuntimeConfig } : {}),
+        resolver: scope.contextWindowResolver,
+        ...(parentSessionID ? { sessionID: parentSessionID } : {}),
+      });
+      const activeProvider = model.provider;
+      if (model.own) runner.log(`model: ${model.reason}`);
+      else runner.log(`model: inheriting the parent's — ${model.reason}`);
       if (!activeProvider) throw new Error("provider unavailable for subagent");
       // `mode: "sandbox"` routes to the sub-agent's own worktree; everything
       // else keeps the shared-context loop unchanged.
       if (record?.mode === "sandbox")
-        return await runSandboxedSubagent(task, runner, exec, activeProvider);
+        return await runSandboxedSubagent(
+          task,
+          runner,
+          exec,
+          activeProvider,
+          model.budget,
+        );
       const allowed = record?.allowedTools ?? [];
       const excluded = new Set(record?.excludeTools ?? []);
       const resume = await loadSubagentLedgerCheckpoint(runner.agentId);
@@ -501,7 +530,8 @@ export async function installSubagents(
       runner.log(`accepted: ${task}`);
       beginSubagentConversation(runner, task);
       const maxSubagentSteps = scope.effectiveMaxSteps(exec);
-      const activeContextConfig = { ...exec.runtimeContextConfig };
+      // The window that belongs to the model this child will call.
+      const activeContextConfig = { ...model.budget };
       for (let step = 1; step <= maxSubagentSteps; step++) {
         const isLastStep =
           Number.isFinite(maxSubagentSteps) && step >= maxSubagentSteps;

@@ -137,6 +137,79 @@ describe("assayRunFor", () => {
   test("no evidence means no run at all", () => {
     expect(assayRunFor({ evidence: [], classesFor })).toBeUndefined();
   });
+
+  test("a declared check with no recorded run is a not_run step, and its classes stay open", () => {
+    // The project declared three checks; the session recorded one. The page must
+    // show the two that never ran — that grey row is the whole point of asking
+    // the project what its checks are instead of guessing from a task kind.
+    const run = assayRunFor({
+      evidence: [
+        {
+          id: "e",
+          taskID: "t",
+          objective: "o",
+          validations: [
+            {
+              command: "bun test",
+              result: "passed",
+              safeSummary: "ok",
+              assayRole: "authoritative",
+            },
+          ],
+        },
+      ],
+      classesFor,
+      declaration: {
+        checks: [
+          { command: "bun test", covers: ["validation:test"] },
+          { command: "bun run typecheck", covers: ["validation:typecheck"] },
+          { command: "npm run docs:check", covers: ["validation:any"] },
+        ],
+      },
+    });
+    expect(
+      run?.steps.map((step) => [step.command, step.result, step.declared]),
+    ).toEqual([
+      ["bun test", "passed", undefined],
+      ["bun run typecheck", "not_run", true],
+      ["npm run docs:check", "not_run", true],
+    ]);
+    // A declared-and-not-run check has NO runner: `role` must stay absent rather
+    // than claiming the author measured it.
+    expect(run?.steps[1]!.role).toBeUndefined();
+    expect(run?.notChecked).toContain("validation:typecheck");
+    expect(run?.warrant).toBe("unwarranted");
+    expect(run?.note).toContain("declared and not run");
+    expect(run?.note).toContain("bun run typecheck");
+  });
+
+  test("every declared check that ran leaves nothing open from the declaration", () => {
+    const run = assayRunFor({
+      evidence: [
+        {
+          id: "e",
+          taskID: "t",
+          objective: "o",
+          validations: [
+            {
+              command: "bun test",
+              result: "passed",
+              safeSummary: "ok",
+              assayRole: "authoritative",
+            },
+          ],
+        },
+      ],
+      classesFor,
+      declaration: {
+        checks: [{ command: "bun test", covers: ["validation:test"] }],
+      },
+    });
+    expect(run?.steps).toHaveLength(1);
+    expect(run?.notChecked).toEqual([]);
+    expect(run?.warrant).toBe("warranted");
+    expect(run?.note).not.toContain("declared and not run");
+  });
 });
 
 describe("assayRuns", () => {

@@ -24,12 +24,22 @@ export type AssayStep = {
   /** The step's own verdict, in the closed vocabulary. */
   result: "passed" | "failed" | "skipped" | "timed_out" | "not_run" | "unknown";
   durationMs?: number;
-  /** Who ran it: absent reads as the weaker of the two, never authoritative. */
-  role: "self-reported" | "authoritative";
+  /**
+   * Who ran it. Absent means NOBODY did — a check the project declared but never
+   * ran has no runner, and inventing "self-reported" for it would say an author
+   * measured something.
+   */
+  role?: "self-reported" | "authoritative";
   /** The bounded output summary the step's log starts with. */
   summary: string;
   /** Where the complete output lives, when it was kept. */
   logRef?: string;
+  /**
+   * True when this step exists because the PROJECT declared the check and no
+   * recorded run matched it. It is the CI page's grey row, except that ours says
+   * who chose the check instead of implying the platform did.
+   */
+  declared?: boolean;
 };
 
 /** One task's run: its evidence grouped as steps. */
@@ -70,6 +80,8 @@ export type AssayEvidenceInput = {
   knownGaps?: string[];
   recordedAt?: string;
   environment?: string;
+  /** The git commit the record was made against, when it was captured. */
+  commit?: string;
 };
 
 /** The completion's verdict for a task, when one was recorded. */
@@ -78,6 +90,15 @@ export type AssayCompletionInput = {
   missing?: string[];
   /** Classes the cited evidence resolved to. */
   resolvedClasses?: string[];
+};
+
+/** The project's declared check list, as the projection reads it. */
+export type AssayDeclarationInput = {
+  checks: ReadonlyArray<{
+    command: string;
+    covers: readonly string[];
+    note?: string;
+  }>;
 };
 
 const CLOSED_RESULTS: ReadonlyArray<AssayStep["result"]> = [
@@ -126,6 +147,15 @@ export function assayRunFor(input: {
   completion?: AssayCompletionInput;
   /** Classes a passing step of this command establishes. */
   classesFor: (command: string, passed: boolean) => readonly string[];
+  /**
+   * The project's own check list, when it wrote one.
+   *
+   * A declared check with no matching recorded command becomes a `not_run` step
+   * and the classes it would have covered become open — so the page answers
+   * "what did this run NOT establish" from the PROJECT's list rather than from a
+   * platform guess.
+   */
+  declaration?: AssayDeclarationInput;
 }): AssayRun | undefined {
   const task = input.taskID ?? input.completion?.taskID;
   const matching = input.evidence.filter(
@@ -145,8 +175,30 @@ export function assayRunFor(input: {
         checked.add(cls);
     }
   }
+  const notRunDeclared: AssayStep[] = [];
+  for (const check of input.declaration?.checks ?? []) {
+    const ran = steps.some(
+      (step) => step.command.trim() === check.command.trim(),
+    );
+    if (ran) continue;
+    notRunDeclared.push({
+      command: check.command,
+      result: "not_run",
+      summary: check.note ?? "declared by the project, not run in this session",
+      declared: true,
+    });
+  }
+  steps.push(...notRunDeclared);
   const latest = matching[matching.length - 1]!;
   const notChecked = [...(input.completion?.missing ?? [])];
+  // A declared check that never ran leaves the classes it would have covered
+  // open, whether or not the completion said so.
+  for (const check of input.declaration?.checks ?? []) {
+    if (steps.some((step) => step.declared && step.command === check.command))
+      for (const cls of check.covers)
+        if (!checked.has(cls) && !notChecked.includes(cls))
+          notChecked.push(cls);
+  }
   const passingAuthoritative = steps.some(
     (step) => step.result === "passed" && step.role === "authoritative",
   );
@@ -155,7 +207,7 @@ export function assayRunFor(input: {
     passingAuthoritative && notChecked.length === 0
       ? "warranted"
       : "unwarranted";
-  const note =
+  const baseNote =
     warrant === "warranted"
       ? `an independent re-run passed and nothing is open`
       : notChecked.length > 0
@@ -165,6 +217,12 @@ export function assayRunFor(input: {
           : steps.length === 0
             ? "no step was recorded"
             : "no step passed";
+  const note =
+    notRunDeclared.length === 0
+      ? baseNote
+      : `${baseNote}; declared and not run: ${notRunDeclared
+          .map((step) => step.command)
+          .join(", ")}`;
   return {
     id: matching.map((record) => record.id).join(","),
     taskID: latest.taskID,
@@ -193,6 +251,7 @@ export function assayRuns(input: {
   evidence: readonly AssayEvidenceInput[];
   completions?: readonly AssayCompletionInput[];
   classesFor: (command: string, passed: boolean) => readonly string[];
+  declaration?: AssayDeclarationInput;
 }): AssayRun[] {
   const tasks = [...new Set(input.evidence.map((record) => record.taskID))];
   const runs: AssayRun[] = [];
@@ -205,6 +264,7 @@ export function assayRuns(input: {
       taskID,
       ...(completion ? { completion } : {}),
       classesFor: input.classesFor,
+      ...(input.declaration ? { declaration: input.declaration } : {}),
     });
     if (run) runs.push(run);
   }

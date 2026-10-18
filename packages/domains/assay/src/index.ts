@@ -7,6 +7,8 @@ export * from "./validation";
 export * from "./junit";
 export * from "./sarif";
 export * from "./assay-runs";
+export * from "./assay-declaration";
+export * from "./assay-comparability";
 export * from "./self-review";
 export * from "./run-scorer";
 export * from "./skill-lifecycle";

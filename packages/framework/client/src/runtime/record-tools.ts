@@ -17,11 +17,23 @@ import { governanceLedgerController } from "@natalia/governance-ledger";
 import {
   sessionFactDriftFindings,
   sessionFactEvidenceRecords,
+  sessionFactCompletions,
   projectedDriftFindings,
 } from "@anthelia/session";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { requestAuditAfterCompletion } from "@natalia/assay";
+import {
+  assayRunFor,
+  assayRuns,
+  compareAssayRuns,
+  loadAssayDeclaration,
+  type AssayDeclaration,
+  type AssayCompletionInput,
+  type AssayEvidenceInput,
+  type AssayRun,
+} from "@natalia/assay";
+import { evaluateCompletionCard, type TaskKind } from "@natalia/work-ledger";
 import type {
   GovernanceLedgerController,
   WorkLedgerController,
@@ -1291,6 +1303,467 @@ export function createDriftAcknowledgeTool(
         }),
       );
       return JSON.stringify({ acknowledged: true, status: args.status });
+    },
+  };
+}
+
+/**
+ * `assay_report` — read the evidence assembled for a task the way a CI run page
+ * reads: each check as a step with its own verdict, duration and who ran it; what
+ * the run established; what it did NOT establish; and, when the task has been run
+ * before, whether this green and the previous one are the same green.
+ *
+ * It is the read half of the three rulers, and it is deliberately a TOOL CARD and
+ * not a new panel (the user's ruling, 2026-10-18): the row already exists where
+ * the work happened, and a second place to look is a second place to get wrong.
+ *
+ * What it will not do: invent a green. A task with no recorded evidence answers
+ * with its reason; a project declaration that cannot be read is reported instead
+ * of silently reading as "nothing is open"; a missing commit is reported as
+ * "cannot say it is comparable" rather than folded into a boolean.
+ */
+export function createAssayReportTool(
+  ctx: RuntimeContext,
+): import("@anthelia/tools").RuntimeTool {
+  return {
+    name: "assay_report",
+    description:
+      "Report the evidence assembled for a task (or every task) the way a CI run page reads: one line per recorded check with its verdict, duration and who ran it (self-reported or authoritative), what the run established, what it did NOT establish (from the completion card and the project's declared checks), the run's warrant, and whether this run and the previous one for the same task are comparable (same checks, same tree, same environment). Use it when you need to judge evidence rather than run more of it, and before citing an old green.",
+    requiresApproval: false,
+    parameters: {
+      type: "object",
+      properties: {
+        taskID: {
+          type: "string",
+          description:
+            "The task to report. Omit it to get every task's run, newest first.",
+        },
+        limit: {
+          type: "number",
+          description:
+            "How many tasks to report when no taskID is given (default 5, clamped to 1..50).",
+        },
+      },
+      additionalProperties: false,
+    },
+    output: assayReportCard(),
+    async execute(parsed, context) {
+      const args = parsed as { taskID?: string; limit?: number };
+      const exec = resolveExec(ctx, context.sessionID);
+      if (!exec) return "no session";
+      await ensureCompleteSessionFactState(ctx, exec);
+      const evidence: AssayEvidenceInput[] = exec.factState
+        ? sessionFactEvidenceRecords(exec.factState)
+        : [];
+      const completions = exec.factState
+        ? sessionFactCompletions(exec.factState)
+        : [];
+      // The PROJECT's own list, read from the workspace. A file that cannot be
+      // read is reported in the answer: silently behaving as if the project
+      // declared nothing would hide the project's own green behind a typo.
+      let declaration: AssayDeclaration = {
+        version: 1,
+        checks: [],
+        warnings: [],
+      };
+      let declarationError: string | undefined;
+      try {
+        declaration = await loadAssayDeclaration(ctx.ports.getWorkspaceRoot());
+      } catch (error) {
+        declarationError =
+          error instanceof Error ? error.message : String(error);
+      }
+      // The completion's own card, re-evaluated from the record it wrote. Its
+      // `missing` list never reached the event, so the same function the gate
+      // ran decides here — with the arguments the event actually carries, which
+      // is stated on the answer rather than glossed over.
+      const completionInputs: AssayCompletionInput[] = completions.map(
+        (completion) => {
+          const evidenceRefs = completion.evidenceIDs ?? [];
+          const resolvedEvidenceClasses = evidenceRefs.flatMap((evidenceID) => {
+            const record = evidence.find((entry) => entry.id === evidenceID);
+            if (!record) return [];
+            return (record.validations ?? []).flatMap((validation) =>
+              validationClassesFor(
+                validation.command,
+                validation.result === "passed",
+              ),
+            );
+          });
+          const card = requireWorkLedger(ctx)?.evaluateCompletionCard({
+            objective: completion.objective,
+            evidenceRefs,
+            resolvedEvidenceClasses,
+            validations: completion.validations ?? [],
+          });
+          return {
+            taskID: completion.taskID,
+            ...(card ? { missing: card.missing } : {}),
+          };
+        },
+      );
+      const declarationInput =
+        declaration.checks.length > 0
+          ? { checks: declaration.checks }
+          : undefined;
+      const comparisonFor = (task: string) => {
+        const sorted = evidence
+          .filter((record) => record.taskID === task)
+          .sort((left, right) =>
+            (left.recordedAt ?? "").localeCompare(right.recordedAt ?? ""),
+          );
+        if (sorted.length < 2) return undefined;
+        return compareAssayRuns({
+          previous: sorted[0]!,
+          current: sorted[sorted.length - 1]!,
+        });
+      };
+      const answer = (extra: Record<string, unknown>): string =>
+        JSON.stringify({
+          ...extra,
+          ...(declarationError ? { declarationError } : {}),
+          ...(declaration.warnings.length > 0
+            ? { declarationWarnings: declaration.warnings }
+            : {}),
+        });
+      const requestedTask = optionalString(args.taskID)?.trim();
+      if (requestedTask) {
+        const records = evidence.filter(
+          (record) => record.taskID === requestedTask,
+        );
+        const completion = completionInputs.find(
+          (entry) => entry.taskID === requestedTask,
+        );
+        const run = assayRunFor({
+          evidence,
+          taskID: requestedTask,
+          ...(completion ? { completion } : {}),
+          classesFor: validationClassesFor,
+          ...(declarationInput ? { declaration: declarationInput } : {}),
+        });
+        if (!run)
+          return answer({
+            found: false,
+            taskID: requestedTask,
+            reason: `no evidence recorded for ${requestedTask} in this session — nothing has been run for it yet (record a check with record_validation, or cite an evidenceID)`,
+          });
+        const comparison = comparisonFor(requestedTask);
+        return answer({
+          found: true,
+          ...runShape(
+            run,
+            completion?.missing ?? [],
+            declaredNotRunCommands(run),
+          ),
+          ...(comparison
+            ? {
+                comparison: {
+                  comparable: comparison.comparable,
+                  why: comparison.why,
+                },
+              }
+            : {}),
+        });
+      }
+      const limit = Math.min(Math.max(Math.trunc(args.limit ?? 5) || 5, 1), 50);
+      const runs = assayRuns({
+        evidence,
+        completions: completionInputs,
+        classesFor: validationClassesFor,
+        ...(declarationInput ? { declaration: declarationInput } : {}),
+      }).slice(0, limit);
+      return answer({
+        total: runs.length,
+        runs: runs.map((run) => {
+          const completion = completionInputs.find(
+            (entry) => entry.taskID === run.taskID,
+          );
+          const comparison = comparisonFor(run.taskID);
+          return {
+            ...runShape(
+              run,
+              completion?.missing ?? [],
+              declaredNotRunCommands(run),
+            ),
+            ...(comparison
+              ? {
+                  comparison: {
+                    comparable: comparison.comparable,
+                    why: comparison.why,
+                  },
+                }
+              : {}),
+          };
+        }),
+      });
+    },
+  };
+}
+
+/** Commands the project declared and this run never executed. */
+function declaredNotRunCommands(run: AssayRun): string[] {
+  return run.steps
+    .filter((step) => step.declared === true)
+    .map((step) => step.command);
+}
+
+/** The envelope one task's run travels in, minus the identity the caller knows. */
+function runShape(
+  run: AssayRun,
+  completionMissing: readonly string[],
+  declaredNotRun: readonly string[],
+): Record<string, unknown> {
+  const sources: string[] = [];
+  if (completionMissing.length > 0)
+    sources.push(
+      "the completion's own card, re-evaluated from the record it wrote",
+    );
+  if (declaredNotRun.length > 0) sources.push("the project's declared checks");
+  return {
+    taskID: run.taskID,
+    objective: run.objective,
+    warrant: run.warrant,
+    note: run.note,
+    checked: run.checked,
+    notChecked: run.notChecked,
+    steps: run.steps,
+    totalDurationMs: run.totalDurationMs,
+    ...(run.notChecked.length > 0 && sources.length > 0
+      ? { openSource: sources.join(" and ") }
+      : {}),
+  };
+}
+
+/**
+ * `assay_report`'s card — the run page, on the row that asked for it.
+ *
+ * One line per check, in the order a CI page reads it: verdict, command,
+ * duration, who ran it. Then what the run established, what it did NOT, where
+ * that came from (the completion card or the project's declaration — a reader
+ * must be able to tell which), and the comparison with the previous run in one
+ * sentence, because "is this still green?" is a sentence, never a boolean.
+ */
+export function assayReportCard(): ToolOutputDefinition {
+  const argsRecord = (args: unknown): Record<string, unknown> =>
+    args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const decode = (value: string): Record<string, unknown> | undefined => {
+    try {
+      const decoded = JSON.parse(value) as unknown;
+      if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+        return undefined;
+      return decoded as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  };
+  const objectList = (value: unknown): Array<Record<string, unknown>> =>
+    Array.isArray(value)
+      ? value.filter(
+          (entry): entry is Record<string, unknown> =>
+            Boolean(entry) &&
+            typeof entry === "object" &&
+            !Array.isArray(entry),
+        )
+      : [];
+  const stringsOf = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  const seconds = (ms: unknown): string | undefined =>
+    typeof ms === "number" ? `${(ms / 1000).toFixed(1)}s` : undefined;
+  const stepLines = (step: Record<string, unknown>): string[] => {
+    const result = typeof step.result === "string" ? step.result : "unknown";
+    const command =
+      typeof step.command === "string" ? step.command : "(no command)";
+    const parts = ["step", result, command];
+    const took = seconds(step.durationMs);
+    if (took) parts.push(took);
+    if (step.declared === true) parts.push("declared, not run");
+    else if (typeof step.role === "string") parts.push(step.role);
+    const lines = [parts.join(" · ")];
+    const summary = typeof step.summary === "string" ? step.summary.trim() : "";
+    // A declared step's summary is the platform's own sentence ("declared by the
+    // project, not run in this session"), so it is not repeated under the line
+    // that already says declared, not run.
+    if (summary && step.declared !== true) lines.push(`  ${summary}`);
+    const logRef =
+      typeof step.logRef === "string" && step.logRef ? step.logRef : undefined;
+    if (logRef) lines.push(`  full output · ${logRef}`);
+    return lines;
+  };
+  const runLines = (record: Record<string, unknown>): string[] => {
+    const lines: string[] = [];
+    if (typeof record.objective === "string" && record.objective)
+      lines.push(`objective · ${record.objective}`);
+    for (const step of objectList(record.steps)) lines.push(...stepLines(step));
+    const checked = stringsOf(record.checked);
+    if (checked.length > 0) lines.push(`checked · ${checked.join(", ")}`);
+    const open = stringsOf(record.notChecked);
+    if (open.length > 0) lines.push(`open · ${open.join(", ")}`);
+    if (typeof record.openSource === "string" && record.openSource)
+      lines.push(`open came from · ${record.openSource}`);
+    const comparison =
+      record.comparison && typeof record.comparison === "object"
+        ? (record.comparison as Record<string, unknown>)
+        : undefined;
+    if (comparison && typeof comparison.why === "string")
+      lines.push(`compare · ${comparison.why}`);
+    if (typeof record.note === "string" && record.note)
+      lines.push(`note · ${record.note}`);
+    return lines;
+  };
+  const stepSummary = (record: Record<string, unknown>): string => {
+    const steps = objectList(record.steps);
+    const passed = steps.filter((step) => step.result === "passed").length;
+    const notRun = steps.filter((step) => step.declared === true).length;
+    const open = stringsOf(record.notChecked).length;
+    const warrant =
+      typeof record.warrant === "string" ? record.warrant : "unwarranted";
+    const parts = [warrant, `${passed}/${steps.length} passed`];
+    if (open > 0) parts.push(`${open} open`);
+    if (notRun > 0) parts.push(`${notRun} declared, not run`);
+    return parts.join(" · ");
+  };
+  return {
+    schema: { type: "object", properties: {} },
+    presentCall(args) {
+      const taskID = optionalString(argsRecord(args).taskID);
+      return {
+        kind: "generic",
+        title: taskID ?? "assay",
+        summary: "read the run",
+      };
+    },
+    presentationMeta(_args, value) {
+      const record = decode(value);
+      if (!record) return {};
+      const steps = objectList(record.steps);
+      const runs = objectList(record.runs);
+      const picked: Record<string, unknown> = {
+        steps: steps.length,
+        passed: steps.filter((step) => step.result === "passed").length,
+        notRun: steps.filter((step) => step.declared === true).length,
+        open: stringsOf(record.notChecked).length,
+      };
+      for (const key of [
+        "found",
+        "taskID",
+        "warrant",
+        "totalDurationMs",
+        "openSource",
+      ])
+        if (record[key] !== undefined) picked[key] = record[key];
+      if (runs.length > 0) {
+        picked.runs = runs.length;
+        picked.open = runs.reduce(
+          (sum, run) => sum + stringsOf(run.notChecked).length,
+          0,
+        );
+        picked.unwarranted = runs.filter(
+          (run) => run.warrant === "unwarranted",
+        ).length;
+      }
+      const comparison =
+        record.comparison && typeof record.comparison === "object"
+          ? (record.comparison as Record<string, unknown>)
+          : undefined;
+      if (comparison && typeof comparison.comparable === "boolean")
+        picked.comparable = comparison.comparable;
+      return picked;
+    },
+    presentResult(args, value, _meta) {
+      // The envelope is the answer's own truth. `meta` (the presentation slot the
+      // event carries) is deliberately not consulted for the counts: a replayed
+      // row arrives without it, and a summary that changes when meta is missing
+      // would be two different reports of one run.
+      const record = decode(value) ?? {};
+      const runs = objectList(record.runs);
+      const taskID =
+        (typeof record.taskID === "string" ? record.taskID : undefined) ??
+        optionalString(argsRecord(args).taskID);
+      // An answer that did not decode keeps its own reason rather than becoming
+      // an empty card: a run that cannot be read is still information.
+      if (!record.found && record.reason === undefined && runs.length === 0) {
+        return {
+          kind: "generic",
+          title: taskID ?? "assay",
+          summary: "the run could not be read",
+          body: `asked for · ${taskID ?? "every task"}`,
+        };
+      }
+      if (record.found === false) {
+        const reason =
+          typeof record.reason === "string" && record.reason
+            ? record.reason
+            : "nothing was recorded";
+        return {
+          kind: "generic",
+          title: taskID ?? "assay",
+          summary: "no run · nothing recorded for this task",
+          body: [
+            `reason · ${reason}`,
+            ...(typeof record.declarationError === "string"
+              ? [`declaration · ${record.declarationError}`]
+              : []),
+            ...stringsOf(record.declarationWarnings).map(
+              (warning) => `declaration · ${warning}`,
+            ),
+          ].join("\n"),
+        };
+      }
+      const warnings = [
+        ...(typeof record.declarationError === "string"
+          ? [`declaration · ${record.declarationError}`]
+          : []),
+        ...stringsOf(record.declarationWarnings).map(
+          (warning) => `declaration · ${warning}`,
+        ),
+      ];
+      const facets: Array<[string, string]> = [];
+      if (typeof record.warrant === "string")
+        facets.push(["warrant", record.warrant]);
+      if (typeof record.notChecked === "object") {
+        const open = stringsOf(record.notChecked).length;
+        if (open > 0) facets.push(["open", String(open)]);
+      }
+      const total = seconds(
+        typeof record.totalDurationMs === "number"
+          ? record.totalDurationMs
+          : undefined,
+      );
+      if (total) facets.push(["took", total]);
+      if (runs.length > 0) {
+        // Counted from the ANSWER, not from `meta`: a replayed row arrives with
+        // no meta slot, and a summary that lies when meta is missing is the same
+        // defect as one that lies when it is stale.
+        const unwarranted = runs.filter((run) => run.warrant === "unwarranted");
+        const open = runs.reduce(
+          (sum, run) => sum + stringsOf(run.notChecked).length,
+          0,
+        );
+        return {
+          kind: "generic",
+          title: "assay runs",
+          summary: `${runs.length} task${runs.length === 1 ? "" : "s"} · ${unwarranted.length} unwarranted · ${open} open`,
+          body: runs
+            .flatMap((run) => [
+              `run · ${typeof run.taskID === "string" ? run.taskID : "(task)"} · ${
+                typeof run.warrant === "string" ? run.warrant : "unwarranted"
+              } · ${objectList(run.steps).length} steps`,
+              ...runLines(run).map((line) => `  ${line}`),
+            ])
+            .concat(warnings)
+            .join("\n"),
+          ...(facets.length > 0 ? { meta: facets } : {}),
+        };
+      }
+      return {
+        kind: "generic",
+        title: taskID ?? "assay",
+        summary: stepSummary(record),
+        body: runLines(record).concat(warnings).join("\n"),
+        ...(facets.length > 0 ? { meta: facets } : {}),
+      };
     },
   };
 }

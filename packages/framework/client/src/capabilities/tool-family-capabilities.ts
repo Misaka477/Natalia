@@ -55,6 +55,7 @@ export function runtimeToolNames(): string[] {
     "cancel_generation",
     "list_generation_candidates",
     "ask_user",
+    "assay_report",
     "browser_click",
     "browser_close",
     "browser_execute_js",

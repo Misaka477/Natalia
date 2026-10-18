@@ -116,6 +116,7 @@ import {
 } from "../generation-tools";
 import { attachmentService as attachmentServiceToken } from "@anthelia/attachments";
 import {
+  createAssayReportTool,
   createDriftAcknowledgeTool,
   createRecordCompletionTool,
   createRecordDecisionTool,
@@ -496,6 +497,9 @@ export async function wireFrameworkServices(
     // EI §8.4: model-facing journal record tools.
     createRecordValidationTool(ctx),
     createReAssayTool(ctx),
+    // The read half of the same rulers: one row per task's run, with what it
+    // established, what it did not, and whether two runs are comparable.
+    createAssayReportTool(ctx),
     createRecordCompletionTool(ctx),
     createRecordDecisionTool(ctx),
     createConstitutionProposeTool(ctx),

@@ -8,7 +8,7 @@
   "scope": "session",
   "provides": [],
   "requires": [],
-  "optionalRequires": [],
+  "optionalRequires": ["managedProcessRegistry"],
   "conflicts": [],
   "dependencies": [],
   "hooks": {},

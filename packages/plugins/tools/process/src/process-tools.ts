@@ -629,7 +629,7 @@ export class ManagedProcessRegistry {
     context: ToolExecutionContext,
     info: ManagedProcessRuntime,
     status: "exited" | "stopped" | "failed",
-    origin: "wait" | "sweep" | "lazy" = "lazy",
+    origin: "wait" | "sweep" | "lazy" | "stop" = "lazy",
   ): ManagedProcessSettledEvent {
     info.status = status;
     info.endedAt = new Date().toISOString();
@@ -655,8 +655,17 @@ export class ManagedProcessRegistry {
     // registered waiter. A lazy settle from an ordinary read tells nobody, so its
     // notice stands — swallowing that one left the model uninformed while the
     // wait ran out.
+    //
+    // A STOP is the fourth case, and it is handed over too: `process_stop`
+    // returns this settled record in its own tool result, to the only session
+    // allowed to stop the process (`assertOwner`), so a notice would be the same
+    // news twice. It used to skip this writer entirely and set the record by
+    // hand — the one terminal transition outside the single writer, which meant
+    // its `endedAt`/status bookkeeping could drift from every other path's.
     const handedToWaiter =
-      origin === "wait" || (origin === "sweep" && this.awaited.has(info.id));
+      origin === "wait" ||
+      origin === "stop" ||
+      (origin === "sweep" && this.awaited.has(info.id));
     this.awaited.delete(info.id);
     if (!handedToWaiter) this.notifySettled(event);
     return event;
@@ -774,8 +783,11 @@ export class ManagedProcessRegistry {
     // 17:45:12 becoming 17:45:24). A finished process stays finished: the
     // stop is idempotent and the original end time survives.
     if (info.status !== "running") return publicProcessInfo(info);
-    info.status = "stopped";
-    info.endedAt = new Date().toISOString();
+    // The ONE terminal-transition writer, with its own origin: the settled
+    // record comes back in this tool's answer (`origin: "stop"` suppresses the
+    // duplicate notice), and the bookkeeping of `endedAt`/status lives where
+    // every other terminal transition already keeps it.
+    this.markTerminal(context, info, "stopped", "stop");
     await this.save(context);
     // A stop is a terminal transition too, so the sweep re-evaluates whether any
     // process is still running.

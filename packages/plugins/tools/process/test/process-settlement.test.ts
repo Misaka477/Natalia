@@ -149,3 +149,31 @@ test("a registry without the spine reports no notices and no crash", async () =>
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a stop writes through the one terminal writer, and tells nobody twice", async () => {
+  const root = await mkdtemp(join(tmpdir(), "settle-stop-"));
+  const child = Bun.spawn(longLivedArgv(30));
+  try {
+    await seed(root, "proc_stop", child.pid);
+    const settlement = fakeSettlement();
+    const registry = new ManagedProcessRegistry(settlement.service);
+    // Load first: a live pid survives the list's re-check, so the record is
+    // still `running` when the stop arrives.
+    await registry.list(contextFor(root));
+    registry.observer.sync();
+    const stopped = await registry.stop("proc_stop", contextFor(root));
+    // The stop's own answer carries the settled record…
+    expect(stopped.status).toBe("stopped");
+    expect(stopped.endedAt).toBeDefined();
+    // …so the spine is NOT told the same news a second time: `origin: "stop"`
+    // is handed to the caller exactly like a wait's answer is.
+    await registry.observer.sweep();
+    expect(settlement.notices).toHaveLength(0);
+    // And the record is durably stopped, not merely reported stopped.
+    const reread = await registry.get("proc_stop", contextFor(root));
+    expect(reread.status).toBe("stopped");
+  } finally {
+    child.kill();
+    await rm(root, { recursive: true, force: true });
+  }
+});

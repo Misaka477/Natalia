@@ -9,9 +9,17 @@
 //
 // The stack, in the order it has to come up:
 //   1. the runtime     `natalia serve --port 8790`   the API the web shell calls
-//   2. the web server  `natalia serve-web ...`       the shell itself, on 8791
+//   2. the web server  `natalia serve-web --root <install>/web --port 8791`
+//                                                    the shell itself, on 8791
 //   3. the window host `natalia-cef-desktop.exe`     the native window
 //   4. the browser                                   the same URL, if 3 dies
+//
+// The web shell's arguments are FLAGS, and this is worth spelling out: the first
+// positional argument of `serve-web` is the ROOT directory, not the port. A
+// reader (and one agent, reading this comment when it said only
+// `natalia serve-web ...`) tries `natalia serve-web 8791` and gets
+// "serve-web: <cwd>/8791 has no index.html" — the port belongs to `--port`, and
+// the directory to `--root`.
 //
 // Ports are not free choices: the web shell's runtime client is compiled with
 // `VITE_NATALIA_RUNTIME_URL || "http://127.0.0.1:8790"`, so a runtime on any

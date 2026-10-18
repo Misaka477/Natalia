@@ -24,6 +24,8 @@ import {
   sandboxedSubagentSystemPrompt,
   TEAM_MODE_DIRECTIVE,
 } from "./agent-team-prompts";
+import type { FanOutDeclaration } from "./fan-out";
+import { loadAssayDeclarationSync } from "@natalia/assay";
 
 export const TEAM_PLUGIN_ID = "natalia-team";
 
@@ -53,6 +55,32 @@ export function createTeamPlugin(): Plugin {
         directive: () => TEAM_MODE_DIRECTIVE,
         sandboxedSubagentSystemPrompt,
       });
+      // The project's own checks, read ONCE from the workspace root the host
+      // handed the plugin. Present, a fan-out's worker self-check is the
+      // DECLARED subset whose `scope` matches each task's writePaths — the
+      // project's words, not the worker's guess. A missing declaration means no
+      // declared checks, which is exactly what the fan-out then reports.
+      const workspaceRoot =
+        (api.config as { workspaceRoot?: string } | undefined)?.workspaceRoot ??
+        "";
+      let declaration: FanOutDeclaration | undefined;
+      let declarationError: string | undefined;
+      const readDeclaration = () => {
+        if (declaration !== undefined || declarationError !== undefined)
+          return declaration;
+        try {
+          declaration = {
+            checks: loadAssayDeclarationSync(workspaceRoot).checks,
+          };
+        } catch (error) {
+          // A declaration the platform cannot read is REPORTED where it shows
+          // up (the fan-out's answer), never silently dropped.
+          declarationError =
+            error instanceof Error ? error.message : String(error);
+          declaration = undefined;
+        }
+        return declaration;
+      };
       api.tools.register(
         createTeamFanoutTool({
           subagents: () => {
@@ -66,6 +94,7 @@ export function createTeamPlugin(): Plugin {
           // terminal adopters: absent it, the fan-out runs without notices.
           settlement: () =>
             api.services.get<SettlementService>(SETTLEMENT_SERVICE),
+          declaration: readDeclaration,
         }),
       );
       api.tools.register(

@@ -12,6 +12,7 @@ import {
   prSettlementReason,
   reviewPRs,
   runFanOut,
+  selfCheckCommandsFor,
   validateOwnershipMap,
   type FanOutPR,
 } from "../src/index";
@@ -911,4 +912,111 @@ test("a review's outcome carries the warrant its evidence earned", async () => {
   expect(promoted[0]).toBe("sbx.1:bun test");
   expect(outcome.warrant).toMatchObject({ warrant: "warranted", missing: [] });
   expect(outcome.warrant?.detail).toContain("an independent re-run");
+});
+
+/**
+ * The worker self-check is the PROJECT's declared subset for what the task
+ * touched — B10e.
+ *
+ * Before this, the self-check was one command the lead typed (or nothing at
+ * all). Now, when the project wrote `.natalia/assay.json`, each task runs the
+ * declared checks whose `scope` matches its own writePaths: the project's words
+ * instead of the worker's guess, and a task that touched nothing declared runs
+ * only the unscoped checks.
+ */
+test("selfCheckCommandsFor picks the declared subset for the task's footprint", () => {
+  const declaration = {
+    checks: [
+      { id: "always", command: "exit 0", covers: ["validation:any"] },
+      {
+        id: "core",
+        command: "check-core",
+        covers: ["validation:test"],
+        scope: ["packages/core/**"],
+      },
+      {
+        id: "docs",
+        command: "check-docs",
+        covers: ["validation:any"],
+        scope: ["docs/**"],
+      },
+    ],
+  };
+  // An explicit build command wins — the lead's word beats the declaration.
+  expect(
+    selfCheckCommandsFor({
+      buildCommand: "make all",
+      declaration,
+      writePaths: ["packages/core/a.ts"],
+    }),
+  ).toEqual(["make all"]);
+  // A task that touched core runs the unscoped check and core's own check.
+  expect(
+    selfCheckCommandsFor({ declaration, writePaths: ["packages/core/a.ts"] }),
+  ).toEqual(["exit 0", "check-core"]);
+  expect(
+    selfCheckCommandsFor({ declaration, writePaths: ["docs/readme.md"] }),
+  ).toEqual(["exit 0", "check-docs"]);
+  // No declaration and no build command: nothing runs, and the PR says so
+  // rather than inventing a command.
+  expect(selfCheckCommandsFor({ writePaths: ["a.ts"] })).toEqual([]);
+});
+
+test("runFanOut runs every declared check for the task's own footprint, each with its verdict", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-fanout-declared-"));
+  const sandboxes = new SnapshotSandboxManager(root);
+  await sandboxes.initialize();
+  const registry = new SubagentRegistry({
+    workDir: join(root, ".natalia", "subagents"),
+    runner: async (task, context) => {
+      await sandboxes.create(context.agentId);
+      context.log("done");
+      context.setStatus("running");
+    },
+  });
+  const prs = await runFanOut({
+    tasks: [
+      {
+        id: "core-task",
+        prompt: "touch core",
+        writePaths: ["packages/core/a.ts"],
+      },
+      { id: "docs-task", prompt: "touch docs", writePaths: ["docs/a.md"] },
+    ],
+    subagents: registry,
+    sandboxes,
+    timeoutMs: 10_000,
+    declaration: {
+      checks: [
+        { id: "always", command: "exit 0", covers: ["validation:any"] },
+        {
+          id: "core",
+          command: "exit 2",
+          covers: ["validation:test"],
+          scope: ["packages/core/**"],
+        },
+      ],
+    },
+  });
+  const core = prs.find((pr) => pr.id === "core-task")!;
+  const docs = prs.find((pr) => pr.id === "docs-task")!;
+  // The core task ran both checks, and the failing one is reported with its own
+  // exit code — the aggregate says failed because a NAMED check failed.
+  expect(
+    core.buildEvidence?.checks?.map((check) => [check.checkID, check.ok]),
+  ).toEqual([
+    ["always", true],
+    ["core", false],
+  ]);
+  expect(core.buildEvidence?.ok).toBe(false);
+  expect(core.buildEvidence?.exitCode).toBe(2);
+  expect(core.buildEvidence?.assayRole).toBe("self-reported");
+  // The docs task's footprint matches no scoped check, so only the unscoped one
+  // ran — and the PR is green on exactly what the project asked for.
+  expect(docs.buildEvidence?.checks?.map((check) => check.checkID)).toEqual([
+    "always",
+  ]);
+  expect(docs.buildEvidence?.ok).toBe(true);
+  // The command rides with the PR for the promotion's independent re-run.
+  expect(core.buildCommand).toBe("exit 0");
 });

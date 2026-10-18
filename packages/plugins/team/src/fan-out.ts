@@ -20,6 +20,8 @@
  */
 import type { RuntimeEvent, SettlementReason } from "@anthelia/contracts";
 import { detectPromoteCommand } from "@anthelia/sandbox";
+import { declaredChecksForFootprint } from "@natalia/assay";
+import type { DeclaredCheck } from "@natalia/assay";
 import type {
   SandboxChangeView,
   SandboxToolService,
@@ -50,6 +52,23 @@ export type FanOutTask = {
   excludeTools?: string[];
 };
 
+/**
+ * One check of a PR's worker self-check, as the sandbox answered it.
+ *
+ * `command` is what ran — the project's own declared check when one applied, or
+ * the build command the lead supplied. `ok`/`exitCode`/`output` are the sandbox's
+ * answer for THAT command, never an average over the set: a PR whose second
+ * check failed must not read as a first-check green.
+ */
+export type FanOutCheck = {
+  command: string;
+  ok: boolean;
+  exitCode: number;
+  output: string;
+  /** The declared check this ran for, when the project declared one. */
+  checkID?: string;
+};
+
 export type FanOutPR = {
   id: string;
   sandboxID: string;
@@ -62,13 +81,20 @@ export type FanOutPR = {
   diff: SandboxChangeView[];
   result?: string;
   /**
-   * Build evidence: a validation command run in the candidate worktree before
-   * the PR is ready. Present when a build command was configured.
+   * Build evidence: the validation commands run in the candidate worktree
+   * before the PR is ready. Present when a build command was configured or the
+   * project declared checks that apply to this task's footprint.
    */
   buildEvidence?: {
     ok: boolean;
     exitCode: number;
     output: string;
+    /**
+     * Every check that ran, in order, each with its own verdict. The
+     * aggregate above is exactly "all of them passed", and the first failing
+     * command's exit code — never an average that could hide which one broke.
+     */
+    checks?: FanOutCheck[];
     /**
      * WHOSE run this was. It is the worker's own check inside its candidate —
      * `self-reported`, always: the party whose work it is ran the command. An
@@ -138,8 +164,15 @@ export async function runFanOut(input: {
    * Build command run in each completed candidate's worktree — the build
    * evidence gate. A candidate that fails it is still reported as a PR, with
    * the failing output as the reason (a lead reviews or rejects on it).
+   *
+   * When it is absent AND the project declared checks, the self-check is the
+   * DECLARED subset whose `scope` matches that task's writePaths — the worker
+   * runs what the project named for what it touched, instead of inventing a
+   * command or running nothing.
    */
   buildCommand?: string;
+  /** The project's declared checks (`.natalia/assay.json`), when it has any. */
+  declaration?: FanOutDeclaration;
   /** Maximum concurrent sub-agents; absent = spawn all at once. */
   maxConcurrent?: number;
   /**
@@ -183,12 +216,86 @@ export async function runFanOut(input: {
   return await drainTerminal(input, spawned, deadline);
 }
 
+/** The project's declared check list, as the fan-out reads it. */
+export type FanOutDeclaration = {
+  checks: readonly DeclaredCheck[];
+};
+
+/** One task's self-check commands, decided BEFORE anything runs. */
+export function selfCheckCommandsFor(input: {
+  /** The lead's build command for this fan-out, when it supplied one. */
+  buildCommand?: string;
+  /** The project's declared checks, when it wrote any. */
+  declaration?: FanOutDeclaration;
+  /** This task's change footprint. */
+  writePaths?: readonly string[];
+}): string[] {
+  if (input.buildCommand?.trim()) return [input.buildCommand.trim()];
+  const checks = input.declaration?.checks ?? [];
+  if (checks.length === 0) return [];
+  return declaredChecksForFootprint(checks, input.writePaths ?? []).map(
+    (check) => check.command,
+  );
+}
+
+/** The declared check a command belongs to, when the declaration named it. */
+function declaredCheckIDFor(
+  declaration: FanOutDeclaration | undefined,
+  command: string,
+): string | undefined {
+  return declaration?.checks.find((check) => check.command === command)?.id;
+}
+
+/**
+ * Builds the PR's evidence: every self-check command run in the candidate
+ * worktree, in order, each with its own verdict.
+ */
+async function runSelfChecks(input: {
+  sandboxes: SandboxToolService;
+  sandboxID: string;
+  commands: readonly string[];
+  declaration?: FanOutDeclaration;
+}): Promise<FanOutPR["buildEvidence"]> {
+  const checks: FanOutCheck[] = [];
+  for (const command of input.commands) {
+    const answer = await input.sandboxes
+      .validate(input.sandboxID, command)
+      .catch((error: unknown) => ({
+        ok: false,
+        exitCode: -1,
+        output: `self-check could not run: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      }));
+    const checkID = declaredCheckIDFor(input.declaration, command);
+    checks.push({ command, ...answer, ...(checkID ? { checkID } : {}) });
+  }
+  if (checks.length === 0) return undefined;
+  const failed = checks.find((check) => !check.ok);
+  // One bounded line per check — the same shape a run's log summary takes, so
+  // the notice, the card and the run page all read the same evidence.
+  const output = checks
+    .map(
+      (check) =>
+        `${check.ok ? "pass" : "fail"} · ${check.command} · exit ${check.exitCode}\n${check.output.trim()}`,
+    )
+    .join("\n");
+  return {
+    ok: !failed,
+    exitCode: failed?.exitCode ?? 0,
+    output,
+    checks,
+    assayRole: "self-reported",
+  };
+}
 /** The diff and build evidence a PR carries, built where it lands. */
 async function buildPR(
   input: {
     sandboxes: SandboxToolService;
     buildCommand?: string;
+    declaration?: FanOutDeclaration;
   },
+  task: FanOutTask,
   sandboxID: string,
   status: FanOutPR["status"],
 ): Promise<{
@@ -203,24 +310,24 @@ async function buildPR(
           .catch(() => [] as SandboxChangeView[])
       : [];
   const buildEvidence =
-    status === "completed" && input.buildCommand
-      ? await input.sandboxes
-          .validate(sandboxID, input.buildCommand)
-          .catch(() => ({
-            ok: false,
-            exitCode: -1,
-            output: "validate failed",
-          }))
-          .then((evidence) => ({
-            ...evidence,
-            assayRole: "self-reported" as const,
-          }))
+    status === "completed"
+      ? await runSelfChecks({
+          sandboxes: input.sandboxes,
+          sandboxID,
+          commands: selfCheckCommandsFor({
+            ...(input.buildCommand ? { buildCommand: input.buildCommand } : {}),
+            ...(input.declaration ? { declaration: input.declaration } : {}),
+            ...(task.writePaths ? { writePaths: task.writePaths } : {}),
+          }),
+          ...(input.declaration ? { declaration: input.declaration } : {}),
+        })
       : undefined;
+  const command = buildEvidence?.checks?.[0]?.command;
   return {
     diff,
     // The command rides with the PR so the lead's promotion validates with
     // the same check that produced the evidence above.
-    ...(input.buildCommand ? { buildCommand: input.buildCommand } : {}),
+    ...(command ? { buildCommand: command } : {}),
     ...(buildEvidence ? { buildEvidence } : {}),
   };
 }
@@ -237,6 +344,7 @@ async function drainTerminal(
     subagents: SubagentToolService;
     sandboxes: SandboxToolService;
     buildCommand?: string;
+    declaration?: FanOutDeclaration;
     publish?: (event: RuntimeEvent) => void;
     onPR?: (pr: FanOutPR) => void;
   },
@@ -278,7 +386,7 @@ async function drainTerminal(
         id: item.id,
         sandboxID: record.id,
         status,
-        ...(await buildPR(input, record.id, status)),
+        ...(await buildPR(input, item, record.id, status)),
         result: record.outputs.map((entry) => entry.text).join("\n"),
       };
       prs.push(pr);
@@ -452,11 +560,12 @@ async function promoteOne(
     }
   }
   // The validation command, in the honest order: the PR's own recorded
-  // command, the batch's, then the command the workspace's project markers
-  // imply. A lead approving a PR whose merge nothing can validate gets a
-  // refusal that names the missing command — never a silent stand-in
-  // (`true`) that passes without testing anything and was then reported to
-  // the model as build evidence.
+  // command (the first self-check that ran — the project's own declared check
+  // when one applied), the batch's, then the command the workspace's project
+  // markers imply. A lead approving a PR whose merge nothing can validate gets
+  // a refusal that names the missing command — never a silent stand-in (`true`)
+  // that passes without testing anything and was then reported to the model as
+  // build evidence.
   const command =
     pr.buildCommand?.trim() ||
     input.buildCommand?.trim() ||

@@ -27,6 +27,7 @@
  * declaration that quietly loses half its checks is the failure mode that makes
  * a green meaningless.
  */
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -39,15 +40,21 @@ export type DeclaredCheck = {
   id: string;
   /** The command the check runs. Run through the same seam as any validation. */
   command: string;
-  /** Evidence classes this check establishes when it passes (closed vocabulary). */
-  covers: string[];
+  /**
+   * Evidence classes this check establishes when it passes (closed vocabulary).
+   *
+   * Read-only on the CONSUMER side: a caller that passes its own declaration in
+   * (a plugin, a test fixture) has no reason to hand over mutable arrays, and
+   * requiring them made every such adapter copy for nothing.
+   */
+  covers: readonly string[];
   /** Optional per-check budget; the platform clamps it like any other. */
   timeoutSec?: number;
   /**
    * Globs (repo-relative, `*` and `**`) a change must match for this check to
    * apply. Absent means the check applies to every change — the whole set.
    */
-  scope?: string[];
+  scope?: readonly string[];
   /** Optional SARIF rule metadata for findings this check can report. */
   rules?: DeclaredRule[];
   /** A human note about why the check exists; shown on the run page. */
@@ -222,6 +229,38 @@ export async function loadAssayDeclaration(
   let text: string;
   try {
     text = await readFile(path, "utf8");
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return { version: 1, checks: [], warnings: [] };
+    throw new Error(
+      `assay declaration ${ASSAY_DECLARATION_PATH} could not be read: ${(error as Error).message}`,
+    );
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(
+      `assay declaration ${ASSAY_DECLARATION_PATH} is not valid JSON: ${(error as Error).message}`,
+    );
+  }
+  return parseAssayDeclaration(decoded);
+}
+
+/**
+ * The same read, synchronously.
+ *
+ * A plugin's setup is where the team fan-out resolves the declaration, and a
+ * setup cannot await a file read before it registers its tools — so the load
+ * happens once, at first use, in the same shape the async reader reports.
+ */
+export function loadAssayDeclarationSync(
+  workspaceRoot: string,
+): AssayDeclaration {
+  const path = resolve(workspaceRoot, ASSAY_DECLARATION_PATH);
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return { version: 1, checks: [], warnings: [] };

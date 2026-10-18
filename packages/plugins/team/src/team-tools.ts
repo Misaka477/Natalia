@@ -13,6 +13,7 @@ import {
   reviewPRs,
   runFanOut,
   validateOwnershipMap,
+  type FanOutDeclaration,
   type FanOutPR,
 } from "./fan-out";
 import {
@@ -34,6 +35,14 @@ export function createTeamFanoutTool(input: {
   sandboxes: () => SandboxToolService | undefined;
   /** The settlement bridge, resolved by the plugin's setup. */
   settlement?: () => SettlementService | undefined;
+  /**
+   * The project's declared checks (`.natalia/assay.json`), resolved by the
+   * plugin's setup from the workspace root. Present, the self-check is the
+   * DECLARED subset whose `scope` matches each task's writePaths when the lead
+   * supplied no buildCommand — the worker runs what the project named for what
+   * it touched, instead of inventing a command or running nothing.
+   */
+  declaration?: () => FanOutDeclaration | undefined;
 }): RuntimeTool {
   return {
     name: "team_fanout",
@@ -139,6 +148,7 @@ export function createTeamFanoutTool(input: {
         subagents,
         sandboxes,
         buildCommand: args.buildCommand,
+        ...(input.declaration?.() ? { declaration: input.declaration!() } : {}),
         maxConcurrent: runtimeConfig?.team?.maxConcurrent,
         parentSessionID,
         ...(context.parentAgentID

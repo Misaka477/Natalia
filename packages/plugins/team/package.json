@@ -13,6 +13,7 @@
     "@anthelia/runtime-services": "workspace:*",
     "@anthelia/sandbox": "workspace:*",
     "@anthelia/tools": "workspace:*",
+    "@natalia/assay": "workspace:*",
     "@natalia/collaboration": "workspace:*"
   },
   "devDependencies": {

@@ -124,3 +124,75 @@ test("run_shell projects a terminal card from its output definition", () => {
     meta: [["exit", "3"]],
   });
 });
+
+/**
+ * `run_in_background`: the model asks for a hand-off, and gets a HANDLE.
+ *
+ * The 2026-10-18 gap: `process_start` already had the whole background
+ * machinery (handle, output file, settlement notice, tree kill, session
+ * ownership), but the tool a model reaches for first — `run_shell` — only ran
+ * things in the foreground, so "start the dev server and then keep working" had
+ * no answer that did not cost a guessed timeout. The answer is a typed handle
+ * rather than an id the model has to dig out of JSON, because the next call
+ * (`process_output`, `process_wait`, `process_stop`) takes that id.
+ */
+test("run_in_background hands the command to the process registry and answers a handle", async () => {
+  const started: Array<{ command: string }> = [];
+  const tool = shellToolFamily(() => ({
+    async start(command: string) {
+      started.push({ command });
+      return { id: "proc_3", pid: 4242, status: "running" };
+    },
+  })).tools.find((candidate) => candidate.name === "run_shell")!;
+  const answer = String(
+    await tool.execute(
+      {
+        command: "npm run dev",
+        description: "Start the dev server",
+        run_in_background: true,
+      },
+      { workspaceRoot: "/ws", settings: {} } as never,
+    ),
+  );
+  // The command went to the registry, in the foreground path's place.
+  expect(started).toEqual([{ command: "npm run dev" }]);
+  const handle = JSON.parse(answer) as Record<string, unknown>;
+  expect(handle).toMatchObject({
+    kind: "background",
+    jobId: "proc_3",
+    command: "npm run dev",
+  });
+  expect(String(handle.note)).toContain("process_output");
+  expect(String(handle.note)).toContain("proc_3");
+  // The card says it is running in the background — NOT an empty terminal card
+  // that reads as "the command printed nothing".
+  const intent = tool.output?.presentResult?.(
+    { command: "npm run dev", description: "Start the dev server" },
+    answer,
+  );
+  expect(intent).toMatchObject({
+    kind: "generic",
+    title: "npm run dev",
+    summary: "running in the background as proc_3",
+    meta: [["background", "proc_3"]],
+  });
+});
+
+test("run_in_background without the process registry refuses instead of running in the foreground", async () => {
+  // No background port: the honest answer is a refusal naming what is missing.
+  // Silently running it in the foreground would kill the command at the
+  // timeout the model never set, and report it as an ordinary failure.
+  const tool = shellToolFamily().tools.find(
+    (candidate) => candidate.name === "run_shell",
+  )!;
+  await expect(
+    tool.execute(
+      {
+        command: "npm run dev",
+        description: "Start the dev server",
+        run_in_background: true,
+      },
+      { workspaceRoot: "/ws", settings: {} } as never,
+    ),
+  ).rejects.toThrow(/managed-process registry/u);
+});

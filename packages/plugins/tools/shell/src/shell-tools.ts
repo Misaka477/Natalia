@@ -34,7 +34,56 @@ export const SHELL_PLUGIN_ID = "natalia-tool-shell";
 export const RUN_SHELL_DEFAULT_TIMEOUT_SEC = 120;
 export const RUN_SHELL_MAX_TIMEOUT_SEC = 1800;
 
-function runShellTool(): RuntimeTool {
+/**
+ * The managed-process registry, as `run_shell` needs it for
+ * `run_in_background` — the port, not the plugin.
+ *
+ * The process plugin already publishes this service under
+ * `managedProcessRegistry`; the shell plugin reads it through the seam the
+ * capability kernel exposes, so one plugin never imports another. Only the two
+ * methods a background hand-off needs are named here, and a registry that
+ * predates one simply does not answer it.
+ */
+export const MANAGED_PROCESS_REGISTRY_SERVICE = "managedProcessRegistry";
+
+export type BackgroundProcessPort = {
+  start(
+    command: string,
+    context: unknown,
+    id?: string,
+    options?: {
+      readyPattern?: string;
+      maxOutputBytes?: number;
+      stopTimeoutMs?: number;
+      maxRuntimeMs?: number;
+    },
+  ): Promise<{ id: string; pid?: number; status: string; output?: string }>;
+};
+
+/**
+ * What `run_in_background` answers with — a typed handle, not an id dug out of
+ * JSON.
+ *
+ * The model asked for a background run; the answer it needs is the name it can
+ * hand to `process_output` / `process_wait` / `process_stop`, plus what it must
+ * do instead of reading output here. The `<kind>-<n>` spelling is the one the
+ * process family already uses (`proc_3`), so a reader sees the same handle in
+ * the tool result, the notice and the status panel.
+ */
+export type BackgroundHandle = {
+  kind: "background";
+  jobId: string;
+  command: string;
+  description: string;
+  /** Where the output goes, and how to read it. */
+  note: string;
+};
+
+function runShellTool(
+  options: {
+    background?: () => BackgroundProcessPort | undefined;
+  } = {},
+): RuntimeTool {
   return {
     name: "run_shell",
     description:
@@ -77,6 +126,11 @@ function runShellTool(): RuntimeTool {
           description:
             "Optional. One sentence explaining why the wider mode is needed. Travels with sandbox_permissions: both or neither.",
         },
+        run_in_background: {
+          type: "boolean",
+          description:
+            "Optional. Start the command as a managed background process instead of waiting for it. The answer is a handle ({kind: 'background', jobId}) — read it with process_output, wait for it with process_wait, stop it with process_stop. Use it for a server, a watch, or anything slower than the timeout you would have to guess; a foreground run that outlives its timeout is killed.",
+        },
       },
       required: ["command", "description"],
       additionalProperties: false,
@@ -110,6 +164,18 @@ function runShellTool(): RuntimeTool {
         const parsed = requireObject(args);
         const command = parsed.command as string | undefined;
         const description = parsed.description as string | undefined;
+        // A background hand-off answers with a handle, not with output: the
+        // row must say so plainly instead of showing an empty card and letting
+        // a reader conclude the command printed nothing.
+        const handle = backgroundHandleOf(value);
+        if (handle)
+          return {
+            kind: "generic",
+            title: handle.command,
+            summary: `running in the background as ${handle.jobId}`,
+            body: handle.note,
+            meta: [["background", handle.jobId]],
+          };
         const stdout =
           value.match(/stdout:\n([\s\S]*?)(?:\nstderr:|\n?$)/u)?.[1] ?? "";
         const stderr = value.match(/stderr:\n([\s\S]*?)$/u)?.[1] ?? "";
@@ -140,6 +206,30 @@ function runShellTool(): RuntimeTool {
       const description = requireString(args.description, "description");
       if (description.trim().length === 0)
         throw new Error("invalid description: expected a non-empty string");
+      if (args.run_in_background === true) {
+        // A background run is a hand-off to the process registry, which owns
+        // the handle, the output file, the settlement notice and the tree kill.
+        // Without that service the honest answer is a refusal naming what is
+        // missing — never a foreground run the model did not ask for.
+        const port = options.background?.();
+        if (!port)
+          throw new Error(
+            "run_in_background needs the managed-process registry, which this runtime does not provide (the process tool family is not loaded). Run the command in the foreground with a timeoutSec, or enable the process tools.",
+          );
+        const command = requireString(args.command, "command");
+        const started = await port.start(command, context);
+        const handle: BackgroundHandle = {
+          kind: "background",
+          jobId: started.id,
+          command,
+          description,
+          note:
+            `started as ${started.id}${started.pid ? ` (pid ${started.pid})` : ""}. ` +
+            "Read it with process_output, wait for it with process_wait, stop it with process_stop. " +
+            "Its settlement arrives as a notice when it ends.",
+        };
+        return JSON.stringify(handle);
+      }
       const timeoutSec =
         context.timeoutSec ??
         timeoutSecOr(
@@ -214,20 +304,51 @@ function runShellTool(): RuntimeTool {
   };
 }
 
+/** The typed background handle an answer carries, when it is one. */
+export function backgroundHandleOf(
+  value: string,
+): BackgroundHandle | undefined {
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+      return undefined;
+    const record = decoded as Record<string, unknown>;
+    if (record.kind !== "background") return undefined;
+    if (typeof record.jobId !== "string" || !record.jobId) return undefined;
+    if (typeof record.command !== "string") return undefined;
+    return {
+      kind: "background",
+      jobId: record.jobId,
+      command: record.command,
+      description:
+        typeof record.description === "string" ? record.description : "",
+      note: typeof record.note === "string" ? record.note : "",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export const shellTools: RuntimeTool[] = [runShellTool()];
 
 /**
  * Session scope: a shell command only runs while the session that submitted it
  * is alive.
+ *
+ * `background` is the managed-process registry the plugin resolved from the
+ * service seam; absent it, `run_in_background` refuses rather than silently
+ * running in the foreground.
  */
-export function shellToolFamily(): ToolFamily {
+export function shellToolFamily(
+  background?: () => BackgroundProcessPort | undefined,
+): ToolFamily {
   return {
     id: "shell",
     name: "Shell Tools",
     version: "1.0.0",
     description: "One-shot command execution.",
     scope: "session",
-    tools: shellTools,
+    tools: background ? [runShellTool({ background })] : shellTools,
   };
 }
 
@@ -241,7 +362,10 @@ export const SHELL_PLUGIN_MANIFEST: PluginManifest = {
   scope: "session",
   provides: [],
   requires: [],
-  optionalRequires: [],
+  // The managed-process registry, when the process tool family is loaded.
+  // Optional on purpose: `run_shell` is useful without it, and the background
+  // hand-off refuses with a reason when it is missing.
+  optionalRequires: [MANAGED_PROCESS_REGISTRY_SERVICE],
   conflicts: [],
   dependencies: [],
   hooks: {},
@@ -252,7 +376,12 @@ export function createShellPlugin(): Plugin {
   return {
     manifest: SHELL_PLUGIN_MANIFEST,
     setup(api) {
-      for (const tool of shellTools) api.tools.register(tool);
+      for (const tool of shellToolFamily(() =>
+        api.services.get<BackgroundProcessPort>(
+          MANAGED_PROCESS_REGISTRY_SERVICE,
+        ),
+      ).tools)
+        api.tools.register(tool);
     },
   };
 }

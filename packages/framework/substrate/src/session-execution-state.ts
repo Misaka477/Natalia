@@ -177,6 +177,15 @@ export type SessionExecutionState = {
    * `context.instructions {kind: "sandbox_rung"}` record is the durable half.
    */
   permissionModeOverride?: "ask" | "auto" | "read_only";
+  /**
+   * True when THIS PROCESS moved the session's rung (`applySessionRung`).
+   *
+   * `permissionModeOverride` cannot answer that: it is filled at construction from
+   * the store's recovery row, which can still hold the value a session was created
+   * with. So a restart looked like "someone chose here" and the attach-time
+   * reconcile skipped, leaving the execution on the stale mode.
+   */
+  permissionModeChosenInProcess?: boolean;
 };
 
 /** Seeds {@link SessionExecutionState.announcedTurnIDs} from the loaded journal. */

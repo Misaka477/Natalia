@@ -384,15 +384,25 @@ export function createSessionAttach(ctx: RuntimeContext) {
       // `session.permission.mode` records what the human chose. Adoption is
       // skipped whenever `permissionModeOverride` is set, i.e. whenever something
       // in this process already decided.
-      if (exec.permissionModeOverride === undefined) {
-        const durable = permissionModeFromEvents(exec.session.events);
+      if (exec.permissionModeChosenInProcess !== true) {
+        // The execution can predate this session's journal (the runtime
+        // initializes with a session id and the history loads around it), so when
+        // its own event list carries no rung fact, read the STORED journal once —
+        // only then, because the full load is not free.
+        let durableEvents = exec.session.events;
+        if (permissionModeFromEvents(durableEvents) === undefined) {
+          const stored = await sessionStore
+            .loadFullAsync(nextID)
+            .catch(() => undefined);
+          if (stored) durableEvents = stored.events;
+        }
+        const durable = permissionModeFromEvents(durableEvents);
         if (durable) {
           exec.permissionMode = durable;
           exec.permissionModeOverride = durable;
         }
-        const durableConfinement = permissionConfinementFromEvents(
-          exec.session.events,
-        );
+        const durableConfinement =
+          permissionConfinementFromEvents(durableEvents);
         if (durableConfinement)
           exec.sandboxModeOverride = durableConfinement as never;
       }
@@ -496,7 +506,7 @@ export function createSessionAttach(ctx: RuntimeContext) {
     //
     // ONE journal read, shared with the status snapshot published below.
     const durableRungEvents = exec.session.events;
-    if (exec.permissionModeOverride === undefined) {
+    if (exec.permissionModeChosenInProcess !== true) {
       const durableMode = permissionModeFromEvents(durableRungEvents);
       if (durableMode) {
         exec.permissionMode = durableMode;

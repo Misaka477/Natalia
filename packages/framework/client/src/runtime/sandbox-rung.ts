@@ -128,6 +128,7 @@ export function applySessionRung(
   const confinementMoved = fromConfinement !== rung.confinement;
   exec.permissionMode = rung.approval;
   exec.permissionModeOverride = rung.approval;
+  exec.permissionModeChosenInProcess = true;
   exec.sandboxModeOverride = rung.confinement;
   // The approval axis has its own event (the UI's status line reads it), and it
   // is published even when only the sandbox axis moved: the pair is what the

@@ -464,6 +464,28 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // The exec already restored its own ledger, agent and model selection
     // (`ensureExecution`); here the activity closures take the same values so
     // UI reads and the next attach start from them.
+    // ADOPT A RUNG THE JOURNAL RECORDS, when nothing in-process has chosen one.
+    //
+    // The execution can be OLDER than this attach (the runtime initializes with a
+    // session id, so `ensureExecution` may already have returned a cached one built
+    // from creation-time defaults), while `session.permission.mode` durably records
+    // the rung its human chose. `permissionModeOverride` is exactly the "this
+    // session chose" marker (`applySessionRung` writes it), so adoption is skipped
+    // whenever something in this process already decided.
+    //
+    // ONE journal read, shared with the status snapshot published below.
+    const durableRungEvents = exec.session.events;
+    if (exec.permissionModeOverride === undefined) {
+      const durableMode = permissionModeFromEvents(durableRungEvents);
+      if (durableMode) {
+        exec.permissionMode = durableMode;
+        exec.permissionModeOverride = durableMode;
+      }
+      const durableConfinement =
+        permissionConfinementFromEvents(durableRungEvents);
+      if (durableConfinement)
+        exec.sandboxModeOverride = durableConfinement as never;
+    }
     setSelectedAgent(exec.selectedAgent);
     setSelectedModel(exec.selectedModel);
     setActiveSkill(exec.activeSkill);
@@ -497,9 +519,27 @@ export function createSessionAttach(ctx: RuntimeContext) {
       sessionID: exec.session.id,
     });
     mark("ready");
+    // THE DURABLE RUNG WINS OVER A STALE EXEC.
+    //
+    // The execution can still be carrying creation-time defaults while the
+    // journal already records the rung its human chose (the runtime initializes
+    // with a session id and loads the history around it). This snapshot is
+    // published LAST, so whatever it says is what a folding front end keeps —
+    // and it used to assert the default over the durable fact replayed just
+    // before it, which is how a session that chose `auto（工作区）` came back
+    // showing the `选择权限` placeholder.
+    const durableMode = permissionModeFromEvents(durableRungEvents);
+    const durableConfinement =
+      permissionConfinementFromEvents(durableRungEvents) ??
+      exec.sandboxModeOverride;
     publishForSession(
       exec,
-      contextStatusEvent(exec.context.status(exec.runtimeContextConfig)),
+      await status.snapshotFor({
+        provider: exec.provider,
+        context: exec.context,
+        permissionMode: durableMode ?? exec.permissionMode,
+        ...(durableConfinement ? { confinement: durableConfinement } : {}),
+      }),
     );
     // The usage bar's static value: the projection's whole-session totals,
     // accumulated per event and resumed from the durable checkpoint above —
@@ -521,12 +561,14 @@ export function createSessionAttach(ctx: RuntimeContext) {
       // snapshot is published LAST, so whatever it says is what a folding front
       // end keeps — and it used to say the default, overwriting the durable fact
       // that had just been replayed.
+      // ONE read of the journal for both rung facts: this snapshot is published
+      // LAST and a folding front end keeps its values, so it must not assert the
+      // execution's creation-time default over a rung the journal records.
       await status.snapshotFor({
         provider: exec.provider,
         context: exec.context,
         permissionMode:
-          permissionModeFromEvents(projection.replayableEvents) ??
-          exec.permissionMode,
+          permissionModeFromEvents(durableRungEvents) ?? exec.permissionMode,
         // The OTHER half of the rung. The approval mode above is the durable
         // fact; this is the session's own sandbox choice, and a front end needs
         // both to render the rung its human left it on.

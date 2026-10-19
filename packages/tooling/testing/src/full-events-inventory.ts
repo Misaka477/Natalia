@@ -164,9 +164,9 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     note: "work-graph queries read facts when complete (the window edge falls back)",
   },
   "packages/framework/client/src/runtime/session-attach.ts": {
-    count: 2,
+    count: 3,
     cls: "derivation",
-    note: "attach-time scans (seq anchoring + a revision walk) over the resident tail by design",
+    note: "attach-time scans (seq anchoring + a revision walk) over the resident tail by design, plus ONE full-journal read shared by the rung adoption and the attach-time status snapshot (both halves: approval + confinement)",
   },
   "packages/framework/client/src/runtime/event-sink.ts": {
     count: 6,

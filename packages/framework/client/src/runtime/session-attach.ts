@@ -534,7 +534,7 @@ export function createSessionAttach(ctx: RuntimeContext) {
           const durable = permissionConfinementFromEvents(
             projection.replayableEvents,
           );
-          return durable ?? exec.sandboxModeOverride
+          return (durable ?? exec.sandboxModeOverride)
             ? { confinement: durable ?? exec.sandboxModeOverride! }
             : {};
         })(),

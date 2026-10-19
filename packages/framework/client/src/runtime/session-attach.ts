@@ -516,6 +516,21 @@ export function createSessionAttach(ctx: RuntimeContext) {
       }),
     );
     mark("status");
+    // THE LIVE PROJECTION IS REBUILT ON EVERY ATTACH.
+    //
+    // `session.snapshot` is deliberately not retained in the live event state
+    // (`isRuntimeRetainedEvent`: "they can be rebuilt/re-requested"), and this is
+    // the rebuild nothing performed. The approval mode survives a restart through
+    // the durable `session.permission.mode`, but the rung a front end shows needs
+    // BOTH axes: `app-neu`'s `sessionRungFromProjection` pairs
+    // `state.permissionMode` (journal ✓) with `state.intelligence.confinement.mode`
+    // (that lives only in `session.snapshot`). With no snapshot after a restart the
+    // pair was incomplete, the selector fell back to config defaults, and when the
+    // default rung was not among the configured `agentModes` the trigger matched no
+    // option at all — the "选择权限" placeholder on a session running on
+    // `auto（工作区）`.
+    ctx.ports.publishSessionSnapshot?.(exec);
+    mark("intelligence");
     perfLog(
       `[perf] attachSession done target=${id} events=${exec.session.events.length} +${(performance.now() - start).toFixed(1)}ms`,
     );

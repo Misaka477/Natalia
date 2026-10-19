@@ -134,10 +134,21 @@ export function createSnapshot(ctx: RuntimeContext) {
     // mode rides `live` (a runtime truth); the escalation facts are
     // journal-derived inside the builder. The UI's danger indicator reads
     // the snapshot and the journal — the same source, never a second state.
-    const confinementMode = effectiveConfinementMode({
+    // THE SESSION'S OWN RUNG OUTRANKS THE DEPLOYMENT DEFAULT.
+    //
+    // This read only the profile/config default, so a session that had been
+    // moved to `workspace-write` kept publishing `danger-full-access` in its
+    // snapshot — and the rung a front end shows is the PAIR of the approval mode
+    // (journal) and this value. `applySessionRung` records the session's choice in
+    // `sandboxModeOverride`, which is exactly the precedence the tool-execution
+    // path resolves with (`resolveSandboxPolicy({ …, sessionMode })`); the snapshot
+    // was the one reader that skipped it.
+    const deploymentConfinementMode = effectiveConfinementMode({
       profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
       configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
     });
+    const confinementMode =
+      exec.sandboxModeOverride ?? deploymentConfinementMode;
     // The L1 fabric's counters (DoD #3's "命中"): aggregated over its
     // kinds, per-kind split kept — an absent fabric (a bare runtime)
     // rides nothing rather than inventing zeros.

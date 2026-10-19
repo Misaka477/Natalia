@@ -376,6 +376,27 @@ export function createSessionAttach(ctx: RuntimeContext) {
         if (exec.session.metadata?.archived)
           throw new RuntimeRefusal("cannot attach an archived session");
       }
+      // THE SAME-SESSION STARTUP ATTACH IS THE RESTART A USER ACTUALLY HAS.
+      //
+      // It takes the active execution as it stands, which was built at
+      // initialize — before this session's journal was read around it — so its
+      // rung can still be the creation-time default while
+      // `session.permission.mode` records what the human chose. Adoption is
+      // skipped whenever `permissionModeOverride` is set, i.e. whenever something
+      // in this process already decided.
+      if (exec.permissionModeOverride === undefined) {
+        const durable = permissionModeFromEvents(exec.session.events);
+        if (durable) {
+          exec.permissionMode = durable;
+          exec.permissionModeOverride = durable;
+        }
+        const durableConfinement = permissionConfinementFromEvents(
+          exec.session.events,
+        );
+        if (durableConfinement)
+          exec.sandboxModeOverride = durableConfinement as never;
+      }
+      setPermissionMode(exec.permissionMode);
       void seedStreamContextSnapshots(exec).catch(() => undefined);
       // A same-session startup attach skips `ensureExecution`, so the durable
       // goal is never replayed here; re-seed the live projection explicitly or
@@ -522,24 +543,15 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // THE DURABLE RUNG WINS OVER A STALE EXEC.
     //
     // The execution can still be carrying creation-time defaults while the
-    // journal already records the rung its human chose (the runtime initializes
-    // with a session id and loads the history around it). This snapshot is
-    // published LAST, so whatever it says is what a folding front end keeps —
-    // and it used to assert the default over the durable fact replayed just
-    // before it, which is how a session that chose `auto（工作区）` came back
-    // showing the `选择权限` placeholder.
+    // journal already records the rung its human chose, and this snapshot is
+    // published LAST — so whatever it says is what a folding front end keeps.
     const durableMode = permissionModeFromEvents(durableRungEvents);
     const durableConfinement =
       permissionConfinementFromEvents(durableRungEvents) ??
       exec.sandboxModeOverride;
     publishForSession(
       exec,
-      await status.snapshotFor({
-        provider: exec.provider,
-        context: exec.context,
-        permissionMode: durableMode ?? exec.permissionMode,
-        ...(durableConfinement ? { confinement: durableConfinement } : {}),
-      }),
+      contextStatusEvent(exec.context.status(exec.runtimeContextConfig)),
     );
     // The usage bar's static value: the projection's whole-session totals,
     // accumulated per event and resumed from the durable checkpoint above —
@@ -553,33 +565,11 @@ export function createSessionAttach(ctx: RuntimeContext) {
     mark("context");
     publishForSession(
       exec,
-      // THE DURABLE RUNG WINS OVER A STALE EXEC.
-      //
-      // The execution can still be carrying creation-time defaults while the
-      // journal already records the rung its human chose (the runtime
-      // initializes with a session id and loads the history around it). This
-      // snapshot is published LAST, so whatever it says is what a folding front
-      // end keeps — and it used to say the default, overwriting the durable fact
-      // that had just been replayed.
-      // ONE read of the journal for both rung facts: this snapshot is published
-      // LAST and a folding front end keeps its values, so it must not assert the
-      // execution's creation-time default over a rung the journal records.
       await status.snapshotFor({
         provider: exec.provider,
         context: exec.context,
-        permissionMode:
-          permissionModeFromEvents(durableRungEvents) ?? exec.permissionMode,
-        // The OTHER half of the rung. The approval mode above is the durable
-        // fact; this is the session's own sandbox choice, and a front end needs
-        // both to render the rung its human left it on.
-        ...(() => {
-          const durable = permissionConfinementFromEvents(
-            projection.replayableEvents,
-          );
-          return (durable ?? exec.sandboxModeOverride)
-            ? { confinement: durable ?? exec.sandboxModeOverride! }
-            : {};
-        })(),
+        permissionMode: durableMode ?? exec.permissionMode,
+        ...(durableConfinement ? { confinement: durableConfinement } : {}),
       }),
     );
     mark("status");

@@ -151,7 +151,12 @@ export function createPermissions(
     if (!derived.found) return;
     const previousMode = getPermissionMode();
     setSelectedPermissionProfile(derived.selectedProfile);
-    setPermissionMode(derived.mode);
+    // The PORTS value follows the deployment default only where no session has
+    // chosen its own rung: the active session override wins, exactly as the
+    // exec does below.
+    setPermissionMode(
+      ctx.ports.getActiveExec()?.permissionModeOverride ?? derived.mode,
+    );
     setDefaultPermissionMode(derived.defaultMode);
     setDefaultPermissionProfile(derived.defaultProfile);
     // Reported only on a real change. The projector derives a session's mode by
@@ -159,6 +164,14 @@ export function createPermissions(
     // was always undefined — a pure replay cannot see process state, only events.
     if (previousMode !== derived.mode)
       for (const exec of ctx.ports.getExecutionBySession().values()) {
+        // A SESSION THAT CHOSE KEEPS ITS RUNG. `applySessionRung` records the
+        // choice in `permissionModeOverride`, and the whole point of that field
+        // is that a config reload refreshes the deployment default underneath a
+        // session that never chose while leaving a session that did choose alone.
+        // This loop ignored it: it stamped `derived.mode` over every exec and
+        // published the event, so a session moved to `auto` came back as the
+        // deployment default on the next start (the mode "was lost on restart").
+        if (exec.permissionModeOverride !== undefined) continue;
         exec.permissionMode = derived.mode;
         // `mode` only: the profile's key lives upstream of what this derivation
         // returns, and the event's `profile` is optional, so inventing one here

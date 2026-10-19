@@ -183,6 +183,8 @@ export {
   sessionFactDiagnosticStreamEvents,
   isDiagnosticStreamEvent,
   settlementRecordsFromEvents,
+  permissionConfinementFromEvents,
+  permissionModeFromEvents,
 } from "./projector";
 export type {
   ProjectedCapability,

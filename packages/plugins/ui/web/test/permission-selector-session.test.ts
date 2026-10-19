@@ -41,11 +41,17 @@ test("moving the rung is ONE session-scoped write carrying both axes", () => {
 test("the standing rung is the session's, with the config only as a fallback", () => {
   const start = app.indexOf("const sessionRungFromProjection = () => {");
   expect(start).toBeGreaterThan(0);
-  const body = app.slice(start, start + 500);
+  const body = app.slice(start, start + 900);
   // The session's own facts first: the approval mode the runtime publishes and
   // the confinement half the session snapshot carries.
   expect(body).toContain("state().permissionMode");
   expect(body).toContain("state().intelligence?.confinement?.mode");
+  // The sandbox half has a SECOND source now, and it is the one that survives a
+  // restart: `permissionConfinement` comes from the durable rung event, while
+  // `intelligence.confinement` only exists while a live `session.snapshot` does.
+  expect(body).toContain("state().permissionConfinement");
+  // The pairing itself (prettier may format it across lines, so the assertion is
+  // on the call, not on one spelling of it).
   expect(body).toContain("rungFor({ approval, confinement })");
   // The config only answers when the runtime has said nothing yet.
   const fallback = app.slice(start, start + 900);

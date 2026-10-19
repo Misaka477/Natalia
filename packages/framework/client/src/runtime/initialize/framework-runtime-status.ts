@@ -112,7 +112,20 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
     provider: ctx.ports.getProvider,
     context: ctx.ports.getRuntimeContext,
     workspaceRoot: ctx.ports.getWorkspaceRoot(),
-    permissionMode: ctx.ports.getPermissionMode,
+    // THE ACTIVE SESSION'S RUNG, NOT THE PROCESS-WIDE DEFAULT.
+    //
+    // `getPermissionMode()` is the runtime-global value the config derivation
+    // stamped; a session that moved its own rung carries a different one on its
+    // execution. Publishing the global value meant every periodic status snapshot
+    // re-asserted the deployment default AFTER the durable rung fact had been
+    // replayed — and since the front end folds events in order, the last one won:
+    // a restarted session showed the deployment's mode, not the rung its human
+    // chose (measured: replay said auto + workspace-write, the status snapshot
+    // that followed said ask + danger-full-access, and the projection ended on
+    // ask + danger-full-access).
+    permissionMode: () =>
+      ctx.ports.getActiveExec()?.permissionMode ??
+      ctx.ports.getPermissionMode(),
     // The session's own sandbox rung outranks the deployment default, the same
     // precedence `resolveSandboxPolicy` applies when a tool actually executes.
     // Without this the status event carried only the approval half, so a

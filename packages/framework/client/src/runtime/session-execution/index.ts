@@ -353,6 +353,14 @@ export function createSessionExecution(
             : undefined;
         })(),
       runtimeContextConfig: getRuntimeContextConfig(),
+      // THE JOURNAL OUTRANKS THE RECOVERY INDEX. The index is a store-maintained
+      // side table; `session.permission.mode` is the durable fact the rung writer
+      // publishes. Reading the index first meant a store whose row still held the
+      // creation-time mode beat a journal that said otherwise.
+      // THE RECOVERY INDEX FIRST, the journal projection second: the projection
+      // may cover only a window of the journal (a fast attach holds a tail), so a
+      // rung move older than that window is invisible to it, while the store
+      // keeps the last one in `recovery_selection` for exactly this read.
       permissionMode:
         recovery?.permissionMode ??
         projection.permissionMode ??

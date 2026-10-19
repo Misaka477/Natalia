@@ -491,6 +491,18 @@ export function permissionModeFromEvents(
   return undefined;
 }
 
+/** The sandbox half of the last rung move, when the event carried one. */
+export function permissionConfinementFromEvents(
+  events: readonly RuntimeEvent[],
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.type === "session.permission.mode" && event.confinement)
+      return event.confinement;
+  }
+  return undefined;
+}
+
 export function permissionProfileFromEvents(
   events: RuntimeEvent[],
 ): string | undefined {

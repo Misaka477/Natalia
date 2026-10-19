@@ -464,25 +464,6 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // The exec already restored its own ledger, agent and model selection
     // (`ensureExecution`); here the activity closures take the same values so
     // UI reads and the next attach start from them.
-    // THE EXEC ADOPTS THE SESSION'S DURABLE RUNG.
-    //
-    // The execution the runtime hands us may have been built BEFORE this
-    // session's journal was loaded (the runtime initializes with a session id and
-    // attaches afterwards), so it carries creation-time defaults. The rung is a
-    // durable fact — `session.permission.mode` records both halves — and this is
-    // the one place holding the freshly loaded projection. Without this the
-    // journal replay told the front end `auto（工作区）` while the runtime kept
-    // running (and republishing) `ask`, and a fold takes the LAST value.
-    const durableMode = permissionModeFromEvents(exec.session.events);
-    if (durableMode) {
-      exec.permissionMode = durableMode;
-      exec.permissionModeOverride = durableMode;
-    }
-    const durableConfinement = permissionConfinementFromEvents(
-      exec.session.events,
-    );
-    if (durableConfinement)
-      exec.sandboxModeOverride = durableConfinement as never;
     setSelectedAgent(exec.selectedAgent);
     setSelectedModel(exec.selectedModel);
     setActiveSkill(exec.activeSkill);
@@ -532,16 +513,31 @@ export function createSessionAttach(ctx: RuntimeContext) {
     mark("context");
     publishForSession(
       exec,
+      // THE DURABLE RUNG WINS OVER A STALE EXEC.
+      //
+      // The execution can still be carrying creation-time defaults while the
+      // journal already records the rung its human chose (the runtime
+      // initializes with a session id and loads the history around it). This
+      // snapshot is published LAST, so whatever it says is what a folding front
+      // end keeps — and it used to say the default, overwriting the durable fact
+      // that had just been replayed.
       await status.snapshotFor({
         provider: exec.provider,
         context: exec.context,
-        permissionMode: exec.permissionMode,
+        permissionMode:
+          permissionModeFromEvents(projection.replayableEvents) ??
+          exec.permissionMode,
         // The OTHER half of the rung. The approval mode above is the durable
         // fact; this is the session's own sandbox choice, and a front end needs
         // both to render the rung its human left it on.
-        ...(exec.sandboxModeOverride
-          ? { confinement: exec.sandboxModeOverride }
-          : {}),
+        ...(() => {
+          const durable = permissionConfinementFromEvents(
+            projection.replayableEvents,
+          );
+          return durable ?? exec.sandboxModeOverride
+            ? { confinement: durable ?? exec.sandboxModeOverride! }
+            : {};
+        })(),
       }),
     );
     mark("status");

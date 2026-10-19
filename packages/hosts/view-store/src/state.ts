@@ -448,7 +448,10 @@ export type AppState = {
    * but is live-only, which is why the control rendered as unset on a session
    * that was running on a rung).
    */
-  permissionConfinement?: "read-only" | "workspace-write" | "danger-full-access";
+  permissionConfinement?:
+    | "read-only"
+    | "workspace-write"
+    | "danger-full-access";
   /**
    * The active turn's durable start, epoch ms, read from the turn's own
    * `turn.submitted.at`. A per-session fact rather than a client's "first time

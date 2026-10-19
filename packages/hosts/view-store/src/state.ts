@@ -439,6 +439,17 @@ export type AppState = {
    */
   permissionMode?: "ask" | "auto" | "read_only";
   /**
+   * The SANDBOX half of the session's rung, from `status.snapshot.confinement`.
+   *
+   * The rung a control shows is a pair, and the two halves arrive on different
+   * events: the approval mode on the durable `session.permission.mode` (so it
+   * survives a restart), and this one on `status.snapshot` (the read model that
+   * provably reaches a client after a restart — `session.snapshot` carries it too
+   * but is live-only, which is why the control rendered as unset on a session
+   * that was running on a rung).
+   */
+  permissionConfinement?: "read-only" | "workspace-write" | "danger-full-access";
+  /**
    * The active turn's durable start, epoch ms, read from the turn's own
    * `turn.submitted.at`. A per-session fact rather than a client's "first time
    * I saw this turn", so switching to a running session continues its clock and

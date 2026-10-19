@@ -16,6 +16,8 @@ import {
   type SubagentsService,
 } from "@anthelia/runtime-services";
 import { projectSession } from "@anthelia/session";
+import { compositionProfile } from "@anthelia/composition";
+import { effectiveConfinementMode } from "../tool-execution/execute-context";
 import { EGRESS_ADVISORY } from "../../egress-advisory";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
@@ -87,6 +89,9 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
           provider: exec.provider,
           context: exec.context,
           permissionMode: exec.permissionMode,
+          ...(exec.sandboxModeOverride
+            ? { confinement: exec.sandboxModeOverride }
+            : {}),
           steps: providerStepsFor(exec),
         }),
       };
@@ -108,6 +113,20 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
     context: ctx.ports.getRuntimeContext,
     workspaceRoot: ctx.ports.getWorkspaceRoot(),
     permissionMode: ctx.ports.getPermissionMode,
+    // The session's own sandbox rung outranks the deployment default, the same
+    // precedence `resolveSandboxPolicy` applies when a tool actually executes.
+    // Without this the status event carried only the approval half, so a
+    // restarted front end could not pair the rung it was standing on.
+    confinement: () => {
+      const active = ctx.ports.getActiveExec();
+      return (
+        active?.sandboxModeOverride ??
+        effectiveConfinementMode({
+          profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
+          configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
+        })
+      );
+    },
     runningCount: async () =>
       (ctx.state.serviceDirectory
         .getOptional(subagentsService)

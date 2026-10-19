@@ -1371,6 +1371,17 @@ type RuntimeEventData =
   | {
       type: "session.permission.mode";
       mode: "ask" | "auto" | "read_only";
+      /**
+       * The SANDBOX half of the rung, when the writer moved both.
+       *
+       * The approval mode alone was not enough for a front end to restore the
+       * rung its human chose: the pair it renders is (approval, confinement), and
+       * the confinement half existed only in a prose notice and in the live-only
+       * `session.snapshot`. So a restarted session showed the control as unset
+       * while it was running on a rung. Optional: a rung move that only touched
+       * the approval axis publishes none, and an older journal carries none.
+       */
+      confinement?: string;
       profile?: string;
     }
   | {
@@ -2051,6 +2062,16 @@ type RuntimeEventData =
        */
       steps?: number;
       permissions: string;
+      /**
+       * The SANDBOX half of the session's rung, beside `permissions` (the approval
+       * half). A front end's rung control needs both, and this is the one read
+       * model that provably reaches a client after a restart: `session.snapshot`
+       * carries the pair too, but it is live-only (`runtimeEventDurability`), so a
+       * restarted client never saw it and the control rendered as unset while the
+       * session was running on a rung. Optional: a journal written before the
+       * field parses, and a session that never chose keeps the deployment default.
+       */
+      confinement?: string;
       cwd: string;
       background: string;
       /**

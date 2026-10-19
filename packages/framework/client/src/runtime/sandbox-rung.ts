@@ -136,6 +136,10 @@ export function applySessionRung(
   ctx.ports.publishForSession(exec, {
     type: "session.permission.mode",
     mode: rung.approval,
+    // BOTH axes, because this is the only durable record of the sandbox half:
+    // the notice below is prose for the model, and `session.snapshot` is live-only,
+    // so a front end that attaches after a restart had no way to pair the rung.
+    confinement: rung.confinement,
   });
   publishSandboxRungNotice(ctx, exec, {
     to: rung.confinement,

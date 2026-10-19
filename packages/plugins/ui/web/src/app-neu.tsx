@@ -2709,7 +2709,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
    */
   const sessionRungFromProjection = () => {
     const approval = state().permissionMode;
-    const confinement = state().intelligence?.confinement?.mode;
+    // `permissionConfinement` (status.snapshot) is the half that reaches a
+    // client after a restart; `intelligence.confinement` (session.snapshot) is
+    // the live one and stays as the fallback for a session that has one.
+    const confinement =
+      state().permissionConfinement ?? state().intelligence?.confinement?.mode;
     if (!approval || !confinement) return undefined;
     return rungFor({ approval, confinement });
   };

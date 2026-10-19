@@ -513,6 +513,12 @@ export function createSessionAttach(ctx: RuntimeContext) {
         provider: exec.provider,
         context: exec.context,
         permissionMode: exec.permissionMode,
+        // The OTHER half of the rung. The approval mode above is the durable
+        // fact; this is the session's own sandbox choice, and a front end needs
+        // both to render the rung its human left it on.
+        ...(exec.sandboxModeOverride
+          ? { confinement: exec.sandboxModeOverride }
+          : {}),
       }),
     );
     mark("status");

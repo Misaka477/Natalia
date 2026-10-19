@@ -31,6 +31,12 @@ export type RuntimeStatusInput = {
   context(): StatusContextLedger;
   workspaceRoot: string;
   permissionMode(): "ask" | "auto" | "read_only";
+  /**
+   * The sandbox half of the rung, when the wiring can answer. Absent (a bare
+   * runtime, a pre-change host) means the event carries no `confinement` and a
+   * front end falls back to its own resolution — never a guess.
+   */
+  confinement?(): string | undefined;
   runningCount(): Promise<number>;
   publish(event: RuntimeEvent): void;
   /**
@@ -71,6 +77,8 @@ export function createStatusSnapshotController(
     provider?: StatusProvider;
     context?: StatusContextLedger;
     permissionMode?: "ask" | "auto" | "read_only";
+    /** The sandbox half of the session's rung; absent falls back to the input. */
+    confinement?: string;
     steps?: number;
   }) {
     const running = await input.runningCount();
@@ -81,6 +89,8 @@ export function createStatusSnapshotController(
       overrides?.permissionMode ?? input.permissionMode(),
       running,
       overrides?.steps ?? input.stepCount?.(),
+      process.platform,
+      overrides?.confinement ?? input.confinement?.(),
     );
   }
 
@@ -128,6 +138,7 @@ export function statusSnapshot(
   running: number,
   steps?: number,
   platform: string = process.platform,
+  confinement?: string,
 ): Extract<RuntimeEvent, { type: "status.snapshot" }> {
   const status = context.journalStatus();
   return {
@@ -141,6 +152,7 @@ export function statusSnapshot(
     // the same word is how two faces came to report one run as two numbers.
     ...(steps !== undefined ? { steps } : {}),
     permissions: permissionMode,
+    ...(confinement ? { confinement } : {}),
     cwd,
     background: `${running} running`,
     platform,

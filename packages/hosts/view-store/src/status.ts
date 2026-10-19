@@ -152,11 +152,24 @@ export function applyStatusEvent(
       // which is how two front ends came to show different modes for one
       // session (each showing its own last write, or the config's default).
       state.permissionMode = event.permissions as AppState["permissionMode"];
+      // The sandbox half of the rung, kept BESIDE the approval half rather than
+      // inside `intelligence` (that field is the `session.snapshot` event's shape,
+      // and `session.snapshot` is live-only, so a restarted front end never has
+      // it). An older journal carries no `confinement`: leave the field unset
+      // rather than inventing the deployment default.
+      if (event.confinement)
+        state.permissionConfinement =
+          event.confinement as AppState["permissionConfinement"];
       return true;
     // The durable record of a rung move. Replayed journals carry it, so a
     // client that attaches after the move sees the same mode a live one does.
     case "session.permission.mode":
       state.permissionMode = event.mode;
+      // The sandbox half of the rung rides the same fact now, so a restarted
+      // front end restores the pair from the journal instead of guessing.
+      if (event.confinement)
+        state.permissionConfinement =
+          event.confinement as AppState["permissionConfinement"];
       return true;
     case "context.status": {
       // Journal replay only: a live writer emits the namespaced

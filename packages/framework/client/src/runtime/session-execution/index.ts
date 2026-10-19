@@ -364,10 +364,13 @@ export function createSessionExecution(
       // (`exec.permissionMode = exec.permissionModeOverride ?? permissionMode`).
       permissionModeOverride:
         recovery?.permissionMode ?? projection.permissionMode,
-      // NOTE: the PROFILE is still the deployment default here (a session on a
-      // custom agentMode comes back on the default). Restoring it by name needs
-      // the config→profile derivation (`derivePermissionSettings`) at this
-      // point; the MODE is restored below and that is the reported defect.
+      // THE PROFILE IS NOT RESTORED FROM THE JOURNAL, and that is correct: a
+      // profile is a CONFIG choice (`config.agentModes` via `options.permissionProfile`
+      // or `defaultAgentMode`), not a per-session one. `reloadPermissionSettings`
+      // re-derives it from the config on every initialize, and the rung selector
+      // only moves the two per-session axes (approval + confinement) — it never
+      // publishes a profile, so there is nothing recorded to restore. Reading the
+      // deployment default here is the config-derived answer, not a lost choice.
       permissionProfile: getDefaultPermissionProfile(),
       selectedAgent: projection.selectedAgent
         ? getAgentRegistry()?.select(projection.selectedAgent)

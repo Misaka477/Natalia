@@ -52,6 +52,20 @@ export type AssayRun = {
   recordedAt?: string;
   /** The environment the run happened in, when it was recorded. */
   environment?: string;
+  /**
+   * EVERY environment this run was measured in, distinct and sorted.
+   *
+   * One entry means one witness. Assay cannot manufacture a second environment —
+   * that is CI's job, and it needs a machine that is not this one. What assay can
+   * do is stop a single-environment green from READING as portable: the fact is
+   * stated here instead of being assumed by the reader.
+   */
+  environments?: string[];
+  /**
+   * How far this run's scope reaches, in words: `single environment — portability
+   * not established` or `N environments`. Never a boolean.
+   */
+  portability?: string;
   steps: AssayStep[];
   /** Evidence classes this run establishes. */
   checked: string[];
@@ -189,6 +203,16 @@ export function assayRunFor(input: {
     });
   }
   steps.push(...notRunDeclared);
+  const environmentList = [
+    ...new Set(
+      matching
+        .map((record) => record.environment)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        ),
+    ),
+  ].sort();
   const latest = matching[matching.length - 1]!;
   const notChecked = [...(input.completion?.missing ?? [])];
   // A declared check that never ran leaves the classes it would have covered
@@ -230,6 +254,15 @@ export function assayRunFor(input: {
     ...(latest.recordedAt ? { recordedAt: latest.recordedAt } : {}),
     ...(latest.environment ? { environment: latest.environment } : {}),
     steps,
+    ...(environmentList.length > 0
+      ? {
+          environments: environmentList,
+          portability:
+            environmentList.length === 1
+              ? "single environment — portability not established"
+              : `${environmentList.length} environments`,
+        }
+      : {}),
     checked: [...checked],
     notChecked,
     warrant,

@@ -1418,9 +1418,14 @@ export function createAssayReportTool(
           current: sorted[sorted.length - 1]!,
         });
       };
+      const checksChosenBy =
+        declaration.checks.length > 0
+          ? "the project's declaration (.natalia/assay.json)"
+          : "the model at call time — the project declared no checks, so this run says nothing about what SHOULD be checked";
       const answer = (extra: Record<string, unknown>): string =>
         JSON.stringify({
           ...extra,
+          checksChosenBy,
           ...(declarationError ? { declarationError } : {}),
           ...(declaration.warnings.length > 0
             ? { declarationWarnings: declaration.warnings }
@@ -1528,6 +1533,8 @@ function runShape(
     notChecked: run.notChecked,
     steps: run.steps,
     totalDurationMs: run.totalDurationMs,
+    ...(run.environments ? { environments: run.environments } : {}),
+    ...(run.portability ? { portability: run.portability } : {}),
     ...(run.notChecked.length > 0 && sources.length > 0
       ? { openSource: sources.join(" and ") }
       : {}),
@@ -1608,6 +1615,13 @@ export function assayReportCard(): ToolOutputDefinition {
         : undefined;
     if (comparison && typeof comparison.why === "string")
       lines.push(`compare · ${comparison.why}`);
+    const environments = stringsOf(record.environments);
+    if (environments.length > 0)
+      lines.push(`environment · ${environments.join(", ")}`);
+    if (typeof record.portability === "string" && record.portability)
+      lines.push(`portability · ${record.portability}`);
+    if (typeof record.checksChosenBy === "string" && record.checksChosenBy)
+      lines.push(`checks chosen by · ${record.checksChosenBy}`);
     if (typeof record.note === "string" && record.note)
       lines.push(`note · ${record.note}`);
     return lines;

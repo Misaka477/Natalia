@@ -41,6 +41,9 @@ const runEnvelope = JSON.stringify({
   checked: ["validation:any", "validation:test"],
   notChecked: ["validation:typecheck"],
   openSource: "the project's declared checks",
+  environments: ["win32/x64"],
+  portability: "single environment — portability not established",
+  checksChosenBy: "the project's declaration (.natalia/assay.json)",
   totalDurationMs: 1240,
   steps: [
     {
@@ -87,6 +90,12 @@ test("a run's card names every check, its verdict, its duration and its role", (
   expect(body).toContain("open · validation:typecheck");
   expect(body).toContain("open came from · the project's declared checks");
   expect(body).toContain("note · still open: validation:typecheck");
+  // WHERE it was measured, HOW FAR that reaches, and WHO chose the checks: the
+  // three facts CI's page cannot state (it knows its environment but not that a
+  // claim's scope ends there, and it never shows who picked the checks).
+  expect(body).toContain("environment · win32/x64");
+  expect(body).toContain("portability · single environment");
+  expect(body).toContain("checks chosen by · the project's declaration");
 });
 
 test("a comparison arrives as a sentence, not a boolean", () => {

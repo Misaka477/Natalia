@@ -107,6 +107,10 @@ test("the members whose refusal must be a value are named, and each names its fi
     // that rung, answers {changed:false} with the mode it was asked for —
     // the answer says whether the ladder MOVED.
     "setSandboxRung",
+    // The shell switch: a switch to the shell the session already runs is not
+    // news, and a session that is not live has nothing to switch — both answer
+    // undefined rather than throwing.
+    "setSessionShell",
     "shutdown",
     "updateConfig",
     "updateConstitutionDocRule",

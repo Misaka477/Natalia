@@ -1287,6 +1287,33 @@ export async function handleRPCMessage(
         result: await client.pickDirectory?.(),
       };
     }
+    if (body.method === "file.pick") {
+      optionsGuard(client, "pickFile");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.pickFile?.(),
+      };
+    }
+    if (body.method === "directory.list") {
+      optionsGuard(client, "listDirectoryLevel");
+      const path = optionalStringParam(body.params, "path");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.listDirectoryLevel?.(path),
+      };
+    }
+    if (body.method === "directory.create") {
+      optionsGuard(client, "createChildDirectory");
+      const path = stringParam(body.params, "path");
+      const name = stringParam(body.params, "name");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.createChildDirectory?.(path, name),
+      };
+    }
     if (body.method === "workspace.add") {
       optionsGuard(client, "workspaceAdd");
       const path = stringParam(body.params, "path");

@@ -26,6 +26,16 @@ export {
   type Win32FolderDialog,
 } from "./win32-dialog-logic";
 export {
+  DEFAULT_MAX_ENTRIES,
+  DirectoryPickerError,
+  boundedInsert,
+  createChildDirectory,
+  fullyQualified,
+  listDirectoryLevel,
+  type DirectoryPickerErrorCode,
+  type ListDirectoryOptions,
+} from "./directory-browse";
+export {
   ENCODING_PREAMBLE,
   candidatePwshPaths,
   configuredPwshPath,

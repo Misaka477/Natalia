@@ -16,6 +16,7 @@ import type {
   WorkspaceSummary,
   WorkspacePermissionSettings,
   WorkspaceToolSettings,
+  DirectoryListing,
 } from "@anthelia/contracts";
 import { callRuntimeRPC } from "@natalia/transport";
 
@@ -73,6 +74,9 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   workspaceWriteConflicts: "workspace.writeConflicts",
   workspaceRoots: "workspace.roots",
   pickDirectory: "directory.pick",
+  pickFile: "file.pick",
+  listDirectoryLevel: "directory.list",
+  createChildDirectory: "directory.create",
   workspaceAdd: "workspace.add",
   workspaceRemove: "workspace.remove",
   workspaceActivate: "workspace.activate",
@@ -947,6 +951,28 @@ export function createWebRuntimeClient(
      */
     async pickDirectory() {
       return (await call<string | null>("directory.pick")) as never;
+    },
+    /** The file twin of `pickDirectory`, for a path that names a file. */
+    async pickFile() {
+      return (await call<string | null>("file.pick")) as never;
+    },
+    /**
+     * List one directory level, for a client no OS dialog can reach.
+     *
+     * The runtime owns the filesystem; a page cannot walk it. A path that is
+     * not fully qualified is refused rather than rebased under the host's cwd.
+     */
+    async listDirectoryLevel(path) {
+      return (await call<DirectoryListing>("directory.list", {
+        path,
+      })) as never;
+    },
+    /** Create one child directory under an existing parent. */
+    async createChildDirectory(path, name) {
+      return (await call<string>("directory.create", {
+        path,
+        name,
+      })) as never;
     },
     async workspaceAdd(input) {
       return (await call<WorkspaceSummary>("workspace.add", {

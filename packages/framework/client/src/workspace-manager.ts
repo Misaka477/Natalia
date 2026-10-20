@@ -10,8 +10,10 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import {
+  createChildDirectory,
   firstUseWorkspaceDeclinedPath,
   firstUseWorkspacePath,
+  listDirectoryLevel,
   nataliaHomeJoin,
   pickDirectory,
   pickFile,
@@ -25,6 +27,7 @@ import {
   type WorkspaceSummary,
   type WorkspacePermissionSettings,
   type WorkspaceToolSettings,
+  type DirectoryListing,
 } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "./runtime/main";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
@@ -253,6 +256,8 @@ export type WorkspaceManager = {
   workspaceRoots(): Promise<WorkspaceSummary[]>;
   pickDirectory(): Promise<string | null>;
   pickFile(): Promise<string | null>;
+  listDirectoryLevel(path?: string): Promise<DirectoryListing>;
+  createChildDirectory(path: string, name: string): Promise<string>;
   workspaceAdd(input: {
     path: string;
     title?: string;
@@ -677,6 +682,21 @@ export function createWorkspaceManager(
     /** The file twin of `pickDirectory`, for a path that names a file. */
     async pickFile() {
       return await pickFile();
+    },
+    /**
+     * List one directory level, for a client no OS dialog can reach.
+     *
+     * The native picker needs a display on the host; a remote browser has none,
+     * so this serves the primitives an in-app browser drives one level at a
+     * time. A path that is not fully qualified is refused rather than rebased
+     * under the host's cwd.
+     */
+    async listDirectoryLevel(path) {
+      return await listDirectoryLevel(path);
+    },
+    /** Create one child directory under an existing parent. */
+    async createChildDirectory(path, name) {
+      return await createChildDirectory(path, name);
     },
     workspaceAdd: addWorkspace,
     workspaceRemove: removeWorkspace,

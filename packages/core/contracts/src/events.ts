@@ -11,6 +11,43 @@ import type {
   PermissionProfile,
 } from "./schemas";
 
+/**
+ * One directory row of a browse listing: a listing child or a breadcrumb
+ * ancestor.
+ *
+ * The type lives here rather than in the host package because the host depends
+ * on the contracts, not the other way round — a type the wire carries belongs
+ * on the contract side of that edge.
+ */
+export type DirectoryEntry = {
+  /** Base name shown in a browser row (a root crumb carries its full path). */
+  name: string;
+  /** Absolute host path — clients never join path segments themselves. */
+  path: string;
+  /** Hidden by the host platform's convention (dot-prefixed on POSIX). */
+  hidden: boolean;
+};
+
+/** One directory level plus its ancestry, as the browse picker reports it. */
+export type DirectoryListing = {
+  /** Absolute path of the listed directory. */
+  path: string;
+  /** The host account's home directory (breadcrumb "Home" rooting). */
+  home: string;
+  /**
+   * Ancestor chain from the filesystem root to the listed directory inclusive;
+   * every crumb is a jump target (crumb `hidden` is always false).
+   */
+  crumbs: DirectoryEntry[];
+  /** Direct child directories, name-sorted; symlinks to directories included. */
+  entries: DirectoryEntry[];
+  /**
+   * True when the level was cut at the complete-result bound: it has more child
+   * directories than reported, and the missing rows are the name-sorted tail.
+   */
+  truncated: boolean;
+};
+
 export type SessionID = `ses_${string}`;
 export type EpisodeID = `epi_${string}`;
 
@@ -4434,6 +4471,15 @@ export type RuntimeClient = {
    * a directory. Same contract: `null` is a dismissal, not a failure.
    */
   pickFile?(): Promise<string | null>;
+  /**
+   * List one directory level, for a client no OS dialog can reach.
+   *
+   * The native picker needs a display on the host; a remote browser has none.
+   * This serves the primitives an in-app browser drives one level at a time.
+   */
+  listDirectoryLevel?(path?: string): Promise<DirectoryListing>;
+  /** Create one child directory under an existing parent. */
+  createChildDirectory?(path: string, name: string): Promise<string>;
   /**
    * Adds a workspace root to the runtime host. When the root is already
    * registered, a provided `title` updates that workspace's display title.

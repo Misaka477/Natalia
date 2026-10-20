@@ -262,6 +262,16 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "null",
     note: "null when the human dismisses the chooser; a host with none throws",
   },
+  // The browse primitives: a level that cannot be read is a typed failure, not
+  // a value, because "no listing" is not something a browser row can render.
+  listDirectoryLevel: {
+    refusal: "error",
+    note: "DirectoryPickerError(directory-unreadable) for a path that is not fully qualified or cannot be listed",
+  },
+  createChildDirectory: {
+    refusal: "error",
+    note: "DirectoryPickerError(directory-exists | directory-create-failed)",
+  },
   workspaceAdd: {
     refusal: "error",
     note: "workspace root policy refuses",

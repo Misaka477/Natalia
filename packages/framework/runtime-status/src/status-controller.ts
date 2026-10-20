@@ -24,6 +24,12 @@ export interface StatusSnapshotController {
      */
     confinement?: string;
     /**
+     * The session this snapshot is ABOUT, so a front end folding it can refuse
+     * the rung of a session it is not showing. The input's own resolution
+     * reads the active exec; a caller that names a session overrides it.
+     */
+    sessionID?: SessionID;
+    /**
      * Provider steps the session has run (one per `runtime.step_usage`). The
      * caller owns the figure because only a session knows it; without one the
      * snapshot carries no `steps` rather than the journal's entry count, which
@@ -46,6 +52,13 @@ export type RuntimeStatusInput = {
    * front end falls back to its own resolution — never a guess.
    */
   confinement?(): string | undefined;
+  /**
+   * The session the ACTIVE exec belongs to, when there is one. A snapshot that
+   * names its subject lets a front end refuse another session's rung; the
+   * runtime's periodic refresh resolves the rung through the active exec, so
+   * without this the reader cannot tell whose rung it just folded.
+   */
+  sessionID?(): SessionID | undefined;
   runningCount(): Promise<number>;
   publish(event: RuntimeEvent): void;
   /**
@@ -88,6 +101,8 @@ export function createStatusSnapshotController(
     permissionMode?: "ask" | "auto" | "read_only";
     /** The sandbox half of the session's rung; absent falls back to the input. */
     confinement?: string;
+    /** The session this snapshot is about; absent falls back to the input. */
+    sessionID?: SessionID;
     steps?: number;
   }) {
     const running = await input.runningCount();
@@ -100,6 +115,7 @@ export function createStatusSnapshotController(
       overrides?.steps ?? input.stepCount?.(),
       process.platform,
       overrides?.confinement ?? input.confinement?.(),
+      overrides?.sessionID ?? input.sessionID?.(),
     );
   }
 
@@ -148,6 +164,7 @@ export function statusSnapshot(
   steps?: number,
   platform: string = process.platform,
   confinement?: string,
+  sessionID?: SessionID,
 ): Extract<RuntimeEvent, { type: "status.snapshot" }> {
   const status = context.journalStatus();
   return {
@@ -162,6 +179,11 @@ export function statusSnapshot(
     ...(steps !== undefined ? { steps } : {}),
     permissions: permissionMode,
     ...(confinement ? { confinement } : {}),
+    // WHO this snapshot is about. The rung fields above are meaningless
+    // without it: the periodic refresh resolves them through the ACTIVE exec,
+    // so a snapshot can describe a session the reader is not showing, and a
+    // fold that cannot refuse it takes the last value it was given.
+    ...(sessionID ? { sessionID } : {}),
     cwd,
     background: `${running} running`,
     platform,

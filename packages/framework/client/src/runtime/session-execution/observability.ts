@@ -65,6 +65,10 @@ export function createObservabilitySurface(
                 ctx.state.serviceDirectory.getOptional(compositionProfile),
               configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
             }),
+          // And WHOSE. Both halves above are this exec's; a snapshot that
+          // names no session cannot be refused by a front end showing another
+          // one, and the last value folded wins.
+          sessionID: exec.session.id,
         })),
         sessionID: exec.session.id,
       };

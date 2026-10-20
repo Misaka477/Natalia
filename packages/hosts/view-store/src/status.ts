@@ -146,6 +146,20 @@ export function applyStatusEvent(
         // "unknown host" rather than assuming either way.
         ...(event.platform ? [`host:${event.platform}`] : []),
       ];
+      // The rung fields are SESSION facts, and a snapshot names its subject
+      // (or says it has none). The runtime's periodic refresh resolves the rung
+      // through the ACTIVE exec, so without this guard a snapshot about another
+      // session landed in this projection and the fold took the last value it
+      // was given: measured — a session standing on `auto` displayed `read`
+      // after a restart, because the last snapshot to arrive described a
+      // different session and nothing on the event said so.
+      //
+      // A snapshot with no session is a deployment-level statement (a bare
+      // runtime, a journal written before the field): it carries no session's
+      // rung, so it is not applied as one either.
+      const snapshotIsThisSession =
+        event.sessionID === undefined || event.sessionID === state.sessionID;
+      if (!snapshotIsThisSession) return true;
       // The session's approval mode as a FIELD, not just a word in the status
       // line. The runtime publishes it on every attach, so a front end that
       // never moved the rung itself still learns what the session stands on —

@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type { ProviderStreamRequest } from "@anthelia/runtime";
+import { permissionModeFromEvents } from "@anthelia/session";
 import { createRealRuntimeClient } from "../src";
 
 /** A provider that answers one text (or nothing) per turn, and records requests. */
@@ -175,5 +176,75 @@ test("a config reload does not stamp the deployment's mode over a session choice
     expect(text).toContain("Permission mode: auto");
   } finally {
     await client.dispose?.();
+  }
+}, 60_000);
+
+/**
+ * The same question one process later, which is where the in-process flag
+ * cannot help.
+ *
+ * `reloadPermissionSettings` runs at INITIALIZE — before any attach has
+ * reconciled the journal onto a freshly built exec — so for a session that
+ * chose in an earlier process `permissionModeOverride` is still undefined and
+ * the "a session that chose keeps its rung" guard does not fire. Publishing
+ * the deployment default there wrote a durable `session.permission.mode` at the
+ * TAIL of that session's journal, and the attach that followed read the tail:
+ * the human's `auto` was overwritten by the default, durably, on every restart.
+ *
+ * Measured on the user's own store: a session on `auto` came back on
+ * `read_only` with a fresh row naming the default.
+ */
+test("a reload does not write the deployment default over a journal's rung", async () => {
+  const root = await workspaceWithPinnedConfig();
+  const sessionID = "ses_rung_reload_journal" as SessionID;
+  // A deployment whose default differs from the mode this client starts on, so
+  // the reload's "only on a real change" guard actually fires.
+  const first = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "read_only",
+    provider: textOnlyProvider(() => undefined),
+  });
+  first.start(() => undefined);
+  try {
+    await first.sessionAttach!(sessionID);
+    await first.setSandboxRung!({ mode: "workspace-write", approval: "auto" });
+  } finally {
+    await first.dispose?.();
+  }
+
+  // A second process: same workspace, same session, same store. The journal
+  // carries the rung; nothing in this process chose one yet.
+  const events: RuntimeEvent[] = [];
+  const second = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "read_only",
+    provider: textOnlyProvider(() => undefined),
+  });
+  second.start((event) => events.push(event));
+  try {
+    await second.sessionAttach!(sessionID);
+    // Attach REPLAYS the journal, so the rung fact the first process wrote is
+    // already here. The reload's write is what the delta measures.
+    const beforeReload = events.filter(
+      (event) => event.type === "session.permission.mode",
+    ).length;
+
+    await second.reloadConfig?.();
+
+    const afterReload = events.filter(
+      (event) => event.type === "session.permission.mode",
+    ).length;
+    // The reload may legitimately move a session that never chose in memory; it
+    // must not write a durable fact HERE, over a journal that already records
+    // the human's pair.
+    expect(afterReload).toBe(beforeReload);
+    const fold = permissionModeFromEvents(
+      events.filter((event) => event.type !== "status.snapshot"),
+    );
+    expect(fold).toBe("auto");
+  } finally {
+    await second.dispose?.();
   }
 }, 60_000);

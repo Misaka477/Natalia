@@ -1519,6 +1519,76 @@ test("status snapshot and diagnostics project to the status surfaces", () => {
   expect(state.footer).toBe("warning: slow provider");
 });
 
+/**
+ * Measured defect this pins: a session standing on `auto` displayed `read`
+ * after a restart.
+ *
+ * The runtime's periodic status refresh resolves the rung through the ACTIVE
+ * exec, so a snapshot can describe a session the reader is not showing. The
+ * event carried no subject, so the projection could not refuse it, and a fold
+ * takes the LAST value it was given — another session's rung won.
+ *
+ * `session.permission.mode` is the durable record and arrives first (it is in
+ * the journal); the snapshot arrives later and, being last, overwrote it.
+ */
+test("a status snapshot about ANOTHER session does not move this session's rung", () => {
+  const mine = "ses_mine" as SessionID;
+  const other = "ses_other" as SessionID;
+  const state = projectEvents([
+    // The projection's own subject, established the way a real stream does.
+    { type: "session.created", sessionID: mine, title: "Work" },
+    // The durable record, replayed from the journal: this session is on auto.
+    {
+      type: "session.permission.mode",
+      mode: "auto",
+      confinement: "workspace-write",
+      sessionID: mine,
+    },
+    // The periodic refresh, about a DIFFERENT session. It arrives later.
+    {
+      type: "status.snapshot",
+      model: "m",
+      provider: "p",
+      context: "1/2",
+      step: "3",
+      permissions: "read_only",
+      confinement: "read-only",
+      sessionID: other,
+      cwd: "/work",
+      background: "0",
+    },
+  ]);
+  expect(state.permissionMode).toBe("auto");
+  expect(state.permissionConfinement).toBe("workspace-write");
+});
+
+test("a status snapshot that names THIS session does move its rung", () => {
+  const mine = "ses_mine" as SessionID;
+  const state = projectEvents([
+    { type: "session.created", sessionID: mine, title: "Work" },
+    {
+      type: "session.permission.mode",
+      mode: "auto",
+      confinement: "workspace-write",
+      sessionID: mine,
+    },
+    {
+      type: "status.snapshot",
+      model: "m",
+      provider: "p",
+      context: "1/2",
+      step: "3",
+      permissions: "read_only",
+      confinement: "read-only",
+      sessionID: mine,
+      cwd: "/work",
+      background: "0",
+    },
+  ]);
+  expect(state.permissionMode).toBe("read_only");
+  expect(state.permissionConfinement).toBe("read-only");
+});
+
 test("a long response stays in one contiguous assistant block", () => {
   const chunk = "x".repeat(2500);
   const state = projectEvents([

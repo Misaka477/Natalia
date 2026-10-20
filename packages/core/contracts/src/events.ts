@@ -2072,6 +2072,23 @@ type RuntimeEventData =
        * field parses, and a session that never chose keeps the deployment default.
        */
       confinement?: string;
+      /**
+       * The session this snapshot DESCRIBES, when it describes one.
+       *
+       * The runtime's periodic refresh resolves the rung through the ACTIVE
+       * exec, so a snapshot can be about a session the reader is not looking
+       * at. The event carried no subject, so a front end could not tell: it
+       * folded `permissions`/`confinement` into whatever session it was
+       * projecting, and a fold takes the LAST value. Measured — a session
+       * standing on `auto` displayed `read` after a restart, because the last
+       * snapshot to arrive named a different session's rung and nothing on the
+       * event said so.
+       *
+       * Absent means "no session in hand" (a bare runtime, a pre-change
+       * journal): a face that reads the rung treats it as not-about-this-one
+       * and keeps what the journal already said.
+       */
+      sessionID?: SessionID;
       cwd: string;
       background: string;
       /**

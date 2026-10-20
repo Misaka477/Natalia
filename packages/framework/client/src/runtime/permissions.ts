@@ -162,20 +162,33 @@ export function createPermissions(
     // Reported only on a real change. The projector derives a session's mode by
     // scanning its events, and nothing emitted this one, so the projected mode
     // was always undefined — a pure replay cannot see process state, only events.
+    //
+    // That publish is GONE, and its removal is the fix rather than a cleanup.
+    // `reloadPermissionSettings` runs at INITIALIZE — before any attach has
+    // reconciled a session's journal onto the exec it just built — so this loop
+    // cannot tell "a session that never chose" from "a session that chose in an
+    // earlier process" (`exec.session.events` is still empty here; the history
+    // loads around the exec afterwards). It published `derived.mode` — the
+    // DEPLOYMENT default — as a durable `session.permission.mode` at the TAIL of
+    // every such session's journal, and the attach that followed read the tail:
+    // the human's `auto` was overwritten by the default, durably, on every
+    // restart. Measured on the user's own store: a session on `auto` came back
+    // on `read_only` with a fresh row naming the default, and the user had never
+    // chosen `read`.
+    //
+    // The in-memory move stays (the environment block and the tool policy read
+    // it), and the front end's answer comes from `status.snapshot`, which the
+    // reload schedules immediately after. A deployment default is not a session
+    // choice and has no business in a session's journal: the only durable record
+    // of a rung is `applySessionRung`'s, and it writes BOTH axes.
     if (previousMode !== derived.mode)
       for (const exec of ctx.ports.getExecutionBySession().values()) {
         // A SESSION THAT CHOSE KEEPS ITS RUNG. `applySessionRung` records the
         // choice in `permissionModeOverride`, and the whole point of that field
         // is that a config reload refreshes the deployment default underneath a
         // session that never chose while leaving a session that did choose alone.
-        // This loop ignored it: it stamped `derived.mode` over every exec and
-        // published the event, so a session moved to `auto` came back as the
-        // deployment default on the next start (the mode "was lost on restart").
         if (exec.permissionModeOverride !== undefined) continue;
         exec.permissionMode = derived.mode;
-        // `mode` only: the profile's key lives upstream of what this derivation
-        // returns, and the event's `profile` is optional, so inventing one here
-        // would be worse than leaving it out.
         ctx.ports.publishForSession(exec, {
           type: "session.permission.mode",
           mode: derived.mode,

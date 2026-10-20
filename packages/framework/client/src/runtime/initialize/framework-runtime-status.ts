@@ -140,6 +140,13 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
         })
       );
     },
+    // WHO the snapshot above is about. The periodic refresh resolves the rung
+    // through the active exec, so the event has to name that exec's session or
+    // a front end folds one session's rung into another's view — measured: a
+    // session on `auto` displayed `read` after a restart because the last
+    // snapshot to arrive described a different session and said nothing about
+    // it.
+    sessionID: () => ctx.ports.getActiveExec()?.session.id,
     runningCount: async () =>
       (ctx.state.serviceDirectory
         .getOptional(subagentsService)

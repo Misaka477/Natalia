@@ -80,7 +80,6 @@ type PackageManifest = {
 const pluginRoots = [
   "packages/plugins/local-tools",
   "packages/plugins/ui/file-editor",
-  "packages/plugins/ui/pending",
   "packages/plugins/browser",
   "packages/plugins/native-terminal",
   "packages/plugins/skills",
@@ -379,8 +378,8 @@ const workerOutputs = workerSources.map((source) =>
   resolve(workersOutdir, `${basename(source).replace(/\.ts$/u, "")}.js`),
 );
 
-if (pluginRoots.length !== 16)
-  throw new Error(`expected 16 release plugins, got ${pluginRoots.length}`);
+if (pluginRoots.length !== 15)
+  throw new Error(`expected 15 release plugins, got ${pluginRoots.length}`);
 for (const artifact of [
   "LICENSE",
   "NOTICE",

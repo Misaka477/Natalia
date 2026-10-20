@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -69,16 +69,18 @@ test("the takeover card is non-modal and its dismiss only minimizes", () => {
 
 test("exactly one plugin owns the pending presenters after the tab's removal", () => {
   // Two owners throw in the host ("already owned by another plugin"), so the
-  // move has to be total: the web plugin registers, the delisted plugin
-  // registers nothing.
+  // move has to be total: the web plugin registers, and nothing else does.
+  //
+  // The delisted `packages/plugins/ui/pending` plugin is GONE rather than
+  // emptied — it had become a shell that mounted nothing and contributed no
+  // panel, kept only so an already-installed copy could dispose cleanly. The
+  // invariant it used to pin (that it registers nothing) is now structural:
+  // there is no second registration to find, and the catalog test in the
+  // installer package pins that it is not an official plugin.
   const web = source("packages/plugins/ui/web/src/plugin-neu.tsx");
   expect(web).toContain("ctx.pending.registerPresenter(approvalPresenter)");
   expect(web).toContain("ctx.pending.registerPresenter(questionPresenter)");
-
-  const pending = source("packages/plugins/ui/pending/src/ui/plugin.tsx");
-  expect(pending).not.toContain("registerPresenter");
-  // … and it contributes no panel either.
-  expect(pending).toContain("panels: []");
+  expect(existsSync(join(root, "packages/plugins/ui/pending"))).toBe(false);
 });
 
 test("the pending inbox is delisted from the official catalog", () => {

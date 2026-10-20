@@ -122,6 +122,16 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
     description: "终端窗口模式",
     category: "runtime",
   },
+  // WHICH shell runs a command, as distinct from the two path rows below that
+  // say WHERE each one lives. A row here is what makes the choice reachable:
+  // `editableActions` holds the behaviour, and a label with no row is a
+  // setting that exists in the code and nowhere on screen.
+  {
+    label: "Shell 类型",
+    description:
+      "命令在哪个 shell 里执行：pwsh（PowerShell 7）、bash（Git Bash / WSL）或 zsh。选「自动」= 跟随平台默认（Windows 用 pwsh，其他用 bash）",
+    category: "runtime",
+  },
   // Windows-only, filtered out on every other host by settings-host-rows.ts.
   // The guard is not cosmetic: on Linux and macOS the shell IS bash and no
   // path can change that, so the resolver off Windows never reads it.

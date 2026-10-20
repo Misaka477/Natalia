@@ -177,7 +177,21 @@ export async function finalizeInitialize(
     scope.activeExec.selectedAgent = scope.selectedAgent;
     scope.activeExec.selectedModel = scope.selectedModel;
     scope.activeExec.activeSkill = scope.activeSkill;
-    scope.activeExec.permissionMode = scope.permissionMode;
+    // THE EXEC'S OWN RUNG OUTRANKS THE PROCESS-GLOBAL VALUE.
+    //
+    // This mirror used to stamp `scope.permissionMode` — the deployment
+    // default — unconditionally, which undid the recovery coordinator's
+    // adoption of the session's durable rung a few lines later in the same
+    // startup. Measured: a session whose journal AND recovery row both said
+    // `ask` came back reporting `read_only` on every restart, and the mode read
+    // as locked on the default no matter what the human had chosen.
+    //
+    // `permissionModeOverride` is set exactly when something adopted a rung for
+    // this session (the recovery coordinator, an attach, the selector), so it is
+    // the "this session chose" marker — the same precedence
+    // `reloadPermissionSettings` and `config-reload` already apply.
+    scope.activeExec.permissionMode =
+      scope.activeExec.permissionModeOverride ?? scope.permissionMode;
     scope.activeExec.permissionProfile = scope.selectedPermissionProfile;
     scope.applyAgentProvider(scope.activeExec);
   }

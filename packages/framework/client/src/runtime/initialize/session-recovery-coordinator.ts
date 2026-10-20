@@ -383,7 +383,18 @@ export class SessionRecoveryCoordinator {
     }
 
     const recoveredPermissionMode =
-      this.sqliteRecovery?.permissionMode ?? projection.permissionMode;
+      this.sqliteRecovery?.permissionMode ??
+      projection.permissionMode ??
+      // THE STORE'S OWN ROW, and it is the last one standing.
+      //
+      // `sqliteRecovery` only arrives with `indexedRecovery`, which needs a
+      // context epoch; without one the load returns no recovery view at all.
+      // And the projection's window can be cropped past the move, leaving it
+      // with no `session.permission.mode` fact. `recovery_selection` is
+      // upserted from that same durable event and is not cropped, so it is the
+      // read that answers when both of the above are silent — which is exactly
+      // the case that made a session come back on the deployment default.
+      this.sessionStore.loadRecoveryProjection(scope.sessionID)?.permissionMode;
     if (recoveredPermissionMode && scope.activeExec) {
       scope.activeExec.permissionMode = recoveredPermissionMode;
       // The override rides with it. Without this the human's rung survived only
@@ -403,7 +414,9 @@ export class SessionRecoveryCoordinator {
     // `auto + danger-full-access`.
     const recoveredConfinement =
       this.sqliteRecovery?.permissionConfinement ??
-      projection.permissionConfinement;
+      projection.permissionConfinement ??
+      this.sessionStore.loadRecoveryProjection(scope.sessionID)
+        ?.permissionConfinement;
     if (recoveredConfinement && scope.activeExec) {
       scope.activeExec.sandboxModeOverride =
         recoveredConfinement as typeof scope.activeExec.sandboxModeOverride;

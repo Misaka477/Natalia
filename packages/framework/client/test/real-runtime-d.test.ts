@@ -1036,33 +1036,23 @@ test("durable session replay preserves tool-call pairs for the next provider tur
   // tool this test does not own.
   expect(restoredTool).toMatchObject({
     toolCallID: "call_read",
-    // The envelope, and the page WITHOUT the file's trailing newline: the
-    // read returns the lines joined, and a trailing separator is not part of
-    // a line. Pinned after CI measured it — the local run had passed with the
-    // newline because the durable store served a different write order.
-    //
-    // The envelope is compared as PARSED JSON rather than as one string: the
-    // read also carries a `version` token (the stale-write guard's), whose
-    // value is a stat composition that changes with the file. Pinning the
-    // serialized string would pin a value that differs on every run.
-    content: JSON.stringify({
-      // The page AND its three-state footer: the replay contract is that the
-      // RESULT SURVIVES the durable round-trip verbatim, and the footer is
-      // part of what read_file returns now (a whole small file says "end of
-      // file - total N lines" instead of leaving a reader guessing).
-      content: "replay-ok\n\n(End of file - total 1 lines)",
-      totalLines: 1,
-      truncated: false,
-      version: expect.any(String),
-    }),
   });
-  // And the round-trip really is verbatim: the replayed envelope parses to the
-  // same facts the read produced, so a field cannot have been dropped or
-  // rewritten on the way through the durable store.
+  // The envelope is compared as PARSED JSON, not as one serialized string: the
+  // read also carries a `version` token (the stale-write guard's) whose value
+  // is a stat composition that changes with the file, so pinning the string
+  // would pin a value that differs on every run. It cannot be matched through
+  // `JSON.stringify` either — an asymmetric matcher serializes to `{}`, which
+  // then never equals the real string. Parse first, then match the fields.
+  //
+  // The page AND its three-state footer: the replay contract is that the
+  // RESULT SURVIVES the durable round-trip verbatim, and the footer is part of
+  // what read_file returns now (a whole small file says "end of file - total N
+  // lines" instead of leaving a reader guessing).
   expect(JSON.parse(String(restoredTool?.content))).toMatchObject({
     content: "replay-ok\n\n(End of file - total 1 lines)",
     totalLines: 1,
     truncated: false,
+    version: expect.any(String),
   });
 });
 

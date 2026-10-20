@@ -492,6 +492,15 @@ export function FileEditor(props: {
     }
     setSelectedPath(path);
     setPreview(path.endsWith(".md") || path.endsWith(".markdown"));
+    // A media file is neither text nor Markdown: it gets its own viewer and
+    // never reaches the editor, so the bytes are not decoded as a document.
+    const media = mediaKindFor(path);
+    if (media) {
+      setPreview(false);
+      void loadMedia(path);
+      return;
+    }
+    releaseMediaURL();
     if (props.transport) {
       void props.transport.readFile(path).then(
         (bytes) => {
@@ -521,6 +530,66 @@ export function FileEditor(props: {
   function renderMarkdown(markdown: string): string {
     // GFM (tables, nested lists, fenced code) instead of the old regex subset.
     return `<div class="neu-markdown-body">${renderMarkdownHtml(markdown)}</div>`;
+  }
+
+  /**
+   * What a path IS, for the viewer: an image, a video, or nothing special.
+   *
+   * The editor used to send every non-Markdown file to CodeMirror, so a PNG
+   * opened as mojibake and an MP4 as binary noise — the reader had to leave the
+   * app to look at an asset that sits in the workspace. The extension is the
+   * honest signal here: the runtime's `workspaceRead` answers `base64` for
+   * bytes it will not decode as text, and a media type is decided by the name
+   * the file already carries.
+   */
+  function mediaKindFor(path: string): "image" | "video" | undefined {
+    const ext = path.split(".").pop()?.toLowerCase() ?? "";
+    if (
+      [
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "avif",
+        "bmp",
+        "ico",
+        "svg",
+      ].includes(ext)
+    )
+      return "image";
+    if (["mp4", "webm", "mov", "m4v", "ogv"].includes(ext)) return "video";
+    return undefined;
+  }
+
+  /**
+   * The bytes of the selected media file as an object URL, or "" while it is
+   * loading / unavailable. Revoked on cleanup so a long session does not leak
+   * one blob per opened asset.
+   */
+  const [mediaURL, setMediaURL] = createSignal("");
+  let mediaObjectURL: string | undefined;
+  function releaseMediaURL() {
+    if (mediaObjectURL) {
+      URL.revokeObjectURL(mediaObjectURL);
+      mediaObjectURL = undefined;
+    }
+    setMediaURL("");
+  }
+  onCleanup(releaseMediaURL);
+
+  async function loadMedia(path: string) {
+    releaseMediaURL();
+    const read = props.transport
+      ? await props.transport.readFile(path).catch(() => undefined)
+      : undefined;
+    if (!read) {
+      props.runtime?.diagnostic?.(`读不到媒体文件：${path}`, "warning");
+      return;
+    }
+    const blob = new Blob([read as unknown as BlobPart]);
+    mediaObjectURL = URL.createObjectURL(blob);
+    setMediaURL(mediaObjectURL);
   }
 
   function updateEditor(path: string, text: string) {
@@ -752,6 +821,94 @@ export function FileEditor(props: {
     setSelectedPath(dir ? `${dir}/` : "");
   }
 
+  /**
+   * The clipboard: a path the reader copied or cut, and whether the cut form
+   * should remove the source. A signal rather than a module-level variable so
+   * the menu can offer 粘贴 only while something is actually on it, and so a
+   * workspace switch clears it (a path from another workspace is not a paste
+   * target here).
+   */
+  const [clipboard, setClipboard] = createSignal<{
+    path: string;
+    cut: boolean;
+  } | null>(null);
+
+  /** The active workspace's absolute root, for the absolute-path menu item. */
+  function workspaceRoot(): string {
+    const state = props.projection?.getState();
+    const active = state?.workspaces?.find(
+      (entry) => entry.workspaceID === state.activeWorkspaceID,
+    );
+    return active?.root ?? state?.workspaces?.[0]?.root ?? "";
+  }
+
+  function absolutePathFor(relative: string): string {
+    const root = workspaceRoot();
+    const clean = relative.replace(/^\/+|\/+$/gu, "");
+    if (!root) return clean;
+    return `${root.replace(/[\\/]+$/u, "")}/${clean}`;
+  }
+
+  async function copyText(text: string, said: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      props.runtime?.diagnostic?.(said, "info");
+    } catch {
+      // A denied clipboard permission is a fact the reader needs; the text is
+      // still shown in the diagnostic so it can be selected by hand.
+      const message = `剪贴板写入被拒绝，请手动复制：${text}`;
+      props.runtime?.diagnostic?.(message, "warning");
+    }
+  }
+
+  async function pasteClipboard() {
+    const entry = clipboard();
+    if (!entry) return;
+    const dir = currentDirectory();
+    const name = entry.path.replace(/\/$/u, "").split("/").pop() ?? entry.path;
+    const target = dir ? `${dir}/${name}` : name;
+    if (target === entry.path.replace(/\/$/u, "")) {
+      props.runtime?.diagnostic?.("目标与源相同，未做任何事", "warning");
+      return;
+    }
+    try {
+      if (entry.cut) {
+        await props.runtime?.workspaceRename?.({
+          path: entry.path,
+          newPath: target,
+        });
+        setClipboard(null);
+        props.runtime?.diagnostic?.(
+          `已移动：${entry.path} → ${target}`,
+          "info",
+        );
+      } else {
+        // A copy reads the source and creates the target: the workspace face
+        // has no copy verb, and inventing one in the UI would be a second
+        // mechanism for something `read` + `create` already says honestly.
+        const source = await props.runtime?.workspaceRead?.({
+          path: entry.path,
+        });
+        if (!source) {
+          props.runtime?.diagnostic?.("复制失败：读不到源文件", "error");
+          return;
+        }
+        await props.runtime?.workspaceCreate?.({
+          path: target,
+          content: source.content,
+          ...(source.encoding ? { encoding: source.encoding } : {}),
+        });
+        props.runtime?.diagnostic?.(`已复制到：${target}`, "info");
+      }
+      await refreshTree();
+    } catch (error) {
+      props.runtime?.diagnostic?.(
+        `粘贴失败：${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
   function buildContextMenu(path: string): ContextMenuItem[] {
     const items: ContextMenuItem[] = [
       {
@@ -771,8 +928,53 @@ export function FileEditor(props: {
         },
       },
     ];
+    // 粘贴 belongs with the create verbs: it is the other half of a copy or a
+    // cut, and it only exists while the clipboard holds something.
+    if (clipboard()) {
+      items.push({
+        type: "item",
+        label: clipboard()!.cut ? "粘贴（移动）" : "粘贴（复制）",
+        onClick() {
+          void pasteClipboard();
+        },
+      });
+    }
     if (path) {
+      const relative = path.replace(/\/$/u, "");
       items.push(
+        { type: "separator" },
+        {
+          type: "item",
+          label: "复制",
+          onClick() {
+            setClipboard({ path, cut: false });
+            props.runtime?.diagnostic?.(`已复制：${relative}`, "info");
+          },
+        },
+        {
+          type: "item",
+          label: "剪切",
+          onClick() {
+            setClipboard({ path, cut: true });
+            props.runtime?.diagnostic?.(`已剪切：${relative}`, "info");
+          },
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "复制相对路径",
+          onClick() {
+            void copyText(relative, `已复制相对路径：${relative}`);
+          },
+        },
+        {
+          type: "item",
+          label: "复制绝对路径",
+          onClick() {
+            const absolute = absolutePathFor(relative);
+            void copyText(absolute, `已复制绝对路径：${absolute}`);
+          },
+        },
         { type: "separator" },
         {
           type: "item",
@@ -1056,9 +1258,37 @@ export function FileEditor(props: {
                   selectedPath().endsWith(".markdown")),
             }}
           >
-            {preview() &&
-            (selectedPath().endsWith(".md") ||
-              selectedPath().endsWith(".markdown")) ? (
+            {mediaKindFor(selectedPath()) ? (
+              <div
+                class="neu-file-media"
+                data-kind={mediaKindFor(selectedPath())}
+              >
+                <Show
+                  when={mediaURL()}
+                  fallback={<span class="neu-file-media-loading">读取中…</span>}
+                >
+                  <Show
+                    when={mediaKindFor(selectedPath()) === "image"}
+                    fallback={
+                      <video
+                        class="neu-file-media-video"
+                        src={mediaURL()}
+                        controls
+                        preload="metadata"
+                      />
+                    }
+                  >
+                    <img
+                      class="neu-file-media-image"
+                      src={mediaURL()}
+                      alt={selectedPath().split("/").pop() ?? ""}
+                    />
+                  </Show>
+                </Show>
+              </div>
+            ) : preview() &&
+              (selectedPath().endsWith(".md") ||
+                selectedPath().endsWith(".markdown")) ? (
               <div
                 class="neu-markdown-preview"
                 innerHTML={renderMarkdown(selectedContent())}

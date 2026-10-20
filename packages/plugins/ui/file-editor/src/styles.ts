@@ -318,7 +318,51 @@ export const fileEditorStyles =
 .neu-markdown-body strong { color: var(--neu-text); }
 .neu-markdown-body em { color: var(--neu-muted); }
 
-/* VSCode-like file tree rows */
+/* The media viewer: an image or a video, centred, bounded by the pane. The
+   workspace holds assets a reader came to LOOK at, and the editor used to open
+   them as mojibake. */
+.neu-file-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  padding: 16px;
+  overflow: auto;
+  background: var(--neu-bg, transparent);
+}
+.neu-file-media-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  /* A checkerboard so a transparent PNG reads as transparent rather than as a
+     hole in the panel. */
+  background-image:
+    linear-gradient(45deg, rgba(127, 127, 127, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(127, 127, 127, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.14) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+.neu-file-media-video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  background: #000;
+}
+.neu-file-media-loading {
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
+  font-size: 12px;
+}
+
 .file-tree-row {
   position: relative;
   display: block;
@@ -326,9 +370,27 @@ export const fileEditorStyles =
   min-width: max-content;
   border-radius: 10px;
 }
+/* The selected row reads as selected WITHOUT costing the text its contrast.
+   It used to paint --neu-bg-light — a LIGHT surface — under --neu-text,
+   which in the dark skin is light text on a light ground: the row was clearly
+   "the selected one" and its name was not readable (reported from use, with a
+   screenshot). The accent tint is the theme's own answer to "sit under text":
+   --neu-accent-soft is a low-alpha wash of --neu-accent, so the label keeps
+   its full contrast in both skins, and the 2px bar on the left carries the
+   "this one" signal that the background used to carry alone. */
 .file-tree-row[data-active="true"] {
-  background: var(--neu-bg-light);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  background: var(--neu-accent-soft, rgba(143, 183, 176, 0.16));
+  box-shadow: none;
+}
+.file-tree-row[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--neu-accent, #7fb3aa);
 }
 .file-tree-row .file-tree-item {
   display: flex;

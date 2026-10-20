@@ -225,6 +225,7 @@ jobs:
                      ./packages/plugins/tools/todo/test \
                               ./packages/plugins/tools/web/test ./packages/plugins/tools/process/test \
                               ./packages/plugins/ui/web/test packages/plugins/ui/pending/test \
+                              ./packages/plugins/ui/file-editor/test \
                               ./packages/plugins/ui/kit/test
           - layer: "apps"
             dirs: >-

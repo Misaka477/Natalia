@@ -4430,6 +4430,11 @@ export type RuntimeClient = {
    */
   pickDirectory?(): Promise<string | null>;
   /**
+   * The file twin of `pickDirectory`, for a path that names a file rather than
+   * a directory. Same contract: `null` is a dismissal, not a failure.
+   */
+  pickFile?(): Promise<string | null>;
+  /**
    * Adds a workspace root to the runtime host. When the root is already
    * registered, a provided `title` updates that workspace's display title.
    */

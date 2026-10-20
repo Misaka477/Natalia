@@ -17,6 +17,9 @@
     },
     {
       "path": "../../../framework/sandbox"
+    },
+    {
+      "path": "../fs-shared"
     }
   ]
 }

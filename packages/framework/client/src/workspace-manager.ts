@@ -14,6 +14,7 @@ import {
   firstUseWorkspacePath,
   nataliaHomeJoin,
   pickDirectory,
+  pickFile,
   resolveNataliaPath,
 } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
@@ -251,6 +252,7 @@ export type WorkspaceManager = {
   load(): Promise<void>;
   workspaceRoots(): Promise<WorkspaceSummary[]>;
   pickDirectory(): Promise<string | null>;
+  pickFile(): Promise<string | null>;
   workspaceAdd(input: {
     path: string;
     title?: string;
@@ -671,6 +673,10 @@ export function createWorkspaceManager(
      */
     async pickDirectory() {
       return await pickDirectory();
+    },
+    /** The file twin of `pickDirectory`, for a path that names a file. */
+    async pickFile() {
+      return await pickFile();
     },
     workspaceAdd: addWorkspace,
     workspaceRemove: removeWorkspace,

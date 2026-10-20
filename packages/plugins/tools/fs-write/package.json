@@ -11,6 +11,7 @@
     "@anthelia/tools": "workspace:*",
     "@anthelia/plugin": "workspace:*",
     "@anthelia/contracts": "workspace:*",
-    "@anthelia/sandbox": "workspace:*"
+    "@anthelia/sandbox": "workspace:*",
+    "@natalia/fs-shared": "workspace:*"
   }
 }

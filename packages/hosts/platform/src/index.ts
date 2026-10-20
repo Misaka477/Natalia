@@ -6,11 +6,15 @@ export * from "./store-paths";
 export {
   DIRECTORY_PICKER_TITLE,
   DirectoryPickerUnavailableError,
+  FILE_PICKER_TITLE,
   pickDirectory,
+  pickFile,
   pickNativeDirectory,
+  pickPath,
   spawnNativeCommand,
   type NativeCommandResult,
   type NativeCommandRunner,
+  type PickerKind,
 } from "./directory-picker";
 export {
   FOS_NOCHANGEDIR,

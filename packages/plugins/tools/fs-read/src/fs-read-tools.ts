@@ -19,6 +19,7 @@ import {
   type ToolOutputDefinition,
 } from "@anthelia/tools";
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
+import { fileVersion } from "@natalia/fs-shared";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { relative } from "node:path";
@@ -242,8 +243,9 @@ function readFileOutput(): ToolOutputDefinition {
         content: { type: "string" },
         totalLines: { type: "integer" },
         truncated: { type: "boolean" },
+        version: { type: "string" },
       },
-      required: ["content", "totalLines", "truncated"],
+      required: ["content", "totalLines", "truncated", "version"],
       additionalProperties: false,
     },
     presentCall(args) {
@@ -320,7 +322,9 @@ function readFileOutput(): ToolOutputDefinition {
 function readFileTool(): RuntimeTool {
   return {
     name: "read_file",
-    description: `Read a UTF-8 text file inside the workspace. Returns at most ${READ_LINE_LIMIT} lines per call; the result says how many lines exist and, when it stopped early, the offset to continue from.`,
+    description:
+      `Read a UTF-8 text file inside the workspace. Returns at most ${READ_LINE_LIMIT} lines per call; the result says how many lines exist and, when it stopped early, the offset to continue from. ` +
+      `The result also carries a \`version\` token: pass it back as \`expectedVersion\` on edit_file, write_file or apply_edits so the write is refused when the file changed after this read.`,
     requiresApproval: false,
     parameters: {
       type: "object",
@@ -368,6 +372,10 @@ function readFileTool(): RuntimeTool {
         ? content.slice(0, -1).replace(/\r$/u, "").split(/\r?\n/u)
         : content.split(/\r?\n/u);
       const totalLines = lines.length;
+      // The version the write tools will later be asked to match. Taken from
+      // the SAME stat the read's own facts come from, so a write that passes
+      // this back is guaranteed to be writing the file this call read.
+      const version = await fileVersion(path);
 
       // NO WINDOW IS A WINDOW. Before this, `read_file` with no arguments
       // returned the whole file: the only tool in the registry that could put
@@ -431,6 +439,7 @@ function readFileTool(): RuntimeTool {
           content: `${page}\n\n(End of file - total ${totalLines} lines)`,
           totalLines,
           truncated: false,
+          version,
         });
 
       const next = last + 1;
@@ -438,6 +447,7 @@ function readFileTool(): RuntimeTool {
         content: `${page}\n\n(Showing lines ${offset}-${last} of ${totalLines}. Use offset=${next} to continue.)`,
         totalLines,
         truncated: true,
+        version,
       });
     },
   };

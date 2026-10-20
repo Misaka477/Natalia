@@ -256,6 +256,12 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     expressedBy: "null",
     note: "null when the human dismisses the chooser; a host with none throws",
   },
+  // The file twin, with the same contract: a dismissal is a value.
+  pickFile: {
+    refusal: "value",
+    expressedBy: "null",
+    note: "null when the human dismisses the chooser; a host with none throws",
+  },
   workspaceAdd: {
     refusal: "error",
     note: "workspace root policy refuses",

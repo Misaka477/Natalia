@@ -52,6 +52,10 @@ test("read_file reads inside the workspace and rejects escapes", async () => {
     content: "hi\n\n(End of file - total 1 lines)",
     totalLines: 1,
     truncated: false,
+    // The version a later write is asked to match. Its value is a stat
+    // composition that changes with the file, so the assertion is that it is
+    // present and opaque rather than equal to a literal.
+    version: expect.any(String),
   });
   await expect(
     tools
@@ -98,6 +102,7 @@ test("read_file accepts offset and length for autonomous pagination", async () =
       "two\nthree\n\n(Showing lines 2-3 of 5. Use offset=4 to continue.)",
     totalLines: 5,
     truncated: true,
+    version: expect.any(String),
   });
   expect(
     JSON.parse(
@@ -111,6 +116,7 @@ test("read_file accepts offset and length for autonomous pagination", async () =
     content: "four\nfive\n\n(End of file - total 5 lines)",
     totalLines: 5,
     truncated: false,
+    version: expect.any(String),
   });
   await expect(
     read.execute(
@@ -242,6 +248,7 @@ test("read_file caps a windowless read at the line limit and says where to conti
     content: "s1\ns2\ns3\n\n(End of file - total 3 lines)",
     totalLines: 3,
     truncated: false,
+    version: expect.any(String),
   });
 });
 

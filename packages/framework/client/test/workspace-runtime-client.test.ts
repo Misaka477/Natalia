@@ -51,6 +51,9 @@ function emptyManager(): WorkspaceManager {
     async pickDirectory() {
       throw new Error("unused");
     },
+    async pickFile() {
+      throw new Error("unused");
+    },
     async workspaceAdd() {
       throw new Error("unused");
     },

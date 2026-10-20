@@ -17,6 +17,24 @@ import {
 } from "@anthelia/tools";
 
 /** Count the lines a hunk touches, so the card's facets are real counts. */
+/**
+ * Refuse a write whose file is no longer the one the model read.
+ *
+ * The check runs BEFORE the literal match, so a stale edit reports the stale
+ * version rather than "oldText not found" against content the model never saw.
+ * A write with no `expectedVersion` is unconditional — the model chose not to
+ * guard, and the tool honours that rather than inventing a requirement.
+ */
+async function assertFresh(
+  path: string,
+  displayPath: string,
+  expected: string | undefined,
+): Promise<void> {
+  if (expected === undefined) return;
+  if (!(await fileAtVersion(path, expected)))
+    throw new Error(`edit_file: ${staleVersionMessage(displayPath)}`);
+}
+
 function countLines(text: string): number {
   return text === "" ? 0 : text.split("\n").length;
 }
@@ -110,6 +128,7 @@ function unifiedHunk(oldText: string, newText: string): string {
   return [...removed, ...added].join("\n");
 }
 import type { Plugin, PluginManifest } from "@anthelia/plugin";
+import { fileAtVersion, staleVersionMessage } from "@natalia/fs-shared";
 import { diffText, unifiedPatchToStructured } from "@anthelia/sandbox";
 import type { RuntimeStructuredDiffHunk } from "@anthelia/contracts";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -140,6 +159,11 @@ function writeFileTool(): RuntimeTool {
           type: "number",
           description:
             "Optional file mode, as an octal literal (for example 0o644).",
+        },
+        expectedVersion: {
+          type: "string",
+          description:
+            "The `version` token read_file returned for this path. When given, the write is refused if the file changed since that read; omit it to overwrite unconditionally.",
         },
       },
       required: ["path", "content"],
@@ -223,6 +247,11 @@ function writeFileTool(): RuntimeTool {
         toolName: "write_file",
         path,
       });
+      await assertFresh(
+        path,
+        relative(context.workspaceRoot, path),
+        optionalString(args.expectedVersion),
+      );
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, requireString(args.content, "content"));
       if (typeof args.mode === "number") await chmod(path, args.mode);
@@ -254,6 +283,11 @@ function editFileTool(): RuntimeTool {
           type: "string",
           description:
             "Literal replacement text. Use an empty string to delete the match.",
+        },
+        expectedVersion: {
+          type: "string",
+          description:
+            "The `version` token read_file returned for this path. When given, the edit is refused if the file changed since that read; omit it to edit unconditionally.",
         },
       },
       required: ["path", "oldText", "newText"],
@@ -339,6 +373,11 @@ function editFileTool(): RuntimeTool {
         path,
       });
       const oldText = requireString(args.oldText, "oldText");
+      await assertFresh(
+        path,
+        relative(context.workspaceRoot, path),
+        optionalString(args.expectedVersion),
+      );
       let current: string;
       try {
         current = await readFile(path, "utf8");
@@ -414,6 +453,11 @@ function applyEditsTool(): RuntimeTool {
                 type: "string",
                 description:
                   "Required for replace and create: the literal text to put in its place.",
+              },
+              expectedVersion: {
+                type: "string",
+                description:
+                  "The `version` token read_file returned for this path. When given, this edit is refused if the file changed since that read; omit it to apply unconditionally.",
               },
             },
             required: ["path", "operation"],
@@ -527,11 +571,19 @@ function applyEditsTool(): RuntimeTool {
             edit.newText === undefined
               ? undefined
               : requireString(edit.newText, `edits[${index}].newText`),
+          expectedVersion:
+            edit.expectedVersion === undefined
+              ? undefined
+              : requireString(
+                  edit.expectedVersion,
+                  `edits[${index}].expectedVersion`,
+                ),
         } as {
           path: string;
           operation: "replace" | "create" | "delete";
           oldText?: string;
           newText?: string;
+          expectedVersion?: string;
         };
       });
 
@@ -555,6 +607,16 @@ function applyEditsTool(): RuntimeTool {
           toolName: "apply_edits",
           path: abs,
         });
+        // The stale check, before anything is written: a batch whose file
+        // moved must change nothing, and the version is checked against the
+        // file as it stands NOW rather than as the first edit of this batch
+        // left it — a batch that edits one file twice would otherwise guard
+        // the second edit against its own first write.
+        await assertFresh(
+          abs,
+          relative(context.workspaceRoot, abs),
+          edit.expectedVersion,
+        );
         if (!states.has(abs)) {
           let original: string | undefined;
           try {

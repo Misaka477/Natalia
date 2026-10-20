@@ -4,6 +4,8 @@ export function WorkspacePanel(props: {
   open: boolean;
   onClose: () => void;
   onAdd?: (path: string) => Promise<void> | void;
+  /** The runtime's directory chooser, so a path stops being typed. */
+  onBrowse?: () => Promise<string | null>;
   error?: string;
 }) {
   const [path, setPath] = createSignal("");
@@ -55,6 +57,28 @@ export function WorkspacePanel(props: {
               placeholder="工作区路径，例如 /home/user/project"
               onInput={(event) => setPath(event.currentTarget.value)}
             />
+            <Show when={props.onBrowse}>
+              <div class="neu-form-actions">
+                <button
+                  type="button"
+                  class="neu-form-btn"
+                  disabled={busy()}
+                  onClick={() => {
+                    if (busy()) return;
+                    void (async () => {
+                      // The dialog is the runtime's, on the user's machine: a
+                      // page has no host channel, so this is the only way a
+                      // workspace path stops being typed. A dismissal leaves
+                      // the field as it was.
+                      const chosen = await props.onBrowse?.();
+                      if (typeof chosen === "string" && chosen) setPath(chosen);
+                    })();
+                  }}
+                >
+                  浏览…
+                </button>
+              </div>
+            </Show>
             <Show when={busy()}>
               <div class="neu-workspace-error">正在添加工作区…</div>
             </Show>

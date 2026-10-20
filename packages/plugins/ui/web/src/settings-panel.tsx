@@ -525,6 +525,24 @@ export function SettingsPanel(props: {
   const [editFieldOptions, setEditFieldOptions] = createSignal<
     Array<{ value: string; label: string }> | undefined
   >(undefined);
+  /**
+   * Whether this field's editor offers a platform chooser, and which kind.
+   * Absent means the value is typed; present means a path the runtime can pick,
+   * and the text box stays beside the button so a path the chooser cannot
+   * express is still enterable.
+   */
+  const [editFieldBrowse, setEditFieldBrowse] = createSignal<
+    "directory" | "file" | undefined
+  >(undefined);
+  /**
+   * A row-specific browse action, when filling the field is not the whole job.
+   *
+   * A comma-separated LIST appends the picked directory instead of replacing
+   * the list with one entry, so it installs its own action and the default
+   * "put the answer in the box" does not apply. Cleared whenever an editor
+   * opens, so one row's action cannot leak into the next.
+   */
+  let browseFieldAction: (() => Promise<void>) | undefined;
   let editFieldAction: ((value: string) => void) | undefined;
   const [permissionEditorOpen, setPermissionEditorOpen] = createSignal(false);
   const [permissionListOpen, setPermissionListOpen] = createSignal(false);
@@ -546,11 +564,14 @@ export function SettingsPanel(props: {
     label: string,
     current: string,
     apply: (value: string) => void,
+    browse?: "directory" | "file",
   ) {
     setEditFieldLabel(label);
     setEditFieldValue(current);
     editFieldAction = apply;
     setEditFieldOptions(undefined);
+    setEditFieldBrowse(browse);
+    browseFieldAction = undefined;
   }
 
   /**
@@ -570,6 +591,32 @@ export function SettingsPanel(props: {
     setEditFieldValue(current);
     editFieldAction = apply;
     setEditFieldOptions(options);
+    setEditFieldBrowse(undefined);
+    browseFieldAction = undefined;
+  }
+
+  /**
+   * Ask the runtime to open its platform chooser and put the answer in the
+   * field being edited.
+   *
+   * The dialog is the runtime's, on the user's machine: a page has no host
+   * channel, so this is the only way a path stops being typed. A dismissal
+   * (`null`) leaves the field exactly as it was — the human closed the dialog,
+   * which is an answer rather than a failure.
+   */
+  async function browseForPath(kind: "directory" | "file") {
+    // A row that needs more than "put the answer in the box" (a list that
+    // appends rather than replaces) installs its own action; everything else
+    // fills the field.
+    if (browseFieldAction) {
+      await browseFieldAction();
+      return;
+    }
+    const chosen =
+      kind === "directory"
+        ? await props.runtime?.pickDirectory?.()
+        : await props.runtime?.pickFile?.();
+    if (typeof chosen === "string" && chosen) setEditFieldValue(chosen);
   }
 
   function openPermissionEditorFor(name: string) {
@@ -625,6 +672,10 @@ export function SettingsPanel(props: {
             },
           });
         },
+        // A FILE, not a directory: the row names bash.exe. The text box stays
+        // beside the chooser so a path the dialog cannot express (a wrapper
+        // script, a path with a space the picker mangles) is still enterable.
+        "file",
       );
     },
     "PowerShell 路径": () => {
@@ -643,6 +694,9 @@ export function SettingsPanel(props: {
             },
           });
         },
+        // A FILE, for the same reason as the Git Bash row: the row names
+        // pwsh.exe.
+        "file",
       );
     },
     "Shell 类型": () => {
@@ -760,17 +814,42 @@ export function SettingsPanel(props: {
       const current = (
         effectiveConfig()?.checkpoint?.additionalDirs ?? []
       ).join(",");
-      openEdit("额外 checkpoint 目录（逗号分隔）", current, (raw) => {
+      openEdit(
+        "额外 checkpoint 目录（逗号分隔）",
+        current,
+        (raw) => {
+          updateConfig?.({
+            checkpoint: {
+              ...effectiveConfig()?.checkpoint,
+              additionalDirs: raw
+                .split(",")
+                .map((entry) => entry.trim())
+                .filter(Boolean),
+            },
+          });
+        },
+        // A LIST, not one path. The chooser APPENDS rather than replacing, so
+        // browsing for a second directory cannot silently drop the first —
+        // which is what a shared "apply the text box" action would do, since
+        // the box holds the whole comma-separated list and the picker returns
+        // one entry. The two actions are therefore separate: 确定 writes the
+        // list as typed, 浏览… adds one picked directory to it.
+        "directory",
+      );
+      browseFieldAction = async () => {
+        const picked = await props.runtime?.pickDirectory?.();
+        if (typeof picked !== "string" || !picked) return;
+        const existing = (
+          effectiveConfig()?.checkpoint?.additionalDirs ?? []
+        ).filter((entry) => entry && entry !== picked);
         updateConfig?.({
           checkpoint: {
             ...effectiveConfig()?.checkpoint,
-            additionalDirs: raw
-              .split(",")
-              .map((entry) => entry.trim())
-              .filter(Boolean),
+            additionalDirs: [...existing, picked],
           },
         });
-      });
+        setEditFieldLabel(undefined);
+      };
     },
     界面偏好保存范围: () => {
       cyclePreference(
@@ -1550,6 +1629,19 @@ export function SettingsPanel(props: {
                   options={editFieldOptions()!}
                   onChange={(value) => setEditFieldValue(value)}
                 />
+              </Show>
+              <Show when={editFieldBrowse()}>
+                {(kind) => (
+                  <div class="neu-form-actions">
+                    <button
+                      type="button"
+                      class="neu-form-btn"
+                      onClick={() => void browseForPath(kind())}
+                    >
+                      浏览…
+                    </button>
+                  </div>
+                )}
               </Show>
               <div class="neu-form-actions">
                 <button

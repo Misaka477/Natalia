@@ -1229,6 +1229,19 @@ export function createChatTools(ctx: RuntimeContext) {
               error instanceof Error ? error.message : String(error)
             }`;
           }
+          // A REFUSED STATUS WRITE IS THE WHOLE ANSWER, and it used to be
+          // thrown away. `planDocUpdateStatus` answers `{ updated: false }`
+          // when the plan index has no such entry, and this tool reported the
+          // verdict as recorded anyway: the evidence record and the round
+          // counter advanced while nothing closed the plan, so it read 「待审」
+          // for ever and a restart started the audit again. Measured on the
+          // user's session — 15 rounds reported as complete, not one
+          // `plan.doc.status` fact in the journal.
+          if (result && result.updated === false)
+            return `audit_report: the verdict was NOT recorded — ${
+              result.reason ??
+              `plan ${args.planID} could not take status ${status}`
+            }`;
 
           let round = 0;
           let roundCheckpointID: string | undefined;

@@ -56,15 +56,35 @@ test("the fold toggle's count includes the command, and a card with no output st
     "bodyLines().length + commandLineCount()",
   );
   // Hidden lines include the command while closed, which is what makes the
-  // toggle appear for a card whose output is empty.
+  // toggle appear for a card whose output is empty. `foldableCount` is the
+  // expanded-independent half: it answers "is there anything to fold back?"
+  // and must count the command unconditionally.
+  const foldable = kit.indexOf("const foldableCount = () =>");
+  expect(foldable).toBeGreaterThan(0);
+  expect(kit.slice(foldable, foldable + 420)).toContain("commandLineCount()");
+  // `hiddenCount` is the "how many are hidden right now" half, and it is zero
+  // once the card is open.
   const hidden = kit.indexOf("const hiddenCount = () =>");
   expect(hidden).toBeGreaterThan(0);
-  expect(kit.slice(hidden, hidden + 260)).toContain(
-    "(expanded() ? 0 : commandLineCount())",
+  expect(kit.slice(hidden, hidden + 120)).toContain(
+    "expanded() ? 0 : foldableCount()",
   );
   expect(kit).toContain(
     "展开全部（${totalLineCount()} 行，已折叠 ${hiddenCount()} 行）",
   );
+});
+
+test("an expanded tool card can be collapsed again", () => {
+  // The measured defect: the 收起 control rendered only when
+  // `hiddenCount() > 0`, and `hiddenCount()` is 0 BY DEFINITION once the card
+  // is open — so the button that opened the card deleted itself in the act of
+  // opening, and a tool card could be expanded but never collapsed.
+  const collapse = kit.indexOf(">\n              收起");
+  expect(collapse).toBeGreaterThan(0);
+  // Its condition is the fold's availability, not the current hidden count.
+  const before = kit.slice(Math.max(0, collapse - 400), collapse);
+  expect(before).toContain("expanded() && foldableCount() > 0");
+  expect(before).not.toContain("hiddenCount() > 0");
 });
 
 test("the header's clipped title carries the full command as its hover", () => {

@@ -1,144 +1,142 @@
+/**
+ * The audit trigger law: WHO may start a Nia audit, and who may not.
+ *
+ * Both halves are here because both were broken and both were reported from
+ * use in the same breath ("如果没有计划就肯定不去唤醒 nia 审计… 重启的时候就不能
+ * 去自动审计").
+ *
+ * 1. NO PLAN, NO AUDIT. `requestAuditAfterCompletion` refuses when the
+ *    completion's task has no registered plan document, and it says why. An
+ *    audit is a review of a plan's claim; without the plan there is nothing to
+ *    review, and waking another agent to say so is worse than silence.
+ *
+ * 2. A RESTART NEVER STARTS AN AUDIT. The old finalize scan re-woke Nia for
+ *    every `audit.requested` whose plan had not reached a verdict. It could not
+ *    tell "interrupted by this restart" from "failed / never going to close"
+ *    (both leave the journal looking identical), and its dedup key lived in a
+ *    process-level set — so a plan stuck on `awaiting_audit` started an audit
+ *    on EVERY boot, forever. The scan is deleted; a restart now starts nothing.
+ */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RuntimeEvent } from "@anthelia/contracts";
-import { unclosedAuditPlanIDs } from "../src/runtime/initialize/finalize";
+import type {
+  RuntimeContext,
+  SessionExecutionState,
+} from "@anthelia/substrate";
+import { createTestContext } from "@anthelia/runtime-services";
+import { workLedgerController } from "@natalia/work-ledger";
+import type { WorkLedgerController } from "@natalia/work-ledger";
+import { requestAuditAfterCompletion } from "@natalia/assay";
+
+function completion(
+  taskID: string,
+  at = "2026-10-10T00:00:00.000Z",
+): Extract<RuntimeEvent, { type: "completion.recorded" }> {
+  return {
+    type: "completion.recorded",
+    id: `completion:${taskID}:1`,
+    taskID,
+    objective: "ship",
+    changeSummary: "did the thing",
+    validations: [],
+    recordedAt: at,
+  };
+}
 
 /**
- * EI §3.9 restart recovery: the in-flight Nia wake is in-memory, so a restart
- * would drop an audit, and the finalize scan re-wakes her for the audits
- * still in flight.
- *
- * The old scan asked "was an `audit_gaps`/`completed` event ever seen" over
- * `session.events` — which on the fast-attach path is only the post-epoch
- * tail. Two failures came out of that: a plan that was paused, handed off or
- * still executing re-woke Nia on EVERY boot (nothing ever closed it), and
- * under `NATALIA_FAST_EXECUTION_LOAD` the tail hid the early events, so an
- * already-closed audit read as unclosed (a false re-wake) while an early
- * `audit.requested` read as never requested (a missed one).
- *
- * The scan now folds the plan's CURRENT status over the full log and wakes
- * only for the pre-verdict states.
+ * A context with no session store (so the audit scan falls back to the resident
+ * log), no work-ledger unless one is passed, and a recording `requestNiaWake`.
  */
+function harness(options: {
+  plans?: Array<{ planID: string; title: string }>;
+}) {
+  const wakes: Array<{ intent: string | undefined }> = [];
+  const published: RuntimeEvent[] = [];
+  const exec = {
+    session: { id: "ses_audit_law", events: [] },
+    context: { add: () => undefined },
+  } as unknown as SessionExecutionState;
 
-function status(planID: string, value: string, at: string): RuntimeEvent {
-  return {
-    type: "plan.doc.status",
-    id: `status:${planID}:${value}:${at}`,
-    planID,
-    status: value,
-    at,
-  };
+  const ledger = {
+    buildAuditRequested: (input: { id: string; planID: string }) => ({
+      type: "audit.requested" as const,
+      id: input.id,
+      planID: input.planID,
+      planVersion: 1,
+      triggerEventID: "completion:1",
+      round: 1,
+      scope: "completion_recorded" as const,
+      at: "2026-10-10T00:00:00.000Z",
+    }),
+  } as unknown as WorkLedgerController;
+
+  const ctx = {
+    state: {
+      serviceDirectory: createTestContext([workLedgerController.mock(ledger)]),
+    },
+    ports: {
+      getExecutionBySession: () => new Map([["ses_audit_law", exec]]),
+      getActiveExec: () => exec,
+      publishForSession: (_exec: unknown, event: RuntimeEvent) => {
+        published.push(event);
+      },
+      nextPlanSequence: () => 1,
+      requestNiaWake: (_exec: unknown, intent?: string) => {
+        wakes.push({ intent });
+      },
+      planDocRuntime: {
+        planDocList: async () => options.plans,
+        planDocUpdateStatus: async () => undefined,
+      },
+    },
+  } as unknown as RuntimeContext;
+
+  return { ctx, exec, wakes, published };
 }
 
-function requested(planID: string, round: number, at: string): RuntimeEvent {
-  return {
-    type: "audit.requested",
-    id: `audit:${planID}:${round}`,
-    planID,
-    planVersion: 1,
-    triggerEventID: `completion:${planID}:${round}`,
-    round,
-    scope: "completion_recorded",
-    at,
-  };
-}
-
-test("an audit still awaiting its verdict is re-woken", () => {
-  for (const state of ["awaiting_audit", "auditing", "audit_pending"]) {
-    expect(
-      unclosedAuditPlanIDs([
-        requested("plan_a", 1, "2026-10-10T00:00:00.000Z"),
-        status("plan_a", "awaiting_audit", "2026-10-10T00:00:01.000Z"),
-        status("plan_a", state, "2026-10-10T00:00:02.000Z"),
-      ]),
-    ).toEqual(["plan_a"]);
-  }
+test("a completion with NO registered plan does not wake Nia, and says why", async () => {
+  const { ctx, exec, wakes } = harness({ plans: [] });
+  const result = await requestAuditAfterCompletion(
+    ctx,
+    exec,
+    completion("task_1"),
+  );
+  expect(result.requested).toBe(false);
+  expect(result.reason).toContain("no registered plan for task_1");
+  // The whole point: no reviewer is woken for a claim that has no plan to
+  // review.
+  expect(wakes).toEqual([]);
 });
 
-test("a plan whose audit reached a verdict is not re-woken", () => {
-  for (const state of ["audit_gaps", "completed"]) {
-    expect(
-      unclosedAuditPlanIDs([
-        requested("plan_a", 1, "2026-10-10T00:00:00.000Z"),
-        status("plan_a", "awaiting_audit", "2026-10-10T00:00:01.000Z"),
-        status("plan_a", state, "2026-10-10T00:00:02.000Z"),
-      ]),
-    ).toEqual([]);
-  }
+test("a plan list that is entirely absent is the same answer as an empty one", async () => {
+  const { ctx, exec, wakes } = harness({});
+  const result = await requestAuditAfterCompletion(
+    ctx,
+    exec,
+    completion("task_1"),
+  );
+  expect(result.requested).toBe(false);
+  expect(wakes).toEqual([]);
 });
 
-test("a requested audit on a plan that moved on is not re-woken", () => {
-  // The old scan's permanent false positive: nothing in the log ever closes
-  // a paused, handed-off or executing plan, so every boot re-woke Nia for
-  // an audit nobody is waiting on.
-  for (const state of ["paused", "handed_off", "executing", "marked"]) {
-    expect(
-      unclosedAuditPlanIDs([
-        requested("plan_a", 1, "2026-10-10T00:00:00.000Z"),
-        status("plan_a", state, "2026-10-10T00:00:01.000Z"),
-      ]),
-    ).toEqual([]);
-  }
-});
-
-test("the plan's CURRENT status decides, not any status it ever held", () => {
-  // Round 1 closed; round 2 was requested and is awaiting its verdict. The
-  // latest round is what the wake is for, and the key carries it.
-  const woken = new Set<string>();
+test("a completion over a REGISTERED plan does wake her, once, as an audit", async () => {
+  const { ctx, exec, wakes, published } = harness({
+    plans: [{ planID: "task_1", title: "Ship it" }],
+  });
+  const result = await requestAuditAfterCompletion(
+    ctx,
+    exec,
+    completion("task_1"),
+  );
+  expect(result.requested).toBe(true);
+  // The durable request is written BEFORE the wake, so a restart/dedup has a
+  // journal shadow to read even if the process dies in between.
   expect(
-    unclosedAuditPlanIDs(
-      [
-        requested("plan_a", 1, "2026-10-10T00:00:00.000Z"),
-        status("plan_a", "awaiting_audit", "2026-10-10T00:00:01.000Z"),
-        status("plan_a", "audit_gaps", "2026-10-10T00:00:02.000Z"),
-        requested("plan_a", 2, "2026-10-10T00:01:00.000Z"),
-        status("plan_a", "awaiting_audit", "2026-10-10T00:01:01.000Z"),
-      ],
-      woken,
-    ),
-  ).toEqual(["plan_a"]);
-  // The same round never wakes twice in one process.
-  expect(
-    unclosedAuditPlanIDs(
-      [
-        requested("plan_a", 2, "2026-10-10T00:01:00.000Z"),
-        status("plan_a", "awaiting_audit", "2026-10-10T00:01:01.000Z"),
-      ],
-      woken,
-    ),
-  ).toEqual([]);
-});
-
-test("a requested audit with no plan lifecycle at all still wakes", () => {
-  // Work outside any plan document: the request's own status projection is
-  // best-effort and there is no lifecycle to read, so the request alone is
-  // the evidence an audit is in flight.
-  expect(
-    unclosedAuditPlanIDs([
-      requested("task_without_plan", 1, "2026-10-10T00:00:00.000Z"),
-    ]),
-  ).toEqual(["task_without_plan"]);
-});
-
-test("a plan status without a request is never re-woken", () => {
-  expect(
-    unclosedAuditPlanIDs([
-      status("plan_a", "awaiting_audit", "2026-10-10T00:00:01.000Z"),
-    ]),
-  ).toEqual([]);
-});
-
-test("several in-flight audits wake once per plan", () => {
-  const planIDs = unclosedAuditPlanIDs([
-    requested("plan_a", 1, "2026-10-10T00:00:00.000Z"),
-    status("plan_a", "awaiting_audit", "2026-10-10T00:00:01.000Z"),
-    requested("plan_b", 3, "2026-10-10T00:00:02.000Z"),
-    status("plan_b", "auditing", "2026-10-10T00:00:03.000Z"),
-    requested("plan_c", 1, "2026-10-10T00:00:04.000Z"),
-    status("plan_c", "completed", "2026-10-10T00:00:05.000Z"),
-  ]);
-  expect(planIDs.sort()).toEqual(["plan_a", "plan_b"]);
+    published.filter((event) => event.type === "audit.requested"),
+  ).toHaveLength(1);
+  expect(wakes).toEqual([{ intent: undefined }]);
 });
 
 const finalizeSource = readFileSync(
@@ -146,10 +144,13 @@ const finalizeSource = readFileSync(
   "utf8",
 );
 
-test("the finalize scan widens to the durable log before it scans", () => {
-  // The scan reads the whole journal: on the fast-attach tail it both missed
-  // early `audit.requested` events and missed the status events that closed
-  // them. The CALL, not the import.
-  expect(finalizeSource).toMatch(/[ .]ensureSessionFullEvents\(/u);
-  expect(finalizeSource).toMatch(/[ .]unclosedAuditPlanIDs\(/u);
+test("a restart starts no audit: finalize never wakes Nia", () => {
+  // Not "wakes her less often" — it does not call the door at all. A source pin
+  // because the property IS the absence of this call in this file, and a
+  // behavioural version would need a whole runtime to prove a negative.
+  expect(finalizeSource).not.toMatch(/requestNiaWake/u);
+  // And the unclosed-audit scan that fed it is gone, so it cannot come back
+  // through a renamed helper.
+  expect(finalizeSource).not.toMatch(/unclosedAuditPlanIDs/u);
+  expect(finalizeSource).not.toMatch(/reWokenAuditsThisProcess/u);
 });

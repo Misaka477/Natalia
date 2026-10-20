@@ -2722,21 +2722,64 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     if (!approval || !confinement) return undefined;
     return rungFor({ approval, confinement });
   };
+  /**
+   * The rung the runtime ANSWERS with, asked directly on session activation.
+   *
+   * The projection above is fed by events, and a cold start is exactly the case
+   * where the events never arrive: the transcript is hydrated from a MESSAGE
+   * page rather than the full journal, so the durable
+   * `session.permission.mode` facts are never folded, and no `status.snapshot`
+   * is published after this window subscribes (the runtime publishes one at
+   * attach, which the shell can beat, and thereafter only when a tool runs).
+   * The control therefore fell back to the config's default and STAYED there —
+   * the reported "locked on read" — while `runtime.status` for the same session
+   * answered `auto`.
+   *
+   * Asking once on activation is the timing-free answer: the runtime owns the
+   * rung, and `runtime.status` is the read it already answers correctly.
+   */
+  const [runtimeRung, setRuntimeRung] = createSignal<
+    | { approval: "ask" | "auto" | "read_only"; confinement: ConfinementMode }
+    | undefined
+  >(undefined);
+  createEffect(() => {
+    const sessionID = selectedSessionID() || state().sessionID;
+    const ask = props.ctx.runtime.runtimeStatus;
+    setRuntimeRung(undefined);
+    if (!sessionID || !ask) return;
+    void ask(sessionID)
+      .then((snapshot) => {
+        // A newer activation wins: the answer must describe the session the
+        // controls are showing, never the one that was there when it was asked.
+        if ((selectedSessionID() || state().sessionID) !== sessionID) return;
+        if (!snapshot) return;
+        const approval = snapshot.permissions as
+          | "ask"
+          | "auto"
+          | "read_only"
+          | undefined;
+        const confinement = snapshot.confinement as ConfinementMode | undefined;
+        if (!approval || !confinement) return;
+        setRuntimeRung({ approval, confinement });
+      })
+      .catch(() => undefined);
+  });
   /** The rung the controls are standing on. */
   const currentRung = () =>
     sessionRungFromProjection() ??
     rungFor(
-      sessionRung() ?? {
-        approval:
-          (config()?.defaultAgentMode as
-            | "ask"
-            | "auto"
-            | "read_only"
-            | undefined) ?? "ask",
-        confinement:
-          (config()?.confinement as { mode?: ConfinementMode } | undefined)
-            ?.mode ?? "workspace-write",
-      },
+      runtimeRung() ??
+        sessionRung() ?? {
+          approval:
+            (config()?.defaultAgentMode as
+              | "ask"
+              | "auto"
+              | "read_only"
+              | undefined) ?? "ask",
+          confinement:
+            (config()?.confinement as { mode?: ConfinementMode } | undefined)
+              ?.mode ?? "workspace-write",
+        },
     );
   /**
    * The rung id the trigger falls back to when nothing above can name one.

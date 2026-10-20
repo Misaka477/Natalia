@@ -115,27 +115,50 @@ export async function createUiPluginHost<TContext = unknown>(
    * create a second, empty shell key that then won `activateSession` and wiped
    * the visible transcript. Treat `default:` as the workspace-unknown home for
    * that session.
+   *
+   * CONTENT IS NOT ONLY THE MAIN TRANSCRIPT. This counted `messages`,
+   * `streams` and `tools` — the main channel's rows — so a session whose
+   * activity was Navi/Nia chat, or whose main transcript had not hydrated yet,
+   * scored ZERO and lost `activateSession` to a fresh `initialState()`. Every
+   * usage channel in that state went to zero with it: the reported symptom was
+   * that only Natalia's usage bar survived a restart or a session switch while
+   * Navi's and Nia's were wiped ("一重启一切 session 就全清零"). A state that
+   * has recorded provider steps, or holds chat rows, is not a shell.
    */
-  function conversationContentScore(
+  function projectedContentScore(
     candidate: viewStore.AppState | undefined,
   ): number {
     if (!candidate) return 0;
+    const channels = candidate.usageByChannel;
+    // A boolean, not the step count: this score is compared between two states
+    // (below), and a busy channel's hundreds of steps would drown out the
+    // transcript comparison it is there to inform.
+    const spentUsage =
+      (channels?.main?.steps ?? 0) +
+        (channels?.navi?.steps ?? 0) +
+        (channels?.nia?.steps ?? 0) >
+      0
+        ? 1
+        : 0;
     return (
       candidate.messages.length +
       Object.keys(candidate.streams).length +
-      Object.keys(candidate.tools).length
+      Object.keys(candidate.tools).length +
+      (candidate.navi?.messages.length ?? 0) +
+      (candidate.nia?.messages.length ?? 0) +
+      spentUsage
     );
   }
 
-  function hasConversationContent(
+  function hasProjectedContent(
     candidate: viewStore.AppState | undefined,
   ): boolean {
-    return conversationContentScore(candidate) > 0;
+    return projectedContentScore(candidate) > 0;
   }
 
   function workspaceUnknownKey(sessionID: string): string | undefined {
     const key = `default:${sessionID}`;
-    return hasConversationContent(sessionStates.get(key)) ? key : undefined;
+    return hasProjectedContent(sessionStates.get(key)) ? key : undefined;
   }
 
   const projection: UiProjection = {
@@ -201,20 +224,20 @@ export async function createUiPluginHost<TContext = unknown>(
       // A concrete-workspace key created by a late event is usually a shell.
       // When the workspace-unknown `default:` key holds this session's history,
       // prefer whichever side actually has more conversation content.
-      if (defaultKey !== preferredKey && hasConversationContent(defaultState)) {
+      if (defaultKey !== preferredKey && hasProjectedContent(defaultState)) {
         if (
-          !hasConversationContent(preferredState) ||
-          conversationContentScore(defaultState) >=
-            conversationContentScore(preferredState)
+          !hasProjectedContent(preferredState) ||
+          projectedContentScore(defaultState) >=
+            projectedContentScore(preferredState)
         ) {
           selectedKey = defaultKey;
         }
       } else if (
         selectedKey === preferredKey &&
-        !hasConversationContent(preferredState)
+        !hasProjectedContent(preferredState)
       ) {
         const hydrated = siblingKeys.find((key) =>
-          hasConversationContent(sessionStates.get(key)),
+          hasProjectedContent(sessionStates.get(key)),
         );
         if (hydrated) selectedKey = hydrated;
       }

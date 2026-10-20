@@ -1769,10 +1769,27 @@ function ToolCallCard(props: {
   // The command counts as hidden while the card is closed: a card whose output
   // is empty still has something to reveal, and without this the fold toggle
   // never appeared for it — the full command stayed unreachable.
-  const hiddenCount = () =>
-    (longSingle() ? 1 : Math.max(0, cap().hidden)) +
-    (expanded() ? 0 : commandLineCount());
-  const isCollapsed = () => hiddenCount() > 0 && !expanded();
+  //
+  // `foldableCount` answers "is there anything to fold back?", which is a
+  // different question from `hiddenCount`'s "how many lines are hidden RIGHT
+  // NOW". The cap is asked in its COLLAPSED form on purpose: `cap()` takes
+  // `expanded()` as its third argument, so asking it while the card is open
+  // returns a zero-hidden cap and the answer would always be "nothing".
+  //
+  // `hiddenCount` used to serve both questions, and that is why a tool card
+  // could be expanded but never collapsed: once open, `hiddenCount()` is 0 by
+  // definition (nothing is hidden), and the 收起 button rendered only when
+  // `hiddenCount() > 0` — so the control that opened the card deleted itself
+  // in the act of opening. Reported from use: "为什么 tool card 只能展开不能收起".
+  const foldableCount = () =>
+    (longSingle()
+      ? 1
+      : Math.max(
+          0,
+          headTailCap(allLines().length, CHAT_OUTPUT_MAX_LINES, false).hidden,
+        )) + commandLineCount();
+  const hiddenCount = () => (expanded() ? 0 : foldableCount());
+  const isCollapsed = () => foldableCount() > 0 && !expanded();
   // The tool's own card wins over the UI's guesswork: its title is what the
   // call IS (a command, a path, a query) and its summary is the sentence the
   // model wrote. The tool name stays as the provenance strip, smaller.
@@ -1900,7 +1917,7 @@ function ToolCallCard(props: {
               </For>
             </Show>
           </pre>
-          <Show when={!isCollapsed() && hiddenCount() > 0}>
+          <Show when={expanded() && foldableCount() > 0}>
             <button
               type="button"
               class="natalia-tool-output-toggle"

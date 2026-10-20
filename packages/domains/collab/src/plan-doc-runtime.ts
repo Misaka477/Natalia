@@ -509,7 +509,24 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       const { planID, status, sessionID } = input;
       const entries = await readIndex(ctx);
       const record = entries[planID];
-      if (!record) return { updated: false };
+      // A status write for a plan that HAS NO DOCUMENT is refused, and it says
+      // so. It used to return a bare `{ updated: false }`, and the audit path
+      // never read the flag: `audit_report` reported the verdict as recorded
+      // while nothing was written, so the plan stayed 「待审」 for ever and the
+      // restart scan re-woke the auditor on every boot. Measured on the user's
+      // own session — 15 audit rounds, 4 `audit.requested`, ZERO
+      // `plan.doc.status`, because the audits were anchored on
+      // `fourier-contour-video` (a taskID) while the only document was
+      // `plan_fourier-contour_mvekdz8x`.
+      if (!record)
+        return {
+          updated: false,
+          reason:
+            `no plan document for ${planID}: the plan index has no such entry, ` +
+            `so a status write would be lost. Register the plan with ` +
+            `plan_doc_write (which creates the index entry) before writing its ` +
+            `status, and make sure the planID is the DOCUMENT's id, not a task id.`,
+        };
       // Terminal protection (T-20): a completed or handed-off plan is a closed
       // lifecycle fact. The state machine used to accept every write, so a
       // `plan_pause(paused=false)` after completion silently returned a

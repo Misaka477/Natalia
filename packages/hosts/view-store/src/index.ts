@@ -344,8 +344,21 @@ export function hydrateProjectedMessages(
     // fold is the session's own accounting for the window it covers, and
     // a cold start has nothing accumulated yet. The older-page path
     // below adds, because its pages are disjoint turn windows.
+    //
+    // ONLY THE MAIN CHANNEL IS THIS PAGE'S BUSINESS.
+    //
+    // The page is the MAIN transcript. `navi.runtime.step_usage` and
+    // `nia.runtime.step_usage` live in the chat streams and appear in no
+    // page, so this fold has ZERO evidence about those channels — and it
+    // replaced the whole record, writing "no evidence" as zero. Measured:
+    // only Natalia's usage bar survived a restart or a session switch while
+    // Navi's and Nia's read `0 轮 · 0 步`, and it happened on EVERY switch,
+    // because every switch re-hydrates this page with `replace: true`
+    // ("一重启一切 session 就全清零"). The other channels are owned by the
+    // attach-time `session.usage` snapshot and by their own live step events;
+    // a page that carries none of their events must not speak for them.
     state.sessionUsage = projected.sessionUsage;
-    state.usageByChannel = projected.usageByChannel;
+    state.usageByChannel.main = projected.usageByChannel.main;
     // The context meters: carried when the page's fold produced one. A
     // live `context.status` (attach republishes it) still wins afterwards
     // because it mutates state directly.

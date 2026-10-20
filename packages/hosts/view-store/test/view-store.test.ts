@@ -8,6 +8,7 @@ import {
   applyEvent,
   boundTranscript,
   displayText,
+  emptySessionUsageStats,
   hydrateNaviMessages,
   hydrateNiaMessages,
   hydrateSubagents,
@@ -3400,6 +3401,62 @@ test("hydration carries the session's usage across a restart instead of zeroing 
   // The paged-back usage is additive when the page folds: at minimum the
   // original window survives, and the live totals only grow.
   expect(fresh.usageByChannel.main?.inputTokens).toBeGreaterThanOrEqual(1200);
+});
+
+/**
+ * The OTHER channels are not the main page's to overwrite.
+ *
+ * Measured from use: only Natalia's usage bar survived a restart or a session
+ * switch; Navi's and Nia's read `0 轮 · 0 步`, on every switch. The page washed
+ * through `hydrateProjectedMessages` is the MAIN transcript, so its fold has
+ * `navi.runtime.step_usage` / `nia.runtime.step_usage` nowhere in it — those
+ * belong to the chat streams. The replace branch assigned the WHOLE
+ * `usageByChannel` record from that fold, so "the page knows nothing about this
+ * channel" was written as zero and wiped what attach's `session.usage`
+ * snapshot had just restored.
+ */
+test("a main-transcript page does not zero the navi and nia usage channels", () => {
+  const state = initialState();
+  // What attach's `session.usage` snapshot puts there: every channel accounted.
+  state.usageByChannel.main = { ...emptySessionUsageStats(), steps: 4 };
+  state.usageByChannel.navi = {
+    ...emptySessionUsageStats(),
+    steps: 7,
+    turns: 2,
+    inputTokens: 30_100,
+  };
+  state.usageByChannel.nia = {
+    ...emptySessionUsageStats(),
+    steps: 3,
+    turns: 1,
+    inputTokens: 5_000,
+  };
+
+  const page = {
+    id: "u1",
+    turnID: "u1",
+    submitted: submitted("u1", "one") as Extract<
+      RuntimeEvent,
+      { type: "turn.submitted" }
+    >,
+    rows: [
+      {
+        id: "u1:user",
+        turnID: "u1",
+        kind: "user" as const,
+        event: submitted("u1", "one"),
+      },
+    ],
+  };
+  hydrateProjectedMessages(state, [page], "newer", { replace: true });
+
+  // The main channel is the page's own accounting: it is replaced.
+  expect(state.usageByChannel.main.steps).toBe(0);
+  // The chat channels are untouched — the page carried no evidence about them.
+  expect(state.usageByChannel.navi.steps).toBe(7);
+  expect(state.usageByChannel.navi.inputTokens).toBe(30_100);
+  expect(state.usageByChannel.nia.steps).toBe(3);
+  expect(state.usageByChannel.nia.inputTokens).toBe(5_000);
 });
 
 test("a live context.status still wins after the hydration carries one", () => {

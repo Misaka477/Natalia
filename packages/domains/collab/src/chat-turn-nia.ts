@@ -834,19 +834,31 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
         text: finalText,
         at: new Date().toISOString(),
       });
-      // EI §3.9 兜底降级: an audit turn that ends without audit_report leaves the
-      // plan stuck in "auditing" forever. Mark it audit_pending so it is visibly
-      // recoverable (re-wake / restart) instead of deadlocked.
+      // AN AUDIT TURN THAT PRODUCES NO VERDICT WRITES NOTHING TO THE PLAN.
+      //
+      // This fallback used to write `audit_pending`, which is one of the
+      // IN-FLIGHT statuses: the plan then read 「待审」 for ever, nothing could
+      // close it (only a later `audit_report` could, and the turn that would
+      // have sent one is the turn that just ended), and the restart scan
+      // treated it as an interrupted audit and re-woke her on every boot.
+      //
+      // The plan's status is the PLAN's fact, not the reviewer's: "the reviewer
+      // said nothing" is a fact about that turn, and the turn already ended in
+      // the journal. The plan is genuinely still awaiting an audit, so it keeps
+      // saying so, and the ordinary triggers drive it again. Inventing a status
+      // here (`audit_pending` before, `audit_failed` in a first pass at this)
+      // made the plan's lifecycle answer a question about somebody else's turn.
+      //
+      // What DOES fix the loop is that the verdict can now be read back: a
+      // refused status write returns the reason through `audit_report`, and the
+      // restart scan is gone (finalize.ts). Reported from use: "即使审计过了，
+      // 重启一样会审计，这代表审计结束就根本不会动状态，永远是待审".
       if (auditIntent && activePlan && !auditReported) {
-        try {
-          await ctx.ports.planDocRuntime.planDocUpdateStatus({
-            planID: activePlan.planID,
-            status: "audit_pending",
-            sessionID: input.exec.session.id,
-          });
-        } catch {
-          // A failed status update must not fail the whole Nia turn.
-        }
+        logOf(ctx.state.serviceDirectory).info(
+          "nia-audit-report",
+          "audit turn ended without a verdict; the plan is unchanged",
+          { planID: activePlan.planID, sessionID: input.exec.session.id },
+        );
       }
       return { text: output };
     } finally {

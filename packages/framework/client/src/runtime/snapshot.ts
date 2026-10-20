@@ -100,6 +100,7 @@ export function createSnapshot(ctx: RuntimeContext) {
       ? sessionFactIntelligenceFacts(factState)
       : undefined;
     let activeTurnIDs: string[];
+    let providerSteps: number | undefined;
     if (factState) {
       activeTurnIDs = sessionFactActiveTurnIDs(factState);
     } else {
@@ -115,12 +116,29 @@ export function createSnapshot(ctx: RuntimeContext) {
           value: projection,
         };
       activeTurnIDs = projection.activeTurnIDs;
+      providerSteps = projection.usage.main.steps;
     }
     const active = activeTurnIDs.length > 0;
     let agentStatus = "idle";
     if (exec.paused) agentStatus = "paused";
     else if (active) agentStatus = "running";
-    const step = exec.context.journalStatus().messageCount;
+    // PROVIDER STEPS, the number the usage bar counts — ONE AUTHORITY, ONE WORD.
+    //
+    // This read `journalStatus().messageCount`, the journal's ENTRY count,
+    // under the name "step". `session_snapshot` is what Navi and Nia read, so
+    // they were told `step 423` while Natalia's own usage bar showed 200-
+    // something for the same run ("navi看natalia是跑了四百多step，natalia用量条显示
+    // 两百多step"). An entry count is a different measure: it moves with every
+    // row a turn writes — tool calls, results, notices — so it is neither steps
+    // nor anything a human asked for. The contracts note on `status.snapshot`
+    // already records this same conflation costing `/status` its credibility
+    // once; the snapshot a sister agent reads had kept it.
+    //
+    // `projection.usage.main.steps` is one per `runtime.step_usage`, which is
+    // what the bar, `/status` and the usage view all count. The fact-state path
+    // (a completed hot state) carries no usage fold, so it reports nothing
+    // there rather than falling back to a different measure.
+    const step = providerSteps;
     const activeTurnID = activeTurnIDs[0];
     const activeTool = activeTurnID
       ? activeToolByTurn.get(activeTurnID)
@@ -186,7 +204,10 @@ export function createSnapshot(ctx: RuntimeContext) {
         : undefined;
     const live = {
       agentStatus,
-      ...(active ? { currentStep: `step ${step}` } : {}),
+      // Stated as provider steps, and only when a completed turn has really run
+      // one: `step` is undefined on the fact-state path, and "step 0" beside a
+      // running agent would be a number nobody counted.
+      ...(active && step !== undefined ? { currentStep: `step ${step}` } : {}),
       ...(activeTool ? { activeTool } : {}),
       ...(liveOutput ? { recentOutput: liveOutput } : {}),
       confinementMode,

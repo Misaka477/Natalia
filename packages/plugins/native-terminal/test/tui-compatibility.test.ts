@@ -35,7 +35,6 @@ function controllerFor(root: string) {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
 }
 

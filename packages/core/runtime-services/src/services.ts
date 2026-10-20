@@ -575,7 +575,6 @@ export type TerminalControllerInput = {
   onPerformance(name: string, durationMs: number): void;
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
-  windowMode(): "auto" | "windowless" | "window";
   /** Cap on concurrent PTYs for one Natalia session. PTY backend only. */
   maxPerSession?: number;
   /** Recycle a session's idle PTY when the cap is hit. PTY backend only. */

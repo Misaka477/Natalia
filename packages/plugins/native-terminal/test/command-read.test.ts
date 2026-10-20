@@ -87,7 +87,6 @@ function controllerInput(root: string, factory: PtyFactory) {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   };
 }

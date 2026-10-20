@@ -80,7 +80,6 @@ function inputs(
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn,
     ...extra,
   } as TerminalControllerInputs & { spawn: PtyFactory };

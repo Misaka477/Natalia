@@ -5294,7 +5294,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             "[settings] re-read <-",
             JSON.stringify({
               compactionEnabled: next?.context?.compactionEnabled,
-              terminalMode: next?.runtime?.terminal?.windowMode,
+              shellExecutable: next?.runtime?.shell?.executable,
               maxSteps: next?.runtime?.maxStepsPerTurn,
             }),
           );

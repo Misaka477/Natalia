@@ -701,8 +701,6 @@ export async function wireFrameworkServices(
         ctx.ports.getPerformanceTrace().mark(name, durationMs),
       runtimeID: ctx.ports.getNativeRuntimeID,
       userRuntimeHome: ctx.ports.getUserRuntimeHome,
-      windowMode: () =>
-        ctx.ports.getTsRuntimeConfig()?.runtime.terminal.windowMode ?? "auto",
       // The session's saved pane layout lives in the session store's metadata —
       // the same home the pending-human-terminal fact uses — because it is a
       // durable per-session fact about this session's terminal. The terminal

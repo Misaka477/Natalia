@@ -117,11 +117,6 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
     description: "额外 checkpoint 目录",
     category: "runtime",
   },
-  {
-    label: "Terminal Window Mode",
-    description: "终端窗口模式",
-    category: "runtime",
-  },
   // WHICH shell runs a command, as distinct from the two path rows below that
   // say WHERE each one lives. A row here is what makes the choice reachable:
   // `editableActions` holds the behaviour, and a label with no row is a

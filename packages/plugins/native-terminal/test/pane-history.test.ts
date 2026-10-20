@@ -68,7 +68,6 @@ test("a pane's ↑/↓ history follows the pane across a runtime restart", async
       onPerformance: () => undefined,
       runtimeID: () => "runtime-test",
       userRuntimeHome: () => historyRoot,
-      windowMode: () => "windowless",
     });
 
   const first = controller();

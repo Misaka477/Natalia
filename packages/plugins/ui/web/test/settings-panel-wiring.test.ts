@@ -36,13 +36,20 @@ test("the panel derives a config writer instead of waiting for one", () => {
 test("every row that writes config derives its writer, inline gates included", () => {
   // The compaction row had its OWN gate (not the shared editableActions one),
   // and that gate also read `props.onUpdateConfig` — so the previous fix, which
-  // rewired only the shared gate, left compaction (and the terminal mode) inert
-  // exactly as before. Both are rewired to the derived writer now.
+  // rewired only the shared gate, left compaction inert exactly as before.
   expect(source).not.toMatch(/props\.onUpdateConfig &&/u);
   expect(source).toMatch(/item\.label === "Compaction" &&\s*updateConfig &&/u);
-  expect(source).toMatch(
-    /item\.label === "Terminal Window Mode" &&\s*updateConfig &&/u,
-  );
+});
+
+test("the terminal window mode is gone, not merely unwired", () => {
+  // `runtime.terminal.windowMode` named how the terminal window opened and
+  // nothing ever read it: the PTY controller declared the field and never
+  // consulted it, and every spawn is `windowsHide: true` outright. The row, the
+  // schema field, the controller input and the framework's wiring are all
+  // deleted — a setting that changes nothing is worse than no setting, because
+  // it reads as a choice.
+  expect(source).not.toContain("Terminal Window Mode");
+  expect(source).not.toMatch(/windowMode/u);
 });
 
 test("the panel reads the runtime's config itself instead of trusting the app's snapshot", () => {

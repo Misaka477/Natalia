@@ -207,7 +207,6 @@ export type PtyTerminalControllerInput = {
   onPerformance(name: string, durationMs: number): void;
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
-  windowMode(): "auto" | "windowless" | "window";
   spawn?: PtyFactory;
   maxPerSession?: number;
   idleMs?: number;

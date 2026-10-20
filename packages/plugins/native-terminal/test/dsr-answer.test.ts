@@ -41,7 +41,6 @@ test.skipIf(process.platform === "win32")(
       onPerformance: () => undefined,
       runtimeID: () => "runtime-test",
       userRuntimeHome: () => undefined,
-      windowMode: () => "windowless",
     });
     try {
       await controller.start({ command: "bash", cwd: root, id: "t_dsr" });

@@ -115,7 +115,6 @@ test("a PowerShell pane reports commands and exit codes", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   try {
     await controller.start({

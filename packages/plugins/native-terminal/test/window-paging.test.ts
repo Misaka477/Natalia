@@ -56,7 +56,6 @@ test.skipIf(process.platform === "win32")(
       onPerformance: () => undefined,
       runtimeID: () => "runtime-test",
       userRuntimeHome: () => undefined,
-      windowMode: () => "windowless",
     });
     const waitFor = async (predicate: () => boolean, ms = 15_000) => {
       const deadline = Date.now() + ms;

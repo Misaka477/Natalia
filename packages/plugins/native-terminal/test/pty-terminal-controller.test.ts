@@ -90,7 +90,6 @@ function controllerInput(
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn,
     ...extra,
   };
@@ -294,7 +293,6 @@ test("the default pty spawn runs an interactive shell", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "printf '__PTY_READY__\\n'",
@@ -340,7 +338,6 @@ test("a real bash pane reports its commands end to end", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   // `bash`, not `bash -l` and not a command: the pane IS an interactive shell,
   // which is the only shape the integration is derived for.
@@ -411,7 +408,6 @@ test("a pane's cwd follows the shell, not the spawn", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "bash",
@@ -477,7 +473,6 @@ test("a zsh pane's shell really receives ZDOTDIR and reports commands", async ()
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "zsh",
@@ -541,7 +536,6 @@ test("a real pane's boundary cases stay honest", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "bash",
@@ -608,7 +602,6 @@ test("a command still running reports no exit code and no output", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "bash",
@@ -678,7 +671,6 @@ test("ours reads correctly alongside an integration the operator already had", a
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     command: "bash",
@@ -729,7 +721,6 @@ test("input written the instant a pty starts is not dropped by the bridge", asyn
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   const started = await controller.start({
     // The managed pane shell wraps commands in a profile-sourcing `sh -lc`;

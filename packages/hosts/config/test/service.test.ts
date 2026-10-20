@@ -38,17 +38,16 @@ test("partial terminal overlay keeps the default pty backend", async () => {
     join(root, ".natalia", "config.json"),
     JSON.stringify({
       version: 4,
-      runtime: { terminal: { windowMode: "window" } },
+      runtime: { terminal: { maxIdleMinutes: 15 } },
     }),
   );
   expect(
     (await resolveConfig({ workspaceRoot: root, globalPath })).config.runtime
       .terminal,
   ).toEqual({
-    windowMode: "window",
     backend: "pty",
-    // P2-19: the exited-pane TTL's default.
-    maxIdleMinutes: 60,
+    // The written value wins over the schema default.
+    maxIdleMinutes: 15,
   });
 });
 

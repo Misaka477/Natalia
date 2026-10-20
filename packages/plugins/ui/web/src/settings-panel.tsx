@@ -829,6 +829,24 @@ export function SettingsPanel(props: {
     />
   );
 
+  /**
+   * The shell row's displayed value. 自动 is a REAL answer — the platform
+   * default — not an absent one, so it must never fall through to
+   * UNSET_VALUE_LABEL and read 「未配置」 as though nobody had decided.
+   */
+  function shellLabel(executable: "bash" | "pwsh" | "zsh" | undefined): string {
+    switch (executable) {
+      case "pwsh":
+        return "pwsh";
+      case "bash":
+        return "bash";
+      case "zsh":
+        return "zsh";
+      default:
+        return "自动";
+    }
+  }
+
   function runtimeValue(label: string): string | undefined {
     const config = effectiveConfig() as ConfigV4 | undefined;
     if (!config) return undefined;
@@ -858,12 +876,16 @@ export function SettingsPanel(props: {
         return `${config.context?.compactionThresholdPercent ?? 85}%`;
       case "Checkpoint 目录":
         return `${(config.checkpoint?.additionalDirs ?? []).length} 个`;
-      case "Terminal Window Mode":
-        return String(config.runtime?.terminal?.windowMode ?? "auto");
       case "Git Bash 路径":
         return config.runtime?.shell?.bashPath || "自动探测";
       case "PowerShell 路径":
         return config.runtime?.shell?.pwshPath || "自动探测";
+      case "Shell 类型":
+        // The configured shell, or 自动 — which is a REAL answer (the platform
+        // default), not an absent one. A row with no case here falls through to
+        // UNSET_VALUE_LABEL and reads 「未配置」, which claims nobody chose when
+        // in fact "follow the platform" is what is in effect.
+        return shellLabel(config.runtime?.shell?.executable);
       case "界面偏好保存范围":
         return uiWriteScope();
       case "运行时配置保存范围":
@@ -1116,50 +1138,6 @@ export function SettingsPanel(props: {
                                 context: {
                                   ...effectiveConfig()?.context,
                                   compactionEnabled: next,
-                                },
-                              });
-                            }}
-                          >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
-                                {item.label}
-                              </span>
-                              <span class="neu-settings-item-description">
-                                {item.description}
-                              </span>
-                            </div>
-                            <span class="neu-settings-item-value">
-                              {value()}
-                            </span>
-                          </button>
-                        );
-                      }
-                      if (
-                        item.label === "Terminal Window Mode" &&
-                        updateConfig &&
-                        effectiveConfig()
-                      ) {
-                        return (
-                          <button
-                            type="button"
-                            class="neu-settings-item neu-settings-item-button"
-                            onClick={() => {
-                              const modes = [
-                                "auto",
-                                "windowless",
-                                "window",
-                              ] as const;
-                              const current =
-                                effectiveConfig()?.runtime?.terminal
-                                  ?.windowMode ?? "auto";
-                              const index = modes.indexOf(
-                                current as (typeof modes)[number],
-                              );
-                              const next = modes[(index + 1) % modes.length];
-                              updateConfig?.({
-                                runtime: {
-                                  ...effectiveConfig()?.runtime,
-                                  terminal: { windowMode: next },
                                 },
                               });
                             }}

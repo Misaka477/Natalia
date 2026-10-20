@@ -122,7 +122,10 @@ test("a changed config is a different generation", async () => {
       buildGeneration({
         config: {
           ...CONFIG,
-          runtime: { terminal: { backend: "pty", windowMode: "windowless" } },
+          // A field that still exists: `terminal.windowMode` was deleted (it
+          // named how the terminal window opened and nothing ever read it), so
+          // the two configs have to differ somewhere the schema still carries.
+          runtime: { terminal: { backend: "pty", maxIdleMinutes: 15 } },
         } as Generation["config"],
         catalog: CATALOG,
         policyRows: [],

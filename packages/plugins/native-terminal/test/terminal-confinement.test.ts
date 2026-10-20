@@ -69,7 +69,6 @@ async function controllerWith(root: string) {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   return { controller, spawns };

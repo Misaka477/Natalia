@@ -15,15 +15,19 @@ export const timeoutSchema = z.object({
 });
 
 /**
- * How the native terminal window is opened for a foreground session.
- * Deployment driven: a headless server has no display, so the pane must run
- * windowless (the model still reads and writes it; only the human window is
- * missing). `auto` is the default — it attempts a window and, when the attach
- * fails (no display, stale DISPLAY, transient first-run failure), degrades to
- * windowless instead of rolling the started terminal back.
+ * The native terminal's settings.
+ *
+ * `windowMode` is GONE rather than deprecated. It named how the terminal window
+ * was opened (`auto` / `windowless` / `window`) and nothing ever read it: the
+ * PTY controller declares the field in its construction input and never
+ * consults it — every spawn is `windowsHide: true` outright. A setting that
+ * changes nothing is worse than no setting, because it reads as a choice.
+ *
+ * The rest of the section is live: `backend` (one value, kept so an old config
+ * that says `"wezterm"` still parses) and `maxIdleMinutes` (the cleanup
+ * budget).
  */
 export const terminalWindowConfigSchema = z.object({
-  windowMode: z.enum(["auto", "windowless", "window"]).default("auto"),
   /**
    * The terminal backend. The WezTerm fork is gone (the user's decision,
    * 2026-10-04): the interactive terminal is the self-developed stack — an

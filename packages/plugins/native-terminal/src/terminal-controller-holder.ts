@@ -58,7 +58,6 @@ export type TerminalControllerInputs = {
   onPerformance(name: string, durationMs: number): void;
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
-  windowMode(): "auto" | "windowless" | "window";
   maxPerSession?: number;
   idleMs?: number;
   settlement?: unknown;
@@ -91,7 +90,7 @@ let lastKey: string | undefined;
 
 /**
  * The fields that decide whether a held controller can serve a new plugin
- * instance. The closures (`publish`, `runtimeID`, `windowMode`, …) are stable
+ * instance. The closures (`publish`, `runtimeID`, …) are stable
  * for the lifetime of a runtime and are deliberately not compared — only the
  * VALUES a pane is built from are, because those are what a stale controller
  * would get wrong: a pane's default working directory and the PTY budgets.

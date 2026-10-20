@@ -56,7 +56,6 @@ async function paneIn(root: string, id: string) {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless",
   });
   await controller.start({ command: "bash", cwd: root, id });
   // The predicate is AWAITED, and that is load-bearing: an async predicate

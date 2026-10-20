@@ -118,7 +118,6 @@ function controllerWith(
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => root,
-    windowMode: () => "windowless",
     spawn: factory,
     ...hooks,
   } as never) as TerminalController;

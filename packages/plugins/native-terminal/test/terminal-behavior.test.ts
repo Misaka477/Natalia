@@ -351,7 +351,6 @@ test("the terminal plugin owns its tools and aliases and unloads cleanly", async
       onPerformance: () => undefined,
       runtimeID: () => "runtime-test",
       userRuntimeHome: () => undefined,
-      windowMode: () => "auto",
     }),
   );
   expect(registry.list()[0]).toMatchObject({
@@ -373,7 +372,6 @@ test("omitted backend uses the in-process PTY controller", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "auto",
   });
   await plugin.setup({
     config: {},
@@ -892,7 +890,6 @@ test("observe without afterRevision waits for what changed since last look", asy
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   const context = { workspaceRoot: root, terminal: controller };
@@ -946,7 +943,6 @@ test("search pages the rendered scrollback, escapes and all gone", async () => {
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   const context = { workspaceRoot: root, terminal: controller };
@@ -1044,7 +1040,6 @@ async function commandToolSetup() {
     onPerformance: () => undefined,
     runtimeID: () => "runtime-test",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   const tools = new Map<string, RuntimeTool>();
@@ -1149,7 +1144,6 @@ test("scrollback search without a starting point fails with guidance (T-08)", as
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   const context = { workspaceRoot: root, terminal: controller };
@@ -1191,7 +1185,6 @@ test("a model write on a human-taken pane is refused naming the current owner (T
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   await controller.start({ command: "bash", cwd: root, id: "tty_owner" });
@@ -1227,7 +1220,6 @@ test("every ownership transition is recorded with its actor and action (user P0)
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   const started = await controller.start({
@@ -1282,7 +1274,6 @@ test("a marker-less pane with activity says the integration is missed, not that 
     onPerformance: () => undefined,
     runtimeID: () => "rt",
     userRuntimeHome: () => undefined,
-    windowMode: () => "windowless" as const,
     spawn: factory,
   });
   await controller.start({ command: "bash", cwd: root, id: "tty_raw" });

@@ -121,6 +121,19 @@ function relativePlanPath(ctx: RuntimeContext, absolute: string) {
 }
 
 function planIDForPath(path: string) {
+  // THE ID IS A PURE FUNCTION OF THE DOCUMENT'S NAME.
+  //
+  // `fourier-contour.md` → `plan_fourier-contour`, every time. It used to be
+  // `plan_<slug>_<Date.now()>`, which made the id depend on WHEN the file was
+  // first written: the same document deleted and rewritten came back as a
+  // different plan, and an id printed in the UI (or remembered by a model)
+  // stopped resolving. Identity belongs to the file, not to the clock — one
+  // name, one id, from now until the file is gone.
+  //
+  // The BASENAME, not the whole relative path: the plan directory is flat by
+  // contract (`.natalia/plans/`), and path-slugging turned
+  // `plans/graph-plan.md` into `plan_plans-graph-plan`, which broke the id
+  // every existing reader and test already relies on.
   const basename = path.split(/[\\/]/u).pop() ?? "plan";
   const slug = basename
     .replace(/\.md$/iu, "")
@@ -205,6 +218,33 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       await ctx.ports.getReady();
       await ensurePlanRoot(ctx);
       const entries = await readIndex(ctx);
+      // A PLAN WHOSE DOCUMENT IS GONE IS NOT A PLAN.
+      //
+      // The registry only ever shrank through `planDocDelete`, so a file
+      // removed any other way — an editor, `rm`, a branch switch — left its
+      // entry behind for ever: `plan_doc_list` kept listing a plan nobody could
+      // read, `plan_doc_status` kept answering its old lifecycle state, and an
+      // audit could be requested against a document that no longer existed.
+      // The path is the identity now, so the file's absence is the whole
+      // question, and this read is where a stale entry becomes visible.
+      const stale: string[] = [];
+      for (const entry of Object.values(entries)) {
+        try {
+          const target = ensurePlanPath(ctx, entry.documentPath);
+          await stat(target);
+        } catch {
+          stale.push(entry.planID);
+        }
+      }
+      if (stale.length) {
+        for (const planID of stale) delete entries[planID];
+        await writeIndex(ctx, entries);
+        logOf(ctx.state.serviceDirectory).info(
+          "plan-doc",
+          "pruned entries whose document is gone",
+          { planIDs: stale },
+        );
+      }
       return Object.values(entries);
     },
 
@@ -280,9 +320,7 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
       // completion citing its task found no plan to audit. The identity comes
       // from the caller (the front-matter `planID`), and a re-write of the same
       // path keeps the same id because it is matched by documentPath above.
-      const planID =
-        input.planID ??
-        `${planIDForPath(documentPath)}_${Date.now().toString(36)}`;
+      const planID = input.planID ?? planIDForPath(documentPath);
       const now = new Date().toISOString();
       const record: IndexEntry = {
         planID,
@@ -372,7 +410,7 @@ export function createPlanDocRuntime(ctx: RuntimeContext): PlanDocRuntime {
         }
         return { marked: true, planID: existing.planID };
       }
-      const planID = `${planIDForPath(relativePlanPath(ctx, targetPath))}_${Date.now().toString(36)}`;
+      const planID = planIDForPath(relativePlanPath(ctx, targetPath));
       const now = new Date().toISOString();
       const record: IndexEntry = {
         planID,

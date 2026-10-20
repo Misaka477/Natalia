@@ -41,7 +41,15 @@ test("moving the rung is ONE session-scoped write carrying both axes", () => {
 test("the standing rung is the session's, with the config only as a fallback", () => {
   const start = app.indexOf("const sessionRungFromProjection = () => {");
   expect(start).toBeGreaterThan(0);
-  const body = app.slice(start, start + 900);
+  // The window covers the pairing, the runtime ASK that follows it, and the
+  // config fallback behind both — the ladder has three rungs, so the slice has
+  // to reach the third. Anchored by POSITION (the next declaration), not by a
+  // magic length: a fixed 900-char window silently pushed the config assertion
+  // out of range the moment a layer was inserted between them, which is exactly
+  // how this test went green while the ladder changed.
+  const end = app.indexOf("const permissionOptions = () =>", start);
+  expect(end).toBeGreaterThan(start);
+  const body = app.slice(start, end);
   // The session's own facts first: the approval mode the runtime publishes and
   // the confinement half the session snapshot carries.
   expect(body).toContain("state().permissionMode");
@@ -53,9 +61,19 @@ test("the standing rung is the session's, with the config only as a fallback", (
   // The pairing itself (prettier may format it across lines, so the assertion is
   // on the call, not on one spelling of it).
   expect(body).toContain("rungFor({ approval, confinement })");
-  // The config only answers when the runtime has said nothing yet.
-  const fallback = app.slice(start, start + 900);
-  expect(fallback).toContain("config()?.defaultAgentMode");
+  // The runtime is ASKED when the projection has said nothing: a cold start
+  // hydrates a message page, so the durable rung events are never folded and no
+  // status snapshot arrives after this window subscribes.
+  expect(body).toContain("props.ctx.runtime.runtimeStatus");
+  // …and the config only answers when nobody else could.
+  expect(body).toContain("config()?.defaultAgentMode");
+  // Order is the property under test: both session-owned sources come first.
+  expect(body.indexOf("sessionRungFromProjection()")).toBeLessThan(
+    body.indexOf("config()?.defaultAgentMode"),
+  );
+  expect(body.indexOf("runtimeRung()")).toBeLessThan(
+    body.indexOf("config()?.defaultAgentMode"),
+  );
 });
 
 test("the session's rung is projected as a field, not only a status word", async () => {

@@ -834,31 +834,33 @@ export function createNiaChatTurn(ctx: RuntimeContext) {
         text: finalText,
         at: new Date().toISOString(),
       });
-      // AN AUDIT TURN THAT PRODUCES NO VERDICT WRITES NOTHING TO THE PLAN.
+      // AN AUDIT TURN THAT ENDS WITHOUT A VERDICT LEAVES AN OWED AUDIT — and
+      // says exactly that.
       //
-      // This fallback used to write `audit_pending`, which is one of the
-      // IN-FLIGHT statuses: the plan then read 「待审」 for ever, nothing could
-      // close it (only a later `audit_report` could, and the turn that would
-      // have sent one is the turn that just ended), and the restart scan
-      // treated it as an interrupted audit and re-woke her on every boot.
+      // `audit_pending` is the right word: the plan is owed an audit and none
+      // has been delivered. What made it a bug was never the word, it was the
+      // two things around it:
+      //   - the restart scan treated every in-flight status as "interrupted by
+      //     this restart" and re-woke her on EVERY boot, so the plan audited
+      //     for ever (that scan is deleted in finalize.ts);
+      //   - `audit_report` discarded a refused status write and reported the
+      //     verdict as recorded, so the owed audit could never be settled (the
+      //     tool now returns the refusal and its reason).
       //
-      // The plan's status is the PLAN's fact, not the reviewer's: "the reviewer
-      // said nothing" is a fact about that turn, and the turn already ended in
-      // the journal. The plan is genuinely still awaiting an audit, so it keeps
-      // saying so, and the ordinary triggers drive it again. Inventing a status
-      // here (`audit_pending` before, `audit_failed` in a first pass at this)
-      // made the plan's lifecycle answer a question about somebody else's turn.
-      //
-      // What DOES fix the loop is that the verdict can now be read back: a
-      // refused status write returns the reason through `audit_report`, and the
-      // restart scan is gone (finalize.ts). Reported from use: "即使审计过了，
-      // 重启一样会审计，这代表审计结束就根本不会动状态，永远是待审".
+      // Writing NOTHING is not the alternative: Nia's turn projected
+      // `auditing` when it started, so silence would leave the plan claiming an
+      // audit that is still running after the turn that ran it has ended.
+      // Reported from use: "审计没给裁决就写状态，不写状态那我问你，那没状态怎么办".
       if (auditIntent && activePlan && !auditReported) {
-        logOf(ctx.state.serviceDirectory).info(
-          "nia-audit-report",
-          "audit turn ended without a verdict; the plan is unchanged",
-          { planID: activePlan.planID, sessionID: input.exec.session.id },
-        );
+        try {
+          await ctx.ports.planDocRuntime.planDocUpdateStatus({
+            planID: activePlan.planID,
+            status: "audit_pending",
+            sessionID: input.exec.session.id,
+          });
+        } catch {
+          // A failed status update must not fail the whole Nia turn.
+        }
       }
       return { text: output };
     } finally {

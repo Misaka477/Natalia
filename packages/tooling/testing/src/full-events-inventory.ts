@@ -108,11 +108,15 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
       cls: "derivation",
       note: "providerStepsFor: the status snapshot's provider-step figure, folded once and cached on the exec keyed by event count (the same guard snapshot.ts uses) — a derivation over what is resident, never a per-refresh rescan",
     },
-  "packages/framework/client/src/runtime/initialize/finalize.ts": {
-    count: 1,
-    cls: "explicit-history",
-    note: "the restart audit re-wake scan behind its own ensureSessionFullEvents — the study's sanctioned class (the scan must see the whole log: the fast-attach tail both missed early audit.requested events and missed the plan.doc.status events that closed them)",
-  },
+  // REMOVED, deliberately: `finalize.ts` used to hold the restart audit
+  // re-wake scan behind its own `ensureSessionFullEvents` (cls:
+  // explicit-history — "the scan must see the whole log"). The scan is gone.
+  // It could not tell an audit interrupted by the restart from one that had
+  // already failed, and its dedup key lived in a process-level set, so a plan
+  // stuck on `awaiting_audit` started an audit on every boot. With the scan
+  // deleted the file performs no full-journal read at all, which is why the
+  // entry is gone rather than set to 0 — a 0 row would claim a read site that
+  // does not exist.
   "packages/framework/client/src/runtime/session-admission.ts": {
     count: 2,
     cls: "state-first",

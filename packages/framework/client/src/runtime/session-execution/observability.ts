@@ -1,9 +1,11 @@
 import { statusSnapshotController } from "@anthelia/runtime-status";
+import { compositionProfile } from "@anthelia/composition";
 import { dirname } from "node:path";
 import { operationLog, readOperationRecords } from "@anthelia/operation-log";
 import { logService, parseLogSpec } from "@anthelia/logging";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
 import type { RuntimeContext } from "@anthelia/substrate";
+import { effectiveConfinementMode } from "../tool-execution/execute-context";
 import type { ClientSurfaceOptions } from "./types";
 import type { StatusSnapshotController } from "@anthelia/runtime-status";
 type Surface = Pick<
@@ -44,6 +46,25 @@ export function createObservabilitySurface(
           provider: exec.provider,
           context: exec.context,
           permissionMode: exec.permissionMode,
+          // BOTH axes, and the sandbox half is THIS session's.
+          //
+          // Omitting it was measured: the controller's own `confinement` input
+          // resolves through `getActiveExec()`, which is the wrong session the
+          // moment a caller names one — and a front end that cannot pair the
+          // rung drops to a fallback that names no rung at all (the permission
+          // selector rendered its 「选择权限」 placeholder over a session
+          // standing on `auto`, because `read_only + workspace-write` is not
+          // one of the four rungs and the trigger then held the raw
+          // agent-mode string). `runtime.status` is the one read a front end
+          // makes on every attach, so it is the one place the pair has to
+          // arrive complete.
+          confinement:
+            exec.sandboxModeOverride ??
+            effectiveConfinementMode({
+              profile:
+                ctx.state.serviceDirectory.getOptional(compositionProfile),
+              configMode: ctx.ports.getTsRuntimeConfig()?.confinement?.mode,
+            }),
         })),
         sessionID: exec.session.id,
       };

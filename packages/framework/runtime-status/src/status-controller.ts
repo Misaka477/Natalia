@@ -15,6 +15,15 @@ export interface StatusSnapshotController {
     context?: StatusContextLedger;
     permissionMode?: "ask" | "auto" | "read_only";
     /**
+     * The sandbox half of the rung, for the session the caller is answering
+     * about. Absent falls back to the input, which resolves through the ACTIVE
+     * exec — the wrong session the moment a caller names one, and the reason
+     * this override exists on the interface and not only in the
+     * implementation: without it no caller could name the half at all, and a
+     * front end that cannot pair the rung has nothing to show.
+     */
+    confinement?: string;
+    /**
      * Provider steps the session has run (one per `runtime.step_usage`). The
      * caller owns the figure because only a session knows it; without one the
      * snapshot carries no `steps` rather than the journal's entry count, which

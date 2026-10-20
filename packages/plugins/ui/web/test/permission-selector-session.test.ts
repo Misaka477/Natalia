@@ -103,3 +103,64 @@ test("the top bar no longer renders a danger badge", () => {
   expect(app).not.toContain("DangerBadge");
   expect(app).not.toContain("neu-danger-badge");
 });
+
+/**
+ * Measured defect this pins: the selector rendered its 「选择权限」 placeholder
+ * over a session standing on `auto`.
+ *
+ * Two things had to break together for that, and both are measured rather than
+ * reasoned about:
+ *
+ *   1. `runtime.status` — the read a front end makes on every attach — published
+ *      the approval axis and NOT the sandbox half, so `permissionConfinement`
+ *      never arrived and the pairing could not be made at all.
+ *   2. The trigger's fallback then held `config()?.defaultAgentMode`, an
+ *      AGENT-MODE name, in a control whose option values are RUNG ids. `ask`
+ *      and `auto` coincide, so only the third mode showed it: a deployment on
+ *      `read_only` put the literal string `"read_only"` in the trigger, no
+ *      option matched, and the control read as unset.
+ *
+ * The deployment in question is a real one: `defaultAgentMode: "read_only"`
+ * with `confinement.mode: "workspace-write"` is a pair the four-rung ladder does
+ * not name (`read` is `read_only` + `read-only`), so `rungFor()` answers
+ * `undefined` and the fallback is the only thing left standing.
+ */
+test("the trigger's fallback is a rung id, never an agent-mode name", () => {
+  // The mapping exists, and it is by the config's own vocabulary: the mode name
+  // in, the rung id out.
+  const start = app.indexOf("const configRungID = ()");
+  expect(start).toBeGreaterThan(0);
+  const body = app.slice(start, start + 500);
+  expect(body).toContain("PERMISSION_RUNGS.find");
+  expect(body).toContain("rung.agentMode === mode");
+  // And the trigger actually uses it rather than the raw mode string. Matched
+  // on the expression itself: the file holds several `<NeuSelect>`s, so an
+  // index-of-`value={` lands on the wrong one.
+  const value = app.slice(
+    app.indexOf("currentRung()?.id ?? configRungID()") - 60,
+    app.indexOf("currentRung()?.id ?? configRungID()") + 60,
+  );
+  expect(value).toContain("currentRung()?.id ?? configRungID()");
+  // The agent-mode name is never fed to the control directly.
+  expect(app).not.toContain("?? config()?.defaultAgentMode");
+});
+
+test("the permission read carries BOTH axes for the session it names", async () => {
+  const observability = await Bun.file(
+    new URL(
+      "../../../../framework/client/src/runtime/session-execution/observability.ts",
+      import.meta.url,
+    ).pathname.replace(/^\/([A-Za-z]:)/u, "$1"),
+  ).text();
+  const start = observability.indexOf(
+    "async runtimeStatus(sessionID?: string)",
+  );
+  expect(start).toBeGreaterThan(0);
+  const body = observability.slice(start, start + 1400);
+  // The sandbox half is THIS exec's, not the active one's: the controller's own
+  // `confinement` input resolves through `getActiveExec()`, which is the wrong
+  // session the moment a caller names one.
+  expect(body).toContain("confinement:");
+  expect(body).toContain("exec.sandboxModeOverride");
+  expect(body).toContain("effectiveConfinementMode({");
+});

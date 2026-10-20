@@ -15,7 +15,12 @@ import { cloneStateInWorker } from "./clone-state-worker-client";
 import { structuralClone } from "./structural-clone";
 import type { ConfinementMode } from "@anthelia/contracts";
 import { panelScopeKey } from "./panel-scope";
-import { PERMISSION_RUNGS, availableRungs, rungFor } from "./permission-rungs";
+import {
+  PERMISSION_RUNGS,
+  availableRungs,
+  rungFor,
+  type PermissionRungID,
+} from "./permission-rungs";
 import {
   createSignal,
   createEffect,
@@ -2733,6 +2738,22 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             ?.mode ?? "workspace-write",
       },
     );
+  /**
+   * The rung id the trigger falls back to when nothing above can name one.
+   *
+   * The fallback used to be `config()?.defaultAgentMode` — an AGENT-MODE name
+   * fed to a control whose option values are RUNG ids. Two of the three names
+   * coincide (`ask`, `auto`), so the bug only showed on the third: a config on
+   * `read_only` put the literal string `"read_only"` in the trigger, no option
+   * matched, and the selector rendered its 「选择权限」 placeholder while the
+   * session ran on a real rung. Spelling the mode as its rung is the same fact
+   * in the vocabulary the control speaks.
+   */
+  const configRungID = (): PermissionRungID | undefined => {
+    const mode = config()?.defaultAgentMode;
+    if (typeof mode !== "string") return undefined;
+    return PERMISSION_RUNGS.find((rung) => rung.agentMode === mode)?.id;
+  };
   // The menu shows the four rungs and no "current" suffix: the trigger already
   // names the standing rung, and the option rows carry `data-active` for the
   // highlight. The suffix made two of the four rows read as one long sentence.
@@ -4398,9 +4419,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                       menuPosition="top"
                     />
                     <NeuSelect
-                      value={
-                        currentRung()?.id ?? config()?.defaultAgentMode ?? "ask"
-                      }
+                      value={currentRung()?.id ?? configRungID() ?? "ask"}
                       options={
                         startupDataDegraded()
                           ? [

@@ -27,9 +27,7 @@
       "@anthelia/subagents": ["packages/framework/subagents/src/index.ts"],
       "@anthelia/substrate": ["packages/framework/substrate/src/index.ts"],
       "@anthelia/tools": ["packages/core/tools/src/index.ts"],
-      "@natalia/fs-shared": [
-        "packages/plugins/tools/fs-shared/src/index.ts"
-      ],
+      "@natalia/fs-shared": ["packages/plugins/tools/fs-shared/src/index.ts"],
       "@anthelia/turn-orchestration": [
         "packages/framework/turn-orchestration/src/index.ts"
       ],

@@ -23,6 +23,12 @@ export type SessionProjection = {
     import("@anthelia/contracts").ChatModelProfile
   >;
   permissionMode?: "ask" | "auto" | "read_only";
+  /**
+   * The sandbox half of the same rung move. A rung is a PAIR, and a projection
+   * that carried only the approval half could not restore the other one — the
+   * missing half silently became the deployment default after a restart.
+   */
+  permissionConfinement?: string;
   permissionProfile?: string;
   /** The settlement notices this session was told (the spine's durable face). */
   settlements: SettlementNoticeRecord[];
@@ -93,6 +99,13 @@ export function projectSession(session: SessionRecord): SessionProjection {
     reasoningEffort: reasoningEffortFromEvents(replayable),
     chatModelProfile: chatModelProfileFromEvents(replayable),
     permissionMode: permissionModeFromEvents(replayable),
+    /**
+     * The sandbox half of the same rung move, beside the approval half. A rung
+     * is a PAIR; a projection that carried only one of them could not restore
+     * the other, and the half that was missing silently became the deployment
+     * default after a restart.
+     */
+    permissionConfinement: permissionConfinementFromEvents(replayable),
     permissionProfile: permissionProfileFromEvents(replayable),
     settlements: settlementRecordsFromEvents(replayable),
     subagentMessages: subagentMessageRecordsFromEvents(replayable),

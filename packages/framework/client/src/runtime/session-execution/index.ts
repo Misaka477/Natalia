@@ -239,6 +239,23 @@ export function createSessionExecution(
     mark("createLedger");
     const projection = projectSession(loaded);
     mark("project");
+    // The store's own fast-restore row, read on EVERY path — but only when the
+    // journal window has lost the fact. `stored.recovery` arrives only with
+    // `indexedRecovery`, which also blanks the event list, so the normal path
+    // asked for nothing and fell back to the deployment default whenever the
+    // window had been cropped past the rung move.
+    //
+    // The read is conditional because it is a store round-trip per built exec:
+    // reading it unconditionally took the 500-concurrent-sessions test from
+    // green to a 60s timeout (measured). A projection that already names the
+    // pair needs nothing else, and a projection that names only the approval
+    // half still asks, because that is the half the row can complete.
+    const projectedRungMode = projection.permissionMode;
+    const projectedRungConfinement = projection.permissionConfinement;
+    const recoveryIndex =
+      projectedRungMode === undefined || projectedRungConfinement === undefined
+        ? sessionStore.loadRecoveryProjection(sessionID)
+        : undefined;
     const latestContextCheckpoint = [...projection.replayableEvents]
       .reverse()
       .find((event) => event.type === "context.checkpoint");
@@ -353,17 +370,30 @@ export function createSessionExecution(
             : undefined;
         })(),
       runtimeContextConfig: getRuntimeContextConfig(),
-      // THE JOURNAL OUTRANKS THE RECOVERY INDEX. The index is a store-maintained
-      // side table; `session.permission.mode` is the durable fact the rung writer
-      // publishes. Reading the index first meant a store whose row still held the
-      // creation-time mode beat a journal that said otherwise.
-      // THE RECOVERY INDEX FIRST, the journal projection second: the projection
-      // may cover only a window of the journal (a fast attach holds a tail), so a
-      // rung move older than that window is invisible to it, while the store
-      // keeps the last one in `recovery_selection` for exactly this read.
+      // THE RUNG IS A PAIR, AND BOTH HALVES ARE RESTORED.
+      //
+      // Two independent holes were measured here, and together they are why a
+      // session came back reporting `read_only` after a restart while its
+      // journal said `auto`:
+      //
+      //   1. `sandboxModeOverride` was never set on a freshly built exec at
+      //      all, so the sandbox half of the rung was ALWAYS the deployment
+      //      default after any restart.
+      //   2. The journal window can be cropped past the move — a session with a
+      //      context epoch excludes the older events, and
+      //      `filterRuntimeRetainedEvents` drops more — so `projection` may
+      //      carry no `session.permission.mode` fact at all. The fallback was
+      //      `getDefaultPermissionMode()`, i.e. the deployment default, which
+      //      is exactly the value the human had moved away from.
+      //
+      // `recovery_selection` is the store's own answer to that: the row is
+      // upserted from the same durable event and is not cropped. It is read
+      // here directly (not only through `load({indexedRecovery})`, which also
+      // blanks the event list) so BOTH paths get it.
       permissionMode:
+        projectedRungMode ??
         recovery?.permissionMode ??
-        projection.permissionMode ??
+        recoveryIndex?.permissionMode ??
         getDefaultPermissionMode(),
       // The human's own rung rides the same durable event the approval mode
       // does (`session.permission.mode`), so a session that was moved to `auto`
@@ -371,7 +401,18 @@ export function createSessionExecution(
       // the next config reload cannot stamp the deployment's default over it
       // (`exec.permissionMode = exec.permissionModeOverride ?? permissionMode`).
       permissionModeOverride:
-        recovery?.permissionMode ?? projection.permissionMode,
+        projectedRungMode ??
+        recovery?.permissionMode ??
+        recoveryIndex?.permissionMode,
+      // The sandbox half, from the same sources in the same order. Absent
+      // means nothing was ever recorded for it (a journal written before the
+      // field existed), which leaves the deployment default in place rather
+      // than inventing a value.
+      sandboxModeOverride: (projectedRungConfinement ??
+        recovery?.permissionConfinement ??
+        recoveryIndex?.permissionConfinement) as
+        | import("@anthelia/confinement").ConfinementMode
+        | undefined,
       // THE PROFILE IS NOT RESTORED FROM THE JOURNAL, and that is correct: a
       // profile is a CONFIG choice (`config.agentModes` via `options.permissionProfile`
       // or `defaultAgentMode`), not a per-session one. `reloadPermissionSettings`

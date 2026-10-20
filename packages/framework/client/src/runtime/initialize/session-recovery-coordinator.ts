@@ -394,6 +394,20 @@ export class SessionRecoveryCoordinator {
       // `read_only` with no notice.
       scope.activeExec.permissionModeOverride = recoveredPermissionMode;
     }
+    // BOTH axes. The sandbox half has its own durable record
+    // (`session.permission.mode.confinement`) and this is the startup path a
+    // user's restart actually takes, so leaving it unset meant every status
+    // snapshot reported the deployment default for it — and, folded last, that
+    // overwrote the session's own sandbox rung in the front end. Measured: a
+    // session whose journal said `auto + workspace-write` reported
+    // `auto + danger-full-access`.
+    const recoveredConfinement =
+      this.sqliteRecovery?.permissionConfinement ??
+      projection.permissionConfinement;
+    if (recoveredConfinement && scope.activeExec) {
+      scope.activeExec.sandboxModeOverride =
+        recoveredConfinement as typeof scope.activeExec.sandboxModeOverride;
+    }
   }
 
   /**

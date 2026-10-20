@@ -460,6 +460,52 @@ test("SQLite recovery projection tracks durable control state and backfills hist
   }
 });
 
+/**
+ * Measured defect this pins: a session came back reporting `read_only` after a
+ * restart while its journal said `auto`.
+ *
+ * A rung is a PAIR. `session.permission.mode` is the one durable fact that
+ * carries both halves, and `recovery_selection` is the store's fast-restore row
+ * upserted from it — the read that survives a journal whose window has been
+ * cropped past the move (a session with a context epoch excludes the older
+ * events, and `filterRuntimeRetainedEvents` drops more). The row carried only
+ * the approval half, so the sandbox half could not be restored at all and
+ * silently became the deployment default.
+ */
+test("SQLite recovery projection keeps BOTH halves of the rung", () => {
+  const path = join(tmpdir(), `natalia-rung-${crypto.randomUUID()}.db`);
+  const store = new SqliteSessionStore(path);
+  const sessionID = "ses_rung" as const;
+  try {
+    store.create(sessionID, "Rung");
+    // The human moves the rung: one write, both axes.
+    store.appendEvents(sessionID, [
+      {
+        type: "session.permission.mode",
+        mode: "auto",
+        confinement: "workspace-write",
+      },
+    ]);
+    const projection = store.loadRecoveryProjection(sessionID);
+    expect(projection.permissionMode).toBe("auto");
+    expect(projection.permissionConfinement).toBe("workspace-write");
+
+    // A move that predates the confinement field reads as absent on that half
+    // rather than inventing one.
+    store.appendEvents(sessionID, [
+      { type: "session.permission.mode", mode: "read_only" },
+    ]);
+    const legacy = store.loadRecoveryProjection(sessionID);
+    expect(legacy.permissionMode).toBe("read_only");
+    expect(legacy.permissionConfinement).toBeUndefined();
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
+});
+
 test("SQLite recovery projection keeps the latest bounded diagnostics", () => {
   const path = join(tmpdir(), `natalia-diagnostics-${crypto.randomUUID()}.db`);
   const store = new SqliteSessionStore(path);

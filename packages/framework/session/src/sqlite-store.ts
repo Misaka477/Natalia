@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS recovery_selection (
   reasoning_effort TEXT,
   chat_model_profile TEXT,
   permission_mode TEXT,
+  permission_confinement TEXT,
   permission_profile TEXT
 );
 
@@ -183,6 +184,8 @@ export type StoredRecoveryProjection = {
     import("@anthelia/contracts").ChatModelProfile
   >;
   permissionMode?: "ask" | "auto" | "read_only";
+  /** The sandbox half of the same move; absent when the event carried none. */
+  permissionConfinement?: string;
   permissionProfile?: string;
   attachments: Map<string, import("@anthelia/contracts").LocalAttachment[]>;
   diagnostics: Array<Extract<RuntimeEvent, { type: "diagnostic" }>>;
@@ -232,6 +235,7 @@ export class SqliteSessionStore {
       ["reasoning_effort", "TEXT"],
       ["chat_model_profile", "TEXT"],
       ["permission_mode", "TEXT"],
+      ["permission_confinement", "TEXT"],
       ["permission_profile", "TEXT"],
     ];
     for (const [name, type] of additions)
@@ -799,7 +803,7 @@ export class SqliteSessionStore {
       .all(sessionID) as Array<{ kind: string; event: string }>;
     const selection = this.db
       .query(
-        `SELECT agent_name, model_id, model_variant, reasoning_effort, chat_model_profile, permission_mode, permission_profile FROM recovery_selection WHERE session_id = ?`,
+        `SELECT agent_name, model_id, model_variant, reasoning_effort, chat_model_profile, permission_mode, permission_confinement, permission_profile FROM recovery_selection WHERE session_id = ?`,
       )
       .get(sessionID) as
       | {
@@ -809,6 +813,7 @@ export class SqliteSessionStore {
           reasoning_effort?: string;
           chat_model_profile?: string;
           permission_mode?: string;
+          permission_confinement?: string;
           permission_profile?: string;
         }
       | undefined;
@@ -883,6 +888,13 @@ export class SqliteSessionStore {
           | "auto"
           | "read_only"
           | undefined) ?? undefined,
+      // The sandbox half, from the same event the approval half rides. A row
+      // written before the column existed reads as absent, which is honest:
+      // nothing was recorded, so nothing is restored.
+      permissionConfinement:
+        typeof selection?.permission_confinement === "string"
+          ? selection.permission_confinement
+          : undefined,
       permissionProfile: selection?.permission_profile ?? undefined,
       attachments,
       diagnostics: diagnostics.map(
@@ -1571,9 +1583,14 @@ export class SqliteSessionStore {
     }
     if (event.type === "session.permission.mode")
       this.run(
-        `INSERT INTO recovery_selection(session_id, permission_mode, permission_profile) VALUES (?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET permission_mode = excluded.permission_mode, permission_profile = excluded.permission_profile`,
-        [sessionID, event.mode, event.profile ?? null],
+        `INSERT INTO recovery_selection(session_id, permission_mode, permission_confinement, permission_profile) VALUES (?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET permission_mode = excluded.permission_mode, permission_confinement = excluded.permission_confinement, permission_profile = excluded.permission_profile`,
+        [
+          sessionID,
+          event.mode,
+          event.confinement ?? null,
+          event.profile ?? null,
+        ],
       );
     if (event.type === "diagnostic") {
       this.run(

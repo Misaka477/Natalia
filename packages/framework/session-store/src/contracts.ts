@@ -40,6 +40,17 @@ export type SessionStoreRecoveryView = {
   reasoningEffort?: RuntimeReasoningEffort;
   chatModelProfile?: Record<string, ChatModelProfile>;
   permissionMode?: "ask" | "auto" | "read_only";
+  /**
+   * The sandbox half of the same rung move, when the event carried one.
+   *
+   * A rung is a PAIR, and this row is the fast-restore read that survives a
+   * journal whose window has been cropped past the move (a session with a
+   * context epoch excludes the older events). Carrying only the approval half
+   * here is why a session came back reporting the deployment's sandbox default
+   * while its journal said otherwise: the pair could not be restored, so the
+   * half that was missing silently became the deployment's.
+   */
+  permissionConfinement?: string;
   permissionProfile?: string;
   attachments: Map<string, LocalAttachment[]>;
   diagnostics: Array<Extract<RuntimeEvent, { type: "diagnostic" }>>;

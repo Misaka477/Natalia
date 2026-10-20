@@ -701,36 +701,46 @@ export function SettingsPanel(props: {
     },
     "Shell 类型": () => {
       // WHICH shell runs a command, as distinct from WHERE each one lives (the
-      // two path rows above). The persisted form of `NATALIA_SHELL`: a choice
-      // made here survives a restart, which an environment variable does not.
+      // two path rows above).
       //
-      // "自动" is a real answer, not a blank: it means the platform default —
-      // pwsh on Windows, bash elsewhere — and it is what clearing the row
-      // writes, so the deployment's own default stands rather than a value
-      // nobody chose.
+      // A choice here is SESSION-scoped and takes effect immediately: the
+      // runtime moves the session's shell, projects it onto the environment the
+      // executor seam reads, and tells the model through the
+      // `context.instructions {kind: "shell_switch"}` record. It is not a
+      // config write, because a workspace's own config outranks the global file
+      // (so a global write was a silent no-op wherever the workspace pinned
+      // one) and because a config write reloads the whole runtime — the user
+      // would see a reload notice without anything moving.
+      //
+      // "自动" is a real answer, not a blank: it means the deployment's own
+      // default, and it is what clearing the session's choice restores.
       const current = effectiveConfig()?.runtime?.shell?.executable ?? "auto";
       openSelect(
-        "Shell 类型（命令在哪个 shell 里执行）",
+        "Shell 类型（命令在哪个 shell 里执行，立即生效）",
         [
-          { value: "auto", label: "自动（Windows 用 pwsh，其他用 bash）" },
+          { value: "auto", label: "自动（跟随部署默认）" },
           { value: "pwsh", label: "pwsh（PowerShell 7）" },
           { value: "bash", label: "bash（Git Bash / WSL）" },
           { value: "zsh", label: "zsh" },
         ],
         current,
         (value) => {
-          updateConfig?.({
-            runtime: {
-              ...effectiveConfig()?.runtime,
-              // The rest of the shell section rides along: writing this row's
-              // value must not wipe the two path rows above it.
-              shell: {
-                ...effectiveConfig()?.runtime?.shell,
-                ...(value === "auto"
-                  ? { executable: undefined }
-                  : { executable: value as "bash" | "pwsh" | "zsh" }),
+          if (value === "auto") {
+            // Back to the deployment's shell: the session's own choice is
+            // cleared rather than overwritten with a value nobody chose.
+            updateConfig?.({
+              runtime: {
+                ...effectiveConfig()?.runtime,
+                shell: {
+                  ...effectiveConfig()?.runtime?.shell,
+                  executable: undefined,
+                },
               },
-            },
+            });
+            return;
+          }
+          void props.runtime?.setSessionShell?.({
+            shell: value as "bash" | "pwsh" | "zsh",
           });
         },
       );
@@ -913,7 +923,9 @@ export function SettingsPanel(props: {
    * default — not an absent one, so it must never fall through to
    * UNSET_VALUE_LABEL and read 「未配置」 as though nobody had decided.
    */
-  function shellLabel(executable: "bash" | "pwsh" | "zsh" | undefined): string {
+  function shellLabel(
+    executable: "bash" | "pwsh" | "zsh" | "auto" | undefined,
+  ): string {
     switch (executable) {
       case "pwsh":
         return "pwsh";
@@ -960,11 +972,18 @@ export function SettingsPanel(props: {
       case "PowerShell 路径":
         return config.runtime?.shell?.pwshPath || "自动探测";
       case "Shell 类型":
-        // The configured shell, or 自动 — which is a REAL answer (the platform
+        // The session's own choice when it has one, else the deployment's
+        // configured shell, else 自动 — which is a REAL answer (the platform
         // default), not an absent one. A row with no case here falls through to
         // UNSET_VALUE_LABEL and reads 「未配置」, which claims nobody chose when
         // in fact "follow the platform" is what is in effect.
-        return shellLabel(config.runtime?.shell?.executable);
+        return shellLabel(
+          (config.runtime?.shell?.executable ?? "auto") as
+            | "bash"
+            | "pwsh"
+            | "zsh"
+            | "auto",
+        );
       case "界面偏好保存范围":
         return uiWriteScope();
       case "运行时配置保存范围":

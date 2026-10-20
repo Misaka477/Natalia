@@ -186,6 +186,21 @@ export type SessionExecutionState = {
    * reconcile skipped, leaving the execution on the stale mode.
    */
   permissionModeChosenInProcess?: boolean;
+  /**
+   * The session's SHELL, when the human moved it mid-session.
+   *
+   * Per-session and dies with the session, for the same reason as the rung
+   * fields: a restart starts at the deployment's shell, and the journal's
+   * `context.instructions {kind: "shell_switch"}` record is the durable half
+   * that says the switch happened.
+   *
+   * The value is also projected onto `NATALIA_SHELL`, because the executor seam
+   * reads the environment and six call sites ask for the executor at module
+   * scope where no session state is reachable. Those sites resolve per call, so
+   * the projection is what makes the switch take effect on the next command
+   * rather than the next start.
+   */
+  shellOverride?: "bash" | "pwsh" | "zsh";
 };
 
 /** Seeds {@link SessionExecutionState.announcedTurnIDs} from the loaded journal. */

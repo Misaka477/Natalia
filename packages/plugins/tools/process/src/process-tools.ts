@@ -102,9 +102,13 @@ export function settlementReasonFor(
   return "exited";
 }
 
-// The shell that owns the POSIX launcher spelling. It is stateless, so one per
-// process; a second shell would be a different CLASS here, not an argument.
-const shell = selectExecutor();
+// The shell that owns the POSIX launcher spelling. Resolved PER CALL, not once
+// at module scope: a module-level constant is evaluated at import time, which
+// is process start, so a shell chosen later in the settings panel never reached
+// it and the human had to restart the app. The executor is stateless and cheap
+// to build, and `selectExecutor` reads the environment the config reload
+// projects the choice into.
+const shell = () => selectExecutor();
 
 /**
  * The process family's card — R1's template, the shape every other family
@@ -468,10 +472,12 @@ export class ManagedProcessRegistry {
       ...(isWindows()
         ? {}
         : {
-            posixScript: `${detachedShellPrefix()}${shell.detachedPosixScript({
-              command,
-              outputPath,
-            })}`,
+            posixScript: `${detachedShellPrefix()}${shell().detachedPosixScript(
+              {
+                command,
+                outputPath,
+              },
+            )}`,
           }),
       cwd: context.workspaceRoot,
       outputPath,

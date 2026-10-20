@@ -263,6 +263,7 @@ export const RPC_ROUTE_MEMBERS = {
   "mcp.server.remove": "mcpServerRemove",
   // The four-rung ladder: moving the live session's sandbox rung.
   "sandbox.rung.set": "setSandboxRung",
+  "shell.set": "setSessionShell",
   "permission.list": "permissionList",
   "permission.save": "permissionSave",
   "permission.delete": "permissionDelete",
@@ -4584,6 +4585,32 @@ export async function handleRPCMessage(
           ...(approval
             ? { approval: approval as "ask" | "auto" | "read_only" }
             : {}),
+          ...(sessionID ? { sessionID } : {}),
+        }),
+      };
+    }
+    if (body.method === "shell.set") {
+      optionsGuard(client, "setSessionShell");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("shell.set.params must be an object");
+      const shell = (params as { shell?: unknown }).shell;
+      if (
+        typeof shell !== "string" ||
+        !(["bash", "pwsh", "zsh"] as readonly string[]).includes(shell)
+      )
+        throw invalidParams(
+          "shell.set.params.shell must be one of bash, pwsh, zsh",
+        );
+      const sessionID =
+        typeof (params as { sessionID?: unknown }).sessionID === "string"
+          ? (params as { sessionID: string }).sessionID
+          : undefined;
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.setSessionShell?.({
+          shell: shell as "bash" | "pwsh" | "zsh",
           ...(sessionID ? { sessionID } : {}),
         }),
       };

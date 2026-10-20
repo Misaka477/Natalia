@@ -77,6 +77,7 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   pickFile: "file.pick",
   listDirectoryLevel: "directory.list",
   createChildDirectory: "directory.create",
+  setSessionShell: "shell.set",
   workspaceAdd: "workspace.add",
   workspaceRemove: "workspace.remove",
   workspaceActivate: "workspace.activate",
@@ -972,6 +973,18 @@ export function createWebRuntimeClient(
       return (await call<string>("directory.create", {
         path,
         name,
+      })) as never;
+    },
+    /**
+     * Move this session's shell and tell the model.
+     *
+     * Session-scoped, and the model learns the new shell through the
+     * `context.instructions {kind: "shell_switch"}` record rather than the
+     * system prompt, whose cached prefix a per-session fact would invalidate.
+     */
+    async setSessionShell(input) {
+      return (await call<{ changed: boolean; to: string }>("shell.set", {
+        ...input,
       })) as never;
     },
     async workspaceAdd(input) {

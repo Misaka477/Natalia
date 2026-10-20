@@ -35,7 +35,19 @@ const shellEnv = new ShellEnvRegistry(process.env.NATALIA_HOME ?? "");
  * and lives above the seam. Adding PowerShell is a new executor, not an edit
  * here.
  */
-const shell = selectExecutor();
+/**
+ * The shell a command runs in, resolved PER CALL rather than once at module
+ * scope.
+ *
+ * A module-level `const shell = selectExecutor()` is evaluated when this module
+ * is first imported, which is process start — so a shell chosen later in the
+ * settings panel never reached it, and the human had to restart the app. The
+ * executor is cheap to build (it holds no state beyond the configured
+ * executable path) and `selectExecutor` reads the environment the config
+ * reload projects the choice into, so resolving per call is what makes the
+ * choice hot.
+ */
+const shell = () => selectExecutor();
 
 export async function runShell(
   command: string,
@@ -46,7 +58,7 @@ export async function runShell(
   // file behind it the head of a long build is gone rather than merely unread,
   // and no pager can walk back to it.
   const spill = spillTargets(context.workspaceRoot);
-  const spec = shell.resolve({
+  const spec = shell().resolve({
     command,
     workdir: context.workspaceRoot,
     timeoutMs: timeoutSec * 1000,
@@ -64,7 +76,7 @@ export async function runShell(
       sessionID: context.sessionID,
     }),
   });
-  const run = await shell.run(spec, {
+  const run = await shell().run(spec, {
     command,
     confinement: context.confinement,
     workspaceRoot: context.workspaceRoot,

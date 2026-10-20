@@ -98,14 +98,21 @@ test("the choice is applied at load AND at reload", () => {
 
 test("the settings panel offers the shell, and 自动 is a real answer", () => {
   expect(panel).toContain('"Shell 类型"');
-  // The four answers, with the platform default named rather than blank.
-  expect(panel).toContain(
-    '{ value: "auto", label: "自动（Windows 用 pwsh，其他用 bash）" }',
-  );
-  expect(panel).toContain('{ value: "pwsh", label: "pwsh（PowerShell 7）" }');
-  expect(panel).toContain('{ value: "bash", label: "bash（Git Bash / WSL）" }');
-  // Clearing the row writes "discover", not a value nobody chose.
-  expect(panel).toContain("{ executable: undefined }");
+  // The four answers. 自动 names the deployment's default rather than a blank,
+  // and the row says the choice takes effect immediately — which is the whole
+  // point of the session-scoped switch. Matched on the label text rather than
+  // one spelling, because prettier decides where the object wraps.
+  expect(panel).toMatch(/value:\s*"auto",\s*label:\s*"自动（跟随部署默认）"/u);
+  expect(panel).toContain("pwsh（PowerShell 7）");
+  expect(panel).toContain("bash（Git Bash / WSL）");
+  expect(panel).toContain("立即生效");
+  // A concrete choice moves the SESSION's shell rather than writing config: a
+  // workspace's own config outranks the global file, and a config write reloads
+  // the whole runtime.
+  expect(panel).toContain("props.runtime?.setSessionShell?.(");
+  // Clearing the choice restores the deployment's default. Matched on the
+  // operands, because prettier wraps the object across lines.
+  expect(panel).toMatch(/executable:\s*undefined/u);
   // A fixed set of answers gets a select, not a text box that invites a typo.
   expect(panel).toContain("function openSelect(");
   expect(panel).toContain("editFieldOptions");

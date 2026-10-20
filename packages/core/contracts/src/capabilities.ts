@@ -171,6 +171,7 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "pickFile",
     "listDirectoryLevel",
     "createChildDirectory",
+    "setSessionShell",
     "workspaceAdd",
     "workspaceRemove",
     "workspaceActivate",

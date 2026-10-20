@@ -1,17 +1,19 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { ShellExecutor } from "@anthelia/shell";
 import { selectExecutor } from "@anthelia/shell";
 import { redactToolOutput } from "./redaction";
 
-// The platform's own shell, resolved once per process: bash on POSIX, pwsh on
-// Windows. The validation command is the USER's command — a `bun test`, a
-// build step — and it must run under the shell the host actually has. This
-// used to spawn `/bin/bash` unconditionally, which on Windows is not a path
-// that exists: every record_validation failed with ENOENT and the evidence
-// it recorded said "validation runner failed" for a command that was never
-// attempted.
-const executor: ShellExecutor = selectExecutor();
+// The platform's own shell, resolved PER CALL: bash on POSIX, pwsh on Windows.
+// The validation command is the USER's command — a `bun test`, a build step —
+// and it must run under the shell the host actually has. This used to spawn
+// `/bin/bash` unconditionally, which on Windows is not a path that exists:
+// every record_validation failed with ENOENT and the evidence it recorded said
+// "validation runner failed" for a command that was never attempted.
+//
+// Resolved per call rather than once at module scope, because a module-level
+// constant is evaluated at import time — process start — so a shell chosen
+// later in the settings panel never reached it and the human had to restart.
+const executor = () => selectExecutor();
 
 /**
  * The default wall-clock budget for one validation run, in seconds, and the
@@ -78,13 +80,13 @@ export async function runValidationCommand(
   signal?: AbortSignal,
 ): Promise<ValidationRun> {
   const seconds = Math.max(1, timeoutSec);
-  const spec = executor.resolve({
+  const spec = executor().resolve({
     command,
     workdir: cwd,
     timeoutMs: seconds * 1000,
   });
   const spill = spillTargets(cwd);
-  const run = await executor.run(spec, {
+  const run = await executor().run(spec, {
     command,
     workspaceRoot: cwd,
     ...(signal ? { signal } : {}),

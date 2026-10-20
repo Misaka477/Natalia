@@ -192,6 +192,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "derivation",
     note: "the sandbox_rung notice's revision — the same monotonic counter the generation_switch notice reads, on the same latest-win channel (洞 2's ladder)",
   },
+  "packages/framework/client/src/runtime/shell-switch.ts": {
+    count: 1,
+    cls: "derivation",
+    note: "the shell_switch notice's revision — the same monotonic counter the sandbox_rung notice reads, on the same latest-win channel",
+  },
   "packages/framework/client/src/runtime/record-tools.ts": {
     count: 1,
     cls: "state-first",

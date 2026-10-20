@@ -272,6 +272,14 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "DirectoryPickerError(directory-exists | directory-create-failed)",
   },
+  // A switch to the shell the session already runs is not news, and a session
+  // that is not live has nothing to switch — both answer undefined rather than
+  // throwing, because neither is a failure the caller must handle.
+  setSessionShell: {
+    refusal: "value",
+    expressedBy: "undefined",
+    note: "undefined when the session already runs that shell or is not live",
+  },
   workspaceAdd: {
     refusal: "error",
     note: "workspace root policy refuses",

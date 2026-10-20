@@ -646,8 +646,11 @@ export function createSkillLoadTool(options: {
   };
 }
 
-// The shell that owns the script's invocation. Stateless, so one per module.
-const shell = selectExecutor();
+// The shell that owns the script's invocation. Resolved PER CALL, not once at
+// module scope: a module-level constant is evaluated at import time, which is
+// process start, so a shell chosen later in the settings panel never reached it
+// and the human had to restart the app.
+const shell = () => selectExecutor();
 
 export async function runSkillScript(
   skill: Skill,
@@ -661,7 +664,7 @@ export async function runSkillScript(
   // executor resolves pwsh. The old unconditional fallback spelled
   // `/usr/bin/bash` — a path that does not exist on Windows — so every skill
   // script there died with ENOENT before the command was ever attempted.
-  const spec = shell.resolve({
+  const spec = shell().resolve({
     command,
     loginShell: true,
     ...(process.env.SHELL ? { shellExecutable: process.env.SHELL } : {}),

@@ -38,8 +38,10 @@ import { noopSandboxLog, type SandboxLog } from "./sandbox-log";
 
 // The shell that owns both spellings this file needs: the profile-reading argv
 // for a foreground execute, and the detached POSIX launcher for a background
-// one. One per module; it is stateless.
-const shell = selectExecutor();
+// one. Resolved PER CALL, not once at module scope: a module-level constant is
+// evaluated at import time, which is process start, so a shell chosen later in
+// the settings panel never reached it and the human had to restart the app.
+const shell = () => selectExecutor();
 
 /**
  * The executor's confinement floor.
@@ -387,7 +389,7 @@ export class WorkspaceSandboxManager
     const manifest = this.mustGet(id);
     // The profile-reading invocation, which is what this call site has always
     // used: a sandboxed workspace executes with the user's shell profile.
-    const spec = shell.resolve({
+    const spec = shell().resolve({
       command,
       workdir: manifest.root,
       loginShell: true,
@@ -400,7 +402,7 @@ export class WorkspaceSandboxManager
         ? { confinementBinaryPath: this.confinementBinaryPath }
         : {}),
     });
-    const run = await shell.run(spec, {
+    const run = await shell().run(spec, {
       command,
       confinement: this.confinementMode,
       workspaceRoot: manifest.root,
@@ -463,7 +465,7 @@ export class WorkspaceSandboxManager
     const posixScript = isWindows()
       ? undefined
       : this.confinedScript(
-          shell.detachedPosixScript({ command, outputPath }),
+          shell().detachedPosixScript({ command, outputPath }),
           manifest.root,
         );
     const { pid } = await startDetachedProcess({
@@ -721,7 +723,7 @@ export class WorkspaceSandboxManager
     command: string,
   ): Promise<{ ok: boolean; exitCode: number; output: string }> {
     const manifest = this.mustGet(id);
-    const spec = shell.resolve({
+    const spec = shell().resolve({
       command,
       workdir: manifest.root,
       loginShell: true,
@@ -732,7 +734,7 @@ export class WorkspaceSandboxManager
         ? { confinementBinaryPath: this.confinementBinaryPath }
         : {}),
     });
-    const run = await shell.run(spec, {
+    const run = await shell().run(spec, {
       command,
       confinement: this.confinementMode,
       workspaceRoot: manifest.root,

@@ -1761,6 +1761,13 @@ type RuntimeEventData =
         // got a wider sandbox must KNOW it, or it keeps apologising for
         // writes it is now allowed to make.
         | "sandbox_rung"
+        // The human picking a different shell is an instruction change for the
+        // same reason: a model that just moved from bash to pwsh must KNOW it,
+        // or it keeps writing POSIX syntax into a PowerShell pane. It rides
+        // this channel rather than the system prompt because the prompt's
+        // prefix is cached — a per-session fact injected there would change the
+        // prefix on every switch and throw the cache away.
+        | "shell_switch"
         | "notice";
       at: string;
       /** Monotonic per session: the highest revision is the current state. */
@@ -3740,6 +3747,7 @@ export type RuntimeProjectedNotice = {
     | "plan_handoff"
     | "generation_switch"
     | "sandbox_rung"
+    | "shell_switch"
     | "notice";
   revision: number;
   at: string;
@@ -4480,6 +4488,20 @@ export type RuntimeClient = {
   listDirectoryLevel?(path?: string): Promise<DirectoryListing>;
   /** Create one child directory under an existing parent. */
   createChildDirectory?(path: string, name: string): Promise<string>;
+  /**
+   * Move this session's shell and tell the model.
+   *
+   * Session-scoped rather than a config write: a workspace's own config
+   * outranks the global file, a config write reloads the whole runtime, and a
+   * shell is a decision about THIS conversation. The model learns the new shell
+   * through the `context.instructions {kind: "shell_switch"}` channel rather
+   * than the system prompt, whose cached prefix a per-session fact would
+   * invalidate on every switch.
+   */
+  setSessionShell?(input: {
+    shell: "bash" | "pwsh" | "zsh";
+    sessionID?: string;
+  }): Promise<{ changed: boolean; from?: string; to: string } | undefined>;
   /**
    * Adds a workspace root to the runtime host. When the root is already
    * registered, a provided `title` updates that workspace's display title.

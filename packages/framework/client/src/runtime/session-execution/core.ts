@@ -5,6 +5,7 @@ import { sessionRunCoordinator } from "@anthelia/session";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
 import { applySandboxRungGrant, applySessionRung } from "../sandbox-rung";
+import { applySessionShell } from "../shell-switch";
 import type { TurnController } from "@anthelia/turn-orchestration";
 type Surface = Pick<
   RuntimeServiceClient,
@@ -20,6 +21,7 @@ type Surface = Pick<
   | "respondQuestion"
   | "respondInteractive"
   | "setSandboxRung"
+  | "setSessionShell"
 >;
 export function createCoreSurface(
   ctx: RuntimeContext,
@@ -220,6 +222,28 @@ export function createCoreSurface(
         changed: applied !== undefined,
         mode: input.mode,
         ...(previous ? { previous } : {}),
+      };
+    },
+    /**
+     * Move this session's shell and tell the model.
+     *
+     * Session-scoped for the same three measured reasons the rung is: the
+     * workspace's own config outranks the global file, a config write is a
+     * whole-runtime reload, and a shell is a decision about THIS conversation.
+     * The model learns the new shell through the
+     * `context.instructions {kind: "shell_switch"}` record rather than the
+     * system prompt, whose cached prefix a per-session fact would invalidate.
+     */
+    async setSessionShell(input) {
+      await ctx.ports.getReady();
+      const sessionID = (input.sessionID ??
+        ctx.ports.getActiveExec()?.session.id) as SessionID | undefined;
+      if (!sessionID) return undefined;
+      const moved = applySessionShell(ctx, sessionID, input.shell);
+      return {
+        changed: moved !== undefined,
+        to: input.shell,
+        ...(moved?.from ? { from: moved.from } : {}),
       };
     },
     async respondQuestion(response) {

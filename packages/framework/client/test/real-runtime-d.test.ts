@@ -1040,6 +1040,11 @@ test("durable session replay preserves tool-call pairs for the next provider tur
     // read returns the lines joined, and a trailing separator is not part of
     // a line. Pinned after CI measured it — the local run had passed with the
     // newline because the durable store served a different write order.
+    //
+    // The envelope is compared as PARSED JSON rather than as one string: the
+    // read also carries a `version` token (the stale-write guard's), whose
+    // value is a stat composition that changes with the file. Pinning the
+    // serialized string would pin a value that differs on every run.
     content: JSON.stringify({
       // The page AND its three-state footer: the replay contract is that the
       // RESULT SURVIVES the durable round-trip verbatim, and the footer is
@@ -1048,7 +1053,16 @@ test("durable session replay preserves tool-call pairs for the next provider tur
       content: "replay-ok\n\n(End of file - total 1 lines)",
       totalLines: 1,
       truncated: false,
+      version: expect.any(String),
     }),
+  });
+  // And the round-trip really is verbatim: the replayed envelope parses to the
+  // same facts the read produced, so a field cannot have been dropped or
+  // rewritten on the way through the durable store.
+  expect(JSON.parse(String(restoredTool?.content))).toMatchObject({
+    content: "replay-ok\n\n(End of file - total 1 lines)",
+    totalLines: 1,
+    truncated: false,
   });
 });
 

@@ -29,7 +29,12 @@ const posix = (path: string) => path.split(sep).join("/");
 /** Directories that hold test files directly, as repo-relative posix paths. */
 function testDirs(): string[] {
   const found: string[] = [];
-  const skip = /(?:^|\/)(?:node_modules|dist|devref|\.natalia|\.git)(?:\/|$)/u;
+  // `.btmp` is the workspace scratch directory (gitignored): `BUN_INSTALL` and
+  // `BUN_TMPDIR` point inside it because `npm install` does not work in this
+  // repository, and a bun install cache carries third-party test files that are
+  // not this repository's tests. Skipped for the same reason as `node_modules`.
+  const skip =
+    /(?:^|\/)(?:node_modules|dist|devref|\.natalia|\.git|\.btmp)(?:\/|$)/u;
   const walk = (dir: string) => {
     let entries;
     try {

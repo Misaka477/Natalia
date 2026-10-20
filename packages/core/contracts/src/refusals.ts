@@ -247,6 +247,15 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     note: "path and pattern policy refuse",
   },
   workspaceRoots: { refusal: "none", note: "pure read" },
+  // A dismissal is a VALUE, not a failure: the human closed the dialog, which
+  // is an answer the caller acts on by leaving the field alone. A host with no
+  // chooser throws instead, because "no dialog here" is not something a path
+  // field can represent.
+  pickDirectory: {
+    refusal: "value",
+    expressedBy: "null",
+    note: "null when the human dismisses the chooser; a host with none throws",
+  },
   workspaceAdd: {
     refusal: "error",
     note: "workspace root policy refuses",

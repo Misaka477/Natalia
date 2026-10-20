@@ -1279,6 +1279,14 @@ export async function handleRPCMessage(
         result: await client.workspaceRoots?.(),
       };
     }
+    if (body.method === "directory.pick") {
+      optionsGuard(client, "pickDirectory");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.pickDirectory?.(),
+      };
+    }
     if (body.method === "workspace.add") {
       optionsGuard(client, "workspaceAdd");
       const path = stringParam(body.params, "path");

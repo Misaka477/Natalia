@@ -4,6 +4,24 @@ export * from "./prebuilt";
 export * from "./runtime-worker";
 export * from "./store-paths";
 export {
+  DIRECTORY_PICKER_TITLE,
+  DirectoryPickerUnavailableError,
+  pickDirectory,
+  pickNativeDirectory,
+  spawnNativeCommand,
+  type NativeCommandResult,
+  type NativeCommandRunner,
+} from "./directory-picker";
+export {
+  FOS_NOCHANGEDIR,
+  FOS_PICKFOLDERS,
+  FOS_FORCEFILESYSTEM,
+  HRESULT_CANCELLED,
+  runFolderDialog,
+  type Win32DialogBindings,
+  type Win32FolderDialog,
+} from "./win32-dialog-logic";
+export {
   ENCODING_PREAMBLE,
   candidatePwshPaths,
   configuredPwshPath,

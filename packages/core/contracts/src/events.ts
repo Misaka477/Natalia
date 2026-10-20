@@ -4421,6 +4421,15 @@ export type RuntimeClient = {
   /** Lists all workspace roots managed by this runtime host. */
   workspaceRoots?(): Promise<WorkspaceSummary[]>;
   /**
+   * Opens the platform's directory chooser and waits for the human.
+   *
+   * The dialog belongs to the runtime, which runs on the user's machine; a
+   * browser page has no host channel, so every path a human would otherwise
+   * type arrives this way. `null` means the human dismissed it — an answer,
+   * not a failure, and the caller leaves the field as it was.
+   */
+  pickDirectory?(): Promise<string | null>;
+  /**
    * Adds a workspace root to the runtime host. When the root is already
    * registered, a provided `title` updates that workspace's display title.
    */

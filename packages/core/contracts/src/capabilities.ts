@@ -167,6 +167,7 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "astRefactorPlan",
     "astApplyRefactor",
     "workspaceRoots",
+    "pickDirectory",
     "workspaceAdd",
     "workspaceRemove",
     "workspaceActivate",

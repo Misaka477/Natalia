@@ -72,6 +72,7 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   workspaceDelete: "workspace.delete",
   workspaceWriteConflicts: "workspace.writeConflicts",
   workspaceRoots: "workspace.roots",
+  pickDirectory: "directory.pick",
   workspaceAdd: "workspace.add",
   workspaceRemove: "workspace.remove",
   workspaceActivate: "workspace.activate",
@@ -936,6 +937,16 @@ export function createWebRuntimeClient(
     },
     async workspaceRoots() {
       return (await call<WorkspaceSummary[]>("workspace.roots")) as never;
+    },
+    /**
+     * Ask the runtime to open its platform directory chooser.
+     *
+     * The dialog is the runtime's, on the user's machine: a page cannot open
+     * one, so this is the only way a path stops being typed. The call blocks
+     * until the human answers, which is the point — `null` is a dismissal.
+     */
+    async pickDirectory() {
+      return (await call<string | null>("directory.pick")) as never;
     },
     async workspaceAdd(input) {
       return (await call<WorkspaceSummary>("workspace.add", {

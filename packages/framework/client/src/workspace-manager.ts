@@ -13,6 +13,7 @@ import {
   firstUseWorkspaceDeclinedPath,
   firstUseWorkspacePath,
   nataliaHomeJoin,
+  pickDirectory,
   resolveNataliaPath,
 } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
@@ -249,6 +250,7 @@ export type WorkspaceManager = {
   activate(workspaceID: string): Promise<WorkspaceSummary>;
   load(): Promise<void>;
   workspaceRoots(): Promise<WorkspaceSummary[]>;
+  pickDirectory(): Promise<string | null>;
   workspaceAdd(input: {
     path: string;
     title?: string;
@@ -658,6 +660,17 @@ export function createWorkspaceManager(
     },
     async workspaceRoots() {
       return Promise.all([...runtimes.values()].map(summary));
+    },
+    /**
+     * Open the platform's directory chooser and wait for the human.
+     *
+     * The dialog is the runtime's, not the browser's: a page has no host
+     * channel, so every path a human would otherwise type arrives this way.
+     * `null` means the human dismissed it, which is an answer rather than a
+     * failure — the caller leaves the field exactly as it was.
+     */
+    async pickDirectory() {
+      return await pickDirectory();
     },
     workspaceAdd: addWorkspace,
     workspaceRemove: removeWorkspace,

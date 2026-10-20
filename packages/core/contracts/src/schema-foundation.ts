@@ -65,6 +65,16 @@ export const terminalWindowConfigSchema = z.object({
 export const shellConfigSchema = z.object({
   bashPath: z.string().max(1024).optional(),
   pwshPath: z.string().max(1024).optional(),
+  /**
+   * WHICH shell runs a command, as distinct from WHERE each one lives (the two
+   * path rows above). Absent means "the platform default" — `pwsh` on Windows,
+   * `bash` elsewhere.
+   *
+   * This is the persisted form of `NATALIA_SHELL`: the environment variable
+   * stays honoured, but a choice a human made in the settings panel must
+   * survive a restart, and an env var is not a persisted configuration.
+   */
+  executable: z.enum(["bash", "pwsh", "zsh"]).optional(),
 });
 
 export const teamConfigSchema = z.object({

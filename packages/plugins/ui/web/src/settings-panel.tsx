@@ -517,6 +517,14 @@ export function SettingsPanel(props: {
     string | undefined
   >();
   const [editFieldValue, setEditFieldValue] = createSignal("");
+  /**
+   * The fixed answers this field accepts, when it has any. Absent means the
+   * editor is a text box; present means it is that list — one dialog, two
+   * input shapes, chosen by whether the value has a known set.
+   */
+  const [editFieldOptions, setEditFieldOptions] = createSignal<
+    Array<{ value: string; label: string }> | undefined
+  >(undefined);
   let editFieldAction: ((value: string) => void) | undefined;
   const [permissionEditorOpen, setPermissionEditorOpen] = createSignal(false);
   const [permissionListOpen, setPermissionListOpen] = createSignal(false);
@@ -542,6 +550,26 @@ export function SettingsPanel(props: {
     setEditFieldLabel(label);
     setEditFieldValue(current);
     editFieldAction = apply;
+    setEditFieldOptions(undefined);
+  }
+
+  /**
+   * The same editor for a value that has a fixed set of answers.
+   *
+   * A text box for "which shell" invites a typo the runtime must then refuse,
+   * and the legal answers are known right here. The options ride the same
+   * dialog, so there is one editor rather than two shapes of one thing.
+   */
+  function openSelect(
+    label: string,
+    options: Array<{ value: string; label: string }>,
+    current: string,
+    apply: (value: string) => void,
+  ) {
+    setEditFieldLabel(label);
+    setEditFieldValue(current);
+    editFieldAction = apply;
+    setEditFieldOptions(options);
   }
 
   function openPermissionEditorFor(name: string) {
@@ -612,6 +640,42 @@ export function SettingsPanel(props: {
               // Same rule as the Git Bash row, and the same reason: the section
               // holds both shell paths.
               shell: { ...effectiveConfig()?.runtime?.shell, pwshPath: path },
+            },
+          });
+        },
+      );
+    },
+    "Shell 类型": () => {
+      // WHICH shell runs a command, as distinct from WHERE each one lives (the
+      // two path rows above). The persisted form of `NATALIA_SHELL`: a choice
+      // made here survives a restart, which an environment variable does not.
+      //
+      // "自动" is a real answer, not a blank: it means the platform default —
+      // pwsh on Windows, bash elsewhere — and it is what clearing the row
+      // writes, so the deployment's own default stands rather than a value
+      // nobody chose.
+      const current = effectiveConfig()?.runtime?.shell?.executable ?? "auto";
+      openSelect(
+        "Shell 类型（命令在哪个 shell 里执行）",
+        [
+          { value: "auto", label: "自动（Windows 用 pwsh，其他用 bash）" },
+          { value: "pwsh", label: "pwsh（PowerShell 7）" },
+          { value: "bash", label: "bash（Git Bash / WSL）" },
+          { value: "zsh", label: "zsh" },
+        ],
+        current,
+        (value) => {
+          updateConfig?.({
+            runtime: {
+              ...effectiveConfig()?.runtime,
+              // The rest of the shell section rides along: writing this row's
+              // value must not wipe the two path rows above it.
+              shell: {
+                ...effectiveConfig()?.runtime?.shell,
+                ...(value === "auto"
+                  ? { executable: undefined }
+                  : { executable: value as "bash" | "pwsh" | "zsh" }),
+              },
             },
           });
         },
@@ -1485,19 +1549,30 @@ export function SettingsPanel(props: {
               </button>
             </div>
             <div class="neu-settings-body neu-edit-body">
-              <input
-                class="neu-form-input"
-                value={editFieldValue()}
-                onInput={(event) =>
-                  setEditFieldValue(event.currentTarget.value)
+              <Show
+                when={editFieldOptions()}
+                fallback={
+                  <input
+                    class="neu-form-input"
+                    value={editFieldValue()}
+                    onInput={(event) =>
+                      setEditFieldValue(event.currentTarget.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        editFieldAction?.(editFieldValue());
+                        setEditFieldLabel(undefined);
+                      }
+                    }}
+                  />
                 }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    editFieldAction?.(editFieldValue());
-                    setEditFieldLabel(undefined);
-                  }
-                }}
-              />
+              >
+                <NeuSelect
+                  value={editFieldValue()}
+                  options={editFieldOptions()!}
+                  onChange={(value) => setEditFieldValue(value)}
+                />
+              </Show>
               <div class="neu-form-actions">
                 <button
                   type="button"

@@ -284,6 +284,12 @@ export function createConfigReload(
         globalPath: options.globalConfigPath,
       });
       setTsRuntimeConfig(tsConfig.config);
+      // The same projection the initialize path makes: a shell chosen in the
+      // settings panel takes effect on the reload that wrote it, not on the
+      // next start. See `applyConfiguredShell` in initialize/config-catalog.ts
+      // for why the environment is the seam.
+      if (tsConfig.config.runtime?.shell?.executable)
+        process.env.NATALIA_SHELL = tsConfig.config.runtime.shell.executable;
       resetCheckpointFactory(ctx);
       setMaxSteps(tsConfig.config.runtime.maxStepsPerTurn);
       setRetryPolicy({

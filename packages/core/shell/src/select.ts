@@ -103,9 +103,15 @@ export function executorFor(name: ShellName): ShellExecutor {
 export function selectExecutor(
   env: NodeJS.ProcessEnv = process.env,
   os: NodeJS.Platform = process.platform,
+  configured?: "bash" | "pwsh" | "zsh",
 ): ShellExecutor {
   // The executor's own `resolve` resolves its executable path (pwsh is not
   // necessarily on PATH), so a caller-given path rides the request rather than
   // being a concern of this selector.
-  return executorFor(resolveShellName(env.NATALIA_SHELL, os));
+  //
+  // The CONFIGURED shell outranks the environment variable: a choice made in
+  // the settings panel is the human's, `NATALIA_SHELL` is the deployment's
+  // fallback for a host that never set one, and a human who chose must not be
+  // overruled by a stale environment. Absent both, the platform default.
+  return executorFor(resolveShellName(configured ?? env.NATALIA_SHELL, os));
 }

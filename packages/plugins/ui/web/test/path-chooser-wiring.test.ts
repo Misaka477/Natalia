@@ -5,6 +5,13 @@
  * why the workspace panel, the plan panel and the three governance path rows
  * still asked for a typed path. This walks the sources and fails on a path
  * surface with no chooser, so the next one added cannot be forgotten either.
+ *
+ * The second pass replaced every panel's own button with ONE shared
+ * `PathBrowseButton`: the app's `onBrowse` forwarding is gone (that spelling
+ * was itself a bug — `<Show when={props.onBrowse}>` calls a function `when`,
+ * so the workspace panel ran the chooser on every render), and the settings
+ * rows feed the shared edit dialog a browse MODE instead of calling the
+ * picker themselves. The pins below follow that shape.
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -20,34 +27,36 @@ function source(relative: string): string {
 /** Every source that renders a path input, and how many rows it has. */
 const PATH_SURFACES = [
   {
+    // The rows feed the shared edit dialog: a row's chooser is the browse
+    // mode it hands `openEdit`, and the dialog renders the ONE
+    // PathBrowseButton for whichever mode is open.
     file: "packages/plugins/ui/web/src/settings-panel.tsx",
     rows: 3,
+    pattern: /^\s*"(?:file|directory)",$/gmu,
   },
   {
-    // The workspace panel takes its chooser as a prop, which `app-neu` wires
-    // to the runtime — so the call is counted in the app, not here.
+    // Every other surface renders the shared button itself, with the runtime
+    // it already has — no callback forwarding through the app.
     file: "packages/plugins/ui/web/src/workspace-panel.tsx",
     rows: 1,
-    call: "props.onBrowse",
+    pattern: /<PathBrowseButton/gu,
   },
   {
     file: "packages/plugins/ui/web/src/plan-panel.tsx",
     rows: 1,
+    pattern: /<PathBrowseButton/gu,
   },
   {
     file: "packages/plugins/ui/web/src/governance-panel.tsx",
     rows: 3,
+    pattern: /<PathBrowseButton/gu,
   },
 ] as const;
 
 test("every path surface calls the runtime's chooser", () => {
   for (const surface of PATH_SURFACES) {
     const text = source(surface.file);
-    const pattern =
-      "call" in surface
-        ? new RegExp(surface.call.replace(/[.?]/gu, "\\$&"), "gu")
-        : /props\.runtime\?\.pick(?:Directory|File)\?\.\(\)/gu;
-    const calls = text.match(pattern) ?? [];
+    const calls = text.match(surface.pattern) ?? [];
     expect(
       calls.length,
       `${surface.file} has ${surface.rows} path row(s) but ${calls.length} chooser call(s)`,
@@ -55,10 +64,27 @@ test("every path surface calls the runtime's chooser", () => {
   }
 });
 
-test("the app wires the workspace panel's chooser to the runtime", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
-  expect(app).toContain("onBrowse={async () =>");
-  expect(app).toContain("props.ctx.runtime.pickDirectory?.()");
+test("each panel renders the shared chooser with the runtime it has", () => {
+  // The app used to forward an `onBrowse` callback to the workspace panel;
+  // that spelling is gone, and was itself the bug (`<Show when={...}>` calls
+  // a function `when`, so the chooser ran on every render). Each panel now
+  // renders the one shared button with the runtime it already holds.
+  for (const file of [
+    "packages/plugins/ui/web/src/workspace-panel.tsx",
+    "packages/plugins/ui/web/src/plan-panel.tsx",
+    "packages/plugins/ui/web/src/governance-panel.tsx",
+  ]) {
+    const text = source(file);
+    expect(text, `${file} renders no chooser`).toContain("<PathBrowseButton");
+    expect(text, `${file} gives the chooser no runtime`).toMatch(
+      /runtime=\{props\.runtime\}/u,
+    );
+  }
+  // And the shared button is the ONE call site for the chooser itself: one
+  // place names the runtime's pickers, not one per panel.
+  const button = source("packages/plugins/ui/web/src/path-browse-button.tsx");
+  expect(button).toContain("props.runtime?.pickDirectory?.()");
+  expect(button).toContain("props.runtime?.pickFile?.()");
 });
 
 test("the governance panel appends rather than replaces", () => {
@@ -78,13 +104,13 @@ test("the chooser shares the action row instead of adding one", () => {
     "packages/plugins/ui/web/src/workspace-panel.tsx",
   ]) {
     const text = source(file);
-    // Anchored on the JSX text node, because a comment elsewhere in the file
-    // also says 浏览.
-    const at = text.indexOf("浏览…\n");
-    expect(at, `${file} has no 浏览 button`).toBeGreaterThan(0);
+    // Anchored on the element, because a comment elsewhere also says 浏览.
+    const at = text.indexOf("<PathBrowseButton");
+    expect(at, `${file} renders no chooser`).toBeGreaterThan(0);
     const between = text.slice(at, text.indexOf("取消", at));
-    expect(between, `${file} opens a new action row after 浏览`).not.toContain(
-      '<div class="neu-form-actions">',
-    );
+    expect(
+      between,
+      `${file} opens a new action row after the chooser`,
+    ).not.toContain('<div class="neu-form-actions">');
   }
 });

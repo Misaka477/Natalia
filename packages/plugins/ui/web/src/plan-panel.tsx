@@ -353,6 +353,23 @@ export function PlanPanel(props: {
           value={markPath()}
           onInput={(event) => setMarkPath(event.currentTarget.value)}
         />
+        {/* The chooser rides the same row as the buttons beside it, so the
+            dialog gains no line of its own. */}
+        <button
+          type="button"
+          class="plan-panel-btn"
+          onClick={() => {
+            void (async () => {
+              // The dialog is the runtime's, on the user's machine: a page has
+              // no host channel, so this is the only way a plan path stops
+              // being typed. A dismissal leaves the field as it was.
+              const chosen = await props.runtime?.pickDirectory?.();
+              if (typeof chosen === "string" && chosen) setMarkPath(chosen);
+            })();
+          }}
+        >
+          浏览…
+        </button>
         <button
           type="button"
           class="plan-panel-btn"

@@ -5349,6 +5349,19 @@ button.wg-node-row:hover {
   color: inherit;
   font-size: 12px;
 }
+/* The chooser beside a path input: same height and type size as the input it
+   sits next to, so the row does not grow and the two read as one control. */
+.constitution-browse {
+  flex: 0 0 auto;
+  cursor: pointer;
+  color: var(--neu-accent);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+.constitution-browse:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
 .constitution-textarea {
   width: 100%;
   min-height: 56px;

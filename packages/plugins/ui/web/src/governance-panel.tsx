@@ -1636,6 +1636,31 @@ export function GovernancePane(props: {
                       })
                     }
                   />
+                  <button
+                    type="button"
+                    class="constitution-input constitution-browse"
+                    onClick={() => {
+                      void (async () => {
+                        // The dialog is the runtime's, on the user's machine: a
+                        // page has no host channel, so this is the only way a
+                        // path stops being typed. A LIST appends the picked
+                        // directory rather than replacing it, so browsing for a
+                        // second one cannot silently drop the first.
+                        const chosen = await props.runtime?.pickDirectory?.();
+                        if (typeof chosen !== "string" || !chosen) return;
+                        const existing = editor()
+                          .paths.split(",")
+                          .map((entry) => entry.trim())
+                          .filter((entry) => entry && entry !== chosen);
+                        setRuleEditor({
+                          ...editor(),
+                          paths: [...existing, chosen].join(","),
+                        });
+                      })();
+                    }}
+                  >
+                    浏览…
+                  </button>
                   <input
                     class="constitution-input"
                     placeholder="commandPattern"
@@ -1697,6 +1722,28 @@ export function GovernancePane(props: {
                       })
                     }
                   />
+                  <button
+                    type="button"
+                    class="constitution-input constitution-browse"
+                    onClick={() => {
+                      void (async () => {
+                        // Same rule as the rule editor's row: a LIST appends the
+                        // picked directory rather than replacing it.
+                        const chosen = await props.runtime?.pickDirectory?.();
+                        if (typeof chosen !== "string" || !chosen) return;
+                        const existing = editor()
+                          .paths.split(",")
+                          .map((entry) => entry.trim())
+                          .filter((entry) => entry && entry !== chosen);
+                        setOverrideEditor({
+                          ...editor(),
+                          paths: [...existing, chosen].join(","),
+                        });
+                      })();
+                    }}
+                  >
+                    浏览…
+                  </button>
                   <input
                     class="constitution-input"
                     placeholder="taskID（可空）"
@@ -1957,6 +2004,28 @@ export function GovernancePane(props: {
                       })
                     }
                   />
+                  <button
+                    type="button"
+                    class="constitution-input constitution-browse"
+                    onClick={() => {
+                      void (async () => {
+                        // Same rule as the other two path rows: a LIST appends
+                        // the picked directory rather than replacing it.
+                        const chosen = await props.runtime?.pickDirectory?.();
+                        if (typeof chosen !== "string" || !chosen) return;
+                        const existing = editor()
+                          .paths.split(",")
+                          .map((entry) => entry.trim())
+                          .filter((entry) => entry && entry !== chosen);
+                        setDocRuleEditor({
+                          ...editor(),
+                          paths: [...existing, chosen].join(","),
+                        });
+                      })();
+                    }}
+                  >
+                    浏览…
+                  </button>
                   <input
                     class="constitution-input"
                     placeholder="commandPattern"

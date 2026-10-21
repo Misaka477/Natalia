@@ -57,8 +57,14 @@ export function WorkspacePanel(props: {
               placeholder="工作区路径，例如 /home/user/project"
               onInput={(event) => setPath(event.currentTarget.value)}
             />
-            <Show when={props.onBrowse}>
-              <div class="neu-form-actions">
+            <Show when={busy()}>
+              <div class="neu-workspace-error">正在添加工作区…</div>
+            </Show>
+            <div class="neu-form-actions">
+              {/* The chooser rides the SAME action row as 取消/添加, not a row of
+                  its own: a second `neu-form-actions` between the field and the
+                  buttons added a whole line to the dialog. */}
+              <Show when={props.onBrowse}>
                 <button
                   type="button"
                   class="neu-form-btn"
@@ -77,12 +83,7 @@ export function WorkspacePanel(props: {
                 >
                   浏览…
                 </button>
-              </div>
-            </Show>
-            <Show when={busy()}>
-              <div class="neu-workspace-error">正在添加工作区…</div>
-            </Show>
-            <div class="neu-form-actions">
+              </Show>
               <button
                 type="button"
                 class="neu-form-btn neu-form-cancel"

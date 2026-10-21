@@ -4901,6 +4901,31 @@ export async function handleRPCMessage(
 }
 
 /**
+ * Records one failure in the runtime's durable diagnostic ring.
+ *
+ * Best effort by design: `diagnostic` is required by the contract, but this
+ * path runs for clients that are wrong about that, and a throw here would
+ * replace the caller's answer with a broken connection. The reply is the same
+ * either way; only the durable copy of the detail is lost.
+ */
+function recordFailure(
+  client: RuntimeClient,
+  method: string | undefined,
+  label: string,
+  message: string,
+  level: "error" | "warning",
+): void {
+  try {
+    client.diagnostic(
+      `rpc ${method ?? "request"} failed [${label}]: ${message}`,
+      level,
+    );
+  } catch {
+    /* a runtime that cannot record its own failure still owes the caller a reply */
+  }
+}
+
+/**
  * Turns a thrown error into a JSON-RPC error object.
  *
  * Classification comes from the typed failure the thrower attached, never from
@@ -4919,26 +4944,31 @@ function describeFailure(
   method: string | undefined,
 ): { code: number; message: string; data: RuntimeFailureData } {
   const classified = runtimeFailureData(error);
-  if (classified)
+  if (classified) {
+    // A classified failure leaves no trace unless it is recorded here. The
+    // HTTP layer answers every JSON-RPC error with the same bodyless 400, so
+    // a console shows "Bad Request" and nothing else — measured: a startup
+    // failure invisible until the diagnostics were read by hand. The reply
+    // cannot carry more (a consumer branches on the code), so the reason goes
+    // to the durable ring instead.
+    //
+    // A refusal is the exception: it is an ordinary answer, not a fault, and
+    // recording one per call would bury the real failures in the ring. The
+    // rest are caller-side faults — the runtime answered correctly — so they
+    // land at `warning`, leaving `error` for the runtime's own breakage.
+    if (classified.kind !== "refused") {
+      const message = error instanceof Error ? error.message : String(error);
+      recordFailure(client, method, classified.kind, message, "warning");
+    }
     return {
       code: RUNTIME_RPC_ERROR_CODES[classified.kind],
       message: error instanceof Error ? error.message : String(error),
       data: classified,
     };
+  }
   const message = error instanceof Error ? error.message : String(error);
   const errorID = `err_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  // Reporting a failure must not be able to fail. `diagnostic` is required by the
-  // contract, but this path runs for clients that are wrong about that, and a
-  // throw here would replace the caller's answer with a broken connection. The
-  // reply is the same either way; only the durable copy of the detail is lost.
-  try {
-    client.diagnostic(
-      `rpc ${method ?? "request"} failed [${errorID}]: ${message}`,
-      "error",
-    );
-  } catch {
-    /* a runtime that cannot record its own failure still owes the caller a reply */
-  }
+  recordFailure(client, method, errorID, message, "error");
   return {
     code: RUNTIME_RPC_ERROR_CODES.internal,
     message: "internal runtime failure",

@@ -77,10 +77,10 @@ export type RuntimeFailureData =
    */
   | { kind: "refused"; reason: string; rule?: string; path?: string }
   /**
-   * No detail: an internal failure's message can carry a path, a command line or
-   * a secret. `errorID` correlates with a durable diagnostic, so the detail is
-   * still reachable through `diagnostics.list` by someone already authorized to
-   * read diagnostics.
+   * `errorID` correlates with a durable diagnostic, so the detail is also
+   * reachable through `diagnostics.list` by someone already authorized to
+   * read diagnostics — and travels in `detail` on the wire, so a console
+   * shows the cause instead of a category.
    */
   | {
       kind: "internal";

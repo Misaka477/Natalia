@@ -374,11 +374,22 @@ export function createWebRuntimeClient(
       method,
       params,
       fetch: options.fetch,
-    }).finally(() => {
-      perfLog(
-        `[perf] rpc ${method} ${(performance.now() - callStart).toFixed(1)}ms`,
-      );
-    });
+    })
+      .catch((error: unknown) => {
+        // The HTTP layer answers every JSON-RPC error with the same bodyless
+        // 400, so the browser's own "Failed to load resource: 400" line names
+        // no method and no reason. The thrown error carries both; without
+        // this line the console shows the status and nothing else — measured:
+        // a startup failure that stayed invisible until the durable
+        // diagnostics were read by hand.
+        console.error(`[web-runtime] rpc ${method} failed`, error);
+        throw error;
+      })
+      .finally(() => {
+        perfLog(
+          `[perf] rpc ${method} ${(performance.now() - callStart).toFixed(1)}ms`,
+        );
+      });
   };
 
   function markStartup(phase: string) {

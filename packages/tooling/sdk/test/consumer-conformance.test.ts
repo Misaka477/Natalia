@@ -483,10 +483,14 @@ test("a runtime implementing only the required set still answers, and says which
       capability: "checkpoint",
     });
 
-    // An unclassified failure arrives as internal and carries no detail at all.
+    // An unclassified failure arrives as internal, and its reason travels in
+    // the message as well as the durable diagnostic: a caller staring at a
+    // console sees the cause instead of a category (the settings panel's 浏览
+    // button reported exactly that for several rounds). The structured half
+    // still says only "internal" with the correlating id.
     const internal = await sdk.sessions().catch((error: unknown) => error);
     expect(failureKind(internal)).toBe("internal");
-    expect((internal as RuntimeRPCError).message).not.toContain(".env");
+    expect((internal as RuntimeRPCError).message).toContain(".env");
     const errorID = ((internal as RuntimeRPCError).data as { errorID: string })
       .errorID;
     expect(errorID).toBeString();

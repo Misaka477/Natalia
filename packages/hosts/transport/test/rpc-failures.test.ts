@@ -244,6 +244,35 @@ test("a refusal from the runtime keeps its reason and stays out of the internal 
   expect(client.diagnostics_).toEqual([]);
 });
 
+test("a classified failure the caller caused is still recorded, with its kind", async () => {
+  // The HTTP layer answers every JSON-RPC error with the same bodyless 400,
+  // so "Bad Request" in a console names no method and no reason. The reply
+  // cannot change — a consumer branches on the code — so the reason goes to
+  // the durable ring instead. Without this, a protocol disagreement between
+  // client and server leaves no trace anywhere: measured, a startup failure
+  // that was invisible until the diagnostics were read by hand.
+  const notFound = await fail("no.such.method");
+  expect(notFound.client.diagnostics_).toHaveLength(1);
+  expect(notFound.client.diagnostics_[0]).toContain("no.such.method");
+  expect(notFound.client.diagnostics_[0]).toContain("methodNotFound");
+
+  const badParams = await fail(
+    "workspace.read",
+    { path: "a.txt", offset: -1 },
+    {
+      async workspaceRead() {
+        throw new Error("must not be reached");
+      },
+    },
+  );
+  expect(badParams.client.diagnostics_).toHaveLength(1);
+  expect(badParams.client.diagnostics_[0]).toContain("invalidParams");
+
+  const unsupported = await fail("pause");
+  expect(unsupported.client.diagnostics_).toHaveLength(1);
+  expect(unsupported.client.diagnostics_[0]).toContain("notSupported");
+});
+
 test("an unclassified failure is internal, says nothing, and puts the detail in diagnostics", async () => {
   const secret = "/home/someone/project/.env";
   const { error, client } = await fail("session.list", undefined, {

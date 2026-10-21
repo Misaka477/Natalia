@@ -1,7 +1,11 @@
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
-import { RPC_METHOD_ROUTES, buildParams } from "../src/runtime-rpc";
+import {
+  RPC_METHOD_ROUTES,
+  buildParams,
+  createWebRuntimeClient,
+} from "../src/runtime-rpc";
 
 test("web runtime routes expose the paged transcript surfaces", () => {
   expect(RPC_METHOD_ROUTES.subagentHistoryPage).toBe("subagent.history.page");
@@ -105,4 +109,41 @@ test("the approval queue's faces are routed — a missing row makes the button d
   );
   expect(routes).toContain('upsertSkill: "skill.upsert"');
   expect(routes).toContain('collabSend: "collab.send"');
+});
+
+test("a failed RPC call names its method and reason in the console", async () => {
+  // The HTTP layer answers every JSON-RPC error with the same bodyless 400,
+  // so the browser's own "Failed to load resource: 400" line names no method
+  // and no reason. The thrown error carries both; without a log line the
+  // console shows the status and nothing else — measured: a startup failure
+  // that stayed invisible until the durable diagnostics were read by hand.
+  const lines: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args.map((arg) => String(arg)).join(" "));
+  };
+  try {
+    const runtime = createWebRuntimeClient({
+      url: "http://127.0.0.1:1",
+      fetch: (async () =>
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            error: {
+              code: -32601,
+              message: "unknown method: agents",
+              data: { kind: "methodNotFound", method: "agents" },
+            },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        )) as typeof globalThis.fetch,
+    });
+    await expect(runtime.sessionList()).rejects.toThrow();
+  } finally {
+    console.error = original;
+  }
+  const logged = lines.join("\n");
+  expect(logged).toContain("session.list");
+  expect(logged).toContain("unknown method: agents");
 });

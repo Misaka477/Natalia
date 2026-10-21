@@ -1864,72 +1864,41 @@ const UNANSWERED_TOOL_CALL_TEXT =
   "This tool call was never answered: its turn ended before the result was recorded, so its outcome is unknown. Retry only if the operation is read-only or idempotent; if it may have side effects, verify the external state or ask the human before retrying. Do not retry blindly.";
 
 /**
- * The most tool calls one assistant message may carry in a request.
+ * Repair an assistant tool call whose arguments are not valid JSON.
  *
- * A gateway that counts them rejects a request with more: measured against
- * StepFun's step_plan endpoint, 85 calls in one message is accepted and 90 is
- * answered `input_invalid` — and a session whose journal carries such a
- * message is then unsendable FOREVER, because the same history replays on
- * every turn (measured: the Fourier turn's model emitted 115 parallel calls
- * in one message; every turn in that session has failed with input_invalid
- * since, and the journal cannot be edited). The deepseek harness bounds the
- * same thing from the other side — DEFAULT_MAX_PARALLEL_TOOL_CALLS = 10 for
- * execution.
+ * A model can emit a syntactically invalid arguments string while the stream
+ * itself completes — measured on this host: a write_file call whose arguments
+ * were `{ content placeholder` followed by a bare filename, which the runtime
+ * could not parse and recorded as the call's argumentsDelta anyway (the tool
+ * then failed with "JSON Parse error", which is the right model-facing
+ * answer). The gateway validates EVERY tool call's `function.arguments` as
+ * JSON and answers `input_invalid` for the whole request — proved minimally:
+ * that one call alone is a 400, the same call with `{}` is a 200. A session
+ * whose journal carries such a call is therefore unsendable forever: the same
+ * history replays on every turn.
  *
- * The request boundary is where the repair belongs: the journal keeps what
- * happened (the model's calls and their results), and the wire keeps what the
- * gateway accepts. The excess calls and their results are dropped together,
- * so the pairing the gateway checks stays intact.
+ * The repair keeps the call visible and replaces only its arguments with an
+ * empty object. The model still sees the call it made and its result — the
+ * runtime's own "JSON Parse error" text names what was wrong — so nothing is
+ * hidden, and the wire stays within the format. The execution side keeps the
+ * raw arguments (the deepseek harness's `parseArguments` preserves them the
+ * same way), which is what makes the tool fail loudly rather than silently.
  */
-const MAX_TOOL_CALLS_PER_MESSAGE = 80;
-
-/**
- * Cap every assistant message's tool calls, dropping the excess calls and
- * their paired results.
- *
- * The dropped results always follow their assistant message in transcript
- * order, so one forward pass collects the kept ids and filters the rest.
- * Both the `toolCalls` field and the content parts are trimmed: the pairing
- * check below reads the content parts too, and a result kept for a call the
- * wire no longer carries would be its own rejection.
- */
-function capToolCallsPerMessage(
+function sanitizeToolCallArguments(
   messages: ProviderMessage[],
 ): ProviderMessage[] {
-  const kept = new Set<string>();
-  const out: ProviderMessage[] = [];
   for (const message of messages) {
-    if (message.role !== "assistant" || !message.toolCalls?.length) {
-      out.push(message);
-      continue;
+    if (message.role !== "assistant" || !message.toolCalls?.length) continue;
+    for (const call of message.toolCalls) {
+      try {
+        JSON.parse(call.arguments);
+      } catch {
+        call.arguments = "{}";
+      }
     }
-    const calls = message.toolCalls.slice(0, MAX_TOOL_CALLS_PER_MESSAGE);
-    for (const call of calls) kept.add(call.id);
-    const parts = (message as { contentParts?: ProviderContentPart[] })
-      .contentParts;
-    let seenCalls = 0;
-    const trimmedParts = Array.isArray(parts)
-      ? parts.filter((part) => {
-          if (part.type !== "tool_call") return true;
-          return seenCalls++ < MAX_TOOL_CALLS_PER_MESSAGE;
-        })
-      : parts;
-    out.push({
-      ...message,
-      toolCalls: calls,
-      ...(trimmedParts ? { contentParts: trimmedParts } : {}),
-    });
   }
-  return out.filter(
-    (message) =>
-      !(
-        message.role === "tool" &&
-        message.toolCallID &&
-        !kept.has(message.toolCallID)
-      ),
-  );
+  return messages;
 }
-
 /**
  * Close every assistant tool call the request would carry with no result.
  *
@@ -2062,7 +2031,7 @@ export function contextEntriesToProviderMessages(
     const message = contextEntryToProviderMessage(entry);
     if (message) messages.push(message);
   }
-  return closeUnansweredToolCalls(capToolCallsPerMessage(messages));
+  return closeUnansweredToolCalls(sanitizeToolCallArguments(messages));
 }
 
 function contextEntryToProviderMessage(

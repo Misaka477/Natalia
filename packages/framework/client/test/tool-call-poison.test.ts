@@ -34,7 +34,8 @@ function unpairedToolMessages(messages: ProviderStreamRequest["messages"]) {
     if (role === "tool") {
       const id = (message as { toolCallID?: string }).toolCallID;
       if (!id) problems.push("a tool result with no id");
-      else if (!openCalls.has(id)) problems.push(`a result for ${id} with no call`);
+      else if (!openCalls.has(id))
+        problems.push(`a result for ${id} with no call`);
       else answered.add(id);
     }
   }

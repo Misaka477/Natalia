@@ -15,12 +15,15 @@
  */
 import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeEvent, SessionID } from "@anthelia/contracts";
 import type { ProviderStreamRequest } from "@anthelia/runtime";
 import { createRealRuntimeClient } from "../src";
 import { recordTurnRequest } from "./e2e-harness";
+
+const repoRoot = join(import.meta.dir, "..", "..", "..", "..");
 
 test("the shell switch tells the model without waking it", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-shell-switch-told-"));
@@ -94,6 +97,48 @@ test("the shell switch tells the model without waking it", async () => {
     expect(afterClear).toContain(
       process.platform === "win32" ? "Shell: pwsh" : "Shell: bash",
     );
+  } finally {
+    await client.dispose?.();
+  }
+}, 60_000);
+
+test("the shell switch stops the session's panes, so no pane outlives the choice", async () => {
+  // A pane already running the OLD shell must not survive the switch: the
+  // human moved to pwsh, the setting says pwsh, and the pane prompt still
+  // reads `$` — measured as exactly that, and the reader concludes the switch
+  // did not happen. Killing the session's panes is the whole remedy; the next
+  // one starts the new shell.
+  const root = await mkdtemp(join(tmpdir(), "natalia-shell-switch-panes-"));
+  const sessionID = "ses_shell_switch_panes" as SessionID;
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    permissionMode: "auto",
+  });
+  client.start(() => undefined);
+  try {
+    await client.sessionAttach!(sessionID);
+    // Source pin on the switch itself: the kill rides the switch, not a UI
+    // afterthought, and it is best-effort (a stop failure must not refuse the
+    // switch).
+    const source = readFileSync(
+      join(repoRoot, "packages/framework/client/src/runtime/shell-switch.ts"),
+      "utf8",
+    );
+    expect(source).toContain("killSessionPanes(ctx, sessionID)");
+    // Matched on the operands, not one spelling: prettier wraps the call.
+    expect(source).toMatch(/\.stop\(pane\.id,\s*"system",\s*sessionID\)/u);
+    // And the kill runs BEFORE the no-op return: a re-pick of the shell the
+    // session already runs used to skip it entirely, which left the old pane
+    // alive and the reader concluded the switch had not happened (measured).
+    const killAt = source.indexOf("killSessionPanes(ctx, sessionID)");
+    const noOpAt = source.indexOf("if (from === to) return undefined;");
+    expect(noOpAt).toBeGreaterThan(0);
+    expect(killAt).toBeLessThan(noOpAt);
+    // And a switch with no terminal controller (this harness) still answers —
+    // the kill is best effort, so the switch cannot be refused by it.
+    const moved = await client.setSessionShell!({ shell: "bash" });
+    expect(moved).toMatchObject({ changed: true, to: "bash" });
   } finally {
     await client.dispose?.();
   }

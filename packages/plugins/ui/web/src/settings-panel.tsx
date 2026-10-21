@@ -319,53 +319,39 @@ export function SettingsPanel(props: {
   const updateConfig:
     | ((patch: Record<string, unknown>) => unknown)
     | undefined =
-    props.onUpdateConfig ??
-    (props.runtime?.updateConfig
-      ? (patch: Record<string, unknown>) =>
-          props.runtime?.updateConfig?.({
-            patch,
-            // The panel's OWN write scope, which every row used to drop: a
-            // write without it defaults to "project", so a 自动 that deleted
-            // the PROJECT's shell key left the human's choice sitting in the
-            // GLOBAL file to show straight through — measured: the row said
-            // 自动, the merged config still said bash, the pane still said
-            // PS. The preference defaults to "global" because this panel is
-            // the user's own settings, and the shell row's 自动 now deletes
-            // the key where the choice actually lives.
-            scope: runtimeWriteScope() as "project" | "global",
-          })
-      : undefined);
+    props.onUpdateConfig || props.runtime?.updateConfig
+      ? async (patch: Record<string, unknown>) => {
+          // The app's writer when mounted with one — the app keeps its own
+          // snapshot honest through it — else the runtime's own face. EITHER
+          // WAY the panel re-reads afterwards, and the re-read is not optional:
+          // `ownConfig` shadows `props.config` (the merge prefers the panel's
+          // own view), so a write that leaves it stale keeps every row showing
+          // its old value until the panel is closed and reopened — measured as
+          // exactly that: the shell row still said 自动 after the human picked
+          // bash, and only the open effect's re-read made it honest. The app's
+          // callback updates the APP's snapshot; nothing updated the PANEL's.
+          if (props.onUpdateConfig) await props.onUpdateConfig(patch);
+          else
+            await props.runtime?.updateConfig?.({
+              patch,
+              // The panel's OWN write scope, which every row used to drop: a
+              // write without it defaults to "project", so a 自动 that deleted
+              // the PROJECT's shell key left the human's choice sitting in the
+              // GLOBAL file to show straight through — measured: the row said
+              // 自动, the merged config still said bash, the pane still said
+              // PS. The preference defaults to "global" because this panel is
+              // the user's own settings, and the shell row's 自动 now deletes
+              // the key where the choice actually lives.
+              scope: runtimeWriteScope() as "project" | "global",
+            });
+          const next = await props.runtime?.configGet?.();
+          // Our own view first (the rows read it), then the app's snapshot.
+          if (next) setOwnConfig(next as never);
+          if (next) props.onConfig?.(next as never);
+        }
+      : undefined;
   /** A config write's failure, shown in the panel rather than swallowed. */
   const [configError, setConfigError] = createSignal<string>();
-  /**
-   * The one config write path. A refused or failed patch reports itself: the
-   * row shows the reason and the panel re-reads the runtime's own answer,
-   * because a local config object and the live runtime can disagree (the
-   * compose-time row versus this process) and the value cell must show what IS.
-   */
-  async function writeConfig(patch: Record<string, unknown>) {
-    // A diagnostic per write, so it rides the plugin's own verbose flag: the
-    // browser console is the operator's, and a write-per-click line is noise
-    // there (the plugin owns its logging, like every other UI file here).
-    verboseLog("[settings] config write ->", patch);
-    try {
-      await updateConfig?.(patch);
-      const next = await props.runtime?.configGet?.();
-      // The write's own echo: verbose-only, like the request line above it.
-      verboseLog("[settings] config write <-", next);
-      // Our own view first (the rows read it), then the app's snapshot.
-      if (next) setOwnConfig(next as never);
-      if (next) props.onConfig?.(next as never);
-    } catch (error) {
-      // The failure is NOT diagnostic-only: a write that failed is shown in
-      // the panel (below) AND logged, because a settings write that silently
-      // did nothing is the defect this panel exists to surface.
-      console.warn("[settings] config write FAILED", error);
-      setConfigError(
-        `写入失败：${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
   createEffect(() => {
     // Opening is the read: `props.config` is the app's snapshot and may still be
     // undefined, which leaves every row on its static value with the config
@@ -1268,7 +1254,7 @@ export function SettingsPanel(props: {
                               const next =
                                 !effectiveConfig()?.context?.compactionEnabled;
                               setConfigError("");
-                              void writeConfig({
+                              void updateConfig?.({
                                 context: {
                                   ...effectiveConfig()?.context,
                                   compactionEnabled: next,

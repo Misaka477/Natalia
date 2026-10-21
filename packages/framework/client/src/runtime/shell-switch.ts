@@ -26,7 +26,15 @@
  */
 
 import { nextContextInstructionsRevision } from "@anthelia/session";
-import { setConfiguredShell, shellSyntaxMeaning } from "@anthelia/shell";
+import {
+  platformShell,
+  setConfiguredShell,
+  shellSyntaxMeaning,
+} from "@anthelia/shell";
+import {
+  terminalController,
+  type TerminalController,
+} from "@anthelia/runtime-services";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import type { SessionID } from "@anthelia/contracts";
@@ -53,8 +61,12 @@ function shellMeaning(name: ShellName): string {
  * Move the session's shell and tell the model.
  *
  * @returns the switch that happened, or undefined when nothing changed (the
- *   session already ran that shell, or the session is not live) — a switch to
- *   the shell you are already on is not news.
+ *   session already ran that shell, or the session is not live). A switch to
+ *   the shell you are already on is not news for the RECORD, but it is still a
+ *   request to refresh: the panes are killed either way (see below), because a
+ *   human re-picking the shell they are on means "make sure my panes run it" —
+ *   measured: re-picking bash with a bash pane left the pane untouched and the
+ *   reader concluded the switch had not happened.
  */
 export function applySessionShell(
   ctx: RuntimeContext,
@@ -64,6 +76,11 @@ export function applySessionShell(
   const exec = ctx.ports.getExecutionBySession().get(sessionID);
   if (!exec) return undefined;
   const from = exec.shellOverride;
+  // The panes go either way — BEFORE the no-op return, which is where they used
+  // to be skipped: a re-pick of the current shell left the old pane running and
+  // the user had to delete it by hand. The next pane (the terminal tab mints
+  // one when a cell exits) starts the shell the slot now holds.
+  void killSessionPanes(ctx, sessionID);
   if (from === to) return undefined;
   exec.shellOverride = to;
   // The runtime-wide record the executor seam reads. Six call sites ask for the
@@ -73,6 +90,34 @@ export function applySessionShell(
   setConfiguredShell(to);
   publishShellSwitchNotice(ctx, exec, { from, to });
   return { from, to };
+}
+
+/**
+ * Stop the session's interactive panes after a shell switch.
+ *
+ * A pane already running the OLD shell must not outlive the choice: the human
+ * switched to pwsh, the setting says pwsh, and the pane prompt still says
+ * `PS`… or rather still says `$` — measured as exactly that on this host, and
+ * the reader concludes the switch did not happen. The next pane starts the new
+ * shell, so killing the old ones is the whole remedy.
+ *
+ * Best effort: a pane that is already gone is not a reason to refuse the
+ * switch, so a stop failure is dropped rather than reported.
+ */
+async function killSessionPanes(
+  ctx: RuntimeContext,
+  sessionID: SessionID,
+): Promise<void> {
+  const terminal = ctx.state.serviceDirectory.getOptional(terminalController);
+  if (!terminal) return;
+  let panes: Awaited<ReturnType<TerminalController["list"]>>;
+  try {
+    panes = await terminal.list(sessionID);
+  } catch {
+    return;
+  }
+  for (const pane of panes)
+    await terminal.stop(pane.id, "system", sessionID).catch(() => undefined);
 }
 
 /**
@@ -93,12 +138,13 @@ export function clearSessionShell(
   exec.shellOverride = undefined;
   setConfiguredShell(undefined);
   publishShellSwitchNotice(ctx, exec, { from, to: platformDefault() });
+  void killSessionPanes(ctx, sessionID);
   return { from };
 }
 
 /** The platform's own shell, spelled here to avoid a dependency edge. */
 function platformDefault(): ShellName {
-  return process.platform === "win32" ? "pwsh" : "bash";
+  return platformShell(process.platform);
 }
 
 /**

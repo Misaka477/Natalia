@@ -107,6 +107,22 @@ test("the shell row switches hot for every value, 自动 included, and offers no
   expect(source).not.toContain('{ value: "zsh"');
 });
 
+test("the config write path re-reads, so a row shows what the runtime answers", () => {
+  // Measured: the panel had ONE writeConfig that read back and refreshed
+  // `ownConfig`, and twelve rows that called the writer directly — including
+  // the shell row. A direct write never re-read, so the row kept its OLD
+  // value on screen until the panel was closed and reopened (the human picked
+  // bash and the row still said 自动). The read-back is now part of the one
+  // writer every row goes through.
+  expect(source).not.toContain("async function writeConfig");
+  // The writer itself reads the runtime back and broadcasts it.
+  expect(source).toMatch(
+    /props\.runtime\?\.updateConfig\?\.\(\{[\s\S]*?props\.runtime\?\.configGet\?\.\(\)/u,
+  );
+  expect(source).toContain("setOwnConfig(next as never)");
+  expect(source).toContain("props.onConfig?.(next as never)");
+});
+
 test("every config write carries the panel's own write scope", () => {
   // Measured: the panel offered a 运行时配置保存范围 preference (default
   // "global") and every row dropped it — `updateConfig(patch)` with no scope

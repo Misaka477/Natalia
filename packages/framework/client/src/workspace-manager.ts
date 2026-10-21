@@ -10,13 +10,9 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import {
-  createChildDirectory,
   firstUseWorkspaceDeclinedPath,
   firstUseWorkspacePath,
-  listDirectoryLevel,
   nataliaHomeJoin,
-  pickDirectory,
-  pickFile,
   resolveNataliaPath,
 } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
@@ -254,10 +250,6 @@ export type WorkspaceManager = {
   activate(workspaceID: string): Promise<WorkspaceSummary>;
   load(): Promise<void>;
   workspaceRoots(): Promise<WorkspaceSummary[]>;
-  pickDirectory(): Promise<string | null>;
-  pickFile(): Promise<string | null>;
-  listDirectoryLevel(path?: string): Promise<DirectoryListing>;
-  createChildDirectory(path: string, name: string): Promise<string>;
   workspaceAdd(input: {
     path: string;
     title?: string;
@@ -667,36 +659,6 @@ export function createWorkspaceManager(
     },
     async workspaceRoots() {
       return Promise.all([...runtimes.values()].map(summary));
-    },
-    /**
-     * Open the platform's directory chooser and wait for the human.
-     *
-     * The dialog is the runtime's, not the browser's: a page has no host
-     * channel, so every path a human would otherwise type arrives this way.
-     * `null` means the human dismissed it, which is an answer rather than a
-     * failure — the caller leaves the field exactly as it was.
-     */
-    async pickDirectory() {
-      return await pickDirectory();
-    },
-    /** The file twin of `pickDirectory`, for a path that names a file. */
-    async pickFile() {
-      return await pickFile();
-    },
-    /**
-     * List one directory level, for a client no OS dialog can reach.
-     *
-     * The native picker needs a display on the host; a remote browser has none,
-     * so this serves the primitives an in-app browser drives one level at a
-     * time. A path that is not fully qualified is refused rather than rebased
-     * under the host's cwd.
-     */
-    async listDirectoryLevel(path) {
-      return await listDirectoryLevel(path);
-    },
-    /** Create one child directory under an existing parent. */
-    async createChildDirectory(path, name) {
-      return await createChildDirectory(path, name);
     },
     workspaceAdd: addWorkspace,
     workspaceRemove: removeWorkspace,

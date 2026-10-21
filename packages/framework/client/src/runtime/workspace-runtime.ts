@@ -15,6 +15,10 @@ import {
   findWorkspaceFiles,
   globWorkspaceFiles,
   listWorkspaceFiles,
+  listDirectoryLevel,
+  createChildDirectory,
+  pickDirectory,
+  pickFile,
   readWorkspaceFile,
   renameWorkspaceFile,
   searchWorkspaceFiles,
@@ -35,6 +39,10 @@ type WorkspaceRuntime = Pick<
   RuntimeServiceClient,
   | "astMove"
   | "workspaceAstMove"
+  | "pickDirectory"
+  | "pickFile"
+  | "listDirectoryLevel"
+  | "createChildDirectory"
   | "workspaceFiles"
   | "workspaceSearch"
   | "workspaceList"
@@ -256,6 +264,43 @@ export function createWorkspaceRuntime(ctx: RuntimeContext): WorkspaceRuntime {
   };
 
   return {
+    /**
+     * Open the platform's directory chooser and wait for the human.
+     *
+     * The dialog is the RUNTIME's, on the user's machine — a page has no host
+     * channel, so this is the only way a path stops being typed. On Windows
+     * that is the koffi-backed `IFileOpenDialog`, which is the Explorer folder
+     * picker the platform already ships; on macOS AppleScript's `choose
+     * folder`; on Linux zenity or kdialog. `null` means the human dismissed
+     * it, which is an answer rather than a failure — the caller leaves the
+     * field exactly as it was.
+     */
+    async pickDirectory() {
+      await ctx.ports.getReady();
+      return await pickDirectory();
+    },
+    /** The file twin of `pickDirectory`, for a path that names a file. */
+    async pickFile() {
+      await ctx.ports.getReady();
+      return await pickFile();
+    },
+    /**
+     * List one directory level, for a client no OS dialog can reach.
+     *
+     * The native picker needs a display on the host; a remote browser has none,
+     * so this serves the primitives an in-app browser drives one level at a
+     * time. A path that is not fully qualified is refused rather than rebased
+     * under the host's cwd.
+     */
+    async listDirectoryLevel(path) {
+      await ctx.ports.getReady();
+      return await listDirectoryLevel(path);
+    },
+    /** Create one child directory under an existing parent. */
+    async createChildDirectory(path, name) {
+      await ctx.ports.getReady();
+      return await createChildDirectory(path, name);
+    },
     async workspaceFiles(input) {
       await ctx.ports.getReady();
       return await findWorkspaceFiles({

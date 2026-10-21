@@ -1,84 +1,70 @@
 /**
- * Every path a human would otherwise type has a chooser beside it.
+ * The runtime surface really carries the chooser.
  *
- * The dialog is the runtime's, on the user's machine — a page has no host
- * channel — so each row reaches it through `props.runtime.pickDirectory` or
- * `pickFile`. The pins here are the wiring: which kind each row asks for, that
- * the text box survives beside the button, and that a list row appends rather
- * than replaces.
- *
- * There is no DOM harness in this repository (no jsdom or happy-dom
- * dependency, and adding one is not this change's business), so the guard is
- * the source wiring itself — the same pattern the settings-panel wiring test
- * uses.
+ * The settings panel's 浏览 button calls `props.runtime.pickDirectory?.()`, and
+ * an optional call on a missing member is a silent no-op — which is exactly how
+ * the button shipped dead: the methods were written into `workspace-manager.ts`,
+ * a module nothing constructs, instead of the surface `createWorkspaceRuntime`
+ * assembles. This pins them where the panel reads them.
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dir, "..", "..", "..", "..", "..");
+// test -> web -> ui -> plugins -> packages -> repo root
+const repoRoot = join(import.meta.dir, "..", "..", "..", "..", "..");
 
 function source(relative: string): string {
-  return readFileSync(join(root, relative), "utf8");
+  return readFileSync(join(repoRoot, relative), "utf8");
 }
 
+const surface = source(
+  "packages/framework/client/src/runtime/workspace-runtime.ts",
+);
+const assembly = source(
+  "packages/framework/client/src/runtime/client-surface.ts",
+);
 const panel = source("packages/plugins/ui/web/src/settings-panel.tsx");
-const workspace = source("packages/plugins/ui/web/src/workspace-panel.tsx");
-const app = source("packages/plugins/ui/web/src/app-neu.tsx");
 
-test("the editor offers a chooser, and the kind is the row's to say", () => {
-  // `openEdit` takes the kind as its fourth argument, so a row names a FILE or
-  // a DIRECTORY rather than the dialog guessing.
-  expect(panel).toContain('browse?: "directory" | "file"');
-  expect(panel).toContain("setEditFieldBrowse(browse)");
-  // The button is conditional: a row with no chooser shows no button, so the
-  // affordance is never advertised where it does nothing.
-  expect(panel).toContain("<Show when={editFieldBrowse()}>");
-  expect(panel).toContain("浏览…");
+test("the chooser lives on the surface the client assembles", () => {
+  // `createWorkspaceRuntime` is spread into the surface by `createClientSurface`,
+  // so a method defined there is reachable as `props.runtime.<name>`.
+  expect(assembly).toContain("...createWorkspaceRuntime(ctx)");
+  expect(surface).toContain("async pickDirectory()");
+  expect(surface).toContain("async pickFile()");
+  // And the Pick that types the return object names them, so a missing member
+  // is a typecheck failure rather than a dead button.
+  expect(surface).toMatch(/\|\s*"pickDirectory"/u);
+  expect(surface).toMatch(/\|\s*"pickFile"/u);
 });
 
-test("the two shell path rows ask for a FILE", () => {
-  // The rows name bash.exe and pwsh.exe. A directory chooser there would be
-  // the wrong question. Matched on the row's own slice rather than one
-  // spelling, because prettier decides where the argument wraps.
-  const bashAt = panel.indexOf('"Git Bash 路径"');
-  const pwshAt = panel.indexOf('"PowerShell 路径"');
-  expect(bashAt).toBeGreaterThan(0);
-  expect(pwshAt).toBeGreaterThan(bashAt);
-  expect(panel.slice(bashAt, pwshAt)).toMatch(/"file"/u);
-  expect(panel.slice(pwshAt, pwshAt + 1200)).toMatch(/"file"/u);
-});
-
-test("the checkpoint row appends rather than replaces", () => {
-  // The field is a comma-separated LIST. A shared "put the answer in the box"
-  // action would replace the whole list with one picked entry, silently
-  // dropping every directory already configured — so this row installs its own
-  // browse action that appends.
-  const at = panel.indexOf('"Checkpoint 目录"');
-  expect(at).toBeGreaterThan(0);
-  const row = panel.slice(at, at + 1600);
-  expect(row).toMatch(/"directory"/u);
-  expect(row).toContain("browseFieldAction = async () => {");
-  // The append itself, matched on the operands: prettier wraps the spread.
-  expect(row).toMatch(/additionalDirs:\s*\[\.\.\.existing,\s*picked\]/u);
-  // And the default action is cleared when an editor opens, so one row's
-  // action cannot leak into the next.
-  expect(panel).toContain("browseFieldAction = undefined;");
-});
-
-test("the workspace panel offers a chooser beside its text box", () => {
-  expect(workspace).toContain("onBrowse?: () => Promise<string | null>");
-  expect(workspace).toContain("浏览…");
-  // The text box stays: a path the chooser cannot express is still enterable.
-  expect(workspace).toContain('placeholder="工作区路径');
-});
-
-test("the app wires the workspace chooser to the runtime", () => {
-  expect(app).toContain("onBrowse={async () =>");
-  expect(app).toContain("props.ctx.runtime.pickDirectory?.()");
-});
-
-test("the browse action reaches the runtime, not a local guess", () => {
+test("the panel calls the runtime's chooser, not a local guess", () => {
   expect(panel).toContain("props.runtime?.pickDirectory?.()");
   expect(panel).toContain("props.runtime?.pickFile?.()");
+});
+
+test("the chooser is not duplicated into the unconstructed manager", () => {
+  // `createWorkspaceManager` has no call site, so a method written only there is
+  // unreachable. The chooser belongs on the surface and nowhere else.
+  const manager = source("packages/framework/client/src/workspace-manager.ts");
+  expect(manager).not.toContain("async pickDirectory()");
+  expect(manager).not.toContain("async pickFile()");
+});
+
+test("the browse button shares the action row instead of adding one", () => {
+  // A second `neu-form-actions` between the field and 取消/确定 added a whole
+  // line to every path editor. The button rides the same row, so no new row
+  // opens between it and 取消. Anchored on the JSX text node, not the word,
+  // because a comment elsewhere in the file also says 浏览.
+  const at = panel.indexOf(
+    ">\n                      浏览…\n                    </button>",
+  );
+  expect(at).toBeGreaterThan(0);
+  const cancelAt = panel.indexOf("取消", at);
+  expect(cancelAt).toBeGreaterThan(at);
+  const between = panel.slice(at, cancelAt);
+  expect(between).not.toContain('<div class="neu-form-actions">');
+  // And it IS inside an actions row, so it is not floating on its own.
+  const before = panel.slice(0, at);
+  expect(before).toContain('<div class="neu-form-actions">');
 });

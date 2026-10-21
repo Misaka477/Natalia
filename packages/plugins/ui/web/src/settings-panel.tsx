@@ -599,10 +599,13 @@ export function SettingsPanel(props: {
    * Ask the runtime to open its platform chooser and put the answer in the
    * field being edited.
    *
-   * The dialog is the runtime's, on the user's machine: a page has no host
-   * channel, so this is the only way a path stops being typed. A dismissal
-   * (`null`) leaves the field exactly as it was — the human closed the dialog,
-   * which is an answer rather than a failure.
+   * The dialog is the RUNTIME's, on the user's machine — a page has no host
+   * channel, so this is the only way a path stops being typed. On Windows that
+   * is the koffi-backed `IFileOpenDialog`, which is the Explorer folder picker
+   * the platform already ships; on macOS AppleScript's `choose folder`; on
+   * Linux zenity or kdialog. A dismissal (`null`) leaves the field exactly as
+   * it was — the human closed the dialog, which is an answer rather than a
+   * failure.
    */
   async function browseForPath(kind: "directory" | "file") {
     // A row that needs more than "put the answer in the box" (a list that
@@ -1649,9 +1652,12 @@ export function SettingsPanel(props: {
                   onChange={(value) => setEditFieldValue(value)}
                 />
               </Show>
-              <Show when={editFieldBrowse()}>
-                {(kind) => (
-                  <div class="neu-form-actions">
+              <div class="neu-form-actions">
+                {/* The chooser rides the SAME action row as 取消/确定, not a row
+                    of its own: a second `neu-form-actions` between the field
+                    and the buttons added a whole line to every path editor. */}
+                <Show when={editFieldBrowse()}>
+                  {(kind) => (
                     <button
                       type="button"
                       class="neu-form-btn"
@@ -1659,10 +1665,8 @@ export function SettingsPanel(props: {
                     >
                       浏览…
                     </button>
-                  </div>
-                )}
-              </Show>
-              <div class="neu-form-actions">
+                  )}
+                </Show>
                 <button
                   type="button"
                   class="neu-form-btn neu-form-cancel"

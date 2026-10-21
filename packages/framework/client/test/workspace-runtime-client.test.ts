@@ -48,18 +48,6 @@ function emptyManager(): WorkspaceManager {
     async workspaceRoots() {
       return [];
     },
-    async pickDirectory() {
-      throw new Error("unused");
-    },
-    async pickFile() {
-      throw new Error("unused");
-    },
-    async listDirectoryLevel() {
-      throw new Error("unused");
-    },
-    async createChildDirectory() {
-      throw new Error("unused");
-    },
     async workspaceAdd() {
       throw new Error("unused");
     },

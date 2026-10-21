@@ -207,6 +207,15 @@ export type PtyTerminalControllerInput = {
   onPerformance(name: string, durationMs: number): void;
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
+  /**
+   * WHICH shell a pane starts, read per call.
+   *
+   * The terminal plugin runs in its own process, so the runtime's configured
+   * shell is not visible to it. This getter is the bridge: the plugin asks, the
+   * runtime answers from the config it owns. Absent means "the platform
+   * default".
+   */
+  shellName?(): "bash" | "pwsh" | "zsh" | undefined;
   spawn?: PtyFactory;
   maxPerSession?: number;
   idleMs?: number;
@@ -1537,6 +1546,11 @@ export function createPtyTerminalController(
     const spawnSpec = nativeTerminalPaneSpawn(
       requestedCommand,
       process.platform,
+      // The runtime's shell choice, bridged in through the terminal input:
+      // this module runs in the plugin's own process, where the runtime's
+      // configured-shell slot is not visible. Absent means the platform
+      // default, which is what a pane got before the choice existed.
+      input.shellName?.(),
     );
     const argv = spawnSpec.argv;
     const file = argv[0] ?? "/bin/sh";

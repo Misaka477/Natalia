@@ -575,6 +575,15 @@ export type TerminalControllerInput = {
   onPerformance(name: string, durationMs: number): void;
   runtimeID(): string;
   userRuntimeHome(): string | undefined;
+  /**
+   * WHICH shell a pane starts, read per call.
+   *
+   * The terminal plugin runs in its own process, so the runtime's configured
+   * shell is not visible to it. This getter is the bridge: the plugin asks, the
+   * runtime answers from the config it owns. Absent means "the platform
+   * default".
+   */
+  shellName?(): "bash" | "pwsh" | "zsh" | undefined;
   /** Cap on concurrent PTYs for one Natalia session. PTY backend only. */
   maxPerSession?: number;
   /** Recycle a session's idle PTY when the cap is hit. PTY backend only. */

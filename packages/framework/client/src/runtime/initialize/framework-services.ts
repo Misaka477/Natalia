@@ -12,6 +12,7 @@
  * returned handle.
  */
 import { createAttachmentService } from "@anthelia/attachments";
+import { configuredShellName } from "@anthelia/shell";
 import { sessionStoreController as sessionStoreControllerToken } from "@anthelia/session-store";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
 import {
@@ -701,6 +702,15 @@ export async function wireFrameworkServices(
         ctx.ports.getPerformanceTrace().mark(name, durationMs),
       runtimeID: ctx.ports.getNativeRuntimeID,
       userRuntimeHome: ctx.ports.getUserRuntimeHome,
+      // WHICH shell a pane starts, read per call.
+      //
+      // The terminal plugin runs in its OWN process, so the runtime's
+      // `setConfiguredShell` slot is not visible to it — a pane opened after a
+      // settings-panel switch kept starting the shell the platform defaults to
+      // (measured: pwsh on Windows after the human chose bash). This getter is
+      // the bridge: the plugin asks, the runtime answers from the config it
+      // owns, and the answer is current because it is read per call.
+      shellName: () => configuredShellName(),
       // The session's saved pane layout lives in the session store's metadata —
       // the same home the pending-human-terminal fact uses — because it is a
       // durable per-session fact about this session's terminal. The terminal

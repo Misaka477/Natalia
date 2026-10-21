@@ -16,14 +16,23 @@ import { interactiveShellArgv, shellEnvFor } from "./shell-integration-argv";
  * HOST's executor whatever the caller asked for — which is how the pinned
  * contract ("sh -lc" stays /bin/sh -lc) broke the moment it ran on Windows,
  * and why CI, which only ever runs it on Linux, never saw it.
+ *
+ * `configured` is the runtime's shell choice, bridged in through the terminal
+ * input because this module runs in the plugin's own process where the
+ * runtime's slot is not visible. Without it a pane kept starting the platform
+ * default after the human chose another shell.
  */
-function shellFor(os?: NodeJS.Platform): ReturnType<typeof selectExecutor> {
-  return selectExecutor(process.env, os ?? process.platform);
+function shellFor(
+  os?: NodeJS.Platform,
+  configured?: "bash" | "pwsh" | "zsh",
+): ReturnType<typeof selectExecutor> {
+  return selectExecutor(process.env, os ?? process.platform, configured);
 }
 
 export function nativeTerminalPaneCommand(
   command: string,
   os?: NodeJS.Platform,
+  configured?: "bash" | "pwsh" | "zsh",
 ): string[] {
   // The argv is unchanged — it is the public contract its callers and tests pin —
   // but the spelling now belongs to the shell rather than being built here.
@@ -37,7 +46,7 @@ export function nativeTerminalPaneCommand(
   // here keeps the wrapper for real commands and drops it for a real shell.
   const integrated = interactiveShellArgv(command, os);
   if (integrated) return integrated;
-  const spec = shellFor(os).resolve({
+  const spec = shellFor(os, configured).resolve({
     command,
     loginShell: true,
     os,
@@ -73,6 +82,7 @@ export function nativeTerminalPaneCommand(
 export function nativeTerminalPaneSpawn(
   command: string,
   os?: NodeJS.Platform,
+  configured?: "bash" | "pwsh" | "zsh",
 ): { argv: string[]; env: Record<string, string> } {
   // The pane argv ALREADY went through the integrator inside
   // `nativeTerminalPaneCommand`, so wrapping it here again would double the
@@ -80,7 +90,7 @@ export function nativeTerminalPaneSpawn(
   // `bash --rcfile X --rcfile X`. What this adds is only the environment half,
   // which the argv path cannot carry.
   return {
-    argv: nativeTerminalPaneCommand(command, os),
+    argv: nativeTerminalPaneCommand(command, os, configured),
     env: shellEnvFor(command, os),
   };
 }

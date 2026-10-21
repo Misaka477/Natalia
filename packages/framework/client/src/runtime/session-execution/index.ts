@@ -29,6 +29,11 @@ import type { SessionStoreController } from "@anthelia/session-store";
 import type { TurnController } from "@anthelia/turn-orchestration";
 import type { ContextLedgerFactory } from "@natalia/context-ledger";
 import { logOf } from "@anthelia/operation-log";
+import {
+  healLedgerToolCalls,
+  syntheticToolUpdate,
+  unansweredToolCalls,
+} from "../tool-call-recovery";
 
 const MAX_IDLE_SESSION_EXECUTIONS = Math.max(
   64,
@@ -281,7 +286,67 @@ export function createSessionExecution(
       storeMode,
       Boolean(epoch),
     );
+    // HEAL A TOOL CALL THE JOURNAL RECORDS BUT NEVER ANSWERED, before the
+    // ledger is restored from these events.
+    //
+    // A turn that ended with an unanswered tool_call poisons the session for
+    // good: the provider request assembled from this history carries the
+    // dangling call and the gateway rejects it — measured as `input_invalid`
+    // on EVERY turn from the first occurrence onward, the session never
+    // recovering, because the same history replays. The origin is the cancel
+    // path (two parallel calls, one approval-gated, the human cancelled: the
+    // gate settled the call it was parked on, the second never ran).
+    //
+    // Closing them here — before the restore — makes THIS exec's ledger
+    // balanced and the journal healed durably in one move, so the next load
+    // needs nothing (the scan finds nothing once the results are journaled).
+    // The synthetic result says the outcome is unknown and states the retry
+    // test, so the model neither loses the call nor retries a side effect
+    // blindly. The live cancel path now closes its own calls after the abort
+    // unwinds; this heals the journals already written.
+    const healedCalls = unansweredToolCalls(runtimeRestoreEvents);
+    if (healedCalls.length) {
+      const healedEvents = healedCalls.map((call) =>
+        syntheticToolUpdate(call, new Date().toISOString()),
+      );
+      runtimeRestoreEvents.push(...healedEvents);
+      loaded.events.push(...healedEvents);
+      void sessionStore.appendEvents(loaded, healedEvents).catch(() => {
+        // Best effort: the in-memory heal above already keeps this exec's
+        // ledger balanced, and a durable append failure surfaces on the next
+        // turn rather than here.
+      });
+      logOf(ctx.state.serviceDirectory).warn(
+        "tool-call-recovery",
+        "ensureExecution",
+        { sessionID, healed: healedEvents.length },
+      );
+    }
     contextLedgerFactory.restore(execContext, runtimeRestoreEvents);
+    // HEAL THE RESTORED LEDGER ITSELF: a context epoch or checkpoint snapshot
+    // can carry the dangling call INSIDE it, where the event scan above cannot
+    // see it — and the ledger is what the provider request is assembled from,
+    // so the ledger is what must be balanced. This is the definitive scan; the
+    // event scan above covers the journal's own tail.
+    const ledgerHealed = healLedgerToolCalls(execContext);
+    if (ledgerHealed.length) {
+      // And heal the journal durably, so the next build needs nothing and the
+      // transcript shows the call closed rather than silently vanishing.
+      const healedEvents = ledgerHealed.map((call) =>
+        syntheticToolUpdate(call, new Date().toISOString()),
+      );
+      loaded.events.push(...healedEvents);
+      void sessionStore.appendEvents(loaded, healedEvents).catch(() => {
+        // Best effort: the in-memory heal above already keeps this exec's
+        // ledger balanced, and a durable append failure surfaces on the next
+        // turn rather than here.
+      });
+      logOf(ctx.state.serviceDirectory).warn(
+        "tool-call-recovery",
+        "ensureExecution",
+        { sessionID, healed: ledgerHealed.length },
+      );
+    }
     // No summary means no compaction rewrote the surface, so the replayed
     // events rebuild exactly the entries the durable checkpoint describes.
     // Restoring its usage anchor on top is what keeps the context ring and the

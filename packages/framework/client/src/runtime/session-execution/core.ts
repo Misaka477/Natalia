@@ -6,6 +6,7 @@ import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
 import { applySandboxRungGrant, applySessionRung } from "../sandbox-rung";
 import { applySessionShell, clearSessionShell } from "../shell-switch";
+import { recoverUnansweredToolCalls } from "../tool-call-recovery";
 import type { TurnController } from "@anthelia/turn-orchestration";
 type Surface = Pick<
   RuntimeServiceClient,
@@ -128,6 +129,21 @@ export function createCoreSurface(
           await controller.persistPromotion(pendingSessionID!);
         }
         await coordinator.interrupt();
+        // NOW close the cancelled turn's unanswered tool calls. The abort's
+        // unwind has already settled the calls the turn runner owned (the
+        // approval gate publishes its result during the abort), so what the
+        // journal still carries unanswered is exactly what never ran — and a
+        // journal that ends with an unanswered tool_call poisons every later
+        // request built from it: the gateway rejects the dangling call
+        // (measured: `input_invalid` on every turn from the first occurrence
+        // on, the session never recovering, because the same history
+        // replays). The synthetic result says the outcome is unknown and
+        // states the retry test, so the model neither loses the call nor
+        // retries a side effect blindly.
+        if (cancelledExec)
+          recoverUnansweredToolCalls(cancelledExec, (event) =>
+            ctx.ports.publishForSession(cancelledExec, event),
+          );
         // `interrupt` clears stale wakeups. Only restart the drain when a queued
         // prompt is already admitted; a user Stop should stay idle until they
         // send the next message.

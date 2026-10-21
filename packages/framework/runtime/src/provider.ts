@@ -1281,7 +1281,6 @@ export class OpenAICompatibleProvider implements StreamingProvider {
     request: ProviderStreamRequest,
   ): AsyncIterable<ProviderStreamChunk> {
     request = await materializeProviderMessages(request);
-
     const timeout = this.timeoutMs
       ? AbortSignal.timeout(this.timeoutMs)
       : undefined;
@@ -1849,6 +1848,148 @@ function reasoningFromContextEntries(
   return {};
 }
 
+/**
+ * What a closed-without-a-result tool call says to the model.
+ *
+ * A turn that ended with unanswered tool calls — the cancel path used to leave
+ * one behind — carries the calls in the ASSISTANT message's content parts, and
+ * every gateway rejects a request whose assistant tool_calls have no matching
+ * tool results (measured: `input_invalid` on every turn from the first
+ * occurrence on, the session never recovering, because the same history
+ * replays). The wording follows the deepseek harness's recovery: the outcome
+ * is unknown, and the retry test is stated rather than assumed, so the model
+ * neither loses the call nor retries a side effect blindly.
+ */
+const UNANSWERED_TOOL_CALL_TEXT =
+  "This tool call was never answered: its turn ended before the result was recorded, so its outcome is unknown. Retry only if the operation is read-only or idempotent; if it may have side effects, verify the external state or ask the human before retrying. Do not retry blindly.";
+
+/**
+ * The most tool calls one assistant message may carry in a request.
+ *
+ * A gateway that counts them rejects a request with more: measured against
+ * StepFun's step_plan endpoint, 85 calls in one message is accepted and 90 is
+ * answered `input_invalid` — and a session whose journal carries such a
+ * message is then unsendable FOREVER, because the same history replays on
+ * every turn (measured: the Fourier turn's model emitted 115 parallel calls
+ * in one message; every turn in that session has failed with input_invalid
+ * since, and the journal cannot be edited). The deepseek harness bounds the
+ * same thing from the other side — DEFAULT_MAX_PARALLEL_TOOL_CALLS = 10 for
+ * execution.
+ *
+ * The request boundary is where the repair belongs: the journal keeps what
+ * happened (the model's calls and their results), and the wire keeps what the
+ * gateway accepts. The excess calls and their results are dropped together,
+ * so the pairing the gateway checks stays intact.
+ */
+const MAX_TOOL_CALLS_PER_MESSAGE = 80;
+
+/**
+ * Cap every assistant message's tool calls, dropping the excess calls and
+ * their paired results.
+ *
+ * The dropped results always follow their assistant message in transcript
+ * order, so one forward pass collects the kept ids and filters the rest.
+ * Both the `toolCalls` field and the content parts are trimmed: the pairing
+ * check below reads the content parts too, and a result kept for a call the
+ * wire no longer carries would be its own rejection.
+ */
+function capToolCallsPerMessage(
+  messages: ProviderMessage[],
+): ProviderMessage[] {
+  const kept = new Set<string>();
+  const out: ProviderMessage[] = [];
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.toolCalls?.length) {
+      out.push(message);
+      continue;
+    }
+    const calls = message.toolCalls.slice(0, MAX_TOOL_CALLS_PER_MESSAGE);
+    for (const call of calls) kept.add(call.id);
+    const parts = (message as { contentParts?: ProviderContentPart[] })
+      .contentParts;
+    let seenCalls = 0;
+    const trimmedParts = Array.isArray(parts)
+      ? parts.filter((part) => {
+          if (part.type !== "tool_call") return true;
+          return seenCalls++ < MAX_TOOL_CALLS_PER_MESSAGE;
+        })
+      : parts;
+    out.push({
+      ...message,
+      toolCalls: calls,
+      ...(trimmedParts ? { contentParts: trimmedParts } : {}),
+    });
+  }
+  return out.filter(
+    (message) =>
+      !(
+        message.role === "tool" &&
+        message.toolCallID &&
+        !kept.has(message.toolCallID)
+      ),
+  );
+}
+
+/**
+ * Close every assistant tool call the request would carry with no result.
+ *
+ * The transaction scan above pairs `tool_call` ENTRIES and drops an unpaired
+ * one, but an assistant message's `contentParts` carry the recorded calls too
+ * — and the provider adapters turn those parts into the request's assistant
+ * `toolCalls`, which is the field the gateway's pairing rule is about. So the
+ * definitive pairing check is on the assembled messages: every assistant call
+ * must be followed by its tool result, synthesized here when the journal never
+ * recorded one. This is the deepseek harness's recovery, at the request
+ * projection boundary — the same place its `ToolCallRecovery` closes dangling
+ * calls before they reach a provider.
+ */
+function closeUnansweredToolCalls(
+  messages: ProviderMessage[],
+): ProviderMessage[] {
+  const answered = new Set<string>();
+  for (const message of messages)
+    if (message.role === "tool" && message.toolCallID)
+      answered.add(message.toolCallID);
+  const out: ProviderMessage[] = [];
+  for (const message of messages) {
+    out.push(message);
+    if (message.role !== "assistant") continue;
+    // The calls the request will carry, from BOTH sources: the toolCalls the
+    // transaction attached (already paired) and the content parts the adapters
+    // turn into toolCalls (unfiltered — this is where the dangling one lives).
+    const ids = new Set<string>();
+    for (const call of message.toolCalls ?? []) ids.add(call.id);
+    for (const call of toolCallsFromContentParts(message)) ids.add(call.id);
+    for (const id of ids) {
+      if (answered.has(id)) continue;
+      answered.add(id);
+      out.push({
+        role: "tool",
+        toolCallID: id,
+        content: UNANSWERED_TOOL_CALL_TEXT,
+      });
+    }
+  }
+  return out;
+}
+
+/** The tool calls an assistant message carries through its content parts. */
+function toolCallsFromContentParts(
+  message: ProviderMessage,
+): Array<{ id: string }> {
+  const parts = (message as { contentParts?: unknown }).contentParts;
+  if (!Array.isArray(parts)) return [];
+  return parts
+    .filter(
+      (part): part is { type: "tool_call"; id: string } =>
+        typeof part === "object" &&
+        part !== null &&
+        (part as { type?: string }).type === "tool_call" &&
+        typeof (part as { id?: unknown }).id === "string",
+    )
+    .map((part) => ({ id: part.id }));
+}
+
 export function contextEntriesToProviderMessages(
   entries: ContextEntry[],
 ): ProviderMessage[] {
@@ -1921,7 +2062,7 @@ export function contextEntriesToProviderMessages(
     const message = contextEntryToProviderMessage(entry);
     if (message) messages.push(message);
   }
-  return messages;
+  return closeUnansweredToolCalls(capToolCallsPerMessage(messages));
 }
 
 function contextEntryToProviderMessage(

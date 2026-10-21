@@ -64,26 +64,29 @@ export function WorkspacePanel(props: {
               {/* The chooser rides the SAME action row as 取消/添加, not a row of
                   its own: a second `neu-form-actions` between the field and the
                   buttons added a whole line to the dialog. */}
-              <Show when={props.onBrowse}>
-                <button
-                  type="button"
-                  class="neu-form-btn"
-                  disabled={busy()}
-                  onClick={() => {
-                    if (busy()) return;
-                    void (async () => {
-                      // The dialog is the runtime's, on the user's machine: a
-                      // page has no host channel, so this is the only way a
-                      // workspace path stops being typed. A dismissal leaves
-                      // the field as it was.
-                      const chosen = await props.onBrowse?.();
-                      if (typeof chosen === "string" && chosen) setPath(chosen);
-                    })();
-                  }}
-                >
-                  浏览…
-                </button>
-              </Show>
+              {/* NOT `<Show when={props.onBrowse}>`: Solid treats a function
+                  `when` as an accessor and CALLS it, so wrapping an async prop
+                  in `Show` invokes the chooser on every re-render — measured as
+                  four pending `directory.pick` requests from one click. The
+                  optional call inside the handler is the guard. */}
+              <button
+                type="button"
+                class="neu-form-btn"
+                disabled={busy()}
+                onClick={() => {
+                  if (busy() || !props.onBrowse) return;
+                  void (async () => {
+                    // The dialog is the runtime's, on the user's machine: a
+                    // page has no host channel, so this is the only way a
+                    // workspace path stops being typed. A dismissal leaves
+                    // the field as it was.
+                    const chosen = await props.onBrowse?.();
+                    if (typeof chosen === "string" && chosen) setPath(chosen);
+                  })();
+                }}
+              >
+                浏览…
+              </button>
               <button
                 type="button"
                 class="neu-form-btn neu-form-cancel"

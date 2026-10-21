@@ -57,12 +57,27 @@ if (typeof setInterval !== "undefined") {
   }, 1000);
 }
 
+// The runtime's address, and the token that authorizes against it.
+//
+// The same three sources `main-neu.ts` reads, in the same order: an explicit
+// build-time URL, then the endpoint the server injected into the document, then
+// a default. This file used to hardcode `http://127.0.0.1:8790` with no token,
+// which is why a 浏览 click produced a request the runtime could not authorize
+// — measured in the browser console as `POST :8790/rpc 400` with no
+// `authorization` header at all.
+const env = (import.meta as { env?: Record<string, string> }).env ?? {};
 const runtimeURL =
-  (import.meta as { env?: Record<string, string> }).env
-    ?.VITE_NATALIA_RUNTIME_URL || "http://127.0.0.1:8790";
+  env.VITE_NATALIA_RUNTIME_URL ||
+  (globalThis as { __NATALIA_RUNTIME__?: { url?: string; token?: string } })
+    .__NATALIA_RUNTIME__?.url ||
+  "http://127.0.0.1:8787";
+const runtimeToken = (
+  globalThis as { __NATALIA_RUNTIME__?: { token?: string } }
+).__NATALIA_RUNTIME__?.token;
 
 const runtime = createWebRuntimeClient({
   url: runtimeURL,
+  ...(runtimeToken ? { token: runtimeToken } : {}),
 });
 perfLog(
   `[startup] runtime client +${(performance.now() - startupStart).toFixed(1)}ms`,

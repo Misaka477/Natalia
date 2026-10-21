@@ -408,6 +408,12 @@ const clientClosureAllowlist = [
   "sandbox",
   "session",
   "session-store",
+  // The configured-shell slot: the client's config-reload and shell-switch
+  // write it at config load and on every reload, so the mechanism is
+  // client-owned like logging above. A leaf package (confinement + platform
+  // only), added by refactor(shell) 3350a4c0 whose own gate run covered the
+  // shell suite but not this closure check.
+  "shell",
   "subagents",
   "terminal",
   "testing",

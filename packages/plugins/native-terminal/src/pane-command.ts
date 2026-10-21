@@ -26,7 +26,28 @@ function shellFor(
   os?: NodeJS.Platform,
   configured?: "bash" | "pwsh" | "zsh",
 ): ReturnType<typeof selectExecutor> {
-  return selectExecutor(process.env, os ?? process.platform, configured);
+  return selectExecutor(os ?? process.platform, configured);
+}
+
+/**
+ * The command a pane starts with, ahead of anything that defaults it.
+ *
+ * The caller's own command wins; absent one, the shell the RUNTIME is
+ * configured for is the default, and only then the platform's own.
+ *
+ * The order is the fix, not a preference. `discoverDefaultShell` answers
+ * `pwsh` on Windows unconditionally — it never consults the choice — and
+ * `interactiveShellArgv` takes a shell-named command verbatim, so a default
+ * of `pwsh` reached the spawn with the configured `bash` unused: the settings
+ * row said bash while the prompt said `PS` (measured on this host). The
+ * platform default stays what 自动 and a host with no choice get.
+ */
+export function paneStartCommand(
+  requested: string | undefined,
+  configured: "bash" | "pwsh" | "zsh" | undefined,
+  platformDefault: string | undefined,
+): string | undefined {
+  return requested?.trim() || configured || platformDefault;
 }
 
 export function nativeTerminalPaneCommand(

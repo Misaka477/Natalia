@@ -34,6 +34,7 @@ import { defaultPaneCommand, isWindowsPowerShell51 } from "@anthelia/platform";
 import {
   nativeTerminalPaneCommand,
   nativeTerminalPaneSpawn,
+  paneStartCommand,
 } from "./pane-command";
 import { terminalOutputChunk, trimScreenTail } from "./output-chunk";
 import {
@@ -1540,9 +1541,19 @@ export function createPtyTerminalController(
     // have (PowerShell on Windows, bash on Linux, zsh or bash on macOS) —
     // never a blank command wrapped in `sh -lc ""`. The request is answered
     // in the session view, so the reader sees the shell that actually runs.
+    //
+    // And the runtime's choice IS that default when one exists: platform
+    // discovery answers pwsh on Windows unconditionally, and the integrator
+    // takes a shell-named command verbatim, so without this the human's bash
+    // was answered with a pwsh pane (measured: the setting says bash, the
+    // prompt says PS).
+    const configured = input.shellName?.();
     const requestedCommand =
-      startInput.command?.trim() ||
-      (defaultPaneCommand() ?? startInput.command);
+      paneStartCommand(
+        startInput.command,
+        configured,
+        defaultPaneCommand() ?? startInput.command,
+      ) ?? startInput.command;
     const spawnSpec = nativeTerminalPaneSpawn(
       requestedCommand,
       process.platform,
@@ -1550,7 +1561,7 @@ export function createPtyTerminalController(
       // this module runs in the plugin's own process, where the runtime's
       // configured-shell slot is not visible. Absent means the platform
       // default, which is what a pane got before the choice existed.
-      input.shellName?.(),
+      configured,
     );
     const argv = spawnSpec.argv;
     const file = argv[0] ?? "/bin/sh";

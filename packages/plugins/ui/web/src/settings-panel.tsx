@@ -15,6 +15,7 @@ import {
   type UiPanelRequirement,
 } from "@anthelia/contracts";
 import { NeuSelect } from "./components/NeuSelect";
+import { PathBrowseButton } from "./path-browse-button";
 import { hostFromSegments, rowsForHost } from "./settings-host-rows";
 import {
   SETTINGS_CATEGORIES,
@@ -596,30 +597,14 @@ export function SettingsPanel(props: {
   }
 
   /**
-   * Ask the runtime to open its platform chooser and put the answer in the
-   * field being edited.
+   * The row-specific browse action, when filling the field is not the whole job.
    *
-   * The dialog is the RUNTIME's, on the user's machine — a page has no host
-   * channel, so this is the only way a path stops being typed. On Windows that
-   * is the koffi-backed `IFileOpenDialog`, which is the Explorer folder picker
-   * the platform already ships; on macOS AppleScript's `choose folder`; on
-   * Linux zenity or kdialog. A dismissal (`null`) leaves the field exactly as
-   * it was — the human closed the dialog, which is an answer rather than a
-   * failure.
+   * The shared `PathBrowseButton` calls this instead of writing the field, for a
+   * comma-separated LIST that must APPEND the picked directory rather than
+   * replace the list with one entry.
    */
-  async function browseForPath(kind: "directory" | "file") {
-    // A row that needs more than "put the answer in the box" (a list that
-    // appends rather than replaces) installs its own action; everything else
-    // fills the field.
-    if (browseFieldAction) {
-      await browseFieldAction();
-      return;
-    }
-    const chosen =
-      kind === "directory"
-        ? await props.runtime?.pickDirectory?.()
-        : await props.runtime?.pickFile?.();
-    if (typeof chosen === "string" && chosen) setEditFieldValue(chosen);
+  function installBrowseAction(action: () => Promise<void>) {
+    browseFieldAction = action;
   }
 
   function openPermissionEditorFor(name: string) {
@@ -849,7 +834,7 @@ export function SettingsPanel(props: {
         // list as typed, 浏览… adds one picked directory to it.
         "directory",
       );
-      browseFieldAction = async () => {
+      installBrowseAction(async () => {
         const picked = await props.runtime?.pickDirectory?.();
         if (typeof picked !== "string" || !picked) return;
         const existing = (
@@ -862,7 +847,7 @@ export function SettingsPanel(props: {
           },
         });
         setEditFieldLabel(undefined);
-      };
+      });
     },
     界面偏好保存范围: () => {
       cyclePreference(
@@ -1658,13 +1643,20 @@ export function SettingsPanel(props: {
                     and the buttons added a whole line to every path editor. */}
                 <Show when={editFieldBrowse()}>
                   {(kind) => (
-                    <button
-                      type="button"
-                      class="neu-form-btn"
-                      onClick={() => void browseForPath(kind())}
-                    >
-                      浏览…
-                    </button>
+                    <PathBrowseButton
+                      runtime={props.runtime}
+                      kind={kind()}
+                      onPick={(chosen) => {
+                        // A row that needs more than "put the answer in the box"
+                        // (a list that appends rather than replaces) installs
+                        // its own action; everything else fills the field.
+                        if (browseFieldAction) {
+                          void browseFieldAction();
+                          return;
+                        }
+                        setEditFieldValue(chosen);
+                      }}
+                    />
                   )}
                 </Show>
                 <button

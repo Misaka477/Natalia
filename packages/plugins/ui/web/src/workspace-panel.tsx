@@ -1,11 +1,21 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import type { RuntimeClient } from "@anthelia/contracts";
+import { PathBrowseButton } from "./path-browse-button";
 
 export function WorkspacePanel(props: {
   open: boolean;
   onClose: () => void;
   onAdd?: (path: string) => Promise<void> | void;
-  /** The runtime's directory chooser, so a path stops being typed. */
-  onBrowse?: () => Promise<string | null>;
+  /**
+   * The runtime, so the chooser is the SHARED button every other panel uses.
+   *
+   * This used to be an `onBrowse` callback the parent wired up, which put one
+   * more hop between the button and the runtime than the settings panel has —
+   * and that hop is where the bug lived (`<Show when={props.onBrowse}>` calls a
+   * function `when`, so the chooser ran on every render). One component, one
+   * call site.
+   */
+  runtime?: RuntimeClient;
   error?: string;
 }) {
   const [path, setPath] = createSignal("");
@@ -64,29 +74,11 @@ export function WorkspacePanel(props: {
               {/* The chooser rides the SAME action row as 取消/添加, not a row of
                   its own: a second `neu-form-actions` between the field and the
                   buttons added a whole line to the dialog. */}
-              {/* NOT `<Show when={props.onBrowse}>`: Solid treats a function
-                  `when` as an accessor and CALLS it, so wrapping an async prop
-                  in `Show` invokes the chooser on every re-render — measured as
-                  four pending `directory.pick` requests from one click. The
-                  optional call inside the handler is the guard. */}
-              <button
-                type="button"
-                class="neu-form-btn"
+              <PathBrowseButton
+                runtime={props.runtime}
                 disabled={busy()}
-                onClick={() => {
-                  if (busy() || !props.onBrowse) return;
-                  void (async () => {
-                    // The dialog is the runtime's, on the user's machine: a
-                    // page has no host channel, so this is the only way a
-                    // workspace path stops being typed. A dismissal leaves
-                    // the field as it was.
-                    const chosen = await props.onBrowse?.();
-                    if (typeof chosen === "string" && chosen) setPath(chosen);
-                  })();
-                }}
-              >
-                浏览…
-              </button>
+                onPick={(chosen) => setPath(chosen)}
+              />
               <button
                 type="button"
                 class="neu-form-btn neu-form-cancel"

@@ -5129,9 +5129,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         open={workspaceOpen()}
         onClose={() => setWorkspaceOpen(false)}
         error={workspaceError()}
-        onBrowse={async () =>
-          (await props.ctx.runtime.pickDirectory?.()) ?? null
-        }
+        runtime={props.ctx.runtime}
         onAdd={async (path) => {
           setWorkspaceError("");
           try {

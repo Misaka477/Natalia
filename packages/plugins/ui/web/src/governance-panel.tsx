@@ -10,6 +10,7 @@ import { WorkGraphTree } from "./components/WorkGraphTree";
 import { WorkGraphGraph } from "./components/WorkGraphGraph";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { createScrollAutoAppend } from "./auto-append";
+import { PathBrowseButton } from "./path-browse-button";
 
 export type GovernanceTab =
   | "constitution"
@@ -1636,31 +1637,23 @@ export function GovernancePane(props: {
                       })
                     }
                   />
-                  <button
-                    type="button"
+                  {/* A LIST, so the chooser APPENDS the picked directory rather
+                      than replacing the field: browsing for a second path must
+                      not silently drop the first. */}
+                  <PathBrowseButton
+                    runtime={props.runtime}
                     class="constitution-input constitution-browse"
-                    onClick={() => {
-                      void (async () => {
-                        // The dialog is the runtime's, on the user's machine: a
-                        // page has no host channel, so this is the only way a
-                        // path stops being typed. A LIST appends the picked
-                        // directory rather than replacing it, so browsing for a
-                        // second one cannot silently drop the first.
-                        const chosen = await props.runtime?.pickDirectory?.();
-                        if (typeof chosen !== "string" || !chosen) return;
-                        const existing = editor()
-                          .paths.split(",")
-                          .map((entry) => entry.trim())
-                          .filter((entry) => entry && entry !== chosen);
-                        setRuleEditor({
-                          ...editor(),
-                          paths: [...existing, chosen].join(","),
-                        });
-                      })();
+                    onPick={(chosen) => {
+                      const existing = editor()
+                        .paths.split(",")
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry && entry !== chosen);
+                      setRuleEditor({
+                        ...editor(),
+                        paths: [...existing, chosen].join(","),
+                      });
                     }}
-                  >
-                    浏览…
-                  </button>
+                  />
                   <input
                     class="constitution-input"
                     placeholder="commandPattern"
@@ -1722,28 +1715,22 @@ export function GovernancePane(props: {
                       })
                     }
                   />
-                  <button
-                    type="button"
+                  {/* Same rule as the rule editor's row: a LIST appends the
+                      picked directory rather than replacing it. */}
+                  <PathBrowseButton
+                    runtime={props.runtime}
                     class="constitution-input constitution-browse"
-                    onClick={() => {
-                      void (async () => {
-                        // Same rule as the rule editor's row: a LIST appends the
-                        // picked directory rather than replacing it.
-                        const chosen = await props.runtime?.pickDirectory?.();
-                        if (typeof chosen !== "string" || !chosen) return;
-                        const existing = editor()
-                          .paths.split(",")
-                          .map((entry) => entry.trim())
-                          .filter((entry) => entry && entry !== chosen);
-                        setOverrideEditor({
-                          ...editor(),
-                          paths: [...existing, chosen].join(","),
-                        });
-                      })();
+                    onPick={(chosen) => {
+                      const existing = editor()
+                        .paths.split(",")
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry && entry !== chosen);
+                      setOverrideEditor({
+                        ...editor(),
+                        paths: [...existing, chosen].join(","),
+                      });
                     }}
-                  >
-                    浏览…
-                  </button>
+                  />
                   <input
                     class="constitution-input"
                     placeholder="taskID（可空）"
@@ -2004,28 +1991,22 @@ export function GovernancePane(props: {
                       })
                     }
                   />
-                  <button
-                    type="button"
+                  {/* Same rule as the other two path rows: a LIST appends the
+                      picked directory rather than replacing it. */}
+                  <PathBrowseButton
+                    runtime={props.runtime}
                     class="constitution-input constitution-browse"
-                    onClick={() => {
-                      void (async () => {
-                        // Same rule as the other two path rows: a LIST appends
-                        // the picked directory rather than replacing it.
-                        const chosen = await props.runtime?.pickDirectory?.();
-                        if (typeof chosen !== "string" || !chosen) return;
-                        const existing = editor()
-                          .paths.split(",")
-                          .map((entry) => entry.trim())
-                          .filter((entry) => entry && entry !== chosen);
-                        setDocRuleEditor({
-                          ...editor(),
-                          paths: [...existing, chosen].join(","),
-                        });
-                      })();
+                    onPick={(chosen) => {
+                      const existing = editor()
+                        .paths.split(",")
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry && entry !== chosen);
+                      setDocRuleEditor({
+                        ...editor(),
+                        paths: [...existing, chosen].join(","),
+                      });
                     }}
-                  >
-                    浏览…
-                  </button>
+                  />
                   <input
                     class="constitution-input"
                     placeholder="commandPattern"

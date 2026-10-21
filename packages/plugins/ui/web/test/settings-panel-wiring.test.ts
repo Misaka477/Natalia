@@ -88,3 +88,48 @@ test("the row's value is a getter, not a frozen const", () => {
     4,
   );
 });
+
+test("the shell row switches hot for every value, 自动 included, and offers no zsh", () => {
+  // Two measured failures of this one row.
+  //
+  // (1) Picking 自动 wrote the config and skipped the hot call entirely (the
+  // `if (value !== "auto")` gate), while the route's whitelist rejected
+  // `auto` anyway — so the pane kept the old shell until the next start,
+  // while the row's own comment promised "the next command uses the new
+  // shell without a restart". 自动 is a real answer to the contract (the
+  // platform's own shell: pwsh on Windows, bash elsewhere), not a blank.
+  expect(source).not.toContain('if (value !== "auto")');
+  expect(source).toMatch(
+    /shell: value as "bash" \| "pwsh" \| "zsh" \| "auto"/u,
+  );
+  // (2) The row offered zsh, which the runtime does not support: a choice
+  // the product cannot honour reads as a choice (the UI-honesty rule).
+  expect(source).not.toContain('{ value: "zsh"');
+});
+
+test("every config write carries the panel's own write scope", () => {
+  // Measured: the panel offered a 运行时配置保存范围 preference (default
+  // "global") and every row dropped it — `updateConfig(patch)` with no scope
+  // defaults to "project" at the runtime, so the shell row's 自动 deleted the
+  // PROJECT's shell key while the human's choice lived in the GLOBAL file and
+  // showed straight through. The row said 自动, the merged config still said
+  // bash, the pane still said PS.
+  expect(source).toContain("scope: runtimeWriteScope()");
+  // And it rides the runtime path only: an embedder's own writer
+  // (`onUpdateConfig`) is theirs to call however they like.
+  expect(source).toMatch(
+    /props\.runtime\?\.updateConfig\?\.\(\{\s*patch,\s*\n?\s*\/\/[\s\S]*?scope: runtimeWriteScope\(\)/u,
+  );
+});
+
+test("the shell row's 自动 writes null, not undefined", () => {
+  // The patch crosses the RPC as JSON, and `JSON.stringify` DROPS a key
+  // whose value is undefined: the runtime merged `{shell:{}}`, deleted
+  // nothing, and the reload that follows re-pinned the PREVIOUS choice —
+  // measured: the row said 自动, the config still said bash, the pane still
+  // said PS, with no restart helping. `null` is the only spelling of "unset"
+  // that survives JSON; the runtime's updateConfig turns it into the delete
+  // the merge understands.
+  expect(source).not.toContain("{ executable: undefined }");
+  expect(source).toContain("{ executable: null }");
+});

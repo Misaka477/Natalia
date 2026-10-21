@@ -4597,10 +4597,10 @@ export async function handleRPCMessage(
       const shell = (params as { shell?: unknown }).shell;
       if (
         typeof shell !== "string" ||
-        !(["bash", "pwsh", "zsh"] as readonly string[]).includes(shell)
+        !(["bash", "pwsh", "zsh", "auto"] as readonly string[]).includes(shell)
       )
         throw invalidParams(
-          "shell.set.params.shell must be one of bash, pwsh, zsh",
+          "shell.set.params.shell must be one of bash, pwsh, zsh, auto",
         );
       const sessionID =
         typeof (params as { sessionID?: unknown }).sessionID === "string"
@@ -4610,7 +4610,7 @@ export async function handleRPCMessage(
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: await client.setSessionShell?.({
-          shell: shell as "bash" | "pwsh" | "zsh",
+          shell: shell as "bash" | "pwsh" | "zsh" | "auto",
           ...(sessionID ? { sessionID } : {}),
         }),
       };

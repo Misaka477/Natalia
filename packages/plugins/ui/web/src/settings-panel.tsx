@@ -322,7 +322,18 @@ export function SettingsPanel(props: {
     props.onUpdateConfig ??
     (props.runtime?.updateConfig
       ? (patch: Record<string, unknown>) =>
-          props.runtime?.updateConfig?.(patch as never)
+          props.runtime?.updateConfig?.({
+            patch,
+            // The panel's OWN write scope, which every row used to drop: a
+            // write without it defaults to "project", so a 自动 that deleted
+            // the PROJECT's shell key left the human's choice sitting in the
+            // GLOBAL file to show straight through — measured: the row said
+            // 自动, the merged config still said bash, the pane still said
+            // PS. The preference defaults to "global" because this panel is
+            // the user's own settings, and the shell row's 自动 now deletes
+            // the key where the choice actually lives.
+            scope: runtimeWriteScope() as "project" | "global",
+          })
       : undefined);
   /** A config write's failure, shown in the panel rather than swallowed. */
   const [configError, setConfigError] = createSignal<string>();
@@ -706,6 +717,9 @@ export function SettingsPanel(props: {
       // PowerShell is a Windows shell. On Linux and macOS it is not offered at
       // all: `selectExecutor` answers bash there regardless, so a row that let a
       // human pick it would advertise a choice the runtime does not honour.
+      // zsh is not offered anywhere: the runtime has no zsh support, and a
+      // choice the product cannot honour reads as a choice (the UI-honesty
+      // rule) — measured as "I picked zsh and got a bash".
       const isWindows = hostPlatform() === "win32";
       openSelect(
         "Shell 类型（命令在哪个 shell 里执行，立即生效）",
@@ -715,7 +729,6 @@ export function SettingsPanel(props: {
             ? [{ value: "pwsh", label: "pwsh（PowerShell 7）" }]
             : []),
           { value: "bash", label: "bash（Git Bash / WSL）" },
-          ...(isWindows ? [{ value: "zsh", label: "zsh" }] : []),
         ],
         current,
         (value) => {
@@ -723,23 +736,37 @@ export function SettingsPanel(props: {
           // write is what the ROW reads, so without it the human switches the
           // shell and the row still shows the old value — which reads as "the
           // click did nothing". The session switch is what makes it HOT: it
-          // projects onto `NATALIA_SHELL`, which the executor seam reads per
-          // call, so the next command uses the new shell without a restart.
+          // records the choice in the slot the executor seam reads per call,
+          // so the next command uses the new shell without a restart.
+          //
+          // 自动 sends `null`, not `undefined`: this patch crosses the RPC as
+          // JSON, and `JSON.stringify` DROPS a key whose value is undefined —
+          // the runtime then merged `{shell:{}}`, deleted nothing, and the
+          // reload that follows re-pinned the previous choice (measured: the
+          // row said 自动, the config still said bash, the pane still said
+          // PS). `null` survives the wire; the runtime's updateConfig turns
+          // it into the delete the merge understands.
           updateConfig?.({
             runtime: {
               ...effectiveConfig()?.runtime,
               shell: {
                 ...effectiveConfig()?.runtime?.shell,
                 ...(value === "auto"
-                  ? { executable: undefined }
+                  ? { executable: null }
                   : { executable: value as "bash" | "pwsh" | "zsh" }),
-              },
+              } as Record<string, unknown>,
             },
           });
-          if (value !== "auto")
-            void props.runtime?.setSessionShell?.({
-              shell: value as "bash" | "pwsh" | "zsh",
-            });
+          // EVERY value, 自动 included. The hot half used to be gated on
+          // `value !== "auto"` while the route's whitelist rejected `auto`
+          // anyway — so picking 自动 wrote the config and left the slot on the
+          // old shell until the next start, which is exactly the restart the
+          // row's title promises is not needed. `auto` is a real answer to the
+          // contract: it clears the session's choice and the slot, and the
+          // executor falls back to the platform's own shell.
+          void props.runtime?.setSessionShell?.({
+            shell: value as "bash" | "pwsh" | "zsh" | "auto",
+          });
         },
       );
     },

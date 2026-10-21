@@ -255,6 +255,15 @@ export function createLifecycleSurface(
         ctx.ports.getTsRuntimeConfig(),
         log,
       ) as never;
+      // 自动 as a wire value is `null`, and the merge deletes a key only on
+      // `undefined` — `mergeOverlay` treats null as a VALUE. The RPC is JSON,
+      // which drops `undefined` keys before the runtime ever sees them, so
+      // `null` is the only spelling that survives the trip: normalize it here
+      // and the settings row's 自动 actually clears `runtime.shell.executable`
+      // instead of being a silent no-op that the reload below re-pinned
+      // (measured: the row said 自动, the config still said bash, the pane
+      // still said PS).
+      normalizeShellUnset(patch as Record<string, unknown>);
       logOf(ctx.state.serviceDirectory).info("updateConfig", "begin", {
         args: [
           input.scope,
@@ -298,6 +307,22 @@ export function createLifecycleSurface(
     await surface.dispose?.();
   };
   return surface;
+}
+
+/**
+ * 自动 as a wire value is `null`; the merge deletes a key only on `undefined`.
+ *
+ * The RPC is JSON, which drops a key whose value is `undefined` before the
+ * runtime ever sees it — so `null` is the only spelling of "unset" that
+ * survives the trip, and this is where it becomes the delete the merge
+ * understands. Without it the settings row's 自动 merged `{shell:{}}`, cleared
+ * nothing, and the reload that follows re-pinned the previous choice.
+ */
+function normalizeShellUnset(patch: Record<string, unknown>): void {
+  const runtime = patch.runtime as Record<string, unknown> | undefined;
+  const shell = runtime?.shell as Record<string, unknown> | undefined;
+  if (shell && "executable" in shell && shell.executable === null)
+    shell.executable = undefined;
 }
 
 function normalizeProviderRenamePatch(

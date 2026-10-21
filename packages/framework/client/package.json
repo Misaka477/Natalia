@@ -18,6 +18,7 @@
     "@anthelia/composition": "workspace:*",
     "@anthelia/config": "workspace:*",
     "@anthelia/confinement": "workspace:*",
+    "@anthelia/shell": "workspace:*",
     "@anthelia/contracts": "workspace:*",
     "@anthelia/diff-wasm": "workspace:*",
     "@anthelia/logging": "workspace:*",

@@ -82,18 +82,40 @@ test("the configured shell outranks the environment variable", () => {
   // The third parameter is the config's answer, and it is consulted FIRST.
   expect(body).toContain("configured?:");
   // Matched on the operands, not on one spelling: prettier may wrap the line.
-  expect(body).toMatch(/configured\s*\?\?\s*env\.NATALIA_SHELL/u);
+  expect(body).toMatch(/configured\s*\?\?\s*configuredShell\s*\?\?/u);
+  // And the environment variable is still READ, as the deployment's default.
+  expect(body).toContain("env.NATALIA_SHELL");
 });
 
-test("the choice is applied at load AND at reload", () => {
+test("the choice is recorded at load AND at reload", () => {
   // Load: a fresh start honours what was persisted.
   expect(catalog).toContain(
-    "applyConfiguredShell(runtimeConfig.runtime?.shell?.executable)",
+    "setConfiguredShell(runtimeConfig.runtime?.shell?.executable)",
   );
-  expect(catalog).toContain("process.env.NATALIA_SHELL = executable");
   // Reload: the change takes effect on the write that made it, not next start.
   expect(reload).toContain("tsConfig.config.runtime?.shell?.executable");
-  expect(reload).toContain("process.env.NATALIA_SHELL =");
+  expect(reload).toContain("setConfiguredShell(");
+});
+
+test("nothing writes the human's choice into NATALIA_SHELL", async () => {
+  // That variable is the DEPLOYMENT's default. Writing a human's choice there
+  // made it outlive the session that made it and collide with the deployment's
+  // own default — which is why 自动 could not get back to the platform shell.
+  expect(catalog).not.toContain("process.env.NATALIA_SHELL =");
+  expect(reload).not.toContain("process.env.NATALIA_SHELL =");
+  const shellSwitch = await Bun.file(
+    join(
+      repoRoot,
+      "packages",
+      "framework",
+      "client",
+      "src",
+      "runtime",
+      "shell-switch.ts",
+    ),
+  ).text();
+  expect(shellSwitch).not.toContain("process.env.NATALIA_SHELL");
+  expect(shellSwitch).toContain("setConfiguredShell(");
 });
 
 test("the settings panel offers the shell, and 自动 is a real answer", () => {

@@ -66,8 +66,23 @@ test("an absent or unrecognised choice is the platform's own shell", () => {
   delete process.env.NATALIA_SHELL;
   expect(resolveShellName(undefined, "win32")).toBe("pwsh");
   expect(resolveShellName("nonsense", "win32")).toBe("pwsh");
-  expect(resolveShellName(undefined, "darwin")).toBe("zsh");
+  // macOS and Linux both default to bash: zsh is the login shell on a Mac but
+  // bash is the POSIX shell a script can rely on, and one default for both
+  // keeps "自动" meaning one thing.
+  expect(resolveShellName(undefined, "darwin")).toBe("bash");
   expect(resolveShellName(undefined, "linux")).toBe("bash");
+});
+
+test("pwsh is not honoured off Windows", () => {
+  // PowerShell is not the shell Linux or macOS ships, and a human who picks it
+  // there gets bash rather than a shell whose `cmd` and `node` are unreachable.
+  expect(selectExecutor({}, "linux", "pwsh")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor({}, "darwin", "pwsh")).toBeInstanceOf(
+    BashLocalExecutor,
+  );
+  // On Windows every choice is honoured.
+  expect(selectExecutor({}, "win32", "pwsh")).toBeInstanceOf(PwshLocalExecutor);
+  expect(selectExecutor({}, "win32", "bash")).toBeInstanceOf(BashLocalExecutor);
 });
 
 test("the switch notice is a context.instructions record, not a prompt line", () => {

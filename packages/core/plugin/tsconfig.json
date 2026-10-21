@@ -8,6 +8,9 @@
   "references": [
     {
       "path": "../tools"
+    },
+    {
+      "path": "../shell"
     }
   ]
 }

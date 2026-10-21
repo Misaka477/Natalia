@@ -336,6 +336,11 @@ const workerSources = [
   "packages/framework/client/src/runtime/secondary.worker.ts",
   "packages/framework/session-store/src/session-load.worker.ts",
   "packages/framework/session-store/src/session-messages.worker.ts",
+  // The platform chooser's own thread: the folder browser is modal to the
+  // thread that shows it, so the runtime cannot be that thread. Without this
+  // entry the module is never embedded and a packaged runtime dies with
+  // `Cannot find module 'B:\~BUN\root\win32-dialog.worker.ts'`.
+  "packages/hosts/platform/src/win32-dialog.worker.ts",
 ] as const;
 const workersOutdir = resolve(outdir, RUNTIME_WORKERS_DIR);
 await rm(workersOutdir, { recursive: true, force: true });

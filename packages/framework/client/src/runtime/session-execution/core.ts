@@ -5,7 +5,7 @@ import { sessionRunCoordinator } from "@anthelia/session";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { ClientSurfaceOptions } from "./types";
 import { applySandboxRungGrant, applySessionRung } from "../sandbox-rung";
-import { applySessionShell } from "../shell-switch";
+import { applySessionShell, clearSessionShell } from "../shell-switch";
 import type { TurnController } from "@anthelia/turn-orchestration";
 type Surface = Pick<
   RuntimeServiceClient,
@@ -238,7 +238,25 @@ export function createCoreSurface(
       await ctx.ports.getReady();
       const sessionID = (input.sessionID ??
         ctx.ports.getActiveExec()?.session.id) as SessionID | undefined;
-      if (!sessionID) return undefined;
+      // REFUSE, do not answer undefined: a silent `undefined` is
+      // indistinguishable from "the session already runs that shell", so the
+      // settings row accepted the click and nothing moved with no way to tell
+      // why. The caller has to be told there is no session to switch.
+      if (!sessionID)
+        throw new Error(
+          "setSessionShell: no active session — open or start a session before switching its shell",
+        );
+      // 自动 is a real answer: it clears the session's own choice and the
+      // projection, so the executor falls back to the platform default rather
+      // than to whatever the human last picked.
+      if (input.shell === "auto") {
+        const cleared = clearSessionShell(ctx, sessionID);
+        return {
+          changed: cleared !== undefined,
+          to: "auto",
+          ...(cleared?.from ? { from: cleared.from } : {}),
+        };
+      }
       const moved = applySessionShell(ctx, sessionID, input.shell);
       return {
         changed: moved !== undefined,

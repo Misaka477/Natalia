@@ -14,6 +14,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { isWindows, locateRuntimeWorker } from "./index";
 
 /** One command the host can run, and its captured result. */
 export type NativeCommandResult = { stdout: string; stderr: string };
@@ -183,7 +184,11 @@ async function pickWindows(
   try {
     const result = await run("powershell", [
       "-NoProfile",
-      "-NonInteractive",
+      // NOT `-NonInteractive`: that flag tells PowerShell to refuse any UI, so
+      // `Shell.Application.BrowseForFolder` never opens and the call answers
+      // nothing — measured as a 浏览 click that produced no dialog at all. The
+      // whole point of this child is to show a modal dialog, so it must be
+      // allowed to.
       "-Command",
       script,
     ]);
@@ -255,15 +260,42 @@ export const spawnNativeCommand: NativeCommandRunner = async (
 /**
  * Open the platform chooser with the production runner.
  *
- * The dialog is modal to the process that shows it, and that process is a
- * CHILD — so the runtime's own thread is never the one that blocks and it keeps
- * serving every other request while a human browses.
+ * On Windows the dialog is modal to the thread that shows it, so it runs on a
+ * dedicated worker rather than the runtime's own thread — the runtime keeps
+ * serving every other request while a human browses. Without the worker the
+ * `await` on the child process never settles, because the child is blocked in
+ * `ShowDialog` waiting for a click that has not happened yet.
+ *
+ * The worker module is a REAL FILE staged beside the executable by
+ * `scripts/ts-build.ts`; `locateRuntimeWorker` finds it and falls back to the
+ * TypeScript source a checkout has.
  * @param kind - a directory or a file; defaults to a directory.
  * @returns the chosen absolute path, or null when the human dismissed it.
  */
 export async function pickPath(
   kind: PickerKind = "directory",
 ): Promise<string | null> {
+  if (isWindows()) {
+    const { Worker } = await import("node:worker_threads");
+    const worker = new Worker(
+      locateRuntimeWorker(
+        new URL("./win32-dialog.worker.ts", import.meta.url),
+      ).url,
+      { workerData: { kind } },
+    );
+    try {
+      return await new Promise<string | null>((resolve, reject) => {
+        worker.once("message", (value: unknown) => {
+          if (value !== null && typeof value === "object" && "error" in value)
+            reject(new Error(String((value as { error: unknown }).error)));
+          else resolve(value as string | null);
+        });
+        worker.once("error", reject);
+      });
+    } finally {
+      await worker.terminate();
+    }
+  }
   return await pickNativeDirectory(spawnNativeCommand, process.platform, kind);
 }
 

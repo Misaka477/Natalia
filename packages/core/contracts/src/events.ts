@@ -4499,7 +4499,14 @@ export type RuntimeClient = {
    * invalidate on every switch.
    */
   setSessionShell?(input: {
-    shell: "bash" | "pwsh" | "zsh";
+    /**
+     * The shell to move to, or `auto` for the platform default.
+     *
+     * `auto` is a real answer, not a blank: it clears the session's own choice
+     * and the projection, so the executor falls back to `platformShell` rather
+     * than to whatever the human last picked.
+     */
+    shell: "bash" | "pwsh" | "zsh" | "auto";
     sessionID?: string;
   }): Promise<{ changed: boolean; from?: string; to: string } | undefined>;
   /**

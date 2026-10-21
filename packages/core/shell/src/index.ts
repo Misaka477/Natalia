@@ -28,10 +28,12 @@ export {
   resolvePwshPath,
 } from "@anthelia/platform";
 export {
+  configuredShellName,
   executorFor,
   platformShell,
   resolveShellName,
   selectExecutor,
+  setConfiguredShell,
   type ShellName,
 } from "./select";
 export {

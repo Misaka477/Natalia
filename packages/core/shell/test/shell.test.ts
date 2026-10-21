@@ -219,11 +219,13 @@ test("a caller that passes no environment inherits, exactly as before", async ()
   }
 });
 
-test("the platform mirror: pwsh on win32, zsh on darwin, bash elsewhere", () => {
-  // THE requested behaviour: Windows pwsh, macOS zsh, Linux bash.
+test("the platform mirror: pwsh on win32, bash elsewhere", () => {
+  // THE requested behaviour: Windows pwsh, everything else bash. macOS used to
+  // answer zsh (its login shell), but bash is the POSIX shell a script can rely
+  // on and one default for both keeps "自动" meaning one thing.
   expect(platformShell("win32")).toBe("pwsh");
   expect(platformShell("linux")).toBe("bash");
-  expect(platformShell("darwin")).toBe("zsh");
+  expect(platformShell("darwin")).toBe("bash");
   // Anything unrecognised is POSIX sh, which every shell-shaped caller speaks.
   expect(platformShell("freebsd")).toBe("bash");
 });

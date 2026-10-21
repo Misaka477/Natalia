@@ -703,33 +703,43 @@ export function SettingsPanel(props: {
       // "自动" is a real answer, not a blank: it means the deployment's own
       // default, and it is what clearing the session's choice restores.
       const current = effectiveConfig()?.runtime?.shell?.executable ?? "auto";
+      // PowerShell is a Windows shell. On Linux and macOS it is not offered at
+      // all: `selectExecutor` answers bash there regardless, so a row that let a
+      // human pick it would advertise a choice the runtime does not honour.
+      const isWindows = hostPlatform() === "win32";
       openSelect(
         "Shell 类型（命令在哪个 shell 里执行，立即生效）",
         [
           { value: "auto", label: "自动（跟随部署默认）" },
-          { value: "pwsh", label: "pwsh（PowerShell 7）" },
+          ...(isWindows
+            ? [{ value: "pwsh", label: "pwsh（PowerShell 7）" }]
+            : []),
           { value: "bash", label: "bash（Git Bash / WSL）" },
-          { value: "zsh", label: "zsh" },
+          ...(isWindows ? [{ value: "zsh", label: "zsh" }] : []),
         ],
         current,
         (value) => {
-          if (value === "auto") {
-            // Back to the deployment's shell: the session's own choice is
-            // cleared rather than overwritten with a value nobody chose.
-            updateConfig?.({
-              runtime: {
-                ...effectiveConfig()?.runtime,
-                shell: {
-                  ...effectiveConfig()?.runtime?.shell,
-                  executable: undefined,
-                },
+          // BOTH halves, because they answer different questions. The config
+          // write is what the ROW reads, so without it the human switches the
+          // shell and the row still shows the old value — which reads as "the
+          // click did nothing". The session switch is what makes it HOT: it
+          // projects onto `NATALIA_SHELL`, which the executor seam reads per
+          // call, so the next command uses the new shell without a restart.
+          updateConfig?.({
+            runtime: {
+              ...effectiveConfig()?.runtime,
+              shell: {
+                ...effectiveConfig()?.runtime?.shell,
+                ...(value === "auto"
+                  ? { executable: undefined }
+                  : { executable: value as "bash" | "pwsh" | "zsh" }),
               },
-            });
-            return;
-          }
-          void props.runtime?.setSessionShell?.({
-            shell: value as "bash" | "pwsh" | "zsh",
+            },
           });
+          if (value !== "auto")
+            void props.runtime?.setSessionShell?.({
+              shell: value as "bash" | "pwsh" | "zsh",
+            });
         },
       );
     },
@@ -905,6 +915,17 @@ export function SettingsPanel(props: {
       }
     />
   );
+
+  /**
+   * The host platform, from the runtime's own status segment.
+   *
+   * `undefined` means the runtime never published one — and an unknown host is
+   * not Windows, so a Windows-only choice stays hidden rather than shown on a
+   * guess.
+   */
+  function hostPlatform(): string | undefined {
+    return hostFromSegments(props.state?.statusSegments);
+  }
 
   /**
    * The shell row's displayed value. 自动 is a REAL answer — the platform

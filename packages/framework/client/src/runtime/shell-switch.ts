@@ -17,14 +17,16 @@
  * notice without anything moving; and a shell is a decision about THIS
  * conversation, not about every future one.
  *
- * The choice is projected onto `NATALIA_SHELL` as well, because the executor
- * seam reads the environment and six call sites ask for the executor at module
- * scope where no session state is reachable. The projection is what makes the
- * switch HOT: those sites resolve per call, so the next command they run uses
- * the new shell without a restart.
+ * The choice is recorded through `setConfiguredShell`, which is what the
+ * executor seam reads — six call sites ask for the executor at module scope
+ * where no session state is reachable, and they resolve per call, so the next
+ * command uses the new shell without a restart. It is NOT written to
+ * `NATALIA_SHELL`: that variable is the deployment's default, and a human's
+ * choice written there outlived the session that made it.
  */
 
 import { nextContextInstructionsRevision } from "@anthelia/session";
+import { setConfiguredShell } from "@anthelia/shell";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import type { SessionID } from "@anthelia/contracts";
@@ -70,13 +72,39 @@ export function applySessionShell(
   const from = exec.shellOverride;
   if (from === to) return undefined;
   exec.shellOverride = to;
-  // The projection the executor seam reads. Six call sites ask for the executor
-  // at module scope, where no session state is reachable, so the environment is
-  // the one input they all share — and they resolve per call, which is what
+  // The runtime-wide record the executor seam reads. Six call sites ask for the
+  // executor at module scope, where no session state is reachable, so this slot
+  // is the one input they all share — and they resolve per call, which is what
   // makes this take effect on the next command rather than the next start.
-  process.env.NATALIA_SHELL = to;
+  setConfiguredShell(to);
   publishShellSwitchNotice(ctx, exec, { from, to });
   return { from, to };
+}
+
+/**
+ * Move the session's shell back to the platform default.
+ *
+ * The mirror of `applySessionShell` for 自动: the session's own choice is
+ * cleared and the record removed, so the executor falls back to
+ * `platformShell` rather than to whatever the human last picked.
+ */
+export function clearSessionShell(
+  ctx: RuntimeContext,
+  sessionID: SessionID,
+): { from?: ShellName } | undefined {
+  const exec = ctx.ports.getExecutionBySession().get(sessionID);
+  if (!exec) return undefined;
+  const from = exec.shellOverride;
+  if (from === undefined) return undefined;
+  exec.shellOverride = undefined;
+  setConfiguredShell(undefined);
+  publishShellSwitchNotice(ctx, exec, { from, to: platformDefault() });
+  return { from };
+}
+
+/** The platform's own shell, spelled here to avoid a dependency edge. */
+function platformDefault(): ShellName {
+  return process.platform === "win32" ? "pwsh" : "bash";
 }
 
 /**

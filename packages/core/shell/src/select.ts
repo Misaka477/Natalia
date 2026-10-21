@@ -38,7 +38,8 @@ export type ShellName = "bash" | "pwsh" | "zsh";
  *   Windows -> pwsh    PowerShell 7 is the Windows shell; bash there is WSL,
  *                      where neither `cmd` nor the Windows-installed node/bun
  *                      are reachable.
- *   macOS   -> zsh     the login shell on every supported macOS.
+ *   macOS   -> bash    the POSIX shell every supported macOS also ships; zsh is
+ *                      the login shell but bash is what a script can rely on.
  *   Linux   -> bash    the shell every supported Linux ships.
  *
  * Anything unrecognised falls to bash, because POSIX sh is the one shell a
@@ -48,7 +49,6 @@ export function platformShell(
   os: NodeJS.Platform = process.platform,
 ): ShellName {
   if (os === "win32") return "pwsh";
-  if (os === "darwin") return "zsh";
   return "bash";
 }
 
@@ -94,6 +94,31 @@ export function executorFor(name: ShellName): ShellExecutor {
 }
 
 /**
+ * The shell the runtime is configured to run, set once by the runtime at
+ * initialize and updated on every config reload.
+ *
+ * This is the persisted form of the settings panel's choice. It lives here
+ * rather than in `NATALIA_SHELL` because an environment variable is a
+ * deployment fact, not a per-session one: writing a human's choice there made
+ * it outlive the session that made it and collide with the deployment's own
+ * default. A module-level slot is the only thing the six module-scope call
+ * sites can reach, and the runtime owns writing it.
+ */
+let configuredShell: "bash" | "pwsh" | "zsh" | undefined;
+
+/** Record the configured shell. Called by the runtime, never by a tool. */
+export function setConfiguredShell(
+  shell: "bash" | "pwsh" | "zsh" | undefined,
+): void {
+  configuredShell = shell;
+}
+
+/** The shell the runtime is configured to run, if it has said. */
+export function configuredShellName(): "bash" | "pwsh" | "zsh" | undefined {
+  return configuredShell;
+}
+
+/**
  * The executor this host's request should use.
  *
  * `request.shellExecutable` names an EXECUTABLE PATH, which is a different
@@ -109,9 +134,20 @@ export function selectExecutor(
   // necessarily on PATH), so a caller-given path rides the request rather than
   // being a concern of this selector.
   //
-  // The CONFIGURED shell outranks the environment variable: a choice made in
-  // the settings panel is the human's, `NATALIA_SHELL` is the deployment's
-  // fallback for a host that never set one, and a human who chose must not be
-  // overruled by a stale environment. Absent both, the platform default.
-  return executorFor(resolveShellName(configured ?? env.NATALIA_SHELL, os));
+  // Precedence, highest first:
+  //
+  //   1. `configured` — the caller's explicit choice.
+  //   2. the shell the runtime recorded from its config.
+  //   3. `NATALIA_SHELL` — the DEPLOYMENT's default, for a host that never set
+  //      one. Read only: a human's choice is never written here.
+  //   4. the platform's own shell.
+  //
+  // On Linux and macOS `pwsh` is NOT honoured: PowerShell is not the shell
+  // those hosts ship, and a human who picked it there gets bash rather than a
+  // shell whose `cmd` and `node` are unreachable. On Windows every choice is
+  // honoured — `bash` there is Git Bash, and a host that cannot find it is told
+  // to set `runtime.shell.bashPath`.
+  const requested = configured ?? configuredShell ?? env.NATALIA_SHELL;
+  if (os !== "win32" && requested === "pwsh") return executorFor("bash");
+  return executorFor(resolveShellName(requested, os));
 }

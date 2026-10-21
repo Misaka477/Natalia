@@ -47,4 +47,17 @@ describe("a media read picks its surface by MIME", () => {
     // time, so a mislabelled type is a tool-side question, not a renderer one.
     expect(source).toContain("mediaType: read?.mediaType");
   });
+
+  test("a card that names the file only in the attachmentID slot is read as a path", () => {
+    // Measured: the session journal's image_read cards (persisted before the
+    // read-image fix) carry the media file's absolute PATH in `attachmentID`
+    // and NO `path` field — `attachImage` stores no attachment id. Mapped
+    // verbatim, the loader asked the runtime for an attachment named
+    // `E:\…\x.png` with an empty path, was refused, and answered 400 on
+    // every restart. The file's location is whichever field spells it.
+    expect(source).toContain("path: read?.path ?? read?.attachmentID");
+    // An id survives only alongside a real `path`: a path-only card must
+    // never be sent as a store reference.
+    expect(source).toContain("id: hasPath ? read?.attachmentID : undefined");
+  });
 });

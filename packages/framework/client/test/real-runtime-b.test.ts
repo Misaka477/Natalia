@@ -2007,6 +2007,49 @@ test("attachmentDataUrl authorizes by session-referenced attachment id", async (
   await client.dispose?.();
 }, 30_000);
 
+test("a card persisted with a path in the attachmentID slot falls back to the path", async () => {
+  // The read-image card used to put the tool result's sentence — the media
+  // file's absolute PATH — in `attachmentID`, on the theory that it named a
+  // stored attachment. It never did, so every restart replayed those cards
+  // and each one answered 400 "attachment is not referenced by session"
+  // (measured: 20+ diagnostics in one session, on every launch). The caller
+  // sends the path on every call; when the id does not resolve, the path
+  // branch serves it through the same workspace gates the tool itself used.
+  const root = await mkdtemp(
+    join(tmpdir(), "natalia-attachment-path-fallback-"),
+  );
+  const sessionID = "ses_attachment_path_fallback";
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID,
+    provider: scriptedProvider("ok"),
+  });
+  client.start(() => undefined);
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d494844520000000100000001",
+    "hex",
+  );
+  const imagePath = join(root, "pic.png");
+  await writeFile(imagePath, png);
+  await expect(
+    client.attachmentDataUrl!({
+      attachmentID: imagePath,
+      sessionID,
+      path: imagePath,
+      mediaType: "image/png",
+    }),
+  ).resolves.toMatch(/^data:image\/png;base64,/u);
+  // Without a path there is nothing to fall back to, and the refusal stands:
+  // an id that resolves to no attachment must not be served from the store.
+  await expect(
+    client.attachmentDataUrl!({
+      attachmentID: imagePath,
+      sessionID,
+    }),
+  ).rejects.toThrow("not referenced");
+  await client.dispose?.();
+}, 30_000);
+
 test("unsupported video attachments degrade to text instead of failing the turn", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-video-attachment-"));
   const requests: Array<Record<string, unknown>> = [];

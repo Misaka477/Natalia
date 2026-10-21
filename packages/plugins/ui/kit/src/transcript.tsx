@@ -1606,9 +1606,19 @@ function ToolCallCard(props: {
     // The card's kind is `read`; the media fields ride that variant. The
     // narrow is local to this accessor so the union stays exhaustive.
     const read = card() as Extract<ToolCard, { kind: "read" }> | undefined;
+    // A card persisted before the read-image fix names the media file's
+    // absolute PATH in the attachmentID slot and carries no `path` field:
+    // `attachImage` hands the bytes to the next provider step and stores no
+    // attachment id, so the slot holds the file's location (measured: the
+    // session journal's image_read cards). Mapped verbatim, the loader asked
+    // the runtime for an attachment named `E:\…\x.png` with an empty path,
+    // was refused, and 400'd on every restart. The file's location is
+    // whichever field spells it; an id survives only alongside a real
+    // `path`, so a path-only card is never mistaken for a store reference.
+    const hasPath = read?.path !== undefined;
     return {
-      id: read?.attachmentID,
-      path: read?.path ?? "",
+      id: hasPath ? read?.attachmentID : undefined,
+      path: read?.path ?? read?.attachmentID ?? "",
       name: read?.title ?? "media",
       mediaType: read?.mediaType,
     } as Attachment;

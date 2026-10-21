@@ -52,11 +52,22 @@ export function createAttachmentRuntime(
         const attachment = referenced.find(
           (item) => item.id === input.attachmentID,
         );
-        if (!attachment)
+        if (attachment) return await attachments.dataURL(attachment);
+        // A card persisted before the read-image fix carries the media file's
+        // PATH in the attachmentID slot: the tool's result sentence names the
+        // file (`image attached: E:\…\x.png`) and `attachImage` stores no id,
+        // so the id never resolves. Every restart replayed those cards and
+        // each one answered 400 "attachment is not referenced by session"
+        // (measured: 20+ diagnostics in one session, on every launch). The
+        // caller sends the path on every call, and the branch below serves it
+        // through the same workspace gates the tool itself used — so the
+        // fallback reads the file the card names, never the attachment store.
+        // Without a path there is nothing to fall back to and the refusal
+        // stands: an id that resolves to no attachment must not be served.
+        if (!input.path)
           throw new Error(
             `attachment is not referenced by session: ${input.attachmentID}`,
           );
-        return await attachments.dataURL(attachment);
       }
 
       if (!input.path || !input.mediaType)

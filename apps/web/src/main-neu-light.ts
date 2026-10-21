@@ -61,16 +61,21 @@ if (typeof setInterval !== "undefined") {
 //
 // The same three sources `main-neu.ts` reads, in the same order: an explicit
 // build-time URL, then the endpoint the server injected into the document, then
-// a default. This file used to hardcode `http://127.0.0.1:8790` with no token,
-// which is why a 浏览 click produced a request the runtime could not authorize
-// — measured in the browser console as `POST :8790/rpc 400` with no
-// `authorization` header at all.
+// a default. The default is 8790 because that is where `start-app` puts the
+// runtime — measured: a live `natalia.exe` launch listens on 8790 (runtime) and
+// 8791 (web shell), and `serve-web` injects `{"url":"http://127.0.0.1:8790"}`
+// into the HTML it serves.
+//
+// This file used to hardcode 8790 with no token, which was right about the port
+// and wrong about the token; a later change moved the default to 8787, which is
+// the DAEMON's port and nothing else's — so a page that missed the injection
+// asked a port with no listener behind it.
 const env = (import.meta as { env?: Record<string, string> }).env ?? {};
 const runtimeURL =
   env.VITE_NATALIA_RUNTIME_URL ||
   (globalThis as { __NATALIA_RUNTIME__?: { url?: string; token?: string } })
     .__NATALIA_RUNTIME__?.url ||
-  "http://127.0.0.1:8787";
+  "http://127.0.0.1:8790";
 const runtimeToken = (
   globalThis as { __NATALIA_RUNTIME__?: { token?: string } }
 ).__NATALIA_RUNTIME__?.token;

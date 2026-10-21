@@ -17,22 +17,24 @@ if (!root) throw new Error("missing #root mount point");
 
 // The runtime's address, and the token that authorizes against it.
 //
-// The port is NOT 8790 by default: the daemon binds 8787 (measured —
-// `netstat` on a live `natalia daemon` shows 127.0.0.1:8787 LISTENING), and a
-// hardcoded 8790 made every RPC fail to connect, which is why the settings
-// panel's 浏览 button did nothing: the request never reached the runtime that
-// would have opened the dialog.
+// Three sources, in order: an explicit build-time URL, then the endpoint the
+// server injected into the document, then a default. The default is 8790
+// because that is where `start-app` puts the runtime — measured: a live
+// `natalia.exe` launch listens on 8790 (runtime) and 8791 (web shell), and
+// `serve-web` injects `{"url":"http://127.0.0.1:8790"}` into the HTML it
+// serves. 8787 is the DAEMON's port and nothing else's.
 //
-// The token is required: the daemon answers `401 unauthorized` without it
-// (measured — a bare POST to /rpc returns exactly that). The shell serves the
-// page from the daemon itself, so the token is injected into the document
-// rather than read from an environment variable a browser cannot see.
+// The token is required when the host has one: the daemon answers
+// `401 unauthorized` without it (measured — a bare POST to /rpc returns exactly
+// that). The shell serves the page from the runtime itself, so the token is
+// injected into the document rather than read from an environment variable a
+// browser cannot see.
 const env = (import.meta as { env?: Record<string, string> }).env ?? {};
 const runtimeURL =
   env.VITE_NATALIA_RUNTIME_URL ||
   (globalThis as { __NATALIA_RUNTIME__?: { url?: string; token?: string } })
     .__NATALIA_RUNTIME__?.url ||
-  "http://127.0.0.1:8787";
+  "http://127.0.0.1:8790";
 const runtimeToken = (
   globalThis as { __NATALIA_RUNTIME__?: { token?: string } }
 ).__NATALIA_RUNTIME__?.token;

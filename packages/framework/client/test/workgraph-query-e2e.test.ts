@@ -1,13 +1,30 @@
 import { expect, test } from "bun:test";
 import type { SessionID } from "@anthelia/contracts";
 import type { ProviderStreamRequest } from "@anthelia/runtime";
+import { testGovernanceRootFor } from "@natalia/governance-ledger";
 import {
   createOfficialRuntimeClient as createRealRuntimeClient,
   officialPluginWorkspace,
+  registerTestArtifact,
   useWorkspaceCleanup,
 } from "./plugin-test-helpers";
 
 useWorkspaceCleanup();
+
+/**
+ * The governance ledger this file's tests write to, isolated per workspace.
+ *
+ * Without it every test in the run shares one ledger, so a `create_goal` or a
+ * `record_validation` from another file lands in the same store this file's
+ * `work_graph_query` reads — and the graph answers about somebody else's
+ * records. The harness the real-runtime suite uses sets this for exactly that
+ * reason; this file built its client straight from the helper and never did.
+ */
+function isolateGovernance(workspaceRoot: string): void {
+  const root = testGovernanceRootFor(workspaceRoot);
+  process.env.NATALIA_TEST_GOVERNANCE_ROOT = root;
+  registerTestArtifact(root);
+}
 
 const SESSION = "ses_e2e_workgraph_query" as SessionID;
 
@@ -20,6 +37,7 @@ type GraphResult = {
 
 test("Phase 3 E2E: work_graph_query filters by nodeKind and reports truncation", async () => {
   const root = await officialPluginWorkspace("workgraph-query-e2e");
+  isolateGovernance(root);
   const results: string[] = [];
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -147,6 +165,7 @@ test("Phase 3 E2E: work_graph_query filters by nodeKind and reports truncation",
 
 test("Phase 3 E2E: work_graph_query returns an empty (not error) result for a non-matching query", async () => {
   const root = await officialPluginWorkspace("workgraph-query-empty");
+  isolateGovernance(root);
   const results: string[] = [];
   const client = createRealRuntimeClient({
     workspaceRoot: root,
@@ -225,6 +244,7 @@ test("Phase 3 E2E: work_graph_query returns an empty (not error) result for a no
 
 test("Phase 3 E2E: an unfiltered work_graph_query defaults to the active plan's chain", async () => {
   const root = await officialPluginWorkspace("workgraph-query-active-plan");
+  isolateGovernance(root);
   const sessionID = "ses_e2e_wgq_active" as SessionID;
   const results: string[] = [];
   let planID = "";
@@ -316,6 +336,7 @@ test("Phase 3 E2E: an unfiltered work_graph_query defaults to the active plan's 
 
 test("Phase 3 E2E: work_graph_query answers a FILE path with the file's chain, not an unknown-planID error (T-19)", async () => {
   const root = await officialPluginWorkspace("workgraph-query-file-path");
+  isolateGovernance(root);
   const sessionID = "ses_e2e_wgq_file_path" as SessionID;
   const results: string[] = [];
   const client = createRealRuntimeClient({
@@ -466,6 +487,7 @@ test("goal, plan and validation nodes exist in the graph (the 2026-10-07 gap pas
   // work_graph_query could not answer "which goals/plans exist" or reach a
   // recorded validation.
   const root = await officialPluginWorkspace("workgraph-node-gap");
+  isolateGovernance(root);
   const sessionID = "ses_wgq_node_gap" as SessionID;
   const answers: string[] = [];
   const client = createRealRuntimeClient({

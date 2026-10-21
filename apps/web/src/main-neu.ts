@@ -15,12 +15,31 @@ startRendererMemoryTrace();
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root mount point");
 
+// The runtime's address, and the token that authorizes against it.
+//
+// The port is NOT 8790 by default: the daemon binds 8787 (measured —
+// `netstat` on a live `natalia daemon` shows 127.0.0.1:8787 LISTENING), and a
+// hardcoded 8790 made every RPC fail to connect, which is why the settings
+// panel's 浏览 button did nothing: the request never reached the runtime that
+// would have opened the dialog.
+//
+// The token is required: the daemon answers `401 unauthorized` without it
+// (measured — a bare POST to /rpc returns exactly that). The shell serves the
+// page from the daemon itself, so the token is injected into the document
+// rather than read from an environment variable a browser cannot see.
+const env = (import.meta as { env?: Record<string, string> }).env ?? {};
 const runtimeURL =
-  (import.meta as { env?: Record<string, string> }).env
-    ?.VITE_NATALIA_RUNTIME_URL || "http://127.0.0.1:8790";
+  env.VITE_NATALIA_RUNTIME_URL ||
+  (globalThis as { __NATALIA_RUNTIME__?: { url?: string; token?: string } })
+    .__NATALIA_RUNTIME__?.url ||
+  "http://127.0.0.1:8787";
+const runtimeToken = (
+  globalThis as { __NATALIA_RUNTIME__?: { token?: string } }
+).__NATALIA_RUNTIME__?.token;
 
 const runtime = createWebRuntimeClient({
   url: runtimeURL,
+  ...(runtimeToken ? { token: runtimeToken } : {}),
 });
 
 // Annotated: the ensurePluginLoaded seam references the host, so the

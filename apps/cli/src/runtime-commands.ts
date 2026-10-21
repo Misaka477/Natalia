@@ -51,7 +51,19 @@ export async function handleRuntimeCommand(argv: string[]) {
     const port = Number(valueAfter(argv, "--port") ?? "8790");
     if (!Number.isInteger(port) || port < 0 || port > 65535)
       throw new Error("serve-web requires a valid port");
-    const served = await serveStaticDirectory({ root, port });
+    // The runtime's endpoint, written by `serve` when it came up. A page cannot
+    // discover it: the port is chosen at launch and the token is per-runtime.
+    // Without this the shell falls back to a hardcoded port and an
+    // unauthenticated request, and every RPC fails.
+    const endpointPath = nataliaHomeJoin({}, "run", "runtime-endpoint.json");
+    const bootstrap = (await Bun.file(endpointPath)
+      .json()
+      .catch(() => undefined)) as { url?: string; token?: string } | undefined;
+    const served = await serveStaticDirectory({
+      root,
+      port,
+      ...(bootstrap ? { bootstrap } : {}),
+    });
     console.log(`[serve-web] ${served.url} -> ${root}`);
     return true;
   }
@@ -131,6 +143,22 @@ export async function handleRuntimeCommand(argv: string[]) {
         auth: process.env.NATALIA_TRANSPORT_TOKEN
           ? "bearer required"
           : "disabled",
+      }),
+    );
+    // The runtime's own address and token, written where the web server can
+    // read them. A browser page cannot discover either: the port is chosen at
+    // launch and the token is per-runtime. The shell used to hardcode
+    // `http://127.0.0.1:8790` with no token, so every RPC from the page failed
+    // — connection refused when the runtime sat on another port, then 401 when
+    // it sat on the right one (both measured). `serve-web` injects this into
+    // the HTML it serves as `window.__NATALIA_RUNTIME__`.
+    await Bun.write(
+      nataliaHomeJoin({}, "run", "runtime-endpoint.json"),
+      JSON.stringify({
+        url: transport.server.url,
+        ...(process.env.NATALIA_TRANSPORT_TOKEN
+          ? { token: process.env.NATALIA_TRANSPORT_TOKEN }
+          : {}),
       }),
     );
     await waitSignal();

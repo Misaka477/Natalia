@@ -16,6 +16,12 @@ export type StaticServeOptions = {
   /** The port; 0 picks a free one and reports it. */
   port?: number;
   hostname?: string;
+  /**
+   * The runtime facts the served page needs and cannot discover: the daemon's
+   * own address and the token that authorizes against it. Injected into every
+   * HTML response as `window.__NATALIA_RUNTIME__`.
+   */
+  bootstrap?: { url?: string; token?: string };
 };
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -70,6 +76,30 @@ export async function serveStaticDirectory(
       const path = new URL(request.url).pathname;
       const file = await resolveWithin(root, path);
       if (!file) return new Response("not found", { status: 404 });
+      // The HTML carries the runtime's own address and token, because a browser
+      // page cannot read either from the host: the port is chosen at launch and
+      // the token is per-daemon. Injecting them here is what lets the page talk
+      // to the daemon that served it — without it the client falls back to a
+      // hardcoded port and an unauthenticated request, and every RPC fails
+      // (measured: connection refused on the wrong port, then 401 without the
+      // token).
+      if (extname(file).toLowerCase() === ".html" && options.bootstrap) {
+        const html = await Bun.file(file).text();
+        const injected = html.replace(
+          "<head>",
+          `<head><script>window.__NATALIA_RUNTIME__ = ${JSON.stringify(
+            options.bootstrap,
+          )};</script>`,
+        );
+        if (injected !== html)
+          return new Response(injected, {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              // Revalidated so a rebuild is picked up.
+              "cache-control": "no-cache",
+            },
+          });
+      }
       return new Response(Bun.file(file), {
         headers: {
           "content-type":

@@ -1,29 +1,30 @@
 /**
  * The session's shell is switchable mid-session, and the model is told.
  *
- * Three properties worth pinning, none of which a UI click can check for
- * itself: the executor seam resolves PER CALL so a later choice is hot, a
- * configured shell outranks the environment variable, and the notice rides the
- * durable latest-win `context.instructions` channel rather than the system
- * prompt (whose cached prefix a per-session fact would invalidate).
+ * Two properties worth pinning, none of which a UI click can check for
+ * itself: the executor seam resolves PER CALL so a later choice is hot, and
+ * the notice rides the durable latest-win `context.instructions` channel
+ * rather than the system prompt (whose cached prefix a per-session fact would
+ * invalidate).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { BashLocalExecutor } from "../src/bash-local";
 import { PwshLocalExecutor } from "../src/pwsh-local";
-import { executorFor, resolveShellName, selectExecutor } from "../src/select";
+import {
+  configuredShellName,
+  executorFor,
+  resolveShellName,
+  selectExecutor,
+  setConfiguredShell,
+} from "../src/select";
 
 const repoRoot = join(import.meta.dir, "..", "..", "..", "..");
-const original = process.env.NATALIA_SHELL;
 
 beforeEach(() => {
-  delete process.env.NATALIA_SHELL;
-});
-
-afterEach(() => {
-  if (original === undefined) delete process.env.NATALIA_SHELL;
-  else process.env.NATALIA_SHELL = original;
+  // The slot is the only channel left: no test may leak a shell into the next.
+  setConfiguredShell(undefined);
 });
 
 test("the shell resolves per call, so a later choice is hot", () => {
@@ -31,30 +32,24 @@ test("the shell resolves per call, so a later choice is hot", () => {
   // evaluated at import time — process start — so a shell chosen later never
   // reached it and the human had to restart the app. Resolving per call is what
   // makes the choice take effect on the next command.
-  process.env.NATALIA_SHELL = "bash";
-  expect(
-    executorFor(resolveShellName(process.env.NATALIA_SHELL)),
-  ).toBeInstanceOf(BashLocalExecutor);
-  process.env.NATALIA_SHELL = "pwsh";
-  expect(
-    executorFor(resolveShellName(process.env.NATALIA_SHELL)),
-  ).toBeInstanceOf(PwshLocalExecutor);
+  setConfiguredShell("bash");
+  expect(selectExecutor()).toBeInstanceOf(BashLocalExecutor);
+  setConfiguredShell("pwsh");
+  expect(selectExecutor()).toBeInstanceOf(PwshLocalExecutor);
+  // And the caller's own choice still outranks the recorded one.
+  expect(selectExecutor(process.platform, "bash")).toBeInstanceOf(
+    BashLocalExecutor,
+  );
 });
 
-test("a configured shell outranks the environment variable", () => {
-  // The panel is the human's, the variable is the deployment's fallback, and a
-  // human who chose must not be overruled by a stale environment. The
-  // precedence lives in `selectExecutor`, which is the seam every caller goes
+test("the recorded shell outranks nothing but the caller, and the platform answers when absent", () => {
+  // Precedence lives in `selectExecutor`, which is the seam every caller goes
   // through — `resolveShellName` only maps a name and reads no environment.
-  process.env.NATALIA_SHELL = "bash";
-  expect(selectExecutor()).toBeInstanceOf(BashLocalExecutor);
-  // A configured choice beats the variable.
-  expect(selectExecutor(process.env, process.platform, "pwsh")).toBeInstanceOf(
-    PwshLocalExecutor,
-  );
-  // And with neither, the platform's own shell — which on Windows is pwsh, so
-  // the assertion names the platform rather than assuming POSIX.
-  delete process.env.NATALIA_SHELL;
+  // There is no environment tier any more: `NATALIA_SHELL` was one and was
+  // deleted, so "nothing recorded" goes straight to the platform's own shell,
+  // which on Windows is pwsh — the assertion names the platform rather than
+  // assuming POSIX.
+  setConfiguredShell(undefined);
   expect(selectExecutor()).toBeInstanceOf(
     process.platform === "win32" ? PwshLocalExecutor : BashLocalExecutor,
   );
@@ -63,7 +58,7 @@ test("a configured shell outranks the environment variable", () => {
 test("an absent or unrecognised choice is the platform's own shell", () => {
   // A typo resolving to the platform shell is a smaller surprise than a typo
   // resolving to another operating system's shell — on Windows, bash is WSL.
-  delete process.env.NATALIA_SHELL;
+  setConfiguredShell(undefined);
   expect(resolveShellName(undefined, "win32")).toBe("pwsh");
   expect(resolveShellName("nonsense", "win32")).toBe("pwsh");
   // macOS and Linux both default to bash: zsh is the login shell on a Mac but
@@ -76,13 +71,11 @@ test("an absent or unrecognised choice is the platform's own shell", () => {
 test("pwsh is not honoured off Windows", () => {
   // PowerShell is not the shell Linux or macOS ships, and a human who picks it
   // there gets bash rather than a shell whose `cmd` and `node` are unreachable.
-  expect(selectExecutor({}, "linux", "pwsh")).toBeInstanceOf(BashLocalExecutor);
-  expect(selectExecutor({}, "darwin", "pwsh")).toBeInstanceOf(
-    BashLocalExecutor,
-  );
+  expect(selectExecutor("linux", "pwsh")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor("darwin", "pwsh")).toBeInstanceOf(BashLocalExecutor);
   // On Windows every choice is honoured.
-  expect(selectExecutor({}, "win32", "pwsh")).toBeInstanceOf(PwshLocalExecutor);
-  expect(selectExecutor({}, "win32", "bash")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor("win32", "pwsh")).toBeInstanceOf(PwshLocalExecutor);
+  expect(selectExecutor("win32", "bash")).toBeInstanceOf(BashLocalExecutor);
 });
 
 test("the switch notice is a context.instructions record, not a prompt line", () => {

@@ -15,7 +15,7 @@
  *
  *   - the default is bash on every platform, which is today's behaviour, so
  *     enabling the mirror changes nothing;
- *   - `NATALIA_SHELL=pwsh` opts in, for the host that verifies it;
+ *   - `runtime.shell.executable` opts in, for the host that verifies it;
  *   - `auto` asks for the mirror explicitly and is what the default becomes once
  *     pwsh has run on a real Windows host.
  *
@@ -62,7 +62,7 @@ export function platformShell(
  * It used to fall back to bash, on the reasoning that "a typo must not select
  * PowerShell by accident". On Windows that fallback is the bug: bash there is
  * `C:\Windows\System32\bash.exe`, which is WSL, so a Windows install with no
- * NATALIA_SHELL set opened a WSL shell — `cmd` is not found, and `node`/`bun`
+ * configured shell opened a WSL shell — `cmd` is not found, and `node`/`bun`
  * (installed on the Windows side) are not on its PATH either, so every command
  * the shell-adjacent tools run dies with "the command could not be started".
  * Measured, not theorised: the user's terminal showed exactly that.
@@ -88,6 +88,40 @@ export function resolveShellName(
  * bash here is the name the caller asked for — which `shellExecutable` already
  * carries. A separate class would exist only to differ by a constant.
  */
+/**
+ * What a shell's syntax means, for a model writing commands into it.
+ *
+ * The failure this exists to prevent: a model that just moved from bash to
+ * pwsh keeps writing POSIX syntax into a PowerShell pane, and every command
+ * it runs dies on the first `&&`. The wording is the same everywhere the
+ * shell is named — the switch notice and the per-turn environment block —
+ * so the two cannot drift apart.
+ */
+export function shellSyntaxMeaning(name: ShellName): string {
+  switch (name) {
+    case "bash":
+      return "POSIX syntax: `&&`, `;`, `$VAR`, `/` separators, single quotes";
+    case "pwsh":
+      return "PowerShell syntax: `;` not `&&`, `$env:VAR`, `\\` separators, cmdlets not coreutils";
+    case "zsh":
+      return "POSIX syntax like bash: `&&`, `;`, `$VAR`, `/` separators";
+    default:
+      return "the host platform's own shell";
+  }
+}
+
+/**
+ * The one environment-block line stating which shell commands run in.
+ *
+ * The turn runner passes the session's resolved shell; the provider runner
+ * renders this inside the per-turn `<environment_details>` block — the
+ * dynamic layer, so the cached prefix (system prompt + tool schemas) is
+ * untouched and ten sessions still share one cache entry.
+ */
+export function shellContextLine(name: ShellName): string {
+  return `Shell: ${name} — commands run in ${shellSyntaxMeaning(name)}`;
+}
+
 export function executorFor(name: ShellName): ShellExecutor {
   if (name === "pwsh") return new PwshLocalExecutor();
   return new BashLocalExecutor();
@@ -98,11 +132,10 @@ export function executorFor(name: ShellName): ShellExecutor {
  * initialize and updated on every config reload.
  *
  * This is the persisted form of the settings panel's choice. It lives here
- * rather than in `NATALIA_SHELL` because an environment variable is a
- * deployment fact, not a per-session one: writing a human's choice there made
- * it outlive the session that made it and collide with the deployment's own
- * default. A module-level slot is the only thing the six module-scope call
- * sites can reach, and the runtime owns writing it.
+ * as a module-level slot because it is the only thing the six module-scope
+ * call sites can reach, and the runtime owns writing it — an environment
+ * variable was tried and deleted: it was the same decision through a channel
+ * the settings row and `config.get` cannot see.
  */
 let configuredShell: "bash" | "pwsh" | "zsh" | undefined;
 
@@ -126,7 +159,6 @@ export function configuredShellName(): "bash" | "pwsh" | "zsh" | undefined {
  * path), so the request carries both and neither overrides the other.
  */
 export function selectExecutor(
-  env: NodeJS.ProcessEnv = process.env,
   os: NodeJS.Platform = process.platform,
   configured?: "bash" | "pwsh" | "zsh",
 ): ShellExecutor {
@@ -138,16 +170,21 @@ export function selectExecutor(
   //
   //   1. `configured` — the caller's explicit choice.
   //   2. the shell the runtime recorded from its config.
-  //   3. `NATALIA_SHELL` — the DEPLOYMENT's default, for a host that never set
-  //      one. Read only: a human's choice is never written here.
-  //   4. the platform's own shell.
+  //   3. the platform's own shell.
+  //
+  // There is no environment-variable tier. `NATALIA_SHELL` was one — a
+  // read-only deployment default consulted when nothing was configured — and
+  // it was deleted: the config file already expresses a deployment default
+  // visibly (the settings row and `config.get` both read it), an env var is
+  // the same decision through a channel neither can see, and one spelling of
+  // one state is worth more than two.
   //
   // On Linux and macOS `pwsh` is NOT honoured: PowerShell is not the shell
   // those hosts ship, and a human who picked it there gets bash rather than a
   // shell whose `cmd` and `node` are unreachable. On Windows every choice is
   // honoured — `bash` there is Git Bash, and a host that cannot find it is told
   // to set `runtime.shell.bashPath`.
-  const requested = configured ?? configuredShell ?? env.NATALIA_SHELL;
+  const requested = configured ?? configuredShell;
   if (os !== "win32" && requested === "pwsh") return executorFor("bash");
   return executorFor(resolveShellName(requested, os));
 }

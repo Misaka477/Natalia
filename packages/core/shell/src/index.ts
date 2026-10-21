@@ -17,7 +17,6 @@ export {
   NATALIA_ENV_PREFIX,
   NATALIA_HOME_ENV,
   NATALIA_SESSION_ID_ENV,
-  NATALIA_SHELL_ENV,
   ShellEnvRegistry,
   applyShellEnv,
 } from "./shell-env";
@@ -34,6 +33,8 @@ export {
   resolveShellName,
   selectExecutor,
   setConfiguredShell,
+  shellContextLine,
+  shellSyntaxMeaning,
   type ShellName,
 } from "./select";
 export {

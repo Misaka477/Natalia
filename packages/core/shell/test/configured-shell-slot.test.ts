@@ -34,19 +34,3 @@ test("the runtime's write reaches the executor", () => {
     process.platform === "win32" ? PwshLocalExecutor : BashLocalExecutor,
   );
 });
-
-test("the deployment's variable still answers when nothing is configured", () => {
-  setConfiguredShell(undefined);
-  const original = process.env.NATALIA_SHELL;
-  try {
-    process.env.NATALIA_SHELL = "bash";
-    expect(selectExecutor()).toBeInstanceOf(BashLocalExecutor);
-    // The configured slot outranks it.
-    setConfiguredShell("pwsh");
-    expect(selectExecutor()).toBeInstanceOf(PwshLocalExecutor);
-  } finally {
-    setConfiguredShell(undefined);
-    if (original === undefined) delete process.env.NATALIA_SHELL;
-    else process.env.NATALIA_SHELL = original;
-  }
-});

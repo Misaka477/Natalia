@@ -28,7 +28,6 @@
 export const NATALIA_ENV_PREFIX = "NATALIA_";
 
 export const NATALIA_HOME_ENV = `${NATALIA_ENV_PREFIX}HOME` as const;
-export const NATALIA_SHELL_ENV = `${NATALIA_ENV_PREFIX}SHELL` as const;
 export const NATALIA_SESSION_ID_ENV =
   `${NATALIA_ENV_PREFIX}SESSION_ID` as const;
 
@@ -38,7 +37,6 @@ export const NATALIA_SESSION_ID_ENV =
  */
 const RESERVED_SHELL_ENV_KEYS: ReadonlySet<string> = new Set([
   NATALIA_HOME_ENV,
-  NATALIA_SHELL_ENV,
   NATALIA_SESSION_ID_ENV,
 ]);
 
@@ -171,7 +169,6 @@ export class ShellEnvRegistry {
   collect(execution: ShellEnvExecution): ShellEnv {
     const values: Record<string, string> = {
       [NATALIA_HOME_ENV]: this.nataliaHome,
-      [NATALIA_SHELL_ENV]: "1",
     };
     if (execution.sessionID !== undefined)
       values[NATALIA_SESSION_ID_ENV] = execution.sessionID;

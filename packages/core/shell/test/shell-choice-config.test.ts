@@ -1,15 +1,17 @@
 /**
- * The shell a command runs in is a PERSISTED choice, not only an env var.
+ * The shell a command runs in is a PERSISTED choice, in one place only.
  *
- * `NATALIA_SHELL` was the only way to pick pwsh over bash, and an environment
- * variable is not a persisted configuration: a human who chose lost the choice
- * on the next start. The chain now is
+ * `NATALIA_SHELL` — an environment variable — used to be the only way to pick
+ * pwsh over bash, and it was deleted: an environment variable is not a
+ * persisted configuration (a human who chose lost the choice on the next
+ * start), it was the same decision through a channel neither the settings row
+ * nor `config.get` can see, and nothing in the tree ever read it. The chain
+ * now is
  *
- *   settings panel → config.runtime.shell.executable → process.env.NATALIA_SHELL
+ *   settings panel → config.runtime.shell.executable → setConfiguredShell
  *     → selectExecutor → BashLocalExecutor | PwshLocalExecutor
  *
- * and the config OUTRANKS the variable, because the panel is the human's and
- * the variable is the deployment's.
+ * and absent means 自动, the platform's own shell.
  */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
@@ -73,18 +75,23 @@ test("the shell choice is a persisted config field", () => {
   expect(foundation).toContain("shell: shellConfigSchema.default({})");
 });
 
-test("the configured shell outranks the environment variable", () => {
+test("the selector reads no environment", () => {
   const at = select.indexOf("export function selectExecutor(");
   expect(at).toBeGreaterThan(0);
   // To the end of the file: `selectExecutor` is its last declaration, and a
   // fixed window silently stops covering the expression under a long comment.
   const body = select.slice(at);
-  // The third parameter is the config's answer, and it is consulted FIRST.
+  // The first parameter is the config's answer, and it is consulted FIRST.
   expect(body).toContain("configured?:");
   // Matched on the operands, not on one spelling: prettier may wrap the line.
-  expect(body).toMatch(/configured\s*\?\?\s*configuredShell\s*\?\?/u);
-  // And the environment variable is still READ, as the deployment's default.
-  expect(body).toContain("env.NATALIA_SHELL");
+  expect(body).toMatch(/configured\s*\?\?\s*configuredShell/u);
+  // And the environment is GONE: `NATALIA_SHELL` was a read-only deployment
+  // default consulted when nothing was configured, and it was deleted — the
+  // config file already expresses a deployment default visibly, an env var is
+  // the same decision through a channel the settings row cannot see, and no
+  // reader existed.
+  expect(body).not.toContain("env.NATALIA_SHELL");
+  expect(body).not.toContain("process.env");
 });
 
 test("the choice is recorded at load AND at reload", () => {
@@ -97,12 +104,14 @@ test("the choice is recorded at load AND at reload", () => {
   expect(reload).toContain("setConfiguredShell(");
 });
 
-test("nothing writes the human's choice into NATALIA_SHELL", async () => {
-  // That variable is the DEPLOYMENT's default. Writing a human's choice there
-  // made it outlive the session that made it and collide with the deployment's
-  // own default — which is why 自动 could not get back to the platform shell.
-  expect(catalog).not.toContain("process.env.NATALIA_SHELL =");
-  expect(reload).not.toContain("process.env.NATALIA_SHELL =");
+test("nothing writes a choice into the environment anywhere", async () => {
+  // `NATALIA_SHELL` was the DEPLOYMENT's default. Writing a human's choice
+  // there made it outlive the session that made it and collide with the
+  // deployment's own default — which is why 自动 could not get back to the
+  // platform shell. The variable is gone; this pins that no path reintroduces
+  // it.
+  expect(catalog).not.toContain("process.env.NATALIA_SHELL");
+  expect(reload).not.toContain("process.env.NATALIA_SHELL");
   const shellSwitch = await Bun.file(
     join(
       repoRoot,
@@ -116,6 +125,13 @@ test("nothing writes the human's choice into NATALIA_SHELL", async () => {
   ).text();
   expect(shellSwitch).not.toContain("process.env.NATALIA_SHELL");
   expect(shellSwitch).toContain("setConfiguredShell(");
+  // And the managed-environment marker it was one letter away from is gone
+  // too: `NATIALIA_SHELL=1` had no reader in the tree.
+  const shellEnv = await Bun.file(
+    join(repoRoot, "packages", "core", "shell", "src", "shell-env.ts"),
+  ).text();
+  expect(shellEnv).not.toContain("SHELL` as const");
+  expect(shellEnv).toContain("NATALIA_HOME_ENV");
 });
 
 test("the settings panel offers the shell, and 自动 is a real answer", () => {
@@ -132,9 +148,12 @@ test("the settings panel offers the shell, and 自动 is a real answer", () => {
   // workspace's own config outranks the global file, and a config write reloads
   // the whole runtime.
   expect(panel).toContain("props.runtime?.setSessionShell?.(");
-  // Clearing the choice restores the deployment's default. Matched on the
-  // operands, because prettier wraps the object across lines.
-  expect(panel).toMatch(/executable:\s*undefined/u);
+  // Clearing the choice restores the platform default. The row sends `null`
+  // — `undefined` would be dropped by the JSON transport before the runtime
+  // ever sees it, so the merge deleted nothing and the reload re-pinned the
+  // previous choice (measured: the row said 自动, the config still said bash).
+  // Matched on the operands, because prettier wraps the object across lines.
+  expect(panel).toMatch(/executable:\s*null/u);
   // A fixed set of answers gets a select, not a text box that invites a typo.
   expect(panel).toContain("function openSelect(");
   expect(panel).toContain("editFieldOptions");

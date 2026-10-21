@@ -74,9 +74,9 @@ export const shellConfigSchema = z.object({
    * path rows above). Absent means "the platform default" — `pwsh` on Windows,
    * `bash` elsewhere.
    *
-   * This is the persisted form of `NATALIA_SHELL`: the environment variable
-   * stays honoured, but a choice a human made in the settings panel must
-   * survive a restart, and an env var is not a persisted configuration.
+   * This is the persisted form of the settings panel's choice: a human's
+   * choice must survive a restart, and an environment variable is not a
+   * persisted configuration. Absent means 自动 — the platform's own shell.
    */
   executable: z.enum(["bash", "pwsh", "zsh"]).optional(),
 });

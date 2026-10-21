@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   NATALIA_HOME_ENV,
   NATALIA_SESSION_ID_ENV,
-  NATALIA_SHELL_ENV,
   ShellEnvRegistry,
   applyShellEnv,
 } from "../src/shell-env";
@@ -21,10 +20,14 @@ describe("ShellEnvRegistry", () => {
     const registry = new ShellEnvRegistry("/natalia");
     const env = registry.collect({});
     expect(env[NATALIA_HOME_ENV]).toBe("/natalia");
-    expect(env[NATALIA_SHELL_ENV]).toBe("1");
     // Absent rather than a placeholder: a command reading it must be able to tell
     // "no session" from "this session".
     expect(NATALIA_SESSION_ID_ENV in env).toBe(false);
+    // And nothing else: `NATALIA_SHELL=1` used to ride here as a detection
+    // marker and was deleted — nothing in the tree read it, and it sat one
+    // transposition away from the (also deleted) `NATALIA_SHELL` choice
+    // variable, which is exactly how two unrelated variables get confused.
+    expect(Object.keys(env)).toEqual([NATALIA_HOME_ENV]);
   });
 
   test("the session id rides along when there is a session", () => {
@@ -133,7 +136,6 @@ describe("ShellEnvRegistry", () => {
     expect(Object.keys(snapshot(false))).toEqual([
       "NATALIA_A",
       NATALIA_HOME_ENV,
-      NATALIA_SHELL_ENV,
       "NATALIA_Z",
     ]);
     expect(Object.entries(snapshot(true))).toEqual(
@@ -196,7 +198,7 @@ describe("applyShellEnv", () => {
   test("an ambient managed value is dropped, not inherited", () => {
     const merged = applyShellEnv(
       { NATALIA_HOME: "/wherever/this/process/started", PATH: "/usr/bin" },
-      { NATALIA_HOME: "/natalia", NATALIA_SHELL: "1" },
+      { NATALIA_HOME: "/natalia" },
     );
     expect(merged!.NATALIA_HOME).toBe("/natalia");
     // The caller's ordinary entries survive.
@@ -233,8 +235,8 @@ describe("applyShellEnv", () => {
     expect(applyShellEnv({ PATH: "/bin" }, undefined)).toEqual({
       PATH: "/bin",
     });
-    expect(applyShellEnv(undefined, { NATALIA_SHELL: "1" })).toEqual({
-      NATALIA_SHELL: "1",
+    expect(applyShellEnv(undefined, { NATALIA_HOME: "/natalia" })).toEqual({
+      NATALIA_HOME: "/natalia",
     });
   });
 });

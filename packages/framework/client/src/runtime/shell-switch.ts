@@ -20,13 +20,13 @@
  * The choice is recorded through `setConfiguredShell`, which is what the
  * executor seam reads — six call sites ask for the executor at module scope
  * where no session state is reachable, and they resolve per call, so the next
- * command uses the new shell without a restart. It is NOT written to
- * `NATALIA_SHELL`: that variable is the deployment's default, and a human's
- * choice written there outlived the session that made it.
+ * command uses the new shell without a restart. Nothing is projected onto the
+ * environment: `NATALIA_SHELL` was, once, and was deleted — a human's choice
+ * written there outlived the session that made it and nothing read it.
  */
 
 import { nextContextInstructionsRevision } from "@anthelia/session";
-import { setConfiguredShell } from "@anthelia/shell";
+import { setConfiguredShell, shellSyntaxMeaning } from "@anthelia/shell";
 import type { RuntimeContext } from "@anthelia/substrate";
 import type { SessionExecutionState } from "@anthelia/substrate";
 import type { SessionID } from "@anthelia/contracts";
@@ -42,17 +42,11 @@ import type { SessionID } from "@anthelia/contracts";
 export type ShellName = "bash" | "pwsh" | "zsh";
 
 /** What a shell means to a model writing commands into it. */
+// The wording lives in `@anthelia/shell` (shellSyntaxMeaning): the switch
+// notice and the per-turn environment block must name the same shell the
+// same way, and two copies of three sentences drift.
 function shellMeaning(name: ShellName): string {
-  switch (name) {
-    case "bash":
-      return "POSIX syntax: `&&`, `;`, `$VAR`, `/` separators, single quotes";
-    case "pwsh":
-      return "PowerShell syntax: `;` not `&&`, `$env:VAR`, `\\` separators, cmdlets not coreutils";
-    case "zsh":
-      return "POSIX syntax like bash: `&&`, `;`, `$VAR`, `/` separators";
-    default:
-      return "the host platform's own shell";
-  }
+  return shellSyntaxMeaning(name);
 }
 
 /**

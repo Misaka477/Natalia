@@ -251,23 +251,17 @@ test("an explicit shell name wins, and anything else is the platform's own", () 
   expect(resolveShellName("", "linux")).toBe("bash");
 });
 
-test("with no opt-in a Windows host runs its own shell, not WSL's bash", () => {
-  // THE behaviour change, pinned: no NATALIA_SHELL, on Windows, is pwsh.
+test("with nothing configured a Windows host runs its own shell, not WSL's bash", () => {
+  // THE behaviour change, pinned: nothing configured, on Windows, is pwsh.
   // Before it was BashLocalExecutor, which on Windows means
   // C:\Windows\System32\bash.exe — WSL.
-  expect(selectExecutor({}, "win32")).toBeInstanceOf(PwshLocalExecutor);
-  expect(selectExecutor({}, "linux")).toBeInstanceOf(BashLocalExecutor);
-  expect(selectExecutor({}, "darwin")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor("win32")).toBeInstanceOf(PwshLocalExecutor);
+  expect(selectExecutor("linux")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor("darwin")).toBeInstanceOf(BashLocalExecutor);
   // And the explicit opt-ins still reach the same places.
-  expect(selectExecutor({ NATALIA_SHELL: "pwsh" }, "win32")).toBeInstanceOf(
-    PwshLocalExecutor,
-  );
-  expect(selectExecutor({ NATALIA_SHELL: "auto" }, "win32")).toBeInstanceOf(
-    PwshLocalExecutor,
-  );
-  expect(selectExecutor({ NATALIA_SHELL: "auto" }, "linux")).toBeInstanceOf(
-    BashLocalExecutor,
-  );
+  expect(selectExecutor("win32", "pwsh")).toBeInstanceOf(PwshLocalExecutor);
+  expect(selectExecutor("win32", "bash")).toBeInstanceOf(BashLocalExecutor);
+  expect(selectExecutor("linux", "bash")).toBeInstanceOf(BashLocalExecutor);
 });
 
 /**

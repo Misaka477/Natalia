@@ -20,7 +20,7 @@ test("a model's command sees NATALIA_HOME without it being allowlisted", async (
   const executor = new BashLocalExecutor();
   const request: ShellExecRequest = {
     command:
-      "printenv NATALIA_HOME && printenv NATALIA_SHELL && printenv NATALIA_SESSION_ID",
+      "printenv NATALIA_HOME && printenv NATALIA_SESSION_ID && printenv NATALIA_SHELL || true",
     // The allowlist, and deliberately NOT containing any NATALIA_* name.
     env: { PATH: process.env.PATH, HOME: process.env.HOME },
     shellEnv: registry.collect({ sessionID: "ses_e2e" }),
@@ -30,9 +30,12 @@ test("a model's command sees NATALIA_HOME without it being allowlisted", async (
 
   expect(run.outcome).toBe("exited");
   expect(run.exitCode).toBe(0);
+  // The two managed facts — and NOTHING for NATALIA_SHELL: `printenv` on a
+  // missing variable writes no line at all, and the `|| true` keeps the chain
+  // alive past its non-zero exit. Two lines is the proof the old "1" marker
+  // is gone; three lines with an empty third would mean something still ran.
   expect(run.stdout.trim().split("\n")).toEqual([
     "/natalia-home-from-registry",
-    "1",
     "ses_e2e",
   ]);
 });

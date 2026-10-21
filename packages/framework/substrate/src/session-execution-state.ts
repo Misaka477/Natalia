@@ -194,11 +194,12 @@ export type SessionExecutionState = {
    * `context.instructions {kind: "shell_switch"}` record is the durable half
    * that says the switch happened.
    *
-   * The value is also projected onto `NATALIA_SHELL`, because the executor seam
-   * reads the environment and six call sites ask for the executor at module
-   * scope where no session state is reachable. Those sites resolve per call, so
-   * the projection is what makes the switch take effect on the next command
-   * rather than the next start.
+   * The live half is the module-level slot `setConfiguredShell` writes (the
+   * switch writes both): the executor seam reads that slot per call, and six
+   * call sites ask for the executor at module scope where no session state is
+   * reachable — so the slot is what makes the switch take effect on the next
+   * command rather than the next start. An environment variable used to be
+   * projected for the same reason and was deleted: nothing else read it.
    */
   shellOverride?: "bash" | "pwsh" | "zsh";
 };

@@ -82,7 +82,19 @@ export type RuntimeFailureData =
    * still reachable through `diagnostics.list` by someone already authorized to
    * read diagnostics.
    */
-  | { kind: "internal"; errorID: string };
+  | {
+      kind: "internal";
+      errorID: string;
+      /**
+       * The thrower's own message, for a failure nothing classified.
+       *
+       * An unclassified throw is by definition not a refusal, so forwarding
+       * its text costs no policy — and without it a consumer sees only
+       * `internal runtime failure` and cannot learn what happened without
+       * looking up `errorID` in the durable diagnostics.
+       */
+      detail?: string;
+    };
 
 /** Marker used instead of `instanceof`, which does not survive a worker hop. */
 const FAILURE_MARKER = "nataliaRuntimeFailure";
@@ -211,7 +223,13 @@ export class RuntimeRPCError extends Error {
     method?: string;
     data?: RuntimeFailureData;
   }) {
-    super(input.message);
+    // An unclassified throw arrives as `internal runtime failure` with the real
+    // reason in `data.detail`. Appending it here is what puts the cause in front
+    // of whoever is looking at the console — without it a caller sees the
+    // category and has to go read a durable diagnostic by id to learn anything.
+    const detail =
+      input.data?.kind === "internal" ? input.data.detail : undefined;
+    super(detail ? `${input.message}: ${detail}` : input.message);
     this.name = "RuntimeRPCError";
     this.code = input.code;
     this.method = input.method;

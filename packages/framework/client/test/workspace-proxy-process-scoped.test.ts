@@ -32,7 +32,6 @@ test("the workspace proxy carries the process-scoped faces", async () => {
   const root = await officialPluginWorkspace("proxy-surface");
   await writeFile(join(root, "input.txt"), "x\n", "utf8");
   const manager = createWorkspaceManager({
-    workspaceRoot: root,
     pluginStoreRoot: `${root}-plugin-store`,
     sessionDir: join(root, ".natalia", "sessions"),
     checkpointDir: join(root, ".natalia", "checkpoints"),

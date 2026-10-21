@@ -4942,6 +4942,13 @@ function describeFailure(
   return {
     code: RUNTIME_RPC_ERROR_CODES.internal,
     message: "internal runtime failure",
-    data: { kind: "internal", errorID },
+    // The real reason travels WITH the error. It used to be dropped here and
+    // published only as a durable diagnostic under `errorID`, which meant a
+    // caller staring at `internal runtime failure` had no way to learn what
+    // actually threw — the settings panel's 浏览 button reported exactly that
+    // for several rounds while the cause sat one field away. The message is
+    // the thrower's own, and an unclassified throw is by definition not a
+    // refusal, so forwarding it costs no policy.
+    data: { kind: "internal", errorID, detail: message },
   };
 }

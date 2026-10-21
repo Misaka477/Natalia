@@ -17,15 +17,6 @@ export {
   type PickerKind,
 } from "./directory-picker";
 export {
-  FOS_NOCHANGEDIR,
-  FOS_PICKFOLDERS,
-  FOS_FORCEFILESYSTEM,
-  HRESULT_CANCELLED,
-  runFolderDialog,
-  type Win32DialogBindings,
-  type Win32FolderDialog,
-} from "./win32-dialog-logic";
-export {
   DEFAULT_MAX_ENTRIES,
   DirectoryPickerError,
   boundedInsert,

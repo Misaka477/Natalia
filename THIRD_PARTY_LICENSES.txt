@@ -2039,13 +2039,6 @@ Apache License
    limitations under the License.
 
 ================================================================================
-@koromix/koffi-win32-x64@3.3.3
-Declared license: MIT
-Source file: node_modules/.bun/@koromix+koffi-win32-x64@3.3.3/node_modules/@koromix/koffi-win32-x64/package.json
-================================================================================
-No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
-
-================================================================================
 @lezer/common@1.5.3
 Declared license: MIT
 Source file: node_modules/.bun/@codemirror+autocomplete@6.20.4/node_modules/@lezer/common/LICENSE
@@ -4761,34 +4754,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 [others]: https://github.com/json5/json5/contributors
-
-================================================================================
-koffi@3.3.3
-Declared license: MIT
-Source file: node_modules/.bun/koffi@3.3.3/node_modules/koffi/LICENSE.txt
-================================================================================
-MIT License
-
-Copyright (C) 2026  Niels Martignène <niels.martignene@protonmail.com>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the “Software”), to deal in
-the Software without restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
-Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
 
 ================================================================================
 lowlight@3.3.0

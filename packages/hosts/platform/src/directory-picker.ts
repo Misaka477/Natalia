@@ -14,9 +14,6 @@
  */
 
 import { spawn } from "node:child_process";
-import { isWindows } from "./index";
-import { loadWin32DialogBindings } from "./win32-dialog-bindings";
-import { runFolderDialog, type Win32DialogKind } from "./win32-dialog-logic";
 
 /** One command the host can run, and its captured result. */
 export type NativeCommandResult = { stdout: string; stderr: string };
@@ -36,7 +33,7 @@ export class DirectoryPickerUnavailableError extends Error {
 }
 
 /** What a chooser selects. A directory, or one file. */
-export type PickerKind = Win32DialogKind;
+export type PickerKind = "directory" | "file";
 
 /** The dialog's title, in the platform's own language where it has one. */
 export const DIRECTORY_PICKER_TITLE = "Select Directory";
@@ -146,19 +143,55 @@ async function pickLinux(
 }
 
 /**
- * The Windows spelling: the koffi-backed `IFileOpenDialog` — the modern picker
- * with per-monitor-v2 DPI. There is no PowerShell fallback tier: a shell-driven
- * chooser is a second mechanism with its own quoting, encoding and foreground
- * behaviour, and one dialog is what the platform already ships.
+ * The Windows spelling: the shell's own folder browser, driven from a
+ * PowerShell child.
+ *
+ * `Shell.Application`'s `BrowseForFolder` is the Explorer dialog the platform
+ * already ships — the same window a user gets from a "Browse…" button — so
+ * there is no second look to maintain and no native dependency.
+ *
+ * It runs as its OWN process rather than inline because a modal dialog blocks
+ * the thread that shows it, and the runtime's thread is the one serving every
+ * other request.
+ *
+ * This replaced a koffi-backed `IFileOpenDialog`. koffi carries its own native
+ * binary as a separate optional package, which `bun install` skipped and `bun
+ * build --compile` would not have embedded either — so a packaged runtime died
+ * with `Cannot find the native Koffi module; did you bundle it correctly?`,
+ * measured against a real release. The shell dialog needs nothing the platform
+ * does not already have.
  */
-async function pickWindows(kind: PickerKind): Promise<string | null> {
-  const bindings = await loadWin32DialogBindings();
-  return runFolderDialog(
-    bindings,
-    kind === "directory" ? DIRECTORY_PICKER_TITLE : FILE_PICKER_TITLE,
-    () => undefined,
-    kind,
-  );
+async function pickWindows(
+  run: NativeCommandRunner,
+  kind: PickerKind,
+): Promise<string | null> {
+  const title =
+    kind === "directory" ? DIRECTORY_PICKER_TITLE : FILE_PICKER_TITLE;
+  const script =
+    kind === "directory"
+      ? [
+          "$s = New-Object -ComObject Shell.Application",
+          `$f = $s.BrowseForFolder(0, '${title}', 0)`,
+          "if ($f -ne $null) { Write-Output $f.Self.Path }",
+        ].join("; ")
+      : [
+          "Add-Type -AssemblyName System.Windows.Forms",
+          "$d = New-Object System.Windows.Forms.OpenFileDialog",
+          `$d.Title = '${title}'`,
+          "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }",
+        ].join("; ");
+  try {
+    const result = await run("powershell", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      script,
+    ]);
+    return outputPath(result.stdout);
+  } catch (error: unknown) {
+    if (looksCancelled(error)) return null;
+    throw error;
+  }
 }
 
 /**
@@ -174,7 +207,7 @@ export async function pickNativeDirectory(
   kind: PickerKind = "directory",
 ): Promise<string | null> {
   if (platform === "darwin") return await pickDarwin(run, kind);
-  if (platform === "win32") return await pickWindows(kind);
+  if (platform === "win32") return await pickWindows(run, kind);
   if (platform === "linux") return await pickLinux(run, kind);
   throw new DirectoryPickerUnavailableError(
     `no native directory chooser on ${platform}`,
@@ -222,8 +255,8 @@ export const spawnNativeCommand: NativeCommandRunner = async (
 /**
  * Open the platform chooser with the production runner.
  *
- * On Windows the dialog is modal to the thread that shows it, so it runs on a
- * dedicated worker rather than the runtime's own thread — the runtime keeps
+ * The dialog is modal to the process that shows it, and that process is a
+ * CHILD — so the runtime's own thread is never the one that blocks and it keeps
  * serving every other request while a human browses.
  * @param kind - a directory or a file; defaults to a directory.
  * @returns the chosen absolute path, or null when the human dismissed it.
@@ -231,31 +264,6 @@ export const spawnNativeCommand: NativeCommandRunner = async (
 export async function pickPath(
   kind: PickerKind = "directory",
 ): Promise<string | null> {
-  if (isWindows()) {
-    const { Worker } = await import("node:worker_threads");
-    const worker = new Worker(
-      new URL("./win32-dialog-worker.ts", import.meta.url),
-      // The kind rides the worker's data, not a second entry point: one
-      // worker file serves both, and `FOS_PICKFOLDERS` is the only difference
-      // the sequencing makes of it.
-      { workerData: { kind } },
-    );
-    try {
-      return await new Promise<string | null>((resolve, reject) => {
-        worker.once("message", (value: unknown) => {
-          // The worker answers a path, null for a dismissal, or an object
-          // naming what went wrong. Treating the last as a path would hand a
-          // JSON blob to a path field.
-          if (value !== null && typeof value === "object" && "error" in value)
-            reject(new Error(String((value as { error: unknown }).error)));
-          else resolve(value as string | null);
-        });
-        worker.once("error", reject);
-      });
-    } finally {
-      await worker.terminate();
-    }
-  }
   return await pickNativeDirectory(spawnNativeCommand, process.platform, kind);
 }
 

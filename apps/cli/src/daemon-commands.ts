@@ -53,6 +53,12 @@ export async function handleDaemonCommands(argv: string[]) {
         client,
         port,
         token,
+        // The same opt-in `serve` makes: the terminal write surface is gated at
+        // the deployment layer, and a daemon that never opted in answers
+        // `-32001 terminal write is not enabled by this host` for every
+        // `nativeTerminal.start/write/resize` — measured against a live daemon,
+        // and it is what made the terminal panel's requests fail in a row.
+        terminalWrite: true,
         pluginUiResolver: createPluginUiResolver(pluginStoreRoot()),
       });
       const { server } = transport;

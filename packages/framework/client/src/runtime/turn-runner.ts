@@ -10,6 +10,7 @@
  */
 import { providerForModel } from "@anthelia/runtime";
 import { foldProviderCacheUsage } from "@anthelia/rina";
+import { configuredShellName, resolveShellName } from "@anthelia/shell";
 import { staticSystemPrompt } from "@natalia/agent-prompts";
 import {
   claimNextSteps,
@@ -260,6 +261,19 @@ export function createTurnRunner(
           profile: ctx.state.serviceDirectory.getOptional(compositionProfile),
           configMode: getTsRuntimeConfig()?.confinement?.mode,
         }),
+      // The session's shell, stated per turn in the environment block (the
+      // same dynamic layer as confinementMode): a model that just moved
+      // from bash to pwsh and does not know it keeps writing POSIX syntax
+      // into a PowerShell pane, and every command dies on the first `&&`.
+      // The session's own choice wins; absent one the configured slot,
+      // which is what the executor seam resolves per call; absent that the
+      // platform's own shell. A per-turn statement, never a wake — the
+      // model learns the shell on a turn it is already running.
+      shell: () =>
+        resolveShellName(
+          exec.shellOverride ?? configuredShellName() ?? undefined,
+          process.platform,
+        ),
       // T3: the turn's telemetry rides the operation log, not the console.
       // The ALS scope the runtime zone wraps the turn body in carries the
       // correlation, so the kit's records need no call-site discipline.

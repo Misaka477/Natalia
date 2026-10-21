@@ -37,6 +37,7 @@ import { cacheHitRate, totalInputTokens } from "@anthelia/contracts";
 import { buildSubmittedTurn } from "@anthelia/session";
 import { materializeTools } from "@anthelia/tools";
 import { confinementContextLine } from "@anthelia/confinement";
+import { shellContextLine } from "@anthelia/shell";
 import { noopOperationLog } from "@anthelia/operation-log";
 import type {
   ConstitutionDocRule,
@@ -357,6 +358,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         activePlan: input.activePlan(),
         projectDocuments: input.projectDocuments?.(),
         confinementMode: input.confinementMode?.(),
+        shell: input.shell?.(),
       });
       // ADR D1: the system message is the static per-role prompt only — no
       // environment, skills, collaboration or plan. Those arrive as appended
@@ -1548,6 +1550,16 @@ type RuntimeContextBlockInput = {
    * where the agent IS. Rides the dynamic layer, never the cached prefix.
    */
   confinementMode?: import("@anthelia/contracts").ConfinementMode;
+  /**
+   * The shell this session's commands run in, resolved per call (the
+   * session's own choice, else the configured slot, else the platform's
+   * own). Stated in the environment block for the same reason as the
+   * confinement mode: a model that just moved from bash to pwsh and does
+   * not know it keeps writing POSIX syntax into a PowerShell pane, and
+   * every command dies on the first `&&`. The dynamic layer, never the
+   * cached prefix.
+   */
+  shell?: import("@anthelia/shell").ShellName;
   agentName?: string;
   /**
    * The session's start date, `YYYY-MM-DD`.
@@ -1721,6 +1733,7 @@ function runtimeContextBlocks(
       input.confinementMode
         ? confinementContextLine(input.confinementMode)
         : undefined,
+      input.shell ? shellContextLine(input.shell) : undefined,
       input.agentName ? `Active agent: ${input.agentName}` : undefined,
       // Date only, no time: seconds make the string look volatile, which
       // misleads anyone later reading a log or a diff.

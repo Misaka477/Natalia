@@ -434,6 +434,15 @@ export type ProviderRunnerInput = {
    */
   confinementMode?(): import("@anthelia/contracts").ConfinementMode;
   /**
+   * The shell this session's commands run in, resolved per call (the
+   * session's own choice, else the configured slot, else the platform's
+   * own). Stated in the per-turn environment block for the same reason as
+   * the confinement mode: a model that just moved from bash to pwsh and
+   * does not know it keeps writing POSIX syntax into a PowerShell pane.
+   * Rides the dynamic layer, never the cached prefix.
+   */
+  shell?(): import("@anthelia/shell").ShellName | undefined;
+  /**
    * The operation-log channel (T3): the runtime zone passes its logger, a
    * bare context (tests) leaves it out and the call sites degrade to
    * silence — telemetry never crashes the turn. Structural so the kit

@@ -106,6 +106,7 @@ function makeHarness(
     };
     projectDocuments?: ProjectDocumentSnapshot;
     confinementMode?: import("@anthelia/contracts").ConfinementMode;
+    shell?: import("@anthelia/shell").ShellName;
     log?: {
       info(
         component: string,
@@ -240,6 +241,7 @@ function makeHarness(
     activePlan: () => options?.activePlan,
     projectDocuments: () => options?.projectDocuments,
     confinementMode: () => options?.confinementMode ?? "workspace-write",
+    shell: () => options?.shell,
     log: options?.log,
     ...(options?.tokenMeter ? { tokenMeter: () => options.tokenMeter! } : {}),
     retry,
@@ -1969,6 +1971,71 @@ test("the environment block states the session's current confinement mode", asyn
   // The statement rides the dynamic layer, never the static system.
   const system = shapes[0]!.find((message) => message.role === "system");
   expect(system!.content).not.toContain("Confinement mode");
+});
+
+test("the environment block states which shell commands run in", async () => {
+  // The switch tells the model WHERE its commands run, not merely applies
+  // it: a model that just moved from bash to pwsh and does not know it
+  // keeps writing POSIX syntax into a PowerShell pane, and every command
+  // dies on the first `&&`. The same dynamic layer as the confinement line
+  // — stated per turn, so the cached prefix is untouched.
+  const shapes: Array<Array<{ role: string; content: string }>> = [];
+  const { runner } = makeHarness(
+    {
+      provider: "scripted",
+      model: "m1",
+      async *stream(request) {
+        shapes.push(
+          request.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        );
+        yield content("ok");
+      },
+    },
+    { permissionMode: "ask", shell: "bash" },
+  );
+  await runner.runTurn(turn);
+  const environment = shapes[0]!.find((message) =>
+    message.content.includes('<runtime_context source="environment"'),
+  );
+  expect(environment).toBeDefined();
+  expect(environment!.content).toContain("Shell: bash");
+  expect(environment!.content).toContain("POSIX syntax");
+  // The statement rides the dynamic layer, never the static system.
+  const system = shapes[0]!.find((message) => message.role === "system");
+  expect(system!.content).not.toContain("Shell:");
+});
+
+test("no shell choice means no shell line — the model is told nothing false", async () => {
+  // A session that never chose and a host with nothing configured still
+  // resolves to the platform's shell at spawn time, but the block must not
+  // invent a name for it: an omitted line is the honest answer, and a
+  // wrong one sends POSIX syntax into a PowerShell pane.
+  const shapes: Array<Array<{ role: string; content: string }>> = [];
+  const { runner } = makeHarness(
+    {
+      provider: "scripted",
+      model: "m1",
+      async *stream(request) {
+        shapes.push(
+          request.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        );
+        yield content("ok");
+      },
+    },
+    { permissionMode: "ask" },
+  );
+  await runner.runTurn(turn);
+  const environment = shapes[0]!.find((message) =>
+    message.content.includes('<runtime_context source="environment"'),
+  );
+  expect(environment).toBeDefined();
+  expect(environment!.content).not.toContain("Shell:");
 });
 
 test("turn telemetry rides the injected log, and degrades to silence without it", async () => {

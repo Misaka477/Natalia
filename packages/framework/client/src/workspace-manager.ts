@@ -10,9 +10,13 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import {
+  createChildDirectory,
   firstUseWorkspaceDeclinedPath,
   firstUseWorkspacePath,
+  listDirectoryLevel,
   nataliaHomeJoin,
+  pickDirectory,
+  pickFile,
   resolveNataliaPath,
 } from "@anthelia/platform";
 import type { RuntimeServiceClient } from "@anthelia/runtime-services";
@@ -989,6 +993,33 @@ export function createWorkspaceRuntimeClient(
     ...workspaceIDFourthArg,
   ]);
 
+  /**
+   * The PROCESS-scoped faces: they answer about the runtime itself, not about
+   * one workspace, so routing them to `active.client` is wrong twice over.
+   *
+   * `pickDirectory` and `pickFile` open the runtime's own platform dialog —
+   * there is no workspace in the conversation. `listDirectoryLevel` and
+   * `createChildDirectory` walk the host filesystem the runtime can see.
+   *
+   * They were falling through to the generic `active.client[prop]` lookup,
+   * which answered `undefined` because the per-workspace client's surface does
+   * not carry them — and the transport's `requireMember` turns a non-function
+   * into `RuntimeNotSupported`, which `describeFailure` classifies as
+   * `internal`. Measured in the browser console: `POST /rpc 400` with
+   * `RuntimeRPCError: internal runtime failure` at `Proxy.pickFile`, and a
+   * settings row that accepted the click and did nothing.
+   *
+   * The dialog is opened through the platform module directly, so the answer
+   * does not depend on which workspace happens to be active — or on there
+   * being one at all.
+   */
+  const processScopedMethods = new Set([
+    "pickDirectory",
+    "pickFile",
+    "listDirectoryLevel",
+    "createChildDirectory",
+  ]);
+
   function workspaceIDFromArgs(
     prop: string,
     args: unknown[],
@@ -1273,6 +1304,21 @@ export function createWorkspaceRuntimeClient(
           };
         }
         return surface;
+      }
+      if (typeof prop === "string" && processScopedMethods.has(prop)) {
+        // Answered by the runtime itself, never by a workspace's client: see
+        // `processScopedMethods` for why routing them there answered
+        // `undefined` and the transport called that an internal failure.
+        return async (...args: unknown[]) => {
+          if (prop === "pickDirectory") return await pickDirectory();
+          if (prop === "pickFile") return await pickFile();
+          if (prop === "listDirectoryLevel")
+            return await listDirectoryLevel(args[0] as string | undefined);
+          return await createChildDirectory(
+            args[0] as string,
+            args[1] as string,
+          );
+        };
       }
       if (typeof prop === "string" && routableMethods.has(prop)) {
         return async (...args: unknown[]) => {

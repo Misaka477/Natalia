@@ -22,6 +22,8 @@ export type BrowseKind = "directory" | "file";
 export function PathBrowseButton(props: {
   /** The runtime whose chooser opens. Absent renders nothing. */
   runtime?: RuntimeClient;
+  /** The translate function for the button's label. */
+  t?: (key: string) => string;
   /** A directory or a file. Defaults to a directory. */
   kind?: BrowseKind;
   /** Disabled while the surrounding form is busy. */
@@ -57,7 +59,7 @@ export function PathBrowseButton(props: {
         })();
       }}
     >
-      浏览…
+      {props.t?.("common.browse") ?? "浏览…"}
     </button>
   );
 }

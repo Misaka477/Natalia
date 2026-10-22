@@ -1722,6 +1722,7 @@ export function SettingsPanel(props: {
                 <Show when={editFieldBrowse()}>
                   {(kind) => (
                     <PathBrowseButton
+                      t={props.t}
                       runtime={props.runtime}
                       kind={kind()}
                       onPick={(chosen) => {

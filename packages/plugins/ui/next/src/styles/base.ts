@@ -75,10 +75,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow: visible;
 }
 
-/* ===== Top bar ===== */
-.neu-topbar {
-.neu-topbar-group {
-
 /* ===== Left session sidebar ===== */
 .neu-sidebar {
   flex-shrink: 0;

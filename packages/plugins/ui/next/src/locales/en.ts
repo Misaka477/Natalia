@@ -70,7 +70,13 @@ export const en = {
   "workbench.expandRight": "Expand the right rail (Ctrl+J)",
   "workbench.collapseLeft": "Expand the left rail (Ctrl+B)",
   "input.messagePlaceholder": "Type a message, use @ to mention files…",
+  "input.chatPlaceholder": "Ask Navi…",
   "input.send": "Send",
   "input.stop": "Stop",
   "input.attach": "Attach",
+  "input.rollback.noticeBoth": "Restored the session to the selected message and recovered the workspace checkpoint.",
+  "input.rollback.noticeWorkspace": "Recovered the workspace checkpoint.",
+  "input.rollback.noticeSafety": "Restored the session to the selected message and created a safety checkpoint.",
+  "input.rollback.noticeMessages": "Restored the session to the selected message. No file checkpoint was available, so workspace changes were not recovered.",
+  "modals.workspaceAddUnsupported": "This runtime does not support workspaceAdd; make sure it is a Natalia runtime serve",
 } satisfies Record<CommonKey, string>;

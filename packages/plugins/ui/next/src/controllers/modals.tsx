@@ -39,6 +39,7 @@ const perfLog = (...args: unknown[]) => {
 
 export interface ModalLayerProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: () => AppState;
   config: () => ConfigV4 | undefined;
   setStateConfig: (config: ConfigV4) => void;
@@ -91,6 +92,7 @@ export interface ModalLayerProps {
 
 /** Every overlay window the shell can open. */
 export function ModalLayer(props: ModalLayerProps) {
+  const t = props.t;
   const runtime = () => props.ctx.runtime;
   return (
     <>
@@ -115,9 +117,7 @@ export function ModalLayer(props: ModalLayerProps) {
             if (!path) return;
             const rt = runtime();
             if (!rt.workspaceAdd) {
-              props.setWorkspaceError(
-                "当前 runtime 不支持 workspaceAdd，请确认连接的是 Natalia runtime serve",
-              );
+              props.setWorkspaceError(t("modals.workspaceAddUnsupported"));
               throw new Error("workspaceAdd unsupported");
             }
             const workspace = (await rt.workspaceAdd({

@@ -20,6 +20,7 @@ import { cloneState } from "@natalia/view-store";
 
 export interface RightRailProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   rightVisible: () => boolean;
@@ -51,6 +52,7 @@ export interface RightRailProps {
 
 /** The right rail: tabbed panes plus the plugin side panels it hosts. */
 export function RightRail(props: RightRailProps) {
+  const t = props.t;
   const {
     ctx,
     state,
@@ -259,7 +261,7 @@ export function RightRail(props: RightRailProps) {
           type="button"
           class="neu-collapsed-rail neu-right-rail"
           onClick={() => setRightVisible(true)}
-          title="展开右侧栏（Ctrl+J）"
+          title={t("workbench.expandRight")}
         >
           <span class="neu-rail-dots" />
         </button>

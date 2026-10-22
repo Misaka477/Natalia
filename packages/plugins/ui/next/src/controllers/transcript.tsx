@@ -30,6 +30,7 @@ import type { PermissionRungID } from "../permission-rungs";
 import type { GoalEditorTarget } from "../app-neu";
 export interface MainPanesProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   toolCards: any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
@@ -138,6 +139,7 @@ export interface MainPanesProps {
 export function MainPanes(props: MainPanesProps) {
   const {
     ctx,
+    t,
     toolCards,
     state,
     setState,
@@ -592,6 +594,7 @@ export function MainPanes(props: MainPanesProps) {
                   </div>
                 </Show>
                 <MainInputArea
+                  t={t}
                   ctx={props.ctx}
                   state={state}
                   selectedSessionID={selectedSessionID}
@@ -769,6 +772,7 @@ export function MainPanes(props: MainPanesProps) {
                   />
                 </div>
                 <ChatInputArea
+                  t={t}
                   naviChatActivity={naviChatActivity}
                   ctx={props.ctx}
                   state={state}

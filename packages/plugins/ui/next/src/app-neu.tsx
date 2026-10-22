@@ -3243,6 +3243,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
 
         {/* Middle dual agent panes */}
         <MainPanes
+          t={t}
           ctx={props.ctx}
           toolCards={toolCards}
           state={state}
@@ -3334,6 +3335,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
 
         {/* Right secondary tabs */}
         <RightRail
+          t={t}
           ctx={props.ctx}
           state={state}
           setState={setState}
@@ -3372,6 +3374,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         )}
       </div>
       <ModalLayer
+        t={t}
         ctx={props.ctx}
         state={state}
         config={config}

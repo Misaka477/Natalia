@@ -81,9 +81,17 @@ export const zh = {
   "workbench.collapseLeft": "展开左侧栏（Ctrl+B）",
   // pending and queue
   "input.messagePlaceholder": "输入消息，使用 @ 提及文件…",
+  "input.chatPlaceholder": "向 Navi 提问…",
   "input.send": "发送",
   "input.stop": "停止",
   "input.attach": "附件",
+  "input.rollback.noticeBoth": "已还原会话到所选消息，并恢复了工作区检查点。",
+  "input.rollback.noticeWorkspace": "已恢复工作区检查点。",
+  "input.rollback.noticeSafety": "已还原会话到所选消息，并创建了安全后悔点。",
+  "input.rollback.noticeMessages":
+    "已还原会话到所选消息。没有可用的文件检查点，因此未恢复工作区更改。",
+  "modals.workspaceAddUnsupported":
+    "当前 runtime 不支持 workspaceAdd，请确认连接的是 Natalia runtime serve",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

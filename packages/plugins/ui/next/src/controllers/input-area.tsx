@@ -17,6 +17,7 @@ import { goalCommandInstruction } from "../app-neu";
 
 export interface MainInputAreaProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: () => AppState;
   selectedSessionID: () => string;
   mainDraft: () => string;
@@ -48,6 +49,7 @@ export interface MainInputAreaProps {
 
 /** The Natalia pane's input area: queue, usage, pending takeover, composer. */
 export function MainInputArea(props: MainInputAreaProps) {
+  const t = props.t;
   const {
     ctx,
     state,
@@ -105,7 +107,7 @@ export function MainInputArea(props: MainInputAreaProps) {
       <Show when={pendingTakeoverCount() === 0 || pendingTakeoverMinimized()}>
         <Composer
           value={mainDraft()}
-          placeholder="输入消息，使用 @ 提及文件…"
+          placeholder={t("input.messagePlaceholder")}
           busy={Boolean(state().natalia.activeTurn)}
           onInput={setMainDraft}
           attachments={mainAttachments()}
@@ -154,12 +156,12 @@ export function MainInputArea(props: MainInputAreaProps) {
                       setRollbackNotice({
                         text:
                           messageResult && preview
-                            ? `已还原会话到所选消息，并恢复了工作区检查点。`
+                            ? t("input.rollback.noticeBoth")
                             : preview
-                              ? `已恢复工作区检查点。`
+                              ? t("input.rollback.noticeWorkspace")
                               : messageResult?.safetyCheckpointID
-                                ? `已还原会话到所选消息，并创建了安全后悔点。`
-                                : `已还原会话到所选消息。没有可用的文件检查点，因此未恢复工作区更改。`,
+                                ? t("input.rollback.noticeSafety")
+                                : t("input.rollback.noticeMessages"),
                         safetyCheckpointID:
                           messageResult?.safetyCheckpointID ??
                           preview?.safetyCheckpointID,
@@ -207,6 +209,7 @@ export function MainInputArea(props: MainInputAreaProps) {
 
 export interface ChatInputAreaProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   naviChatActivity: any;
   state: () => AppState;
   selectedSessionID: () => string;
@@ -229,6 +232,7 @@ export interface ChatInputAreaProps {
 
 /** The Navi pane's input area: usage bar and chat composer. */
 export function ChatInputArea(props: ChatInputAreaProps) {
+  const t = props.t;
   const {
     ctx,
     naviChatActivity,
@@ -247,7 +251,7 @@ export function ChatInputArea(props: ChatInputAreaProps) {
       <SessionUsageBar usage={state().usageByChannel.navi} />
       <Composer
         value={chatDraft()}
-        placeholder="向 Navi 提问…"
+        placeholder={t("input.chatPlaceholder")}
         busy={Boolean(naviChatActivity())}
         onInput={setChatDraft}
         onStop={() =>

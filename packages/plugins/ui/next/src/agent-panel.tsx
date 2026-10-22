@@ -381,11 +381,11 @@ export function AgentPanel(props: {
 
   function agentStatusLabel(agent: SubagentView) {
     return agent.status === "running"
-      ? "运行"
+      ? t("agent.statusRunning")
       : agent.status === "completed"
-        ? "完成"
+        ? t("agent.statusCompleted")
         : agent.status === "failed"
-          ? "失败"
+          ? t("agent.statusFailed")
           : agent.status;
   }
 
@@ -415,7 +415,7 @@ export function AgentPanel(props: {
       <Show when={subTab() === "subagent"}>
         <div class="review-header">
           <div class="review-title">
-            <span>子 Agent</span>
+            <span>{t("agent.subagent")}</span>
           </div>
           <div class="review-meta">
             <ContextMeter
@@ -446,10 +446,8 @@ export function AgentPanel(props: {
                   />
                 </svg>
               </div>
-              <div class="review-empty-title">暂无子 Agent</div>
-              <div class="review-empty-desc">
-                子 Agent 运行后会出现在这里，并展示它的独立信息流。
-              </div>
+              <div class="review-empty-title">{t("agent.emptyTitle")}</div>
+              <div class="review-empty-desc">{t("agent.emptyHint")}</div>
             </div>
           }
         >
@@ -492,7 +490,7 @@ export function AgentPanel(props: {
               </For>
               <Show when={!subagents().length}>
                 <div class="review-empty">
-                  <div class="review-empty-title">暂无子 Agent</div>
+                  <div class="review-empty-title">{t("agent.emptyTitle")}</div>
                 </div>
               </Show>
             </div>
@@ -504,18 +502,20 @@ export function AgentPanel(props: {
             <div class="review-diff">
               <div class="review-diff-header">
                 <span class="review-diff-path">
-                  {selectedSubagent()?.id ?? "选择一个子 Agent"}
+                  {selectedSubagent()?.id ?? t("agent.selectOne")}
                 </span>
                 <Show when={selectedSubagent()}>
                   <span class="review-meta">
                     {selectedSubagent()?.status} ·{" "}
                     {selectedSubagent()?.phase ?? "idle"}
                     {selectedSubagent()?.parentAgentID
-                      ? ` · 父 ${selectedSubagent()?.parentAgentID}`
+                      ? t("agent.parent", {
+                          id: selectedSubagent()?.parentAgentID,
+                        })
                       : ""}
                     <Show when={selectedTerminals().length}>
                       {" · "}
-                      终端:{" "}
+                      {t("agent.terminal")}
                       {selectedTerminals()
                         .map((terminal) => terminal.id)
                         .join(", ")}
@@ -526,7 +526,7 @@ export function AgentPanel(props: {
                           props.onOpenTerminal?.(selectedTerminals()[0]!.id)
                         }
                       >
-                        打开终端
+                        {t("agent.openTerminal")}
                       </button>
                     </Show>
                   </span>
@@ -538,15 +538,15 @@ export function AgentPanel(props: {
                   fallback={
                     <div class="review-empty">
                       <div class="review-empty-title">
-                        选择一个子 Agent 查看信息流
+                        {t("agent.selectToView")}
                       </div>
                     </div>
                   }
                 >
                   <Transcript
                     messages={renderedSubagentMessages()}
-                    emptyTitle="子 Agent 暂无消息"
-                    emptyHint="子 Agent 运行后这里会展示它的信息流"
+                    emptyTitle={t("agent.emptyMsgTitle")}
+                    emptyHint={t("agent.emptyMsgHint")}
                     assistantName={selectedSubagent()?.id ?? "Subagent"}
                     assistantInitial="A"
                     apiRef={(api) => {
@@ -581,7 +581,7 @@ export function AgentPanel(props: {
                       type="button"
                       class="neu-jump-bottom"
                       onClick={() => subTranscriptApi?.scrollToBottom()}
-                      title="跳到底部"
+                      title={t("agent.jumpToBottom")}
                     >
                       ↓
                     </button>
@@ -596,7 +596,7 @@ export function AgentPanel(props: {
       <Show when={subTab() === "team"}>
         <div class="review-header">
           <div class="review-title">
-            <span>Team 概览</span>
+            <span>{t("agent.teamOverview")}</span>
             <button
               type="button"
               class="terminal-toolbar-btn"
@@ -609,36 +609,40 @@ export function AgentPanel(props: {
             <span class="review-count">{teamPRs().length} PR</span>
           </div>
         </div>
-        <div class="review-section-label">并发上限</div>
+        <div class="review-section-label">{t("agent.concurrencyLimit")}</div>
         <div class="review-entity-control">
-          <div class="review-select">{teamConcurrency() ?? "未设置"}</div>
+          <div class="review-select">
+            {teamConcurrency() ?? t("agent.unset")}
+          </div>
         </div>
-        <div class="review-section-label">运行中的子 Agent</div>
+        <div class="review-section-label">{t("agent.runningSubagents")}</div>
         <div class="review-entity-control">
           <div class="review-select">{runningSubagents().length}</div>
         </div>
-        <div class="review-section-label">状态统计</div>
+        <div class="review-section-label">{t("agent.statusTally")}</div>
         <div class="review-entity-control">
           <div class="review-select">
-            完成 {teamStatusTally().completed ?? 0} · 失败{" "}
-            {teamStatusTally().failed ?? 0} · 停止{" "}
-            {teamStatusTally().stopped ?? 0}
+            {t("agent.completedFailed", {
+              completed: teamStatusTally().completed ?? 0,
+              failed: teamStatusTally().failed ?? 0,
+              stopped: teamStatusTally().stopped ?? 0,
+            })}
           </div>
         </div>
         <Show when={teamPRs().length}>
-          <div class="review-section-label">任务队列</div>
+          <div class="review-section-label">{t("agent.taskQueue")}</div>
           <div class="review-entity-list">
             <For each={teamPRs()}>
               {(pr) => (
                 <div class="team-queue-card">
                   <div class="team-queue-title">{pr.task || pr.id}</div>
                   <div class="team-queue-meta">
-                    <span>状态: {pr.status}</span>
-                    <span>子 Agent: {pr.sandboxID}</span>
+                    <span>{t("agent.prStatus", { status: pr.status })}</span>
+                    <span>{t("agent.prSubagent", { id: pr.sandboxID })}</span>
                     <span>
                       phase:{" "}
                       {subagents().find((item) => item.id === pr.sandboxID)
-                        ?.phase ?? "未知"}
+                        ?.phase ?? t("agent.phaseUnknown")}
                     </span>
                   </div>
                   <Show when={pr.result}>
@@ -656,7 +660,7 @@ export function AgentPanel(props: {
         </Show>
         <Show when={!teamPRs().length}>
           <div class="review-empty">
-            <div class="review-empty-title">暂无 Team 任务</div>
+            <div class="review-empty-title">{t("agent.noTeamTasks")}</div>
           </div>
         </Show>
       </Show>

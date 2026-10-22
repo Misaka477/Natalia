@@ -141,6 +141,7 @@ export function RightRail(props: RightRailProps) {
               when={rightTab() === "plan" ? rightPanelScopeKey() : undefined}
             >
               <PlanPanel
+                t={t}
                 state={state()}
                 sessionID={selectedSessionID() || state().sessionID}
                 runtime={props.ctx.runtime}

@@ -23,32 +23,34 @@ type PlanRow = {
   markedAt?: string;
 };
 
-const PLAN_STATUS_LABELS: Record<string, string> = {
-  handed_off: "已交接",
-  executing: "执行中",
-  paused: "已暂停",
-  awaiting_audit: "待审计",
-  auditing: "审计中",
-  audit_pending: "审计待重试",
-  audit_gaps: "有缺口",
-  completed: "已完成",
-  unmarked: "未标记",
+const PLAN_STATUS_LABEL_KEYS: Record<string, string> = {
+  handed_off: "plan.statusHandedOff",
+  executing: "plan.statusExecuting",
+  paused: "plan.statusPaused",
+  awaiting_audit: "plan.statusAwaitingAudit",
+  auditing: "plan.statusAuditing",
+  audit_pending: "plan.statusAuditPending",
+  audit_gaps: "plan.statusAuditGaps",
+  completed: "plan.statusCompleted",
+  unmarked: "plan.statusUnmarked",
 };
 
-function planStatusLabel(status: string): string {
-  return PLAN_STATUS_LABELS[status] ?? status;
+function planStatusLabel(status: string, t: (key: string) => string): string {
+  const key = PLAN_STATUS_LABEL_KEYS[status];
+  return key ? t(key) : status;
 }
 
-const TASK_STATE_LABELS: Record<string, string> = {
-  verified: "已验证",
-  gap: "缺证据",
-  in_progress: "进行中",
-  pending: "待办",
-  skipped: "跳过",
+const TASK_STATE_LABEL_KEYS: Record<string, string> = {
+  verified: "plan.taskVerified",
+  gap: "plan.taskGap",
+  in_progress: "plan.taskInProgress",
+  pending: "plan.taskPending",
+  skipped: "plan.taskSkipped",
 };
 
-function taskStateLabel(state: string): string {
-  return TASK_STATE_LABELS[state] ?? state;
+function taskStateLabel(state: string, t: (key: string) => string): string {
+  const key = TASK_STATE_LABEL_KEYS[state];
+  return key ? t(key) : state;
 }
 
 /**
@@ -66,6 +68,7 @@ function MarkdownPreview(props: { content: string }) {
 }
 
 export function PlanPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: AppState;
   /** Explicit selected session. Falls back to the projection session. */
   sessionID?: string;
@@ -74,6 +77,7 @@ export function PlanPanel(props: {
     subscribe(listener: (event: RuntimeEvent) => void): () => void;
   };
 }) {
+  const t = props.t;
   const [selectedID, setSelectedID] = createSignal<string | undefined>();
   const [activePlanID, setActivePlanID] = createSignal<string | undefined>();
   const [draft, setDraft] = createSignal("");
@@ -105,7 +109,7 @@ export function PlanPanel(props: {
         count: taskStates().filter((task) => task.state === state).length,
       }))
       .filter((entry) => entry.count > 0)
-      .map((entry) => `${taskStateLabel(entry.state)} ${entry.count}`)
+      .map((entry) => `${taskStateLabel(entry.state, t)} ${entry.count}`)
       .join(" · "),
   );
   const sessionID = () => props.sessionID ?? props.state.sessionID;
@@ -239,7 +243,11 @@ export function PlanPanel(props: {
         planID: plan.planID,
         sessionID: sessionID(),
       });
-      setNotice(result?.written ? `已保存 ${plan.documentPath}` : "保存未生效");
+      setNotice(
+        result?.written
+          ? t("plan.saved", { path: plan.documentPath })
+          : t("plan.saveFailed"),
+      );
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -258,8 +266,8 @@ export function PlanPanel(props: {
       );
       setNotice(
         result?.updated
-          ? `已将「${plan.title}」设为当前活跃计划`
-          : "设置未生效",
+          ? t("plan.setActive", { title: plan.title })
+          : t("plan.setActiveFailed"),
       );
       setError("");
       await refreshPlans();
@@ -271,7 +279,7 @@ export function PlanPanel(props: {
   async function markPlan() {
     const path = markPath().trim();
     if (!path) {
-      setError("请输入要标记为 Plan 的 Markdown 路径");
+      setError(t("plan.markPathRequired"));
       return;
     }
     try {
@@ -281,8 +289,8 @@ export function PlanPanel(props: {
       });
       setNotice(
         result?.marked && result.planID
-          ? `已标记为 Plan：${result.planID}`
-          : "标记未生效",
+          ? `已{t("plan.markButton")}：${result.planID}`
+          : t("plan.markFailed"),
       );
       setMarkPath("");
       setError("");
@@ -295,7 +303,7 @@ export function PlanPanel(props: {
   async function newPlan() {
     const id = `plan_${Date.now().toString(36)}`;
     const path = `.natalia/plans/${id}.md`;
-    const title = `新计划 ${id}`;
+    const title = t("plan.newTitle", { id });
     try {
       await props.runtime?.planDocWrite?.({
         path,
@@ -303,16 +311,16 @@ export function PlanPanel(props: {
         sessionID: sessionID(),
         content: `# ${title}
 
-## 目标
+t("plan.goalSection")
 
 
-## 步骤
+t("plan.stepsSection")
 
 
-## 验证
+t("plan.verifySection")
 
 
-## 总结
+t("plan.summarySection")
 
 `,
       });
@@ -323,8 +331,8 @@ export function PlanPanel(props: {
       });
       setNotice(
         result?.marked && result.planID
-          ? `已创建并标记为 Plan：${result.planID}`
-          : "创建未生效",
+          ? `已创建并{t("plan.markButton")}：${result.planID}`
+          : t("plan.createFailed"),
       );
       setMarkPath("");
       setError("");
@@ -345,12 +353,12 @@ export function PlanPanel(props: {
 
   return (
     <div class="review-pane">
-      <div class="review-section-label">计划文档</div>
+      <div class="review-section-label">{t("plan.docSection")}</div>
       <div class="review-checkpoint-rename">
         <input
           class="review-checkpoint-rename-input"
           type="text"
-          placeholder="输入 .natalia/plans/ 下的 Markdown 文件路径"
+          placeholder={t("plan.pathPh")}
           value={markPath()}
           onInput={(event) => setMarkPath(event.currentTarget.value)}
         />
@@ -365,30 +373,27 @@ export function PlanPanel(props: {
           class="plan-panel-btn"
           onClick={() => void markPlan()}
         >
-          标记为 Plan
+          {t("plan.markButton")}
         </button>
         <button
           type="button"
           class="plan-panel-btn"
           onClick={() => void newPlan()}
         >
-          新建
+          {t("plan.create")}
         </button>
       </div>
       <Show when={!plans().length}>
         <div class="agent-empty-full">
           <div class="review-empty-icon">📄</div>
-          <div class="review-empty-title">暂无计划文档</div>
-          <div class="review-empty-desc">
-            可手动新建计划文档，或先用 Navi 写入 .natalia/plans/ 下的 Markdown
-            文件，再在这里标记为 Plan。
-          </div>
+          <div class="review-empty-title">{t("plan.emptyTitle")}</div>
+          <div class="review-empty-desc">{t("plan.emptyHint")}</div>
         </div>
       </Show>
       <Show when={plans().length}>
         <div class="agent-layout">
           <div class="agent-sidebar">
-            <div class="review-section-label">已标记 Plan</div>
+            <div class="review-section-label">{t("plan.markedSection")}</div>
             <For each={plans()}>
               {(plan) => (
                 <button
@@ -402,7 +407,7 @@ export function PlanPanel(props: {
                     class="agent-card-status"
                     data-active={activePlanID() === plan.planID}
                   >
-                    {planStatusLabel(plan.status)}
+                    {planStatusLabel(plan.status, t)}
                   </div>
                   <div class="agent-card-detail">{plan.documentPath}</div>
                 </button>
@@ -412,14 +417,16 @@ export function PlanPanel(props: {
           <div class="agent-stream">
             <Show
               when={selected()}
-              fallback={<div class="agent-empty">先选择或标记一个 Plan</div>}
+              fallback={<div class="agent-empty">{t("plan.selectFirst")}</div>}
             >
               <div class="agent-stream-header">
                 <div class="agent-stream-title">{selected()!.title}</div>
                 <div class="agent-stream-meta">
                   {selected()!.planID} · {selected()!.documentPath}
                   <Show when={activePlan()?.planID === selected()!.planID}>
-                    <span class="plan-panel-active-badge">当前活跃</span>
+                    <span class="plan-panel-active-badge">
+                      {t("plan.activeBadge")}
+                    </span>
                   </Show>
                 </div>
               </div>
@@ -438,8 +445,8 @@ export function PlanPanel(props: {
                       data-status={contract().status}
                     >
                       {contract().status === "current"
-                        ? `已批准 (${contract().acceptedBy})`
-                        : "草案 · 待批准"}
+                        ? t("plan.approved", { by: contract().acceptedBy })
+                        : t("plan.draft")}
                     </span>
                     <Show when={contract().scope?.length}>
                       <span class="plan-contract-seg">
@@ -448,12 +455,14 @@ export function PlanPanel(props: {
                     </Show>
                     <Show when={contract().verification?.length}>
                       <span class="plan-contract-seg">
-                        验证 ×{contract().verification!.length}
+                        {t("plan.verification", {
+                          count: contract().verification!.length,
+                        })}
                       </span>
                     </Show>
                     <Show when={contract().stale}>
                       <span class="plan-contract-seg" data-status="stale">
-                        计划已变更 · 需重新提案
+                        {t("plan.stale")}
                       </span>
                     </Show>
                     <Show when={contract().unverifiable}>
@@ -489,7 +498,7 @@ export function PlanPanel(props: {
                     <Show when={rules().length > 0}>
                       <div class="plan-constraints">
                         <div class="plan-constraints-title">
-                          适用约束 ×{rules().length}（critical/high）
+                          {t("plan.constraints", { count: rules().length })}
                         </div>
                         <For each={rules()}>
                           {(rule) => (
@@ -518,14 +527,14 @@ export function PlanPanel(props: {
                   onClick={() => void saveSelected()}
                   disabled={saving()}
                 >
-                  保存
+                  {t("plan.save")}
                 </button>
                 <button
                   type="button"
                   class="plan-panel-btn"
                   onClick={() => setPreview(!preview())}
                 >
-                  {preview() ? "编辑" : "预览"}
+                  {preview() ? t("plan.edit") : t("plan.preview")}
                 </button>
                 <button
                   type="button"
@@ -534,8 +543,8 @@ export function PlanPanel(props: {
                   onClick={() => void setActivePlan()}
                 >
                   {activePlan()?.planID === selected()!.planID
-                    ? "活跃中"
-                    : "设为当前活跃"}
+                    ? t("plan.activeNow")
+                    : t("plan.setActiveButton")}
                 </button>
                 <button
                   type="button"
@@ -551,7 +560,7 @@ export function PlanPanel(props: {
                     })()
                   }
                 >
-                  删除标记
+                  {t("plan.unmark")}
                 </button>
               </div>
               <Show when={taskStates().length}>
@@ -564,7 +573,9 @@ export function PlanPanel(props: {
                     <span class="review-section-label">任务态</span>
                     <span class="plan-task-counts">{taskStateSummary()}</span>
                     <span class="plan-task-toggle">
-                      {tasksExpanded() ? "收起" : `展开 ${taskStates().length}`}
+                      {tasksExpanded()
+                        ? t("common.collapse")
+                        : t("plan.tasksExpand", { count: taskStates().length })}
                     </span>
                   </button>
                   <Show when={tasksExpanded()}>
@@ -572,7 +583,7 @@ export function PlanPanel(props: {
                       {(task) => (
                         <div class="plan-task-row" data-state={task.state}>
                           <span class="plan-task-badge" data-state={task.state}>
-                            {taskStateLabel(task.state)}
+                            {taskStateLabel(task.state, t)}
                           </span>
                           <span
                             class="plan-task-text"

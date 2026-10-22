@@ -1,3 +1,4 @@
+import styles from "../styles/pending-takeover.module.css";
 import { Show, createMemo, createSignal } from "solid-js";
 import type { ApprovalResponse, QuestionResponse } from "@anthelia/contracts";
 import {
@@ -110,13 +111,13 @@ export function PendingTakeover(props: {
       <Show
         when={!minimized()}
         fallback={
-          <div class="natalia-pending-takeover-min" data-testid="pending-min">
-            <span class="natalia-pending-takeover-min-count">
+          <div class={styles.min} data-testid="pending-min">
+            <span class={styles.minCount}>
               {t("pending.count", { count: count() })}
             </span>
             <button
               type="button"
-              class="natalia-pending-takeover-min-expand"
+              class={styles.minExpand}
               onClick={() => setMinimized(false)}
             >
               {t("pending.expand")}
@@ -124,14 +125,14 @@ export function PendingTakeover(props: {
           </div>
         }
       >
-        <div class="natalia-pending-takeover" data-testid="pending-takeover">
-          <div class="natalia-pending-takeover-head">
-            <span class="natalia-pending-takeover-title">
+        <div class={styles.takeover} data-testid="pending-takeover">
+          <div class={styles.head}>
+            <span class={styles.title}>
               {t("pending.decisionTitle", { count: count() })}
             </span>
             <button
               type="button"
-              class="natalia-pending-takeover-minimize"
+              class={styles.minimize}
               onClick={() => setMinimized(true)}
             >
               {t("pending.minimize")}
@@ -139,21 +140,19 @@ export function PendingTakeover(props: {
           </div>
           <Show
             when={items().length > 1}
-            fallback={
-              <p class="natalia-pending-takeover-hint">{t("pending.hint")}</p>
-            }
+            fallback={<p class={styles.hint}>{t("pending.hint")}</p>}
           >
-            <ul class="natalia-pending-takeover-list">
+            <ul class={styles.list}>
               {items().map((item) => (
                 <li>
                   <button
                     type="button"
-                    class="natalia-pending-takeover-row"
+                    class={styles.row}
                     data-active={item.id === activeID()}
                     onClick={() => setFocusedID(item.id)}
                   >
-                    <span class="natalia-pending-row-kind">{item.kind}</span>
-                    <span class="natalia-pending-row-title">{item.title}</span>
+                    <span class={styles.rowKind}>{item.kind}</span>
+                    <span class={styles.rowTitle}>{item.title}</span>
                   </button>
                 </li>
               ))}
@@ -162,9 +161,7 @@ export function PendingTakeover(props: {
           <Show
             keyed
             when={activeID()}
-            fallback={
-              <div class="natalia-pending-empty">{t("pending.empty")}</div>
-            }
+            fallback={<div class={styles.empty}>{t("pending.empty")}</div>}
           >
             {(id) => {
               const item = () => items().find((entry) => entry.id === id);

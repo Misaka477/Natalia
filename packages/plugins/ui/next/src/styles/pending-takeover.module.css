@@ -1,0 +1,117 @@
+/* The pending takeover card: the decision surface above the composer —
+   the head with its count, the hint, the list of rows and the minimized
+   form. Tokens only. */
+
+.takeover {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline-accent);
+  border-radius: 12px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.minimize,
+.minExpand {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 8px;
+  color: var(--neu-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 30%;
+  overflow-y: auto;
+}
+
+.row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--neu-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row[data-active="true"] {
+  background: var(--neu-bg);
+  border-color: var(--neu-hairline-accent);
+  color: var(--neu-accent);
+}
+
+.min {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline-accent);
+  border-radius: 10px;
+}
+
+.minCount {
+  flex: 1;
+  font-size: 12px;
+  color: var(--neu-accent);
+}
+
+.rowKind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--neu-muted);
+  flex-shrink: 0;
+}
+
+.rowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--neu-muted);
+  font-size: 12px;
+}

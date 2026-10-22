@@ -5907,3 +5907,52 @@ export const confirmDialogCss = `
   color: var(--neu-on-error);
 }
 `;
+
+/** The topbar's status and session segments, plus the settings window's
+ *  fullscreen presentation. These three belong to regions that have not
+ *  been modularized yet; they stay global until their regions move. */
+export const topbarSegmentsCss = `
+  /* Settings, fullscreen presentation: the window fills the viewport and
+     drops its chrome. Tokens only, like the rest of the sheet. */
+  .neu-settings-backdrop[data-fullscreen="true"] {
+    padding: 0;
+  }
+  .neu-settings-backdrop[data-fullscreen="true"] .neu-settings-window {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* The topbar's status segment: the running turn, always in view. */
+  .neu-topbar-status {
+    margin-left: var(--neu-space-3);
+    padding: 2px var(--neu-space-2);
+    border-radius: var(--neu-radius-1);
+    background: var(--neu-state-info-bg);
+    color: var(--neu-state-info-text);
+    font-size: var(--neu-font-sm);
+    white-space: nowrap;
+  }
+
+  /* The topbar's session segment: which session, one click from the list. */
+  .neu-topbar-session {
+    max-width: 220px;
+    margin-left: var(--neu-space-2);
+    padding: 2px var(--neu-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--neu-radius-1);
+    background: transparent;
+    color: var(--neu-text);
+    font: inherit;
+    font-size: var(--neu-font-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .neu-topbar-session:hover {
+    background: var(--neu-hover-overlay);
+  }
+  `;

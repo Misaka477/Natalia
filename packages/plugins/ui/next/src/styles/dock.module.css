@@ -1,0 +1,61 @@
+/* The terminal's independent frame: the split column beside the
+   transcript and the floating frame over the shell. Both are containers
+   the panel's host div is APPENDED into — re-parented, never
+   re-mounted. Tokens only. */
+
+.split {
+  display: none;
+}
+
+.split[data-open="true"] {
+  display: block;
+  width: 420px;
+  min-width: 240px;
+  border-left: 1px solid var(--neu-border);
+  background: var(--neu-bg);
+  overflow: hidden;
+}
+
+.float {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 48px));
+  height: min(440px, calc(100vh - 96px));
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-border);
+  border-radius: var(--neu-radius-3);
+  box-shadow: var(--neu-elevation-float);
+  overflow: hidden;
+}
+
+.floatBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--neu-space-1) var(--neu-space-2);
+  border-bottom: 1px solid var(--neu-border);
+  background: var(--neu-surface-sunken);
+}
+
+.floatTitle {
+  color: var(--neu-text-dim);
+  font-size: var(--neu-font-sm);
+}
+
+.floatClose {
+  border: 0;
+  background: transparent;
+  color: var(--neu-text-dim);
+  font-size: var(--neu-font-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.floatBody {
+  flex: 1;
+  overflow: hidden;
+}

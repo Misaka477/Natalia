@@ -11,6 +11,7 @@
 
 import { For, Show, createEffect, createSignal } from "solid-js";
 import type { CommandRegistry } from "../commands/registry";
+import styles from "../styles/slash.module.css";
 
 /** The filter a draft carries, or undefined when the menu is closed. */
 export function slashQuery(draft: string): string | undefined {
@@ -43,12 +44,12 @@ export function SlashMenu(props: SlashMenuProps) {
 
   return (
     <Show when={props.query !== undefined && results().length > 0}>
-      <div class="neu-slash-menu" role="listbox">
+      <div class={styles.menu} role="listbox">
         <For each={results()}>
           {(command, index) => (
             <button
               type="button"
-              class="neu-slash-item"
+              class={styles.item}
               role="option"
               aria-selected={index() === active() ? "true" : "false"}
               data-active={index() === active() ? "true" : undefined}
@@ -57,9 +58,9 @@ export function SlashMenu(props: SlashMenuProps) {
                 props.onClose();
               }}
             >
-              <span class="neu-slash-title">{command.title}</span>
+              <span class={styles.title}>{command.title}</span>
               <Show when={command.hint}>
-                <span class="neu-slash-hint">{command.hint}</span>
+                <span class={styles.hint}>{command.hint}</span>
               </Show>
             </button>
           )}

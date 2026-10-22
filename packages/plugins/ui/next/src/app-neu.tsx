@@ -59,6 +59,7 @@ import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
 import { CommandRegistry } from "./commands/registry";
 import { registerDockTarget } from "./terminal/dock-targets";
+import dockStyles from "./styles/dock.module.css";
 import {
   DOCK_MODE_PREFERENCE_KEY,
   isDockMode,
@@ -3337,7 +3338,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           is APPENDED into when the dock mode says split — one container,
           re-parented, never re-mounted. */}
       <div
-        class="neu-terminal-split"
+        class={dockStyles.split}
         data-open={dockMode() === "split"}
         ref={(element) => registerDockTarget("split", element)}
       />
@@ -3346,12 +3347,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           frame body, never re-mounted. Closing the frame returns the
           terminal to its rail tab. */}
       <Show when={dockMode() === "float"}>
-        <div class="neu-terminal-float">
-          <div class="neu-terminal-float-bar">
-            <span class="neu-terminal-float-title">{t("dock.mode.float")}</span>
+        <div class={dockStyles.float}>
+          <div class={dockStyles.floatBar}>
+            <span class={dockStyles.floatTitle}>{t("dock.mode.float")}</span>
             <button
               type="button"
-              class="neu-terminal-float-close"
+              class={dockStyles.floatClose}
               onClick={() => chooseDockMode("tab")}
               aria-label={t("common.close")}
               title={t("common.close")}
@@ -3360,7 +3361,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             </button>
           </div>
           <div
-            class="neu-terminal-float-body"
+            class={dockStyles.floatBody}
             ref={(element) => registerDockTarget("float", element)}
           />
         </div>

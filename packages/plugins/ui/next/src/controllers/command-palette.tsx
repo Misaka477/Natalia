@@ -10,6 +10,7 @@ import {
   onMount,
 } from "solid-js";
 import type { CommandRegistry } from "../commands/registry";
+import styles from "../styles/palette.module.css";
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -66,14 +67,14 @@ export function CommandPalette(props: CommandPaletteProps) {
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
         <div
-          class="neu-command-palette"
+          class={styles.palette}
           role="dialog"
           aria-modal="true"
           onClick={(event) => event.stopPropagation()}
         >
           <input
             ref={inputEl}
-            class="neu-command-input"
+            class={styles.input}
             type="text"
             value={query()}
             placeholder={props.t("palette.placeholder")}
@@ -82,27 +83,27 @@ export function CommandPalette(props: CommandPaletteProps) {
               setActive(0);
             }}
           />
-          <div class="neu-command-list">
+          <div class={styles.list}>
             <For each={results()}>
               {(command, index) => (
                 <button
                   type="button"
-                  class="neu-command-item"
+                  class={styles.item}
                   data-active={index() === active() ? "true" : undefined}
                   onClick={() => {
                     props.onClose();
                     command.run();
                   }}
                 >
-                  <span class="neu-command-title">{command.title}</span>
+                  <span class={styles.title}>{command.title}</span>
                   <Show when={command.hint}>
-                    <span class="neu-command-hint">{command.hint}</span>
+                    <span class={styles.hint}>{command.hint}</span>
                   </Show>
                 </button>
               )}
             </For>
             <Show when={results().length === 0}>
-              <div class="neu-command-empty">{props.t("palette.empty")}</div>
+              <div class={styles.empty}>{props.t("palette.empty")}</div>
             </Show>
           </div>
         </div>

@@ -6025,4 +6025,45 @@ export const commandPaletteCss = `
     background: var(--neu-bg);
     overflow: hidden;
   }
+  /* The terminal's floating frame: over the shell, its own chrome, and the
+     panel host div appended into its body — re-parented, never re-mounted. */
+  .neu-terminal-float {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: min(720px, calc(100vw - 48px));
+    height: min(440px, calc(100vh - 96px));
+    background: var(--neu-bg);
+    border: 1px solid var(--neu-border);
+    border-radius: var(--neu-radius-3);
+    box-shadow: var(--neu-elevation-float);
+    overflow: hidden;
+  }
+  .neu-terminal-float-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--neu-space-1) var(--neu-space-2);
+    border-bottom: 1px solid var(--neu-border);
+    background: var(--neu-surface-sunken);
+  }
+  .neu-terminal-float-title {
+    color: var(--neu-text-dim);
+    font-size: var(--neu-font-sm);
+  }
+  .neu-terminal-float-close {
+    border: 0;
+    background: transparent;
+    color: var(--neu-text-dim);
+    font-size: var(--neu-font-lg);
+    line-height: 1;
+    cursor: pointer;
+  }
+  .neu-terminal-float-body {
+    flex: 1;
+    overflow: hidden;
+  }
   `;

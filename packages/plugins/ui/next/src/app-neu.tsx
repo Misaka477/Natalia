@@ -278,6 +278,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           "tab")
       : "tab",
   );
+  const chooseDockMode = (mode: DockMode) => {
+    setDockMode(mode);
+    props.ctx.preferences?.set(DOCK_MODE_PREFERENCE_KEY, mode);
+  };
   const cycleDockMode = () =>
     setDockMode((current) => {
       const next = nextDockMode(current);
@@ -3337,6 +3341,30 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         data-open={dockMode() === "split"}
         ref={(element) => registerDockTarget("split", element)}
       />
+      {/* The terminal floating frame: the same re-parenting mechanism as
+          the split column — the panel host div is appended into the
+          frame body, never re-mounted. Closing the frame returns the
+          terminal to its rail tab. */}
+      <Show when={dockMode() === "float"}>
+        <div class="neu-terminal-float">
+          <div class="neu-terminal-float-bar">
+            <span class="neu-terminal-float-title">{t("dock.mode.float")}</span>
+            <button
+              type="button"
+              class="neu-terminal-float-close"
+              onClick={() => chooseDockMode("tab")}
+              aria-label={t("common.close")}
+              title={t("common.close")}
+            >
+              ×
+            </button>
+          </div>
+          <div
+            class="neu-terminal-float-body"
+            ref={(element) => registerDockTarget("float", element)}
+          />
+        </div>
+      </Show>
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar

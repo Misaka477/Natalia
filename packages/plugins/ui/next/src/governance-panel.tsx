@@ -467,7 +467,7 @@ export async function promoteConstitutionDocRuleViaRpc(
 
 /**
  * L7's trigger surface: the RPC action behind a Growth trigger row's
- * [晋升为提案]. It records the `growth.promoted` fact — where the trigger
+ * [{t("gov.promote")}]. It records the `growth.promoted` fact — where the trigger
  * lands (its destination class) and what approval it needs. **It applies
  * nothing**: the promotion's `next` names who acts, and the approval
  * policy decides. The loop's automation ends at this button on purpose —
@@ -503,7 +503,7 @@ export async function updateConstitutionDocRuleViaRpc(
   return runtime?.updateConstitutionDocRule?.(input, sessionID);
 }
 
-/** The RPC action behind the [新增规则] button (user creates a rule). */
+/** The RPC action behind the [{t("gov.newRule")}] button (user creates a rule). */
 export async function createConstitutionRuleViaRpc(
   runtime: RuntimeClient | undefined,
   sessionID: string | undefined,
@@ -648,6 +648,7 @@ export async function editConstitutionRuleViaRpc(
  * owns its expand state locally (no per-card bookkeeping in the pane).
  */
 function DriftCard(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   finding: any;
   resolveContract: (planID?: string) => any;
   actionBusy: () => boolean;
@@ -663,6 +664,7 @@ function DriftCard(props: {
   ) => void;
   onReopen: (findingID: string) => void;
 }) {
+  const t = props.t;
   const [activityExpanded, setActivityExpanded] = createSignal(false);
   const [evidenceExpanded, setEvidenceExpanded] = createSignal(false);
   const finding = () => props.finding;
@@ -683,7 +685,7 @@ function DriftCard(props: {
         </span>
         <Show when={(finding().reopenedCount ?? 0) > 0}>
           <span class="drift-card-reopened">
-            已翻案 {finding().reopenedCount} 次
+            {t("gov.reopenedCount", { count: finding().reopenedCount })}
           </span>
         </Show>
       </div>
@@ -725,8 +727,8 @@ function DriftCard(props: {
             onClick={() => setActivityExpanded(!activityExpanded())}
           >
             {activityExpanded()
-              ? "收起"
-              : `展开全部 (+${activityView().hiddenCount})`}
+              ? t("common.collapse")
+              : t("gov.expandAll", { count: activityView().hiddenCount })}
           </button>
         </Show>
       </div>
@@ -765,8 +767,10 @@ function DriftCard(props: {
               onClick={() => setEvidenceExpanded(!evidenceExpanded())}
             >
               {evidenceExpanded()
-                ? "收起"
-                : `展开全部 evidence (+${evidenceView().hiddenCount})`}
+                ? t("common.collapse")
+                : t("gov.expandEvidence", {
+                    count: evidenceView().hiddenCount,
+                  })}
             </button>
           </Show>
         </div>
@@ -791,7 +795,7 @@ function DriftCard(props: {
             onClick={() => {
               // An explanation is only auditable with a rationale; prompt for
               // one and skip the acknowledgement if it is empty.
-              const rationale = window.prompt("解释这条发现，给出理由：");
+              const rationale = window.prompt(t("gov.explainPrompt"));
               if (rationale?.trim())
                 props.onAcknowledge(
                   finding().findingID,
@@ -800,7 +804,7 @@ function DriftCard(props: {
                 );
             }}
           >
-            解释
+            {t("gov.explain")}
           </button>
           <button
             type="button"
@@ -808,7 +812,7 @@ function DriftCard(props: {
             data-kind="dispute"
             disabled={props.actionBusy()}
             onClick={() => {
-              const reason = window.prompt("声明这是误报，给出理由：");
+              const reason = window.prompt(t("gov.falsePositivePrompt"));
               if (reason?.trim())
                 props.onAcknowledge(
                   finding().findingID,
@@ -817,7 +821,7 @@ function DriftCard(props: {
                 );
             }}
           >
-            误报
+            {t("gov.falsePositive")}
           </button>
           <button
             type="button"
@@ -828,7 +832,7 @@ function DriftCard(props: {
               props.onAcknowledge(finding().findingID, "dismissed")
             }
           >
-            忽略
+            {t("gov.ignore")}
           </button>
           <button
             type="button"
@@ -838,9 +842,7 @@ function DriftCard(props: {
             onClick={() => {
               // Correcting realigns the work: capture the correction plan so the
               // rationale is auditable.
-              const plan = window.prompt(
-                "生成纠正 plan，说明如何让工作回到目标：",
-              );
+              const plan = window.prompt(t("gov.correctPrompt"));
               if (plan?.trim())
                 props.onAcknowledge(
                   finding().findingID,
@@ -849,7 +851,7 @@ function DriftCard(props: {
                 );
             }}
           >
-            纠正
+            {t("gov.correct")}
           </button>
           <button
             type="button"
@@ -858,9 +860,7 @@ function DriftCard(props: {
             disabled={props.actionBusy()}
             onClick={() => {
               // A detour is an explicit, sanctioned pause; capture why.
-              const reason = window.prompt(
-                "声明这是有意绕行，给出理由（会显式暂停）：",
-              );
+              const reason = window.prompt(t("gov.bypassPrompt"));
               if (reason?.trim())
                 props.onAcknowledge(
                   finding().findingID,
@@ -869,7 +869,7 @@ function DriftCard(props: {
                 );
             }}
           >
-            绕行
+            {t("gov.bypass")}
           </button>
         </div>
       </Show>
@@ -886,7 +886,7 @@ function DriftCard(props: {
             disabled={props.actionBusy()}
             onClick={() => props.onReopen(finding().findingID)}
           >
-            重新打开
+            {t("gov.reopen")}
           </button>
         </div>
       </Show>
@@ -908,14 +908,18 @@ function DriftCard(props: {
  * truncation without a reveal is not allowed), and an absent list renders
  * nothing rather than an empty section.
  */
-function RuleOverrides(props: { overrides: GovernanceOverrideView[] }) {
+function RuleOverrides(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
+  overrides: GovernanceOverrideView[];
+}) {
+  const t = props.t;
   const [expanded, setExpanded] = createSignal(false);
   const view = () => collapseList(props.overrides, expanded());
   return (
     <Show when={props.overrides.length > 0}>
       <div class="constitution-row-overrides">
         <div class="constitution-row-overrides-title">
-          已授 override ×{props.overrides.length}
+          {t("gov.overrideCount", { count: props.overrides.length })}
         </div>
         <For each={view().shown}>
           {(override) => (
@@ -930,7 +934,9 @@ function RuleOverrides(props: { overrides: GovernanceOverrideView[] }) {
             class="constitution-btn"
             onClick={() => setExpanded(!expanded())}
           >
-            {expanded() ? "收起" : `展开全部 (+${view().hiddenCount})`}
+            {expanded()
+              ? t("common.collapse")
+              : t("gov.expandAll", { count: view().hiddenCount })}
           </button>
         </Show>
       </div>
@@ -939,12 +945,14 @@ function RuleOverrides(props: { overrides: GovernanceOverrideView[] }) {
 }
 
 export function GovernancePane(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: AppState;
   runtime?: RuntimeClient;
   sessionID?: string;
   /** Optional deep-link target; defaults to the drift review view. */
   initialTab?: GovernanceTab;
 }) {
+  const t = props.t;
   const [tab, setTab] = createSignal<Tab>(props.initialTab ?? "drift");
   const [contentEl, setContentEl] = createSignal<HTMLDivElement>();
   const [workGraphView, setWorkGraphView] = createSignal<"tree" | "graph">(
@@ -1095,7 +1103,9 @@ export function GovernancePane(props: {
       setPageInfo((current) => ({ ...current, [tab]: next }));
     } catch (error) {
       setActionNotice(
-        `加载下一页失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.loadNextFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1150,9 +1160,7 @@ export function GovernancePane(props: {
   });
   // ("用户走 UI 补 humanValidation").
   async function recordHumanValidation(taskID: string) {
-    const note = window.prompt(
-      `为 ${taskID} 记录人工验收（写入 completion 卡片，用户为准）：`,
-    );
+    const note = window.prompt(t("gov.humanValidatePrompt", { taskID }));
     if (!note?.trim()) return;
     setActionBusy(true);
     try {
@@ -1162,13 +1170,15 @@ export function GovernancePane(props: {
       );
       setActionNotice(
         result?.recorded
-          ? "已记录人工验收"
-          : `失败：${result?.reason ?? "未知原因"}`,
+          ? t("gov.humanValidated")
+          : t("gov.failedUnknown", { reason: result?.reason ?? "未知原因" }),
       );
       if (result?.recorded) await load();
     } catch (error) {
       setActionNotice(
-        `失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.failedUnknown", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1223,13 +1233,15 @@ export function GovernancePane(props: {
       );
       setActionNotice(
         result?.acknowledged
-          ? `已更新：${findingID} → ${status}`
-          : `未更新：${findingID} 已不是 open，或服务端没找到这条 finding。`,
+          ? t("gov.updated", { id: findingID, status })
+          : t("gov.notUpdated", { id: findingID }),
       );
       await load();
     } catch (error) {
       setActionNotice(
-        `更新失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.updateFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1300,15 +1312,17 @@ export function GovernancePane(props: {
       setActionNotice(
         ok
           ? editor.mode === "add"
-            ? "已新增规则"
-            : "已更新规则"
-          : `失败：${outcome?.reason ?? "未知原因"}`,
+            ? t("gov.ruleAdded")
+            : t("gov.ruleUpdated")
+          : t("gov.failedUnknown", { reason: outcome?.reason ?? "未知原因" }),
       );
       if (ok) setRuleEditor(undefined);
       await load();
     } catch (error) {
       setActionNotice(
-        `失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.failedUnknown", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1331,7 +1345,7 @@ export function GovernancePane(props: {
     if (!editor) return;
     const draft = overrideRequestFromDraft(editor);
     if (!draft.ok) {
-      setActionNotice(`失败：${draft.reason}`);
+      setActionNotice(t("gov.failedUnknown", { reason: draft.reason }));
       return;
     }
     setActionBusy(true);
@@ -1346,14 +1360,19 @@ export function GovernancePane(props: {
         | undefined;
       if (result?.requested)
         setActionNotice(
-          `已提交 override 请求（${draft.input.ruleID}）——审批通过即生效；拒绝则记录在案`,
+          t("gov.overrideSubmitted", { ruleID: draft.input.ruleID }),
         );
-      else setActionNotice(`失败：${result?.reason ?? "未知原因"}`);
+      else
+        setActionNotice(
+          t("gov.failedUnknown", { reason: result?.reason ?? "未知原因" }),
+        );
       if (result?.requested) setOverrideEditor(undefined);
       await load();
     } catch (error) {
       setActionNotice(
-        `失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.failedUnknown", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1418,14 +1437,16 @@ export function GovernancePane(props: {
         | undefined;
       setActionNotice(
         outcome?.updated
-          ? `已更新文档规则「${editor.section}」`
-          : `失败：${outcome?.reason ?? "未知原因"}`,
+          ? t("gov.docRuleUpdated", { section: editor.section })
+          : t("gov.failedUnknown", { reason: outcome?.reason ?? "未知原因" }),
       );
       if (outcome?.updated) setDocRuleEditor(undefined);
       await load();
     } catch (error) {
       setActionNotice(
-        `失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.failedUnknown", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1443,13 +1464,15 @@ export function GovernancePane(props: {
       );
       setActionNotice(
         result?.reopened
-          ? `已翻案：${findingID} → open`
-          : `无法翻案：${result?.reason ?? "未知原因"}`,
+          ? t("gov.reopened", { id: findingID })
+          : t("gov.reopenFailed", { reason: result?.reason ?? "未知原因" }),
       );
       await load();
     } catch (error) {
       setActionNotice(
-        `翻案失败：${error instanceof Error ? error.message : String(error)}`,
+        t("gov.reopenError", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setActionBusy(false);
@@ -1553,6 +1576,7 @@ export function GovernancePane(props: {
           >
             {(finding) => (
               <DriftCard
+                t={t}
                 finding={finding}
                 resolveContract={contractFor}
                 actionBusy={actionBusy}
@@ -1580,7 +1604,7 @@ export function GovernancePane(props: {
               disabled={actionBusy()}
               onClick={() => openRuleEditor("add")}
             >
-              新增规则
+              {t("gov.newRule")}
             </button>
           </div>
           <Show when={ruleEditor()}>
@@ -1588,7 +1612,7 @@ export function GovernancePane(props: {
               <div class="constitution-editor">
                 <input
                   class="constitution-input"
-                  placeholder="规则内容（statement）"
+                  placeholder={t("gov.statementPh")}
                   value={editor().statement}
                   onInput={(event) =>
                     setRuleEditor({
@@ -1617,7 +1641,7 @@ export function GovernancePane(props: {
                   </select>
                   <input
                     class="constitution-input"
-                    placeholder="tools（逗号分隔）"
+                    placeholder={t("gov.toolsPh")}
                     value={editor().tools}
                     onInput={(event) =>
                       setRuleEditor({
@@ -1628,7 +1652,7 @@ export function GovernancePane(props: {
                   />
                   <input
                     class="constitution-input"
-                    placeholder="paths（逗号分隔）"
+                    placeholder={t("gov.pathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
                       setRuleEditor({
@@ -1673,14 +1697,14 @@ export function GovernancePane(props: {
                     disabled={actionBusy()}
                     onClick={() => void saveRule()}
                   >
-                    {editor().mode === "add" ? "新增" : "保存"}
+                    {editor().mode === "add" ? t("gov.add") : t("gov.save")}
                   </button>
                   <button
                     type="button"
                     class="constitution-btn"
                     onClick={() => setRuleEditor(undefined)}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                 </div>
               </div>
@@ -1690,11 +1714,11 @@ export function GovernancePane(props: {
             {(editor) => (
               <div class="constitution-editor">
                 <div class="neu-gov-title">
-                  申请 override：{editor().ruleID}
+                  {t("gov.overrideRequest", { ruleID: editor().ruleID })}
                 </div>
                 <input
                   class="constitution-input"
-                  placeholder="理由（必填）——为什么这次可以破例"
+                  placeholder={t("gov.reasonPh")}
                   value={editor().reason}
                   onInput={(event) =>
                     setOverrideEditor({
@@ -1706,7 +1730,7 @@ export function GovernancePane(props: {
                 <div class="constitution-editor-row">
                   <input
                     class="constitution-input"
-                    placeholder="paths（逗号分隔，可空）"
+                    placeholder={t("gov.overridePathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
                       setOverrideEditor({
@@ -1733,7 +1757,7 @@ export function GovernancePane(props: {
                   />
                   <input
                     class="constitution-input"
-                    placeholder="taskID（可空）"
+                    placeholder={t("gov.taskIDPh")}
                     value={editor().taskID}
                     onInput={(event) =>
                       setOverrideEditor({
@@ -1744,7 +1768,7 @@ export function GovernancePane(props: {
                   />
                   <input
                     class="constitution-input"
-                    placeholder="过期时间 ISO（可空）"
+                    placeholder={t("gov.expiryPh")}
                     value={editor().expiresAt}
                     onInput={(event) =>
                       setOverrideEditor({
@@ -1761,14 +1785,14 @@ export function GovernancePane(props: {
                     disabled={actionBusy()}
                     onClick={() => void submitOverride()}
                   >
-                    提交审批
+                    {t("gov.submitApproval")}
                   </button>
                   <button
                     type="button"
                     class="constitution-btn"
                     onClick={() => setOverrideEditor(undefined)}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                 </div>
               </div>
@@ -1792,6 +1816,7 @@ export function GovernancePane(props: {
                     {rule.scope} · {rule.enforcement}
                   </span>
                   <RuleOverrides
+                    t={t}
                     overrides={overridesForRule(liveOverrides(), rule.ruleID)}
                   />
                 </div>
@@ -1803,7 +1828,7 @@ export function GovernancePane(props: {
                       disabled={actionBusy()}
                       onClick={() => openRuleEditor("edit", rule)}
                     >
-                      编辑
+                      {t("gov.edit")}
                     </button>
                     <Show
                       when={
@@ -1831,7 +1856,7 @@ export function GovernancePane(props: {
                         ).then(() => load())
                       }
                     >
-                      停用
+                      {t("gov.disable")}
                     </button>
                     <button
                       type="button"
@@ -1840,15 +1865,17 @@ export function GovernancePane(props: {
                       onClick={() =>
                         void (async () => {
                           const ok = await confirm({
-                            title: "删除规则",
+                            title: t("gov.deleteRuleTitle"),
                             // 说清到底发生什么，不承诺没交付的东西：规则立刻
                             // 永久失效；journal 留一条删除记录且不可擦除（只增
                             // 不改是这套 journal 的硬约束，和 feedback 的「撤
                             // 回」同理）。「历史保留」这种说法听着像在替你保管
                             // 数据，其实那条记录目前没有任何界面读它——空头承
                             // 诺不如不说。
-                            message: `删除 ${rule.ruleID}？规则立刻永久失效。journal 会留一条删除记录（不可擦除）。`,
-                            confirmLabel: "删除",
+                            message: t("gov.deleteRuleBody", {
+                              ruleID: rule.ruleID,
+                            }),
+                            confirmLabel: t("gov.deleteConfirm"),
                             danger: true,
                           });
                           if (ok)
@@ -1860,7 +1887,7 @@ export function GovernancePane(props: {
                         })()
                       }
                     >
-                      删除
+                      {t("gov.delete")}
                     </button>
                   </div>
                 </Show>
@@ -1886,7 +1913,7 @@ export function GovernancePane(props: {
             )}
           </For>
           <Show when={liveDocRules().length}>
-            <div class="neu-gov-section-label">文档规则（可提升）</div>
+            <div class="neu-gov-section-label">{t("gov.docRulesSection")}</div>
             <For each={liveDocRules()}>
               {(rule) => (
                 <div class="constitution-row">
@@ -1895,7 +1922,7 @@ export function GovernancePane(props: {
                     <span class="neu-gov-text">{rule.statement}</span>
                     <span class="neu-gov-meta">
                       {rule.source} · {rule.enforcement}
-                      {rule.annotated ? " · 已标注" : " · prose"}
+                      {rule.annotated ? t("gov.annotated") : t("gov.prose")}
                     </span>
                   </div>
                   <div class="constitution-row-actions">
@@ -1904,7 +1931,7 @@ export function GovernancePane(props: {
                       class="constitution-btn"
                       onClick={() => openDocRuleEditor(rule)}
                     >
-                      编辑
+                      {t("gov.edit")}
                     </button>
                     <button
                       type="button"
@@ -1918,14 +1945,16 @@ export function GovernancePane(props: {
                           );
                           setActionNotice(
                             result?.promoted
-                              ? `已提升为正式规则 ${result.ruleID}`
-                              : `提升失败：${result?.reason ?? "未知原因"}`,
+                              ? t("gov.promoted", { ruleID: result.ruleID })
+                              : t("gov.promoteFailed", {
+                                  reason: result?.reason ?? "未知原因",
+                                }),
                           );
                           await load();
                         })()
                       }
                     >
-                      提升为正式规则
+                      {t("gov.promote")}
                     </button>
                   </div>
                 </div>
@@ -1937,12 +1966,15 @@ export function GovernancePane(props: {
               <div class="constitution-editor">
                 <div class="constitution-editor-row">
                   <span class="neu-gov-meta">
-                    编辑文档规则「{editor().section}」（{editor().source}）
+                    {t("gov.docRuleEditorTitle", {
+                      section: editor().section,
+                      source: editor().source,
+                    })}
                   </span>
                 </div>
                 <textarea
                   class="constitution-input constitution-textarea"
-                  placeholder="规则内容（statement，写回文档段落）"
+                  placeholder={t("gov.docRuleStatementPh")}
                   value={editor().statement}
                   onInput={(event) =>
                     setDocRuleEditor({
@@ -1965,13 +1997,13 @@ export function GovernancePane(props: {
                       })
                     }
                   >
-                    <option value="warn">warn（软约束）</option>
+                    <option value="warn">{t("gov.warnOption")}</option>
                     <option value="approval">approval</option>
                     <option value="deny">deny</option>
                   </select>
                   <input
                     class="constitution-input"
-                    placeholder="tools（逗号分隔；deny/approval 必填）"
+                    placeholder={t("gov.docRuleToolsPh")}
                     value={editor().tools}
                     onInput={(event) =>
                       setDocRuleEditor({
@@ -1982,7 +2014,7 @@ export function GovernancePane(props: {
                   />
                   <input
                     class="constitution-input"
-                    placeholder="paths（逗号分隔）"
+                    placeholder={t("gov.pathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
                       setDocRuleEditor({
@@ -2026,14 +2058,14 @@ export function GovernancePane(props: {
                     disabled={actionBusy()}
                     onClick={() => void saveDocRule()}
                   >
-                    保存到文档
+                    {t("gov.saveToDoc")}
                   </button>
                   <button
                     type="button"
                     class="constitution-btn"
                     onClick={() => setDocRuleEditor(undefined)}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                 </div>
               </div>
@@ -2233,7 +2265,7 @@ export function GovernancePane(props: {
                     disabled={actionBusy()}
                     onClick={() => void recordHumanValidation(record.taskID)}
                   >
-                    记录人工验收
+                    {t("gov.recordHuman")}
                   </button>
                 </div>
                 <div class="gov-card-section">
@@ -2332,7 +2364,7 @@ export function GovernancePane(props: {
                 data-active={workGraphView() === "tree"}
                 onClick={() => setWorkGraphView("tree")}
               >
-                因果树
+                {t("gov.causalTree")}
               </button>
               <button
                 type="button"
@@ -2340,7 +2372,7 @@ export function GovernancePane(props: {
                 data-active={workGraphView() === "graph"}
                 onClick={() => setWorkGraphView("graph")}
               >
-                图导航
+                {t("gov.graphNav")}
               </button>
             </div>
             <Show
@@ -2390,10 +2422,9 @@ export function GovernancePane(props: {
             when={growthHasAnything()}
             fallback={
               <div class="neu-gov-empty">
-                进化数据还是空的：没有触发器、没有提案、没有晋升记录。
+                {t("gov.growthEmpty")}
                 <br />
-                触发器每次读取时从工作区自己的历史推导——干过的活还不够多，
-                多跑几轮之后这里才会有东西。
+                {t("gov.growthEmptyHint")}
               </div>
             }
           >
@@ -2404,8 +2435,7 @@ export function GovernancePane(props: {
               priority by eye. The subtitle says which yardstick the order
               is, so a reader never mistakes it for a chronology. */}
             <div class="neu-gov-text" style="margin-bottom:6px;">
-              按潜在收益 × 出现频率排序（平局按能力名）· 点「晋升为提案」只记录
-              事实，不触发变异
+              {t("gov.growthSortHint")}
             </div>
             <For each={liveGrowthTriggers()}>
               {(trigger) => (
@@ -2435,14 +2465,21 @@ export function GovernancePane(props: {
                         );
                         setActionNotice(
                           result?.promoted
-                            ? `已记录晋升：${trigger.capability} → ${result.destination}（${result.approval}）· ${result.next}`
-                            : `晋升未记录：${result?.reason ?? "未知原因"}`,
+                            ? t("gov.promotionRecorded", {
+                                capability: trigger.capability,
+                                destination: result.destination,
+                                approval: result.approval,
+                                next: result.next,
+                              })
+                            : t("gov.promotionNotRecorded", {
+                                reason: result?.reason ?? "未知原因",
+                              }),
                         );
                         await load();
                       })()
                     }
                   >
-                    晋升为提案
+                    {t("gov.promote")}
                   </button>
                 </div>
               )}
@@ -2534,12 +2571,7 @@ export function GovernancePane(props: {
               liveExternalJoinedTasks().length > 0 ||
               (props.state.externalRuns ?? []).length > 0
             }
-            fallback={
-              <div class="neu-gov-empty">
-                没有对比数据。跑 `natalia eval` 接入外部基准、或本会话有记录
-                的运行之后，这里才会有东西。
-              </div>
-            }
+            fallback={<div class="neu-gov-empty">{t("gov.evalEmpty")}</div>}
           >
             <div class="neu-gov-section-title">
               External Benchmark — Per-Task Comparison

@@ -1117,8 +1117,14 @@ test("the Growth tab says ONE thing when everything is empty, and the delete dia
     "utf8",
   );
   expect(source).toContain("growthHasAnything");
-  expect(source).toContain("进化数据还是空的");
-  expect(source).toContain("没有对比数据");
+  // The copy itself lives in the dictionary now — the single source the
+  // panel renders through — so the guard reads it there.
+  const zh = readFileSync(
+    join(import.meta.dir, "..", "src", "locales", "zh.ts"),
+    "utf8",
+  );
+  expect(zh).toContain("进化数据还是空的");
+  expect(zh).toContain("没有对比数据");
   // And the delete dialog says what actually happens. "历史保留" was a
   // promise with no reader — the tombstone is journaled and the fold
   // excludes the rule, but no surface ever shows it, so the copy claimed a
@@ -1128,9 +1134,9 @@ test("the Growth tab says ONE thing when everything is empty, and the delete dia
   // explains why the phrase was removed contains the phrase itself, so a
   // file-wide `not.toContain` reads the comment and fails on the very thing
   // it is guarding. A guard must read the exact bytes it guards.
-  expect(source).toContain("规则立刻永久失效");
-  expect(source).toContain(
+  expect(zh).toContain("规则立刻永久失效");
+  expect(zh).toContain(
     "？规则立刻永久失效。journal 会留一条删除记录（不可擦除）。",
   );
-  expect(source).not.toContain("记录进 journal（墓碑），历史保留。");
+  expect(zh).not.toContain("记录进 journal（墓碑），历史保留。");
 });

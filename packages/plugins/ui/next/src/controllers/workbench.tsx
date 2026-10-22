@@ -156,6 +156,7 @@ export function RightRail(props: RightRailProps) {
               }
             >
               <GovernancePane
+                t={t}
                 state={state()}
                 runtime={props.ctx.runtime}
                 sessionID={selectedSessionID() || state().sessionID}

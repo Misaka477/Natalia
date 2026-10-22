@@ -17,11 +17,13 @@ import { GovernancePane } from "../governance-panel";
 import { NiaPanel } from "../nia-panel";
 import { AgentPanel } from "../agent-panel";
 import { cloneState } from "@natalia/view-store";
+import { dockTargetFor } from "../terminal/dock-targets";
 
 export interface RightRailProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
   slots: any;
+  dockMode: () => any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   rightVisible: () => boolean;
@@ -215,6 +217,7 @@ export function RightRail(props: RightRailProps) {
                 // socket and scrollback, the file editor's open tabs and
                 // unsaved buffers — and a re-mount throws all of it away.
                 let container: HTMLDivElement | undefined;
+                let home: HTMLElement | undefined;
                 let everShown = false;
                 let mounting = false;
                 let mounted = false;
@@ -243,6 +246,22 @@ export function RightRail(props: RightRailProps) {
                     .finally(() => {
                       mounting = false;
                     });
+                });
+                // The dock mode re-parents this ONE host div — it appends
+                // the element the panel already lives in to the container
+                // the current mode names. Appending re-parents; it never
+                // re-mounts, so the panel xterm, socket and scrollback
+                // survive every mode change.
+                createEffect(() => {
+                  const mode = props.dockMode();
+                  if (!container) return;
+                  const target = dockTargetFor(mode);
+                  if (!target) {
+                    // tab: back to the rail slot that owns it.
+                    home?.appendChild(container);
+                    return;
+                  }
+                  target.appendChild(container);
                 });
                 // THE DOCK MODES AND THIS MOUNT (terminal independent frame).
                 //
@@ -277,6 +296,13 @@ export function RightRail(props: RightRailProps) {
                     }}
                     ref={(element) => {
                       container = element;
+                      // The rail slot is the host's HOME: the one parent
+                      // the dock mode returns it to for `tab`. Captured
+                      // once, because a moved element's parent is wherever
+                      // the last mode put it.
+                      if (!home && element?.parentElement) {
+                        home = element.parentElement;
+                      }
                     }}
                   />
                 );

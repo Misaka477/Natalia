@@ -6011,4 +6011,18 @@ export const commandPaletteCss = `
   .neu-topbar-session:hover {
     background: var(--neu-hover-overlay);
   }
+  /* The terminal's split column: closed it takes no space at all; open it
+     is a real column beside the transcript, with the terminal host div
+     appended into it (re-parented, never re-mounted). */
+  .neu-terminal-split {
+    display: none;
+  }
+  .neu-terminal-split[data-open="true"] {
+    display: block;
+    width: 420px;
+    min-width: 240px;
+    border-left: 1px solid var(--neu-border);
+    background: var(--neu-bg);
+    overflow: hidden;
+  }
   `;

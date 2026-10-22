@@ -58,6 +58,7 @@ import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
 import { CommandRegistry } from "./commands/registry";
+import { registerDockTarget } from "./terminal/dock-targets";
 import {
   DOCK_MODE_PREFERENCE_KEY,
   isDockMode,
@@ -3328,6 +3329,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         t={t}
       />
       <SlotMount slots={slots} name="statusbar" t={t} />
+      {/* The terminal split column: an empty frame the terminal's host div
+          is APPENDED into when the dock mode says split — one container,
+          re-parented, never re-mounted. */}
+      <div
+        class="neu-terminal-split"
+        data-open={dockMode() === "split"}
+        ref={(element) => registerDockTarget("split", element)}
+      />
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar
@@ -3475,6 +3484,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         <RightRail
           t={t}
           slots={slots}
+          dockMode={dockMode}
           ctx={props.ctx}
           state={state}
           setState={setState}

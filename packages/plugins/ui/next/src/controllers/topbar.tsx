@@ -76,8 +76,8 @@ export function Topbar(props: TopbarProps) {
     mountTopbarPanel,
   } = props;
   return (
-    <header class="neu-topbar">
-      <div class="neu-topbar-left">
+    <header class={styles.bar}>
+      <div class={styles.left}>
         {/* A plugin entry, before the shell's brand block. */}
         <SlotMount slots={slots} name="topbar.start" t={t} />
         {/* The app's own mark, not a letter. `/brand.png` is the shell's
@@ -86,36 +86,36 @@ export function Topbar(props: TopbarProps) {
               copies verbatim. Root-relative because this UI ships as a plugin
               bundle served by the runtime from a different origin, so neither
               a hashed asset name nor a bundle-relative path would resolve. */}
-        <img class="neu-topbar-logo" src="/brand.png" alt="Natalia" />
-        <div class="neu-topbar-meta">
-          <span class="neu-topbar-title">Natalia</span>
-          <span class="neu-topbar-sub">
+        <img class={styles.logo} src="/brand.png" alt="Natalia" />
+        <div class={styles.meta}>
+          <span class={styles.title}>Natalia</span>
+          <span class={styles.sub}>
             The world is not beautiful; therefore it is.
           </span>
         </div>
         {/* The status segment: what the turn is doing now, always visible
             rather than only where the transcript happens to be scrolled. */}
         <Show when={runningLabel()}>
-          {(label) => <span class="neu-topbar-status">{label()}</span>}
+          {(label) => <span class={styles.status}>{label()}</span>}
         </Show>
         {/* The session segment: which session this is, one click from the
             list. The tree is the switch surface; this is its door. */}
         <button
           type="button"
-          class="neu-topbar-session"
+          class={styles.session}
           onClick={onOpenSessions}
           title={sessionLabel()}
         >
           {sessionLabel()}
         </button>
       </div>
-      <div class="neu-topbar-right">
+      <div class={styles.right}>
         {/* The rail toggles are direct buttons in the actions segment — the
           four-segment topbar keeps every action one click from the bar
           instead of behind a dropdown. */}
         <button
           type="button"
-          class="neu-topbar-btn"
+          class={styles.btn}
           data-active={leftVisible()}
           onClick={() => setLeftVisible((value) => !value)}
         >
@@ -123,7 +123,7 @@ export function Topbar(props: TopbarProps) {
         </button>
         <button
           type="button"
-          class="neu-topbar-btn"
+          class={styles.btn}
           data-active={rightVisible()}
           onClick={() => setRightVisible((value) => !value)}
         >
@@ -132,7 +132,7 @@ export function Topbar(props: TopbarProps) {
         <Show when={layoutMode() === "tiny"}>
           <button
             type="button"
-            class="neu-topbar-btn"
+            class={styles.btn}
             data-active={naviOpen()}
             onClick={() => setNaviOpen((value) => !value)}
           >
@@ -141,21 +141,21 @@ export function Topbar(props: TopbarProps) {
         </Show>
         <button
           type="button"
-          class="neu-topbar-btn"
+          class={styles.btn}
           onClick={() => setSearchOpen(true)}
         >
           {t("topbar.search")}
         </button>
         <button
           type="button"
-          class="neu-topbar-btn neu-topbar-btn-primary"
+          class={`${styles.btn} neu-topbar-btn-primary`}
           onClick={() => setSettingsOpen(true)}
         >
           {t("topbar.settings")}
         </button>
         <button
           type="button"
-          class="neu-topbar-btn"
+          class={styles.btn}
           data-active={moreOpen()}
           onClick={() => setMoreOpen((value) => !value)}
         >

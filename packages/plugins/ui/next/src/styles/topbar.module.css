@@ -87,3 +87,128 @@
   gap: 2px;
   padding: 4px 0;
 }
+
+/* The bar itself and its three clusters: brand, actions, and the two
+   segments the four-segment architecture names (status, session). */
+
+.bar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 10px 18px;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-3);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* The app's own mark at the top bar's size. The blue square with a letter
+   in it was a placeholder; this element now carries the image, so it keeps
+   the rounded frame and drops the color and the type. */
+.logo {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.sub {
+  font-size: 11px;
+  color: var(--neu-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+  transition:
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.btn:hover {
+  box-shadow: var(--neu-elevation-1);
+  color: var(--neu-accent);
+}
+
+.btn:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+.btn[data-active="true"] {
+  box-shadow: var(--neu-inset-2);
+  color: var(--neu-accent);
+}
+
+/* The status segment: the running turn, always in view. */
+.status {
+  margin-left: var(--neu-space-3);
+  padding: 2px var(--neu-space-2);
+  border-radius: var(--neu-radius-1);
+  background: var(--neu-state-info-bg);
+  color: var(--neu-state-info-text);
+  font-size: var(--neu-font-sm);
+  white-space: nowrap;
+}
+
+/* The session segment: which session, one click from the list. */
+.session {
+  max-width: 220px;
+  margin-left: var(--neu-space-2);
+  padding: 2px var(--neu-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--neu-radius-1);
+  background: transparent;
+  color: var(--neu-text);
+  font: inherit;
+  font-size: var(--neu-font-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.session:hover {
+  background: var(--neu-hover-overlay);
+}

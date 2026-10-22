@@ -1,3 +1,36 @@
+/**
+ * THE CSS MODULES MIGRATION — the plan, written where the work happens.
+ *
+ * This file is one global stylesheet, and the architecture wants it one
+ * module per region. The order and the rules, so the migration is
+ * mechanical rather than a rewrite:
+ *
+ *  1. ONE MODULE PER REGION, cut along the controller boundaries the
+ *     shell already has: topbar, session-tree, transcript, input-area,
+ *     workbench, modals, and one module per panel the modals open. A
+ *     region's rules move verbatim; nothing is re-authored.
+ *  2. TOKENS ONLY. A module consumes `--neu-*` semantic vars and never
+ *     a literal color — the same rule the token guard enforces today,
+ *     and it must keep enforcing it per module (the guard reads every
+ *     module, not just this file).
+ *  3. CLASS NAMES GO LOCAL. A component imports its module and reads
+ *     `styles.foo`; a name that crosses a region boundary (a parent
+ *     styling a child's internals) is the one case that stays global,
+ *     and it is called out in a comment where it lives.
+ *  4. THE CASCADE ORDER IS THE RISK. Today's order — theme, base,
+ *     dialogs, palette, then the appended blocks — is load-bearing for
+ *     specificity ties. A module's rules are appended in the same
+ *     order the regions appear in the shell, so a tie resolves the same
+ *     way it does now.
+ *  5. THIS FILE SHRINKS, IT DOES NOT DIE. What remains global: the
+ *     reset, the `:root` derived aliases, and the kit's own surface
+ *     (the kit ships its styles; the shell does not restyle it).
+ *
+ * The first module is the command palette (already an isolated block at
+ * the bottom of this file), which proves the pattern end to end before
+ * the regions move.
+ */
+
 export const nataliaNeuBaseStyles = `
 :root {
   font-family: "Inter", system-ui, -apple-system, sans-serif;

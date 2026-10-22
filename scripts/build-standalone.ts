@@ -542,6 +542,15 @@ async function stageDesktopHost(
     "debug.log",
     "bootstrap.exe",
     "bootstrapc.exe",
+    // The retired launcher. Its CMake target is gone, but this loop copies
+    // the build-output directory WHOLE, so a binary the target left behind
+    // on disk keeps shipping in every release and lands in the deployment
+    // directory — measured: the deploy's mirror copied the 10-14 binary
+    // back into an install that had already deleted it. The target's
+    // deletion is what stops the next BUILD producing it; this entry is
+    // what stops the last one from outliving it.
+    "natalia-launcher.exe",
+    "natalia-launcher",
     // The uninstaller and installer script belong to the packaging step, and
     // shipping them beside the app would let an installer overwrite them.
     "unins000.dat",

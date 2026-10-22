@@ -103,8 +103,9 @@ const DEFAULT_CEF = "natalia-cef-desktop";
  * because bare `natalia` printed status JSON and exited. So the CLI now starts
  * the whole stack when given no subcommand, and the shortcut points at it: one
  * exe, one entry, the same thing you double-click in the install folder.
- * `natalia-launcher.exe` stays supported for anyone who has it, but it is no
- * longer what the shortcut names.
+ * `natalia-launcher.exe` was deleted: `natalia.exe` with no subcommand does
+ * the same job (runtime + web server + window host), and a third executable
+ * that duplicates the first is a "which of these do I run" question.
  */
 const DEFAULT_LAUNCHER = "natalia.exe";
 

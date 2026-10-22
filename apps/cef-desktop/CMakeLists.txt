@@ -88,11 +88,11 @@ if(WIN32)
     # every Windows target carries.
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simple_tray_win.cc"
   )
-  # The application icon as a Windows resource, so the executables carry it
-  # themselves: the window class icon the tray reads, Explorer's icon for the
-  # .exe, and the launcher (which never creates a window of its own). The
-  # running window's icon on every platform comes from simple_app.cc instead.
-  # See src/natalia.rc.in for why the path is substituted rather than written.
+  # The application icon as a Windows resource, so the executable carries it
+  # itself: the window class icon the tray reads, and Explorer's icon for the
+  # .exe. The running window's icon on every platform comes from simple_app.cc
+  # instead. See src/natalia.rc.in for why the path is substituted rather than
+  # written.
   set(NATALIA_APP_ICON_ICO
     "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/icons/icon.ico")
   if(NOT EXISTS "${NATALIA_APP_ICON_ICO}")
@@ -115,22 +115,6 @@ if(WIN32)
       NATALIA_CEF_PROBE_ONLY=1)
   endif()
   target_link_libraries(natalia-cef-desktop PRIVATE shell32)
-
-  # The Start Menu entry: a real EXE, not a batch script. A .cmd's `start /b`
-  # children share its console, so when the script ended the console closed and
-  # took both servers with it — the browser tab it had just opened then failed
-  # every API call with ERR_CONNECTION_REFUSED. This launcher starts them with
-  # DETACHED_PROCESS, so they outlive it, and it is what the shortcut runs.
-  add_executable(natalia-launcher WIN32
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/natalia_launcher_win.cc"
-    # The same embedded icon: the launcher's own taskbar button and its Start
-    # Menu entry before the shortcut's icon takes over.
-    "${CMAKE_CURRENT_BINARY_DIR}/natalia.rc"
-  )
-  target_link_libraries(natalia-launcher PRIVATE shell32 ws2_32)
-  set_target_properties(natalia-launcher PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output"
-  )
 else()
 # The tray. Both platforms get one, and the difference is a dependency's
 # availability rather than a design choice:

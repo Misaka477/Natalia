@@ -173,3 +173,192 @@
   font-weight: 500;
   color: var(--neu-text);
 }
+
+/* The workspace row sub-region: the folder, its chevron and icon, the
+   hover actions, the rename input, the menu button and its popups. */
+
+.workspaceGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  margin: 1px 0;
+  border-radius: var(--neu-radius-sm);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  color: var(--neu-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.folder:hover,
+.folder[data-menu-open="true"] {
+  background: var(--neu-bg);
+}
+
+.chevron {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.folder:hover .chevron,
+.folder:focus-within .chevron,
+.folder[data-menu-open="true"] .chevron {
+  display: inline-flex;
+}
+
+.chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+.folderIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--neu-accent);
+  opacity: 0.65;
+}
+
+.folder:hover .folderIcon,
+.folder:focus-within .folderIcon,
+.folder[data-menu-open="true"] .folderIcon {
+  display: none;
+}
+
+.folder:hover .workspaceActions,
+.folder:focus-within .workspaceActions,
+.folder[data-menu-open="true"] .workspaceActions,
+.workspaceActions:hover {
+  display: inline-flex;
+}
+
+.workspaceActions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  box-shadow: var(--neu-inset-1);
+}
+
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+}
+
+.menuBtn:hover {
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+}
+
+.popup {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+  padding: 4px;
+  background: var(--neu-bg-light);
+  border-radius: 10px;
+  box-shadow: var(--neu-elevation-4);
+}
+
+.popup button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.popup button:hover {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+}
+
+.popupDanger {
+  color: var(--neu-error);
+}
+
+.popupDanger:hover {
+  background: var(--neu-diff-removed-bg);
+  color: var(--neu-error);
+}
+
+.count {
+  font-size: 11px;
+  color: var(--neu-muted);
+  flex-shrink: 0;
+  min-width: 16px;
+  text-align: right;
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--neu-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--neu-bg);
+  color: var(--neu-text);
+}

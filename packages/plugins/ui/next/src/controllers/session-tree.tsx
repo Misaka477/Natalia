@@ -293,7 +293,7 @@ function SessionTree(props: {
           <span class={styles.workspaceName}>
             {t("sidebar.parallelSessions")}
           </span>
-          <span class="neu-count">{runningSessions().length}</span>
+          <span class={styles.count}>{runningSessions().length}</span>
         </div>
         <For each={runningSessions()}>
           {(session) => (
@@ -318,16 +318,16 @@ function SessionTree(props: {
               : group.sessions.slice(0, 5),
           );
           return (
-            <div class="neu-workspace-group">
+            <div class={styles.workspaceGroup}>
               <div
-                class="neu-workspace-folder"
+                class={styles.folder}
                 data-menu-open={menuForThis()}
                 onClick={() => {
                   if (editingWorkspaceID() === group.workspaceID) return;
                   toggleCollapse(group.workspaceID);
                 }}
               >
-                <span class="neu-workspace-folder-icon">
+                <span class={styles.folderIcon}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path
                       d="M1 4.5A2.5 2.5 0 013.5 2H6l1.2 1.2H12.5A2.5 2.5 0 0115 6v6.5a2.5 2.5 0 01-2.5 2.5h-9A2.5 2.5 0 011 12.5v-8z"
@@ -338,7 +338,7 @@ function SessionTree(props: {
                     />
                   </svg>
                 </span>
-                <span class="neu-workspace-chevron" data-open={open()}>
+                <span class={styles.chevron} data-open={open()}>
                   <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
                     <path
                       d="M5 3L11 8L5 13"
@@ -356,7 +356,7 @@ function SessionTree(props: {
                   }
                 >
                   <input
-                    class="neu-workspace-rename-input"
+                    class={styles.renameInput}
                     value={draftWorkspaceName()}
                     autofocus
                     onInput={(event) =>
@@ -382,12 +382,12 @@ function SessionTree(props: {
                   />
                 </Show>
                 <span
-                  class="neu-workspace-actions"
+                  class={styles.workspaceActions}
                   onClick={(event) => event.stopPropagation()}
                 >
                   <button
                     type="button"
-                    class="neu-workspace-menu-btn"
+                    class={styles.menuBtn}
                     title={t("sidebar.workspaceActions")}
                     onClick={(event) =>
                       toggleWorkspaceMenu(group.workspaceID, event)
@@ -402,7 +402,7 @@ function SessionTree(props: {
                   <Show when={props.onCreateSessionInWorkspace}>
                     <button
                       type="button"
-                      class="neu-workspace-menu-btn"
+                      class={styles.menuBtn}
                       title={t("sidebar.newSession")}
                       onClick={() => {
                         expandWorkspace(group.workspaceID);
@@ -426,7 +426,7 @@ function SessionTree(props: {
                   </Show>
                   {menuForThis() && (
                     <div
-                      class="neu-workspace-popup"
+                      class={styles.popup}
                       onClick={(event) => event.stopPropagation()}
                     >
                       <button
@@ -484,7 +484,7 @@ function SessionTree(props: {
                       </button>
                       <button
                         type="button"
-                        class="neu-workspace-popup-danger"
+                        class={styles.popupDanger}
                         onClick={() => {
                           setActiveWorkspaceMenu(null);
                           props.onRemoveWorkspace?.(group.workspaceID);

@@ -59,6 +59,7 @@ import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
 import { CommandRegistry } from "./commands/registry";
 import { CommandPalette } from "./controllers/command-palette";
+import { SlotMount } from "./slots/mount";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -3278,6 +3279,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         registry={commands}
         t={t}
       />
+      <SlotMount slots={slots} name="statusbar" t={t} />
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar
@@ -3330,6 +3332,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         {/* Middle dual agent panes */}
         <MainPanes
           t={t}
+          slots={slots}
           ctx={props.ctx}
           toolCards={toolCards}
           state={state}

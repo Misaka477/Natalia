@@ -7,6 +7,7 @@
  */
 
 import { Show } from "solid-js";
+import { SlotMount } from "../slots/mount";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import { QueueDock } from "../components/QueueDock";
@@ -18,6 +19,7 @@ import { goalCommandInstruction } from "../app-neu";
 export interface MainInputAreaProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
+  slots: any;
   state: () => AppState;
   selectedSessionID: () => string;
   mainDraft: () => string;
@@ -50,6 +52,7 @@ export interface MainInputAreaProps {
 /** The Natalia pane's input area: queue, usage, pending takeover, composer. */
 export function MainInputArea(props: MainInputAreaProps) {
   const t = props.t;
+  const slots = props.slots;
   const {
     ctx,
     state,
@@ -72,6 +75,7 @@ export function MainInputArea(props: MainInputAreaProps) {
   } = props;
   return (
     <>
+      <SlotMount slots={slots} name="input.dock" t={t} />
       <QueueDock
         t={t}
         items={state().pendingInputs}
@@ -213,6 +217,7 @@ export function MainInputArea(props: MainInputAreaProps) {
 export interface ChatInputAreaProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
+  slots: any;
   naviChatActivity: any;
   state: () => AppState;
   selectedSessionID: () => string;
@@ -236,6 +241,7 @@ export interface ChatInputAreaProps {
 /** The Navi pane's input area: usage bar and chat composer. */
 export function ChatInputArea(props: ChatInputAreaProps) {
   const t = props.t;
+  const slots = props.slots;
   const {
     ctx,
     naviChatActivity,

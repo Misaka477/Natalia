@@ -32,6 +32,7 @@ export interface MainPanesProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
   toolCards: any;
+  slots: any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   mainDraft: () => string;
@@ -141,6 +142,7 @@ export function MainPanes(props: MainPanesProps) {
     ctx,
     t,
     toolCards,
+    slots,
     state,
     setState,
     mainDraft,
@@ -602,6 +604,7 @@ export function MainPanes(props: MainPanesProps) {
                   </div>
                 </Show>
                 <MainInputArea
+                  slots={slots}
                   t={t}
                   ctx={props.ctx}
                   state={state}
@@ -780,6 +783,7 @@ export function MainPanes(props: MainPanesProps) {
                   />
                 </div>
                 <ChatInputArea
+                  slots={slots}
                   t={t}
                   naviChatActivity={naviChatActivity}
                   ctx={props.ctx}

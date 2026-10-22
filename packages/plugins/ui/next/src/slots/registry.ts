@@ -11,7 +11,7 @@
  */
 
 import { createSignal } from "solid-js";
-import type { JSX } from "solid-js";
+import type { Component } from "solid-js";
 
 /**
  * The shell's nine slots, in the order the information architecture
@@ -42,10 +42,10 @@ export const SLOT_NAMES = [
 export type SlotName = (typeof SLOT_NAMES)[number];
 
 /** A slot entry: one component, with the props the shell passes it. */
-export type SlotComponent = (props: {
+export type SlotComponent = Component<{
   /** The shell's translate function, so the entry switches language. */
   t: (key: string, params?: Record<string, unknown>) => string;
-}) => JSX.Element;
+}>;
 
 interface SlotEntry {
   component: SlotComponent;

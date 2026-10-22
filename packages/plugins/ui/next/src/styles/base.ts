@@ -735,45 +735,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   line-height: 1;
 }
 
- .neu-pane .neu-rollback-banner {
-   display: flex;
-   align-items: center;
-   gap: 8px;
-   margin-top: 6px;
-   padding: 6px 10px;
-   border-radius: 10px;
-   background: var(--neu-bg);
-   color: var(--neu-text);
-   font-size: 12px;
-   box-shadow: var(--neu-inset-2);
- }
- .neu-pane .neu-rollback-hint {
-   color: var(--neu-muted);
- }
- .neu-pane .neu-rollback-cancel {
-   margin-left: auto;
-   padding: 3px 8px;
-   border: none;
-   border-radius: 8px;
-   background: var(--neu-bg-light);
-   color: var(--neu-text);
-   font-family: inherit;
-   font-size: 11px;
-   cursor: pointer;
- }
- .neu-pane .neu-rollback-cancel:hover {
-   color: var(--neu-accent);
- }
- .neu-pane .neu-rollback-redo {
-   padding: 3px 8px;
-   border: none;
-   border-radius: 8px;
-   background: var(--neu-bg-light);
-   color: var(--neu-accent);
-   font-family: inherit;
-   font-size: 11px;
-   cursor: pointer;
- }
 
 .neu-pane .natalia-composer {
   flex-shrink: 0;

@@ -273,3 +273,51 @@
   color: var(--neu-float-surface);
   font-weight: 600;
 }
+
+/* The rollback banner inside the pane: what a prepared rollback will do,
+   its cancel and its redo. The pane is shared vocabulary and stays the
+   global ancestor; these rules style this region's own classes under
+   it, so the prefix stays and the names are local. */
+.neu-pane .banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 12px;
+  box-shadow: var(--neu-inset-2);
+}
+
+.neu-pane .hint {
+  color: var(--neu-muted);
+}
+
+.neu-pane .cancel {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.neu-pane .cancel:hover {
+  color: var(--neu-accent);
+}
+
+.neu-pane .redo {
+  padding: 3px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}

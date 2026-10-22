@@ -562,23 +562,23 @@ export function MainPanes(props: MainPanesProps) {
                       alive while writing nothing is the exact failure this path
                       had before the runtime face was wired. */}
                 <Show when={permissionProblem()}>
-                  <div class="neu-rollback-banner">
+                  <div class={styles.banner}>
                     <span>{permissionProblem()}</span>
                   </div>
                 </Show>
                 <Show when={pendingRollback()}>
-                  <div class="neu-rollback-banner">
+                  <div class={styles.banner}>
                     <span>
                       {t("transcript.rollbackPrepared", {
                         label: pendingRollback()!.label,
                       })}
                     </span>
-                    <span class="neu-rollback-hint">
+                    <span class={styles.hint}>
                       {t("transcript.rollbackEffectiveOnSend")}
                     </span>
                     <button
                       type="button"
-                      class="neu-rollback-cancel"
+                      class={styles.cancel}
                       onClick={() => cancelPendingRollback()}
                     >
                       {t("common.cancel")}
@@ -586,15 +586,15 @@ export function MainPanes(props: MainPanesProps) {
                   </div>
                 </Show>
                 <Show when={!pendingRollback() && rollbackNotice()}>
-                  <div class="neu-rollback-banner">
+                  <div class={styles.banner}>
                     <span>{rollbackNotice()!.text}</span>
-                    <span class="neu-rollback-hint">
+                    <span class={styles.hint}>
                       {t("transcript.rollbackRedoHint")}
                     </span>
                     <Show when={rollbackNotice()!.safetyCheckpointID}>
                       <button
                         type="button"
-                        class="neu-rollback-redo"
+                        class={styles.redo}
                         onClick={() => void redoAppliedRollback()}
                       >
                         {t("transcript.redo")}
@@ -602,7 +602,7 @@ export function MainPanes(props: MainPanesProps) {
                     </Show>
                     <button
                       type="button"
-                      class="neu-rollback-cancel"
+                      class={styles.cancel}
                       onClick={() => setRollbackNotice(undefined)}
                     >
                       {t("transcript.acknowledged")}

@@ -5874,3 +5874,65 @@ export const confirmDialogCss = `
   color: var(--neu-on-error);
 }
 `;
+
+/** The Ctrl+K command palette. One surface for the shell commands and
+ *  every plugin's own; tokens only, like the rest of the sheet. */
+export const commandPaletteCss = `
+  .neu-command-palette {
+    width: min(560px, calc(100vw - 48px));
+    margin: 12vh auto 0;
+    background: var(--neu-bg);
+    border: 1px solid var(--neu-border);
+    border-radius: var(--neu-radius-3);
+    box-shadow: var(--neu-elevation-float);
+    overflow: hidden;
+  }
+  .neu-command-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--neu-space-3) var(--neu-space-4);
+    border: 0;
+    border-bottom: 1px solid var(--neu-border);
+    background: var(--neu-bg);
+    color: var(--neu-text);
+    font: inherit;
+    font-size: var(--neu-font-base);
+    outline: none;
+  }
+  .neu-command-list {
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: var(--neu-space-2);
+  }
+  .neu-command-item {
+    display: flex;
+    width: 100%;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--neu-space-3);
+    padding: var(--neu-space-2) var(--neu-space-3);
+    border: 0;
+    border-radius: var(--neu-radius-1);
+    background: transparent;
+    color: var(--neu-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .neu-command-item[data-active="true"] {
+    background: var(--neu-accent-soft);
+  }
+  .neu-command-title {
+    font-size: var(--neu-font-base);
+  }
+  .neu-command-hint {
+    color: var(--neu-text-dim);
+    font-size: var(--neu-font-sm);
+  }
+  .neu-command-empty {
+    padding: var(--neu-space-4);
+    color: var(--neu-text-dim);
+    font-size: var(--neu-font-sm);
+    text-align: center;
+  }
+  `;

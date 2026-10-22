@@ -57,6 +57,8 @@ import { Topbar } from "./controllers/topbar";
 import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
+import { CommandRegistry } from "./commands/registry";
+import { CommandPalette } from "./controllers/command-palette";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -212,6 +214,53 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   (props.ctx.extra as { toolCards?: ToolCardRegistry }).toolCards = toolCards;
   // The slot registry is the third plugin-facing seat on ctx.extra: a UI
   // plugin fills a named shell slot instead of the shell growing a branch.
+  // The command registry is the fourth plugin-facing seat: the Ctrl+K
+  // palette reads the shell commands and every plugin own.
+  const commands = new CommandRegistry();
+  (props.ctx.extra as { commands?: CommandRegistry }).commands = commands;
+  commands.register({
+    id: "shell.settings",
+    title: t("palette.cmd.settings"),
+    keywords: ["settings", "preferences"],
+    run: () => setSettingsOpen(true),
+  });
+  commands.register({
+    id: "shell.search",
+    title: t("palette.cmd.search"),
+    keywords: ["search", "find"],
+    run: () => setSearchOpen(true),
+  });
+  commands.register({
+    id: "shell.help",
+    title: t("palette.cmd.help"),
+    keywords: ["help", "shortcuts"],
+    run: () => setHelpOpen(true),
+  });
+  commands.register({
+    id: "shell.status",
+    title: t("palette.cmd.status"),
+    keywords: ["status", "diagnostics"],
+    run: () => setStatusOpen(true),
+  });
+  commands.register({
+    id: "shell.toggleLeft",
+    title: t("palette.cmd.toggleLeft"),
+    keywords: ["left", "sidebar"],
+    run: () => setLeftVisible((value) => !value),
+  });
+  commands.register({
+    id: "shell.toggleRight",
+    title: t("palette.cmd.toggleRight"),
+    keywords: ["right", "rail"],
+    run: () => setRightVisible((value) => !value),
+  });
+  commands.register({
+    id: "shell.language",
+    title: t("palette.cmd.language"),
+    keywords: ["language", "locale", "语言"],
+    run: () =>
+      locale.setLocale(locale.getLocale().active === "zh-CN" ? "en" : "zh-CN"),
+  });
   const slots = createSlotsRegistry();
   (
     props.ctx.extra as { slots?: ReturnType<typeof createSlotsRegistry> }
@@ -610,6 +659,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [reasoningEffort, setReasoningEffortSignal] = createSignal<string>("");
   const [chatProfile, setChatProfile] = createSignal<ChatModelProfile>({});
   const [searchOpen, setSearchOpen] = createSignal(false);
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [stashOpen, setStashOpen] = createSignal(false);
   const [sandboxOpen, setSandboxOpen] = createSignal(false);
@@ -1514,6 +1564,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       ) {
         event.preventDefault();
         setSearchOpen(true);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
       }
     };
     window.addEventListener("keydown", handleKeydown);
@@ -3218,6 +3272,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         side column on top of it.
       */}
       <ImagePreviewHost />
+      <CommandPalette
+        open={paletteOpen()}
+        onClose={() => setPaletteOpen(false)}
+        registry={commands}
+        t={t}
+      />
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar

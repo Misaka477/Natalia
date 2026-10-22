@@ -260,8 +260,8 @@ export function MainPanes(props: MainPanesProps) {
                   <div class="main-transcript-wrap">
                     <Transcript
                       messages={renderedMainMessages()}
-                      emptyTitle="Natalia 已准备好"
-                      emptyHint="Natalia 会直接处理工作区任务。"
+                      emptyTitle={t("transcript.emptyMainTitle")}
+                      emptyHint={t("transcript.emptyMainHint")}
                       assistantName="Natalia"
                       assistantInitial="N"
                       toolCards={toolCards}
@@ -286,7 +286,7 @@ export function MainPanes(props: MainPanesProps) {
                         type="button"
                         class="neu-jump-bottom"
                         onClick={jumpToBottom}
-                        title="跳到底部"
+                        title={t("transcript.jumpToBottom")}
                       >
                         ↓
                       </button>
@@ -337,9 +337,9 @@ export function MainPanes(props: MainPanesProps) {
                             <Show when={goal()!.phase === "complete"}>
                               <span
                                 class="neu-goal-chip-done"
-                                title="目标已完成——清除后可设定新目标"
+                                title={t("transcript.goalDoneTitle")}
                               >
-                                ✓ 完成
+                                {t("transcript.goalDone")}
                               </span>
                             </Show>
                           </span>
@@ -350,8 +350,8 @@ export function MainPanes(props: MainPanesProps) {
                               disabled={goalBusy()}
                               title={
                                 goal()!.phase === "active"
-                                  ? "暂停（停止当前轮，稍后可继续）"
-                                  : "继续（开启新一轮）"
+                                  ? t("transcript.goalPause")
+                                  : t("transcript.goalResume")
                               }
                               onClick={() =>
                                 void runGoalControl(
@@ -367,7 +367,7 @@ export function MainPanes(props: MainPanesProps) {
                           <button
                             class="neu-goal-action"
                             disabled={goalBusy()}
-                            title="编辑 goal 目标 / 轮次上限"
+                            title={t("transcript.goalEditTitle")}
                             onClick={() => openGoalEditor(goal()!)}
                           >
                             ✎
@@ -375,7 +375,7 @@ export function MainPanes(props: MainPanesProps) {
                           <button
                             class="neu-goal-action neu-goal-clear"
                             disabled={goalBusy()}
-                            title="清除 goal"
+                            title={t("transcript.goalClearTitle")}
                             onClick={() => void runGoalControl("clear")}
                           >
                             ✕
@@ -384,7 +384,7 @@ export function MainPanes(props: MainPanesProps) {
                         <Show when={goalEditOpen()}>
                           <div class="neu-goal-editor">
                             <label class="neu-goal-editor-field">
-                              <span>目标</span>
+                              <span>{t("transcript.goalLabel")}</span>
                               <textarea
                                 rows={2}
                                 value={goalEditObjective()}
@@ -406,11 +406,11 @@ export function MainPanes(props: MainPanesProps) {
                               />
                             </label>
                             <label class="neu-goal-editor-field neu-goal-editor-cap">
-                              <span>轮次上限</span>
+                              <span>{t("transcript.goalCapLabel")}</span>
                               <input
                                 type="number"
                                 min="0"
-                                placeholder="留空=不改，0=无限"
+                                placeholder={t("transcript.goalCapHint")}
                                 value={goalEditCap()}
                                 onInput={(event) =>
                                   setGoalEditCap(event.currentTarget.value)
@@ -429,13 +429,13 @@ export function MainPanes(props: MainPanesProps) {
                                 disabled={goalBusy()}
                                 onClick={() => void saveGoalEditor(goal()!)}
                               >
-                                保存
+                                {t("common.save")}
                               </button>
                               <button
                                 class="neu-goal-editor-cancel"
                                 onClick={() => setGoalEditOpen(false)}
                               >
-                                取消
+                                {t("common.cancel")}
                               </button>
                             </div>
                           </div>
@@ -450,7 +450,7 @@ export function MainPanes(props: MainPanesProps) {
                     {state().natalia.activeTurn
                       ? `${activityLabel()} · ${
                           turnStartAt() === undefined
-                            ? "计时未知"
+                            ? t("transcript.timingUnknown")
                             : formatDuration(turnElapsedMs())
                         }`
                       : "idle"}
@@ -481,7 +481,7 @@ export function MainPanes(props: MainPanesProps) {
                         sessionID,
                       );
                     }}
-                    placeholder="选择模型"
+                    placeholder={t("transcript.selectModel")}
                     menuPosition="top"
                   />
                   <NeuSelect
@@ -507,7 +507,7 @@ export function MainPanes(props: MainPanesProps) {
                         sessionID,
                       );
                     }}
-                    placeholder="推理强度"
+                    placeholder={t("transcript.reasoningEffort")}
                     menuPosition="top"
                   />
                   <NeuSelect
@@ -517,7 +517,7 @@ export function MainPanes(props: MainPanesProps) {
                         ? [
                             {
                               value: "__retry",
-                              label: "配置加载失败，点击重试",
+                              label: t("transcript.configLoadFailedRetry"),
                             },
                           ]
                         : permissionOptions()
@@ -543,7 +543,9 @@ export function MainPanes(props: MainPanesProps) {
                       void changePermission(permission);
                     }}
                     placeholder={
-                      startupDataDegraded() ? "配置加载失败" : "选择权限"
+                      startupDataDegraded()
+                        ? t("transcript.configLoadFailed")
+                        : t("transcript.selectPermission")
                     }
                     menuPosition="top"
                   />
@@ -558,14 +560,20 @@ export function MainPanes(props: MainPanesProps) {
                 </Show>
                 <Show when={pendingRollback()}>
                   <div class="neu-rollback-banner">
-                    <span>已准备回滚：{pendingRollback()!.label}</span>
-                    <span class="neu-rollback-hint">发送新消息后生效</span>
+                    <span>
+                      {t("transcript.rollbackPrepared", {
+                        label: pendingRollback()!.label,
+                      })}
+                    </span>
+                    <span class="neu-rollback-hint">
+                      {t("transcript.rollbackEffectiveOnSend")}
+                    </span>
                     <button
                       type="button"
                       class="neu-rollback-cancel"
                       onClick={() => cancelPendingRollback()}
                     >
-                      取消
+                      {t("common.cancel")}
                     </button>
                   </div>
                 </Show>
@@ -573,7 +581,7 @@ export function MainPanes(props: MainPanesProps) {
                   <div class="neu-rollback-banner">
                     <span>{rollbackNotice()!.text}</span>
                     <span class="neu-rollback-hint">
-                      发送新消息前可以重做这些更改
+                      {t("transcript.rollbackRedoHint")}
                     </span>
                     <Show when={rollbackNotice()!.safetyCheckpointID}>
                       <button
@@ -581,7 +589,7 @@ export function MainPanes(props: MainPanesProps) {
                         class="neu-rollback-redo"
                         onClick={() => void redoAppliedRollback()}
                       >
-                        重做
+                        {t("transcript.redo")}
                       </button>
                     </Show>
                     <button
@@ -589,7 +597,7 @@ export function MainPanes(props: MainPanesProps) {
                       class="neu-rollback-cancel"
                       onClick={() => setRollbackNotice(undefined)}
                     >
-                      知道了
+                      {t("transcript.acknowledged")}
                     </button>
                   </div>
                 </Show>
@@ -644,8 +652,8 @@ export function MainPanes(props: MainPanesProps) {
                   <div class="chat-transcript-wrap">
                     <Transcript
                       messages={renderedChatMessages()}
-                      emptyTitle="向 Navi 提问"
-                      emptyHint="Navi 用于规划和审查，不直接操作工作区。"
+                      emptyTitle={t("transcript.emptyChatTitle")}
+                      emptyHint={t("transcript.emptyChatHint")}
                       assistantName="Navi"
                       assistantInitial="V"
                       toolCards={toolCards}
@@ -667,7 +675,7 @@ export function MainPanes(props: MainPanesProps) {
                         type="button"
                         class="neu-jump-bottom"
                         onClick={jumpChatToBottom}
-                        title="跳到底部"
+                        title={t("transcript.jumpToBottom")}
                       >
                         ↓
                       </button>
@@ -700,7 +708,7 @@ export function MainPanes(props: MainPanesProps) {
                         normal: { ...chatProfile().normal, modelID },
                       })
                     }
-                    placeholder="Chat 模型"
+                    placeholder={t("transcript.chatModel")}
                     menuPosition="top"
                   />
                   <NeuSelect
@@ -726,7 +734,7 @@ export function MainPanes(props: MainPanesProps) {
                         },
                       })
                     }
-                    placeholder="Chat 推理"
+                    placeholder={t("transcript.chatReasoning")}
                     menuPosition="top"
                   />
                   <NeuSelect
@@ -741,7 +749,7 @@ export function MainPanes(props: MainPanesProps) {
                         expert: { ...chatProfile().expert, modelID },
                       })
                     }
-                    placeholder="专家模型"
+                    placeholder={t("transcript.expertModel")}
                     menuPosition="top"
                   />
                   <NeuSelect
@@ -767,7 +775,7 @@ export function MainPanes(props: MainPanesProps) {
                         },
                       })
                     }
-                    placeholder="专家推理"
+                    placeholder={t("transcript.expertReasoning")}
                     menuPosition="top"
                   />
                 </div>

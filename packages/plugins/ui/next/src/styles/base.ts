@@ -273,12 +273,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane-status[data-running="true"] {
   color: var(--neu-success);
 }
-.neu-pane-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
 .neu-load-older {
   border: 1px solid var(--neu-border);
   border-radius: 999px;

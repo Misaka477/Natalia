@@ -242,7 +242,7 @@ export function MainPanes(props: MainPanesProps) {
             <div class="neu-pane">
               <div class="neu-pane-header">
                 <span class="neu-pane-title">Natalia</span>
-                <span class="neu-pane-header-right">
+                <span class={styles.headerRight}>
                   <ContextMeter
                     usage={state().natalia.context ?? state().context}
                     compact
@@ -645,7 +645,7 @@ export function MainPanes(props: MainPanesProps) {
             <div class="neu-pane">
               <div class="neu-pane-header">
                 <span class="neu-pane-title">Navi</span>
-                <span class="neu-pane-header-right">
+                <span class={styles.headerRight}>
                   <ContextMeter usage={state().navi.context} compact />
                   <span
                     class="neu-pane-status"

@@ -18,3 +18,13 @@
   bottom: 16px;
   right: 16px;
 }
+
+/* The pane header's trailing cluster: the model and permission selectors.
+   The pane header itself is shared vocabulary; this is the transcript's
+   own trailing group inside it. */
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}

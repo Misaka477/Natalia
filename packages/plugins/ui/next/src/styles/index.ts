@@ -1,6 +1,10 @@
 import { applyUiSkin, defineUiSkin, type UiSkin } from "@natalia/ui-kit";
-import { confirmDialogCss, nataliaNeuBaseStyles } from "./base";
-import { topbarSegmentsCss } from "./base";
+import {
+  confirmDialogCss,
+  nataliaNeuBaseStyles,
+  settingsFullscreenCss,
+  topbarSegmentsCss,
+} from "./base";
 import {
   PALETTES,
   PALETTE_MODES,
@@ -12,7 +16,7 @@ import {
 import { shapeTokens } from "../theme";
 
 export { nataliaNeuBaseStyles, confirmDialogCss } from "./base";
-export { topbarSegmentsCss } from "./base";
+export { settingsFullscreenCss, topbarSegmentsCss } from "./base";
 export {
   PALETTES,
   PALETTE_MODES,
@@ -59,6 +63,7 @@ export const nataliaNeuStyles =
   nataliaNeuThemeStyles +
   nataliaNeuBaseStyles +
   confirmDialogCss +
+  settingsFullscreenCss +
   topbarSegmentsCss;
 
 /** Skins per mode, kept for the shell's existing skin lookups. */

@@ -5864,10 +5864,10 @@ export const confirmDialogCss = `
 }
 `;
 
-/** The topbar's status and session segments, plus the settings window's
- *  fullscreen presentation. These three belong to regions that have not
- *  been modularized yet; they stay global until their regions move. */
-export const topbarSegmentsCss = `
+/** The settings window's fullscreen presentation. Belongs to the settings
+ *  region, which has not been modularized yet; it stays global until that
+ *  region moves. */
+export const settingsFullscreenCss = `
   /* Settings, fullscreen presentation: the window fills the viewport and
      drops its chrome. Tokens only, like the rest of the sheet. */
   .neu-settings-backdrop[data-fullscreen="true"] {
@@ -5880,7 +5880,12 @@ export const topbarSegmentsCss = `
     border-radius: 0;
     box-shadow: none;
   }
+`;
 
+/** The topbar's status and session segments. These two belong to the topbar
+ *  region, which has not been modularized yet; they stay global until that
+ *  region moves — at which point they travel with the topbar module. */
+export const topbarSegmentsCss = `
   /* The topbar's status segment: the running turn, always in view. */
   .neu-topbar-status {
     margin-left: var(--neu-space-3);

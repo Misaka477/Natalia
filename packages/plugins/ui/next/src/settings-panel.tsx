@@ -48,12 +48,13 @@ function splitCsv(value: string): string[] {
 function buildToolFamilyGroups(
   registered: readonly RegisteredToolView[],
   selected: string,
+  t: (key: string) => string,
 ): ToolFamilyGroup[] {
   const selectedValues = new Set(splitCsv(selected));
   const registeredNames = new Set<string>();
   const byOwner = new Map<string, Set<string>>();
   for (const tool of registered) {
-    const owner = tool.owner || "未归属";
+    const owner = tool.owner || t("settingsDlg.unownedOwner");
     const tools = byOwner.get(owner) ?? new Set<string>();
     tools.add(tool.name);
     byOwner.set(owner, tools);
@@ -74,25 +75,30 @@ function buildToolFamilyGroups(
   if (missing.length)
     groups.push({
       id: "__configured__",
-      label: "已配置（未注册）",
+      label: t("settingsDlg.configuredUnregistered"),
       tools: missing.sort(),
     });
   return groups;
 }
 
 function ToolFamilyChecklist(props: {
+  t: (key: string) => string;
   registered: readonly RegisteredToolView[];
   selected: string;
   onToggle(tools: readonly string[], selected: boolean): void;
 }) {
   const selectedSet = createMemo(() => new Set(splitCsv(props.selected)));
   const groups = createMemo(() =>
-    buildToolFamilyGroups(props.registered, props.selected),
+    buildToolFamilyGroups(props.registered, props.selected, props.t),
   );
   return (
     <Show
       when={groups().length}
-      fallback={<div class="neu-tool-family-empty">暂无可选工具</div>}
+      fallback={
+        <div class="neu-tool-family-empty">
+          {props.t("settingsDlg.noTools")}
+        </div>
+      }
     >
       <div class="neu-tool-family-list">
         <For each={groups()}>
@@ -444,7 +450,7 @@ export function SettingsPanel(props: {
   const groupedSettingsPanels = () => {
     const groups = new Map<string, ReturnType<typeof settingsPanels>>();
     for (const item of settingsPanels()) {
-      const group = item.panel.group ?? "插件设置";
+      const group = item.panel.group ?? t("settingsDlg.pluginGroup");
       const list = groups.get(group) ?? [];
       list.push(item);
       groups.set(group, list);
@@ -513,7 +519,7 @@ export function SettingsPanel(props: {
 
   function modelLabel(config: ConfigV4): string {
     const model = config.defaultModel;
-    if (!model) return "未设置";
+    if (!model) return t("settingsDlg.modelUnset");
     if (typeof model === "string") return model;
     return `${model.provider}/${model.model}`;
   }
@@ -660,7 +666,7 @@ export function SettingsPanel(props: {
     "Git Bash 路径": () => {
       const current = effectiveConfig()?.runtime?.shell?.bashPath ?? "";
       openEdit(
-        "Git Bash 路径 (bash.exe 全路径，留空自动探测)",
+        t("settingsDlg.gitBashTitle"),
         current,
         (raw) => {
           const path = raw.trim();
@@ -684,7 +690,7 @@ export function SettingsPanel(props: {
     "PowerShell 路径": () => {
       const current = effectiveConfig()?.runtime?.shell?.pwshPath ?? "";
       openEdit(
-        "PowerShell 路径 (pwsh.exe 全路径，留空自动探测)",
+        t("settingsDlg.psPathTitle"),
         current,
         (raw) => {
           const path = raw.trim();
@@ -726,13 +732,13 @@ export function SettingsPanel(props: {
       // rule) — measured as "I picked zsh and got a bash".
       const isWindows = hostPlatform() === "win32";
       openSelect(
-        "Shell 类型（命令在哪个 shell 里执行，立即生效）",
+        t("settingsDlg.shellTitle"),
         [
-          { value: "auto", label: "自动（跟随部署默认）" },
+          { value: "auto", label: t("settingsDlg.shellAuto") },
           ...(isWindows
             ? [{ value: "pwsh", label: "pwsh（PowerShell 7）" }]
             : []),
-          { value: "bash", label: "bash（Git Bash / WSL）" },
+          { value: "bash", label: t("settingsDlg.bashWsl") },
         ],
         current,
         (value) => {
@@ -776,7 +782,7 @@ export function SettingsPanel(props: {
     },
     "子 Agent 并发数": () => {
       const current = String(effectiveConfig()?.team?.maxConcurrent ?? 4);
-      openEdit("子 Agent 最大并发数", current, (raw) => {
+      openEdit(t("settingsDlg.subConcurrencyTitle"), current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 1 && value <= 32)
           updateConfig?.({
@@ -790,7 +796,7 @@ export function SettingsPanel(props: {
     "Max Steps": () => {
       const steps = effectiveConfig()?.runtime?.maxStepsPerTurn;
       const current = steps ? String(steps) : "";
-      openEdit("单轮最大执行步数", current, (raw) => {
+      openEdit(t("settingsDlg.maxStepsTitle"), current, (raw) => {
         updateConfig?.({
           runtime: {
             ...effectiveConfig()?.runtime,
@@ -805,7 +811,7 @@ export function SettingsPanel(props: {
         effectiveConfig()?.runtime?.retry?.maxAttemptsPerStep;
       const current =
         effective === null || effective === undefined ? "" : String(effective);
-      openEdit("单步最大重试次数", current, (raw) => {
+      openEdit(t("settingsDlg.maxRetryTitle"), current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0)
           updateConfig?.({
@@ -820,7 +826,7 @@ export function SettingsPanel(props: {
       const current = String(
         effectiveConfig()?.runtime?.timeouts?.requestSec ?? 0,
       );
-      openEdit("请求超时（秒，0 表示不设置）", current, (raw) => {
+      openEdit(t("settingsDlg.timeoutTitle"), current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value >= 0)
           updateConfig?.({
@@ -838,7 +844,7 @@ export function SettingsPanel(props: {
       const current = String(
         effectiveConfig()?.context?.compactionThresholdPercent ?? 85,
       );
-      openEdit("Compaction 阈值（%）", current, (raw) => {
+      openEdit(t("settingsDlg.compactionThresholdTitle"), current, (raw) => {
         const value = Number(raw);
         if (Number.isInteger(value) && value > 0 && value <= 100)
           updateConfig?.({
@@ -854,7 +860,7 @@ export function SettingsPanel(props: {
         effectiveConfig()?.checkpoint?.additionalDirs ?? []
       ).join(",");
       openEdit(
-        "额外 checkpoint 目录（逗号分隔）",
+        t("settingsDlg.checkpointDirsTitle"),
         current,
         (raw) => {
           updateConfig?.({
@@ -939,6 +945,7 @@ export function SettingsPanel(props: {
 
   const toolChecklist = (selected: string, setter: (next: string) => void) => (
     <ToolFamilyChecklist
+      t={props.t}
       registered={props.registeredTools ?? []}
       selected={selected}
       onToggle={(tools, select) =>
@@ -974,7 +981,7 @@ export function SettingsPanel(props: {
       case "zsh":
         return "zsh";
       default:
-        return "自动";
+        return t("settingsDlg.auto");
     }
   }
 
@@ -995,22 +1002,26 @@ export function SettingsPanel(props: {
           config.runtime?.maxAttemptsPerStep ??
           config.runtime?.retry?.maxAttemptsPerStep;
         return retryCap === null || retryCap === undefined
-          ? "不限制"
+          ? t("settingsDlg.unlimited")
           : String(retryCap);
       case "Request Timeout": {
         const seconds = config.runtime?.timeouts?.requestSec ?? 0;
-        return seconds > 0 ? `${seconds}s` : "不设置";
+        return seconds > 0 ? `${seconds}s` : t("settingsDlg.unsetTimeout");
       }
       case "Compaction":
-        return config.context?.compactionEnabled ? "开启" : "关闭";
+        return config.context?.compactionEnabled
+          ? t("settingsDlg.on")
+          : t("settingsDlg.off");
       case "Compaction Threshold":
         return `${config.context?.compactionThresholdPercent ?? 85}%`;
       case "Checkpoint 目录":
-        return `${(config.checkpoint?.additionalDirs ?? []).length} 个`;
+        return t("settingsDlg.dirCount", {
+          count: (config.checkpoint?.additionalDirs ?? []).length,
+        });
       case "Git Bash 路径":
-        return config.runtime?.shell?.bashPath || "自动探测";
+        return config.runtime?.shell?.bashPath || t("settingsDlg.autoDetect");
       case "PowerShell 路径":
-        return config.runtime?.shell?.pwshPath || "自动探测";
+        return config.runtime?.shell?.pwshPath || t("settingsDlg.autoDetect");
       case "Shell 类型":
         // The session's own choice when it has one, else the deployment's
         // configured shell, else 自动 — which is a REAL answer (the platform
@@ -1040,12 +1051,12 @@ export function SettingsPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">设置</span>
+            <span class="neu-settings-title">{t("settingsDlg.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭设置"
+              aria-label={t("settingsDlg.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -1092,7 +1103,9 @@ export function SettingsPanel(props: {
             </nav>
             <section class="neu-settings-content">
               <Show when={current().id === "plugin"}>
-                <div class="neu-settings-content-title">插件配置</div>
+                <div class="neu-settings-content-title">
+                  {t("settings.pluginCategory")}
+                </div>
                 <For each={groupedSettingsPanels()}>
                   {([group, panels]) => (
                     <>
@@ -1130,7 +1143,8 @@ export function SettingsPanel(props: {
                                   {panel.panel.title}
                                 </span>
                                 <span class="neu-settings-item-description">
-                                  {panel.panel.group ?? "插件设置"}
+                                  {panel.panel.group ??
+                                    t("settingsDlg.pluginGroup")}
                                 </span>
                               </div>
                             </button>
@@ -1224,7 +1238,9 @@ export function SettingsPanel(props: {
                               </span>
                             </div>
                             <span class="neu-settings-item-value">
-                              {props.themeMode === "dark" ? "深色" : "浅色"}
+                              {props.themeMode === "dark"
+                                ? t("settingsDlg.themeDark")
+                                : t("settingsDlg.themeLight")}
                             </span>
                           </button>
                         );
@@ -1253,8 +1269,8 @@ export function SettingsPanel(props: {
                             </div>
                             <span class="neu-settings-item-value">
                               {busySendDelivery() === "next-step"
-                                ? "注入当前轮"
-                                : "排到下一轮"}
+                                ? t("settingsDlg.injectCurrent")
+                                : t("settingsDlg.queueNext")}
                             </span>
                           </button>
                         );
@@ -1354,7 +1370,9 @@ export function SettingsPanel(props: {
             onClick={(event) => event.stopPropagation()}
           >
             <div class="neu-settings-header">
-              <span class="neu-settings-title">权限配置</span>
+              <span class="neu-settings-title">
+                {t("settingsDlg.permissionListTitle")}
+              </span>
               <button
                 type="button"
                 class="neu-settings-close"
@@ -1382,10 +1400,10 @@ export function SettingsPanel(props: {
                   <div class="neu-settings-item">
                     <div class="neu-settings-item-main">
                       <span class="neu-settings-item-label">
-                        暂无自定义权限配置
+                        {t("settingsDlg.noCustomProfiles")}
                       </span>
                       <span class="neu-settings-item-description">
-                        点击下方“新增权限配置”创建
+                        {t("settingsDlg.noCustomProfilesHint")}
                       </span>
                     </div>
                   </div>
@@ -1414,7 +1432,7 @@ export function SettingsPanel(props: {
                           <span class="neu-settings-item-label">
                             {name}
                             {effectiveConfig()?.defaultAgentMode === name
-                              ? "（默认）"
+                              ? t("settingsDlg.defaultSuffix")
                               : ""}
                           </span>
                           <span class="neu-settings-item-description">
@@ -1433,7 +1451,7 @@ export function SettingsPanel(props: {
                           openPermissionEditorFor(name);
                         }}
                       >
-                        编辑
+                        {t("settingsDlg.edit")}
                       </button>
                     </div>
                   )}
@@ -1448,7 +1466,7 @@ export function SettingsPanel(props: {
                     openNewPermissionEditor();
                   }}
                 >
-                  新增权限配置
+                  {t("settingsDlg.newProfile")}
                 </button>
               </div>
             </div>
@@ -1466,7 +1484,7 @@ export function SettingsPanel(props: {
           >
             <div class="neu-settings-header">
               <span class="neu-settings-title">
-                权限配置（Permission Profile）
+                {t("settingsDlg.profileEditorTitle")}
               </span>
               <button
                 type="button"
@@ -1486,7 +1504,9 @@ export function SettingsPanel(props: {
             </div>
             <div class="neu-settings-body neu-edit-body">
               <div class="neu-form-field">
-                <label class="neu-form-label">Profile 名称</label>
+                <label class="neu-form-label">
+                  {t("settingsDlg.profileName")}
+                </label>
                 <input
                   class="neu-form-input"
                   value={permissionName()}
@@ -1494,7 +1514,9 @@ export function SettingsPanel(props: {
                 />
               </div>
               <div class="neu-form-field">
-                <label class="neu-form-label">描述</label>
+                <label class="neu-form-label">
+                  {t("settingsDlg.profileDesc")}
+                </label>
                 <input
                   class="neu-form-input"
                   value={permissionDescription()}
@@ -1517,7 +1539,7 @@ export function SettingsPanel(props: {
               </div>
               <div class="neu-form-field">
                 <label class="neu-form-label">
-                  Allowed Tools（允许列表，留空不限制）
+                  {t("settingsDlg.allowedTools")}
                 </label>
                 {toolChecklist(
                   permissionAllowedTools(),
@@ -1525,7 +1547,9 @@ export function SettingsPanel(props: {
                 )}
               </div>
               <div class="neu-form-field">
-                <label class="neu-form-label">Excluded Tools（黑名单）</label>
+                <label class="neu-form-label">
+                  {t("settingsDlg.excludedTools")}
+                </label>
                 {toolChecklist(
                   permissionExcludedTools(),
                   setPermissionExcludedTools,
@@ -1544,7 +1568,9 @@ export function SettingsPanel(props: {
                 />
               </div>
               <div class="neu-form-field">
-                <label class="neu-form-label">Command Rules（逗号分隔）</label>
+                <label class="neu-form-label">
+                  {t("settingsDlg.commandRules")}
+                </label>
                 <input
                   class="neu-form-input"
                   value={permissionCommandRules()}
@@ -1555,7 +1581,7 @@ export function SettingsPanel(props: {
               </div>
               <div class="neu-form-field">
                 <label class="neu-form-label">
-                  Interactive Programs（高风险启动命令）
+                  {t("settingsDlg.interactivePrograms")}
                 </label>
                 <div class="neu-checkbox-list">
                   <label class="neu-form-checkbox">
@@ -1564,13 +1590,13 @@ export function SettingsPanel(props: {
                       checked={permissionInteractiveAny()}
                       onChange={() => setPermissionInteractiveAny((v) => !v)}
                     />
-                    <span>allowAny（任意启动命令）</span>
+                    <span>{t("settingsDlg.allowAny")}</span>
                   </label>
                 </div>
                 <input
                   class="neu-form-input"
                   value={permissionInteractiveAllow()}
-                  placeholder="允许的交互程序，逗号分隔"
+                  placeholder={t("settingsDlg.programsPh")}
                   onInput={(e) =>
                     setPermissionInteractiveAllow(e.currentTarget.value)
                   }
@@ -1582,7 +1608,7 @@ export function SettingsPanel(props: {
                   class="neu-form-btn neu-form-cancel"
                   onClick={() => setPermissionEditorOpen(false)}
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -1630,7 +1656,7 @@ export function SettingsPanel(props: {
                     setPermissionEditorOpen(false);
                   }}
                 >
-                  保存
+                  {t("settingsDlg.save")}
                 </button>
               </div>
             </div>
@@ -1716,7 +1742,7 @@ export function SettingsPanel(props: {
                   class="neu-form-btn neu-form-cancel"
                   onClick={() => setEditFieldLabel(undefined)}
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -1726,7 +1752,7 @@ export function SettingsPanel(props: {
                     setEditFieldLabel(undefined);
                   }}
                 >
-                  确定
+                  {t("settingsDlg.confirm")}
                 </button>
               </div>
             </div>

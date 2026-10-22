@@ -309,26 +309,23 @@ export function MainPanes(props: MainPanesProps) {
                   <span class="neu-activity-pulse" />
                   <Show when={state().goal}>
                     {(goal) => (
-                      <span class="neu-goal-slot">
-                        <span
-                          class="neu-goal-control"
-                          data-phase={goal()!.phase}
-                        >
+                      <span class={styles.slot}>
+                        <span class={styles.control} data-phase={goal()!.phase}>
                           <span
-                            class="neu-goal-chip"
+                            class={styles.chip}
                             title={`${goal()!.objective}${
                               goal()!.blockedReason
                                 ? ` — ${goal()!.blockedReason!.code}: ${goal()!.blockedReason!.message}`
                                 : ""
                             }`}
                           >
-                            <span class="neu-goal-chip-label">Goal</span>
-                            <span class="neu-goal-chip-text">
+                            <span class={styles.chipLabel}>Goal</span>
+                            <span class={styles.chipText}>
                               {goal()!.objective.length > 40
                                 ? `${goal()!.objective.slice(0, 40)}…`
                                 : goal()!.objective}
                             </span>
-                            <span class="neu-goal-chip-round">
+                            <span class={styles.chipRound}>
                               {`Round ${goal()!.roundsStarted}${
                                 goal()!.maxGoalRounds === 0
                                   ? ""
@@ -345,7 +342,7 @@ export function MainPanes(props: MainPanesProps) {
                                   by hand. */}
                             <Show when={goal()!.phase === "complete"}>
                               <span
-                                class="neu-goal-chip-done"
+                                class={styles.chipDone}
                                 title={t("transcript.goalDoneTitle")}
                               >
                                 {t("transcript.goalDone")}
@@ -354,7 +351,7 @@ export function MainPanes(props: MainPanesProps) {
                           </span>
                           <Show when={goal()!.phase !== "complete"}>
                             <button
-                              class="neu-goal-action neu-goal-toggle"
+                              class={`${styles.action} ${styles.toggle}`}
                               data-phase={goal()!.phase}
                               disabled={goalBusy()}
                               title={
@@ -374,7 +371,7 @@ export function MainPanes(props: MainPanesProps) {
                             </button>
                           </Show>
                           <button
-                            class="neu-goal-action"
+                            class={styles.action}
                             disabled={goalBusy()}
                             title={t("transcript.goalEditTitle")}
                             onClick={() => openGoalEditor(goal()!)}
@@ -382,7 +379,7 @@ export function MainPanes(props: MainPanesProps) {
                             ✎
                           </button>
                           <button
-                            class="neu-goal-action neu-goal-clear"
+                            class={`${styles.action} ${styles.clear}`}
                             disabled={goalBusy()}
                             title={t("transcript.goalClearTitle")}
                             onClick={() => void runGoalControl("clear")}
@@ -391,8 +388,8 @@ export function MainPanes(props: MainPanesProps) {
                           </button>
                         </span>
                         <Show when={goalEditOpen()}>
-                          <div class="neu-goal-editor">
-                            <label class="neu-goal-editor-field">
+                          <div class={styles.editor}>
+                            <label class={styles.editorField}>
                               <span>{t("transcript.goalLabel")}</span>
                               <textarea
                                 rows={2}
@@ -414,7 +411,9 @@ export function MainPanes(props: MainPanesProps) {
                                 }}
                               />
                             </label>
-                            <label class="neu-goal-editor-field neu-goal-editor-cap">
+                            <label
+                              class={`${styles.editorField} ${styles.editorCap}`}
+                            >
                               <span>{t("transcript.goalCapLabel")}</span>
                               <input
                                 type="number"
@@ -432,16 +431,16 @@ export function MainPanes(props: MainPanesProps) {
                                 }}
                               />
                             </label>
-                            <div class="neu-goal-editor-actions">
+                            <div class={styles.editorActions}>
                               <button
-                                class="neu-goal-editor-save"
+                                class={styles.editorSave}
                                 disabled={goalBusy()}
                                 onClick={() => void saveGoalEditor(goal()!)}
                               >
                                 {t("common.save")}
                               </button>
                               <button
-                                class="neu-goal-editor-cancel"
+                                class={styles.editorCancel}
                                 onClick={() => setGoalEditOpen(false)}
                               >
                                 {t("common.cancel")}
@@ -453,7 +452,7 @@ export function MainPanes(props: MainPanesProps) {
                     )}
                   </Show>
                   <Show when={goalNotice()}>
-                    <span class="neu-goal-notice">{goalNotice()}</span>
+                    <span class={styles.notice}>{goalNotice()}</span>
                   </Show>
                   <span class="neu-activity-label">
                     {state().natalia.activeTurn

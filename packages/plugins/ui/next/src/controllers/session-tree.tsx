@@ -53,7 +53,7 @@ function TreeRow(props: {
   return (
     <button
       type="button"
-      class="neu-tree-row"
+      class={styles.row}
       data-selected={props.selected}
       style={{ "padding-left": `${18 + (props.depth ?? 1) * 14}px` }}
       onClick={() => {
@@ -69,7 +69,7 @@ function TreeRow(props: {
         when={props.editValue !== undefined}
         fallback={
           <>
-            <span class="neu-tree-label">{props.label}</span>
+            <span class={styles.label}>{props.label}</span>
             {props.status === "running" ? (
               <span class="neu-badge neu-badge-running">
                 {t("sidebar.parallelRunning")}
@@ -77,11 +77,11 @@ function TreeRow(props: {
             ) : null}
             {props.badge ? <span class="neu-badge">{props.badge}</span> : null}
             <Show when={!props.bulkMode && (props.onAction || props.onEdit)}>
-              <span class="neu-tree-actions">
+              <span class={styles.actions}>
                 <Show when={props.onAction}>
                   <button
                     type="button"
-                    class="neu-tree-edit"
+                    class={styles.edit}
                     title={props.actionTitle}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -94,7 +94,7 @@ function TreeRow(props: {
                 <Show when={props.onEdit}>
                   <button
                     type="button"
-                    class="neu-tree-edit"
+                    class={styles.edit}
                     title={t("sidebar.rename")}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -110,7 +110,7 @@ function TreeRow(props: {
         }
       >
         <input
-          class="neu-tree-edit-input"
+          class={styles.editInput}
           value={props.editValue}
           onInput={(event) => props.onEditChange?.(event.currentTarget.value)}
           onKeyDown={(event) => {

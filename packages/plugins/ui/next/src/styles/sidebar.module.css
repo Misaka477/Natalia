@@ -362,3 +362,105 @@
   background: var(--neu-bg);
   color: var(--neu-text);
 }
+
+/* The tree's rows: the row itself with its states, the hover actions, the
+   rename control and the label. */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  margin: 4px 0;
+  border: none;
+  border-radius: var(--neu-radius-sm);
+  background: transparent;
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.row:active {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--neu-accent);
+  outline-offset: 2px;
+}
+
+.row:hover {
+  background: var(--neu-bg);
+  color: var(--neu-text);
+}
+
+.row[data-selected="true"] {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+  color: var(--neu-text);
+}
+
+.actions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.row:hover .actions,
+.row:focus-within .actions {
+  display: inline-flex;
+}
+
+.edit {
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.edit:hover {
+  color: var(--neu-accent);
+}
+
+.editInput {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  outline: none;
+  box-shadow: var(--neu-inset-1);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The smooth-transition pass the global sheet applies across regions;
+   these two rows were in that list, so the module carries it for them. */
+.row,
+.workspaceRow {
+  transition:
+    box-shadow 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}

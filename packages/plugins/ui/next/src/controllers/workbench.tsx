@@ -244,6 +244,28 @@ export function RightRail(props: RightRailProps) {
                       mounting = false;
                     });
                 });
+                // THE DOCK MODES AND THIS MOUNT (terminal independent frame).
+                //
+                // `tab` is what this code does today: the panel's host lives
+                // in the rail and is shown or hidden. `split` and `float`
+                // must NOT re-mount the panel into a second container —
+                // everything these panels hold lives inside them (an xterm
+                // instance with its socket and scrollback, the editor's open
+                // tabs and unsaved buffers), and a second mount throws all of
+                // it away, which is exactly the defect the never-keyed rule
+                // above was written to kill.
+                //
+                // The shape that keeps the invariant: the host div MOVES.
+                // One container, created once on first activation and never
+                // rebuilt, is appended to whichever parent the current dock
+                // mode names — the rail for `tab`, the shell's split column
+                // for `split`, the floating frame's body for `float`. The
+                // panel's own DOM (and therefore its xterm, its socket and
+                // its scrollback) survives the move untouched, because
+                // appending an element re-parents it rather than recreating
+                // it. The mode change is therefore an appendChild, not a
+                // mount — and the guard test's "never keyed and never
+                // rebuilt" property stays true under all three modes.
                 return (
                   <div
                     class="neu-side-panel-host"

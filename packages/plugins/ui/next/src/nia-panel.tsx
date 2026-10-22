@@ -25,6 +25,7 @@ import type { Attachment, Message } from "./types";
 import { stableRows, type RowSignature } from "./stable-rows";
 
 export function NiaPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: AppState;
   runtime?: RuntimeClient;
   sessionID?: string;
@@ -42,6 +43,7 @@ export function NiaPanel(props: {
    */
   onOpenSettings?: () => void;
 }) {
+  const t = props.t;
   const [draft, setDraft] = createSignal("");
   const [attachments, setAttachments] = createSignal<ComposerAttachment[]>([]);
   const [modelID, setModelID] = createSignal("");
@@ -408,8 +410,9 @@ export function NiaPanel(props: {
             menuPosition="top"
           />
         </div>
-        <SessionUsageBar usage={props.state.usageByChannel.nia} />
+        <SessionUsageBar t={props.t} usage={props.state.usageByChannel.nia} />
         <Composer
+          t={props.t}
           value={draft()}
           placeholder="问 Nia 审计发现，或直接和她聊…"
           busy={Boolean(active()) || busy()}

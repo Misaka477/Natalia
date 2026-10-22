@@ -48,6 +48,7 @@ function subagentToolCallsFromText(
 }
 
 export function AgentPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   state: AppState;
   runtime?: RuntimeClient;
   sessionID?: string;
@@ -61,6 +62,7 @@ export function AgentPanel(props: {
     },
   ) => void;
 }) {
+  const t = props.t;
   const [subTab, setSubTab] = createSignal<"subagent" | "team">("subagent");
   const [selectedID, setSelectedID] = createSignal<string | undefined>(
     undefined,
@@ -559,6 +561,7 @@ export function AgentPanel(props: {
                     olderHistoryLoading={subagentPaging().loadingOlder}
                   />
                   <SessionUsageBar
+                    t={props.t}
                     usage={
                       props.state.subagentStates[selectedID() ?? ""]
                         ?.sessionUsage

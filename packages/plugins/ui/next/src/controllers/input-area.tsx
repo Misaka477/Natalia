@@ -73,6 +73,7 @@ export function MainInputArea(props: MainInputAreaProps) {
   return (
     <>
       <QueueDock
+        t={t}
         items={state().pendingInputs}
         onRemove={(id) => {
           void props.ctx.runtime.removeInput?.({
@@ -94,9 +95,10 @@ export function MainInputArea(props: MainInputAreaProps) {
           });
         }}
       />
-      <SessionUsageBar usage={state().usageByChannel.main} />
+      <SessionUsageBar t={t} usage={state().usageByChannel.main} />
       <Show when={pendingTakeoverCount() > 0 && !pendingTakeoverMinimized()}>
         <PendingTakeover
+          t={t}
           ctx={props.ctx}
           minimized={pendingTakeoverMinimized}
           onMinimize={setPendingTakeoverMinimized}
@@ -106,6 +108,7 @@ export function MainInputArea(props: MainInputAreaProps) {
       </Show>
       <Show when={pendingTakeoverCount() === 0 || pendingTakeoverMinimized()}>
         <Composer
+          t={t}
           value={mainDraft()}
           placeholder={t("input.messagePlaceholder")}
           busy={Boolean(state().natalia.activeTurn)}
@@ -248,8 +251,9 @@ export function ChatInputArea(props: ChatInputAreaProps) {
   } = props;
   return (
     <>
-      <SessionUsageBar usage={state().usageByChannel.navi} />
+      <SessionUsageBar t={t} usage={state().usageByChannel.navi} />
       <Composer
+        t={t}
         value={chatDraft()}
         placeholder={t("input.chatPlaceholder")}
         busy={Boolean(naviChatActivity())}

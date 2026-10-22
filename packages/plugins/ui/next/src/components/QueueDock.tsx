@@ -8,6 +8,7 @@ export interface QueueDockItem {
 }
 
 export interface QueueDockProps {
+  t: (key: string, params?: Record<string, unknown>) => string;
   items: QueueDockItem[];
   onRemove: (id: string) => void;
   onReplace: (id: string, text: string) => void;
@@ -22,6 +23,7 @@ const COLLAPSE_AFTER = 3;
  * events, so it never touches the transcript.
  */
 export function QueueDock(props: QueueDockProps) {
+  const t = props.t;
   const [expanded, setExpanded] = createSignal(false);
   const [editing, setEditing] = createSignal<string | undefined>(undefined);
   const [draft, setDraft] = createSignal("");
@@ -47,14 +49,18 @@ export function QueueDock(props: QueueDockProps) {
     <Show when={props.items.length > 0}>
       <div class="natalia-queue-dock">
         <div class="natalia-queue-head">
-          <span class="natalia-queue-title">队列 · {props.items.length}</span>
+          <span class="natalia-queue-title">
+            {t("queue.title", { count: props.items.length })}
+          </span>
           <Show when={hiddenCount() > 0}>
             <button
               type="button"
               class="natalia-queue-toggle"
               onClick={() => setExpanded((value) => !value)}
             >
-              {expanded() ? "收起" : `展开 ${hiddenCount()} 条`}
+              {expanded()
+                ? t("queue.collapse")
+                : t("queue.expand", { count: hiddenCount() })}
             </button>
           </Show>
         </div>
@@ -62,7 +68,9 @@ export function QueueDock(props: QueueDockProps) {
           {(item) => (
             <div class="natalia-queue-row" data-status={item.status}>
               <span class="natalia-queue-chip">
-                {item.delivery === "next-step" ? "等待注入" : "排队中"}
+                {item.delivery === "next-step"
+                  ? t("queue.waitingInject")
+                  : t("queue.queued")}
               </span>
               <Show
                 when={editing() === item.id}
@@ -93,9 +101,9 @@ export function QueueDock(props: QueueDockProps) {
                     type="button"
                     class="natalia-queue-action"
                     onClick={() => props.onPromote(item.id)}
-                    title="提升为 next-step，注入当前轮"
+                    title={t("queue.promoteTitle")}
                   >
-                    提升
+                    {t("queue.promote")}
                   </button>
                 </Show>
                 <Show
@@ -105,9 +113,9 @@ export function QueueDock(props: QueueDockProps) {
                       type="button"
                       class="natalia-queue-action"
                       onClick={() => beginEdit(item.id, item.text)}
-                      title="编辑"
+                      title={t("queue.editTitle")}
                     >
-                      编辑
+                      {t("queue.edit")}
                     </button>
                   }
                 >
@@ -115,9 +123,9 @@ export function QueueDock(props: QueueDockProps) {
                     type="button"
                     class="natalia-queue-action"
                     onClick={() => commitEdit(item.id)}
-                    title="保存"
+                    title={t("queue.saveTitle")}
                   >
-                    保存
+                    {t("queue.save")}
                   </button>
                 </Show>
                 <button
@@ -125,9 +133,9 @@ export function QueueDock(props: QueueDockProps) {
                   class="natalia-queue-action"
                   data-danger="true"
                   onClick={() => props.onRemove(item.id)}
-                  title="删除"
+                  title={t("queue.deleteTitle")}
                 >
-                  删除
+                  {t("queue.delete")}
                 </button>
               </div>
             </div>

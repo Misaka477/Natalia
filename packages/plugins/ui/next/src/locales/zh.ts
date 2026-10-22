@@ -122,6 +122,39 @@ export const zh = {
   "transcript.chatReasoning": "Chat 推理",
   "transcript.expertModel": "专家模型",
   "transcript.expertReasoning": "专家推理",
+  // queue dock
+  "queue.title": "队列 · {count}",
+  "queue.collapse": "收起",
+  "queue.expand": "展开 {count} 条",
+  "queue.waitingInject": "等待注入",
+  "queue.queued": "排队中",
+  "queue.promoteTitle": "提升为 next-step，注入当前轮",
+  "queue.promote": "提升",
+  "queue.editTitle": "编辑",
+  "queue.edit": "编辑",
+  "queue.saveTitle": "保存",
+  "queue.save": "保存",
+  "queue.deleteTitle": "删除",
+  "queue.delete": "删除",
+  // pending takeover
+  "pending.count": "{count} 个待处理",
+  "pending.expand": "展开",
+  "pending.decisionTitle": "等待你的决定（{count}）",
+  "pending.minimize": "最小化",
+  "pending.hint": "回答后 agent 自动继续；最小化不会让它消失，徽标会留着。",
+  "pending.empty": "没有待处理事项",
+  // session usage bar
+  "usage.title": "本会话轮数 / provider 步数（每次模型调用计一步）",
+  "usage.turnsSteps": "{turns} 轮 · {steps} 步",
+  "usage.cacheHit": "命中 {rate}%",
+  "usage.llmTool": "LLM {llm} · 工具 {tool}",
+  "usage.firstToken": "首 token {ms}",
+  // composer
+  "composer.placeholder": "输入消息...",
+  "composer.attachTitle": "添加附件",
+  "composer.stopTitle": "停止",
+  "composer.sendInjectTitle": "发送并注入当前轮",
+  "composer.sendTitle": "发送",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

@@ -35,6 +35,7 @@ import type { UiPluginContext } from "@natalia/ui-host";
  * and a second request never renders inside the first's disposed tree.
  */
 export function PendingTakeover(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   ctx: UiPluginContext;
   /** Lifted so the shell can render the composer again while minimized. */
   minimized: () => boolean;
@@ -43,6 +44,7 @@ export function PendingTakeover(props: {
   focusID: () => string | undefined;
   onFocusHandled: () => void;
 }) {
+  const t = props.t;
   const minimized = props.minimized;
   const setMinimized = props.onMinimize;
   const [focusedID, setFocusedID] = createSignal<string | undefined>(undefined);
@@ -110,14 +112,14 @@ export function PendingTakeover(props: {
         fallback={
           <div class="natalia-pending-takeover-min" data-testid="pending-min">
             <span class="natalia-pending-takeover-min-count">
-              {count()} 个待处理
+              {t("pending.count", { count: count() })}
             </span>
             <button
               type="button"
               class="natalia-pending-takeover-min-expand"
               onClick={() => setMinimized(false)}
             >
-              展开
+              {t("pending.expand")}
             </button>
           </div>
         }
@@ -125,22 +127,20 @@ export function PendingTakeover(props: {
         <div class="natalia-pending-takeover" data-testid="pending-takeover">
           <div class="natalia-pending-takeover-head">
             <span class="natalia-pending-takeover-title">
-              等待你的决定（{count()}）
+              {t("pending.decisionTitle", { count: count() })}
             </span>
             <button
               type="button"
               class="natalia-pending-takeover-minimize"
               onClick={() => setMinimized(true)}
             >
-              最小化
+              {t("pending.minimize")}
             </button>
           </div>
           <Show
             when={items().length > 1}
             fallback={
-              <p class="natalia-pending-takeover-hint">
-                回答后 agent 自动继续；最小化不会让它消失，徽标会留着。
-              </p>
+              <p class="natalia-pending-takeover-hint">{t("pending.hint")}</p>
             }
           >
             <ul class="natalia-pending-takeover-list">
@@ -162,7 +162,9 @@ export function PendingTakeover(props: {
           <Show
             keyed
             when={activeID()}
-            fallback={<div class="natalia-pending-empty">没有待处理事项</div>}
+            fallback={
+              <div class="natalia-pending-empty">{t("pending.empty")}</div>
+            }
           >
             {(id) => {
               const item = () => items().find((entry) => entry.id === id);

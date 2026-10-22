@@ -14,6 +14,7 @@ export interface ComposerAttachment {
 }
 
 export interface ComposerProps {
+  t: (key: string, params?: Record<string, unknown>) => string;
   value: string;
   placeholder?: string;
   busy?: boolean;
@@ -29,6 +30,7 @@ export interface ComposerProps {
 }
 
 export function Composer(props: ComposerProps) {
+  const t = props.t;
   let textareaRef: HTMLTextAreaElement | undefined;
   let resizeObserver: ResizeObserver | undefined;
   const [isFocused, setIsFocused] = createSignal(false);
@@ -158,7 +160,7 @@ export function Composer(props: ComposerProps) {
         ref={textareaRef}
         class="natalia-composer-textarea"
         value={props.value}
-        placeholder={props.placeholder ?? "输入消息..."}
+        placeholder={props.placeholder ?? t("composer.placeholder")}
         disabled={props.disabled}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -176,7 +178,7 @@ export function Composer(props: ComposerProps) {
               class="natalia-composer-icon-btn"
               onClick={props.onAddAttachment}
               disabled={props.disabled}
-              title="添加附件"
+              title={t("composer.attachTitle")}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
@@ -201,7 +203,7 @@ export function Composer(props: ComposerProps) {
               class="natalia-composer-stop"
               onClick={props.onStop}
               disabled={props.disabled}
-              title="停止"
+              title={t("composer.stopTitle")}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <rect
@@ -222,7 +224,11 @@ export function Composer(props: ComposerProps) {
               data-busy={props.busy}
               onClick={handleSubmit}
               disabled={props.disabled || !canSubmit()}
-              title={props.busy ? "发送并注入当前轮" : "发送"}
+              title={
+                props.busy
+                  ? t("composer.sendInjectTitle")
+                  : t("composer.sendTitle")
+              }
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path

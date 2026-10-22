@@ -165,6 +165,7 @@ export function RightRail(props: RightRailProps) {
               keyed
             >
               <NiaPanel
+                t={t}
                 state={state()}
                 runtime={props.ctx.runtime}
                 catalog={modelCatalog()}
@@ -181,6 +182,7 @@ export function RightRail(props: RightRailProps) {
               when={rightTab() === "agent" ? rightPanelScopeKey() : undefined}
             >
               <AgentPanel
+                t={t}
                 state={state()}
                 runtime={props.ctx.runtime}
                 sessionID={selectedSessionID() || state().sessionID}

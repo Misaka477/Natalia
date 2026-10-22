@@ -49,9 +49,18 @@ test("the delivery mode rides the tooltip, and Stop keeps the red", async () => 
       "$1",
     ),
   ).text();
-  expect(composer).toContain(
-    'title={props.busy ? "发送并注入当前轮" : "发送"}',
-  );
+  expect(composer).toContain('t("composer.sendInjectTitle")');
+  expect(composer).toContain('t("composer.sendTitle")');
+  // The keys exist in both dictionaries, so the tooltip still names the
+  // delivery after the locale conversion.
+  const zh = await Bun.file(
+    new URL("../src/locales/zh.ts", import.meta.url).pathname.replace(
+      /^\/([A-Za-z]:)/u,
+      "$1",
+    ),
+  ).text();
+  expect(zh).toContain('"composer.sendInjectTitle": "发送并注入当前轮"');
+  expect(zh).toContain('"composer.sendTitle": "发送"');
   // The interrupt control is the red one, and it is a separate control.
   expect(composer).toContain("natalia-composer-stop");
   const stopRule = styles.slice(

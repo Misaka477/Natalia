@@ -31,9 +31,11 @@ function formatMs(ms: number): string {
  * `/status` cannot describe one run with two numbers.
  */
 export function SessionUsageBar(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   state?: AppState;
   usage?: SessionUsageStats;
 }) {
+  const t = props.t;
   // Always present: a usage meter is a standing readout, not a popup. With no
   // steps yet the figures are all zero, which is the honest "nothing spent
   // yet" state — the bar still shows so the slot never flickers in and out.
@@ -48,11 +50,8 @@ export function SessionUsageBar(props: {
 
   return (
     <div class="session-usage-bar">
-      <span
-        class="session-usage-seg"
-        title="本会话轮数 / provider 步数（每次模型调用计一步）"
-      >
-        {view().turns} 轮 · {view().steps} 步
+      <span class="session-usage-seg" title={t("usage.title")}>
+        {t("usage.turnsSteps", { turns: view().turns, steps: view().steps })}
       </span>
       <span class="session-usage-sep">·</span>
       <span
@@ -72,16 +71,19 @@ export function SessionUsageBar(props: {
       </span>
       <span class="session-usage-sep">·</span>
       <span class="session-usage-seg" title="Cache read / total input">
-        命中 {(view().cacheHitRate * 100).toFixed(1)}%
+        {t("usage.cacheHit", { rate: (view().cacheHitRate * 100).toFixed(1) })}
       </span>
       <span class="session-usage-sep">·</span>
       <span class="session-usage-seg" title="Model / tool wall time">
-        LLM {formatMs(view().llmMs)} · 工具 {formatMs(view().toolMs)}
+        {t("usage.llmTool", {
+          llm: formatMs(view().llmMs),
+          tool: formatMs(view().toolMs),
+        })}
       </span>
       <Show when={view().ttftSteps > 0}>
         <span class="session-usage-sep">·</span>
         <span class="session-usage-seg" title="Average first-token latency">
-          首 token {formatMs(view().avgTtftMs)}
+          {t("usage.firstToken", { ms: formatMs(view().avgTtftMs) })}
         </span>
       </Show>
       <Show when={view().tokensPerSecond > 0}>

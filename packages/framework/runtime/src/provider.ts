@@ -1856,9 +1856,9 @@ function reasoningFromContextEntries(
  * every gateway rejects a request whose assistant tool_calls have no matching
  * tool results (measured: `input_invalid` on every turn from the first
  * occurrence on, the session never recovering, because the same history
- * replays). The wording follows the deepseek harness's recovery: the outcome
- * is unknown, and the retry test is stated rather than assumed, so the model
- * neither loses the call nor retries a side effect blindly.
+ * replays). The wording states the outcome is unknown, and the retry test is
+ * stated rather than assumed, so the model neither loses the call nor retries
+ * a side effect blindly.
  */
 const UNANSWERED_TOOL_CALL_TEXT =
   "This tool call was never answered: its turn ended before the result was recorded, so its outcome is unknown. Retry only if the operation is read-only or idempotent; if it may have side effects, verify the external state or ask the human before retrying. Do not retry blindly.";
@@ -1873,10 +1873,11 @@ const UNANSWERED_TOOL_CALL_TEXT =
  * bare filename is a 400, the same call with `{}` is a 200, and a session
  * whose journal carries such a call is unsendable forever because the same
  * history replays on every turn. The journal keeps the raw text (the tool
- * failed with "JSON Parse error", the right model-facing answer, and the
- * deepseek harness's `parseArguments` preserves it the same way); the wire
- * gets `{}`, so the model still sees the call it made and the result naming
- * what was wrong.
+ * failed with "JSON Parse error", the right model-facing answer — an
+ * unparseable string is preserved as the call's arguments on the execution
+ * side, which is what makes the tool fail loudly rather than silently); the
+ * wire gets `{}`, so the model still sees the call it made and the result
+ * naming what was wrong.
  */
 export function safeToolCallArguments(raw: string): string {
   try {
@@ -1895,9 +1896,8 @@ export function safeToolCallArguments(raw: string): string {
  * `toolCalls`, which is the field the gateway's pairing rule is about. So the
  * definitive pairing check is on the assembled messages: every assistant call
  * must be followed by its tool result, synthesized here when the journal never
- * recorded one. This is the deepseek harness's recovery, at the request
- * projection boundary — the same place its `ToolCallRecovery` closes dangling
- * calls before they reach a provider.
+ * recorded one. The request projection boundary is the right place: whatever
+ * built the history, the wire the gateway sees is balanced.
  */
 function closeUnansweredToolCalls(
   messages: ProviderMessage[],

@@ -14,8 +14,9 @@
  * to the same count did not reproduce it (the count was never the cause).
  *
  * The repairs: sanitize the arguments (the call stays visible, its result
- * still names what was wrong), and close a call that never got a result — the
- * deepseek harness's `ToolCallRecovery` does the same at the same place.
+ * still names what was wrong), and close a call that never got a result — both
+ * at the projection boundary, so whatever built the history the wire the
+ * gateway sees is balanced.
  */
 import { expect, test } from "bun:test";
 import type { ContextEntry } from "@anthelia/runtime";

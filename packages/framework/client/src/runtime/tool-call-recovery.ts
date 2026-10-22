@@ -10,12 +10,19 @@
  * was a cancelled turn: two parallel tool calls, one approval-gated, the human
  * cancelled — the running call got its result, the gated one never did.
  *
- * The remedy is the deepseek harness's (devref/deepseek-harness,
- * `ToolCallRecovery` / `openTurnClosers`): synthesize the missing results so
- * the history is balanced, and say plainly what happened. The model must not
- * silently lose a call it made — that is how a re-run does the side effect
- * twice — so the wording states the outcome is unknown and gives the retry
- * test rather than pretending the call succeeded or was never made.
+ * The remedy: synthesize the missing results so the history is balanced, and
+ * say plainly what happened. The model must not silently lose a call it made
+ * — that is how a re-run does the side effect twice — so the wording states
+ * the outcome is unknown and gives the retry test rather than pretending the
+ * call succeeded or was never made. Three pieces, the same shape:
+ *
+ * - the cancel path closes the cancelled turn's unanswered calls after the
+ *   abort unwinds (so the calls the turn runner already settled keep their
+ *   real results and only what never ran gets a synthetic one);
+ * - the exec build closes a journal that was already written, before the
+ *   ledger is restored from it, so the ledger this exec carries is balanced
+ *   and the journal is healed durably in one move;
+ * - both are idempotent: a balanced journal yields nothing.
  */
 import type { RuntimeEvent } from "@anthelia/contracts";
 

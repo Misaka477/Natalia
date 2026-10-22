@@ -11,12 +11,11 @@
  * The user's diagnosis was exact: not the model, the message assembly — we
  * were sending a history the wire format forbids.
  *
- * The repair follows the deepseek harness's `ToolCallRecovery` /
- * `openTurnClosers` (devref/deepseek-harness): close the unanswered calls with
- * synthetic results that say the outcome is unknown and state the retry test,
- * so the model neither loses the call nor retries a side effect blindly. The
- * cancel path closes its own calls after the abort unwinds; attach closes any
- * journal that was already written.
+ * The repair: close the unanswered calls with synthetic results that say the
+ * outcome is unknown and state the retry test, so the model neither loses the
+ * call nor retries a side effect blindly. The cancel path closes its own calls
+ * after the abort unwinds; the exec build closes any journal that was already
+ * written.
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";

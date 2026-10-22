@@ -10,7 +10,13 @@ type DialogRequest = {
   resolve: (value: boolean) => void;
 };
 
-export function useConfirmDialog() {
+/**
+ * The confirm/alert host. The optional translate function drives the
+ * default button labels; without one the labels stay their Chinese
+ * defaults, so a caller that never learned about the locale runtime
+ * still shows correct copy.
+ */
+export function useConfirmDialog(t?: (key: string) => string) {
   const [request, setRequest] = createSignal<DialogRequest | undefined>();
   const confirm = (input: {
     message: string;
@@ -53,7 +59,9 @@ export function useConfirmDialog() {
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
           >
-            <div class="neu-confirm-title">{current().title ?? "提示"}</div>
+            <div class="neu-confirm-title">
+              {current().title ?? t?.("common.alertTitle") ?? "提示"}
+            </div>
             <div class="neu-confirm-message">{current().message}</div>
             <div class="neu-confirm-actions">
               <Show when={current().mode !== "alert"}>
@@ -65,7 +73,7 @@ export function useConfirmDialog() {
                     setRequest(undefined);
                   }}
                 >
-                  {current().cancelLabel ?? "取消"}
+                  {current().cancelLabel ?? t?.("common.cancel") ?? "取消"}
                 </button>
               </Show>
               <button
@@ -77,7 +85,7 @@ export function useConfirmDialog() {
                   setRequest(undefined);
                 }}
               >
-                {current().confirmLabel ?? "确定"}
+                {current().confirmLabel ?? t?.("common.ok") ?? "确定"}
               </button>
             </div>
           </div>

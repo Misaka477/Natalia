@@ -248,8 +248,11 @@ export const zh = {
   "pluginMgr.uninstall": "卸载",
   "pluginMgr.reload": "重新加载",
   // permission rungs
+  "rung.read": "read",
+  "rung.ask": "ask",
   "rung.readOnly": "只读：全系统可读，任何写入都被拒（无沙箱）",
-  "rung.ask": "工作区沙箱；每次写入都要问；模型可申请提权，同意一次只放行一次",
+  "rung.askMeaning":
+    "工作区沙箱；每次写入都要问；模型可申请提权，同意一次只放行一次",
   "rung.autoWorkspace": "auto（工作区）",
   "rung.autoWorkspaceDesc": "工作区内写入自动放行；区外一律拒绝",
   "rung.autoSystem": "auto（系统）",
@@ -592,6 +595,55 @@ export const zh = {
   "gov.promotionNotRecorded": "晋升未记录：{reason}",
   "gov.evalEmpty":
     "没有对比数据。跑 `natalia eval` 接入外部基准、或本会话有记录的运行之后，这里才会有东西。",
+  // shell (app-neu handlers)
+  "shell.newSessionTitle": "新建会话",
+  "shell.newSessionName": "新会话",
+  "shell.switchWorkspaceUnsupported": "当前 runtime 不支持切换工作区。",
+  "shell.renameWorkspaceTitle": "重命名工作区",
+  "shell.workspaceExists": "已存在名为“{title}”的工作区。",
+  "shell.renameWorkspaceUnsupported": "当前 runtime 不支持重命名工作区。",
+  "shell.renameFailed": "重命名失败",
+  "shell.deleteWorkspaceTitle": "删除工作区",
+  "shell.deleteWorkspaceBody":
+    "将把“{title}”从工作区列表中移除。工作区中的文件和会话不会被删除。",
+  "shell.deleteWorkspaceConfirm": "删除工作区",
+  "shell.deleteWorkspaceFailed": "删除工作区失败",
+  "shell.sessionSwitchUnsupported": "当前 runtime 不支持会话切换。",
+  "shell.archiveNeedsSession":
+    "归档当前会话前需要先创建或切换到其他会话，但当前 runtime 不支持。",
+  "shell.archiveFailed": "归档会话失败：{error}",
+  "shell.restoreFailed": "恢复会话失败：{error}",
+  "shell.forkFailed": "Fork 会话失败：{error}",
+  "shell.bulkNeedsSession": "批量操作当前唯一会话前需要先创建并切换到新会话。",
+  "shell.deleteSessionTitle": "删除会话",
+  "shell.deleteSessionsBody":
+    "确定彻底删除选中的 {count} 个会话吗？这会删除会话记录和附件，无法恢复。",
+  "shell.purgeUnsupported": "当前 runtime 不支持彻底删除会话。",
+  "shell.bulkDeleteFailed": "批量删除失败：{error}",
+  "shell.thisMessage": "该消息",
+  "shell.redoFailed": "重做失败：{error}",
+  "shell.deleteSessionBody":
+    "确定要彻底删除会话“{name}”吗？这会删除会话记录和附件，无法恢复。",
+  "shell.purgeNeedsSession": "彻底删除当前会话前无法创建或切换到其他会话。",
+  "shell.purgeFailed": "彻底删除会话失败：{message}",
+  "shell.permissionSwitchUnsupported": "当前 runtime 不支持切换权限模式",
+  "shell.permissionSwitchFailed": "切换权限模式失败：{error}",
+  "shell.handleAction": "处理",
+  "shell.feedbackUnavailable": "评分不可用：运行时没有反馈入口",
+  "shell.feedbackNoSession": "评分不可用：没有活动会话",
+  "shell.withdrawUnrecorded": "撤回未记录",
+  "shell.ratingUnrecorded": "评分未记录",
+  "shell.ratingFailed": "评分失败：{error}",
+  "shell.moreGroup": "更多",
+  "shell.deleteFailed": "删除失败",
+  // nia panel
+  "nia.emptyTitle": "向 Nia 提问",
+  "nia.emptyHint":
+    "Nia 是只读的审计 agent，也能直接对话：问她审计发现、项目状态，或让她解释她的判断。她不写代码、不写 Plan。",
+  "nia.jumpToBottom": "跳到底部",
+  "nia.model": "Nia 模型",
+  "nia.reasoning": "Nia 推理",
+  "nia.chatPlaceholder": "问 Nia 审计发现，或直接和她聊…",
   // settings: row labels
   "settings.row.providers": "Providers & Models",
   "settings.row.defaultModel": "Default Model",

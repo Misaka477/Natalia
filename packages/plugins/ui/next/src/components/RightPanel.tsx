@@ -1956,7 +1956,7 @@ export function ReviewPane(
                           <Show when={astApplyResult()}>
                             <div class="review-empty">
                               <div class="review-empty-title">
-                                已{t("review.applyChanges")}：
+                                {t("review.appliedChanges")}
                                 {
                                   astApplyResult()!.applied.filter(
                                     (item) => !item.error,

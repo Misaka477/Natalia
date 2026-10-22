@@ -611,7 +611,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     panelId: string;
   } | null>(null);
   const [moreOpen, setMoreOpen] = createSignal(false);
-  const { confirm, alert, dialog } = useConfirmDialog();
+  const { confirm, alert, dialog } = useConfirmDialog(t);
   const [viewOpen, setViewOpen] = createSignal(false);
   let topbarPanelRef: HTMLDivElement | undefined;
 
@@ -938,8 +938,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     if (workspaceID) {
       if (!props.ctx.runtime.workspaceActivate) {
         await alert({
-          title: "新建会话",
-          message: "当前 runtime 不支持切换工作区。",
+          title: t("shell.newSessionTitle"),
+          message: t("shell.switchWorkspaceUnsupported"),
         });
         return;
       }
@@ -950,7 +950,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       userSelectedSession = true;
       const nextSessionID = created.sessionID;
       setSelectedSessionID(nextSessionID);
-      setSelectedSession("新会话");
+      setSelectedSession(t("shell.newSessionName"));
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
       void loadPerSessionModelConfig(nextSessionID);
     }
@@ -974,15 +974,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       )
     ) {
       await alert({
-        title: "重命名工作区",
-        message: `已存在名为“${nextTitle}”的工作区。`,
+        title: t("shell.renameWorkspaceTitle"),
+        message: t("shell.workspaceExists", { title: nextTitle }),
       });
       return;
     }
     if (!props.ctx.runtime.workspaceAdd) {
       await alert({
-        title: "重命名工作区",
-        message: "当前 runtime 不支持重命名工作区。",
+        title: t("shell.renameWorkspaceTitle"),
+        message: t("shell.renameWorkspaceUnsupported"),
       });
       return;
     }
@@ -994,7 +994,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshWorkspaces();
     } catch (error: unknown) {
       await alert({
-        title: "重命名失败",
+        title: t("shell.renameFailed"),
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -1005,9 +1005,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       (entry) => entry.workspaceID === workspaceID,
     );
     const confirmed = await confirm({
-      title: "删除工作区",
-      message: `将把“${workspace?.title ?? workspaceID}”从工作区列表中移除。工作区中的文件和会话不会被删除。`,
-      confirmLabel: "删除工作区",
+      title: t("shell.deleteWorkspaceTitle"),
+      message: t("shell.deleteWorkspaceBody", {
+        title: workspace?.title ?? workspaceID,
+      }),
+      confirmLabel: t("shell.deleteWorkspaceConfirm"),
       danger: true,
     });
     if (!confirmed) return;
@@ -1022,7 +1024,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       // click looked like it did nothing at all. Renaming above already
       // reports this way.
       await alert({
-        title: "删除工作区失败",
+        title: t("shell.deleteWorkspaceFailed"),
         message: error instanceof Error ? error.message : String(error),
       });
       setWorkspaceError(error instanceof Error ? error.message : String(error));
@@ -1055,7 +1057,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }): Promise<void> {
     const attach = props.ctx.runtime.sessionAttach;
     if (typeof attach !== "function")
-      throw new Error("当前 runtime 不支持会话切换。");
+      throw new Error(t("shell.sessionSwitchUnsupported"));
     // Select locally before awaiting attach: the web runtime emits
     // `natalia:session-attached` from inside the attach promise, and the
     // hydration listener reads selectedSessionID() at that moment. Updating the
@@ -1110,7 +1112,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     if (!created?.sessionID) return false;
     await attachAndSelectSession({
       id: created.sessionID,
-      title: "新会话",
+      title: t("shell.newSessionTitle"),
     });
     return true;
   }
@@ -1121,7 +1123,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         const switched = await switchAwayFromSession(targetID);
         if (!switched) {
           props.ctx.runtime.diagnostic?.(
-            "归档当前会话前需要先创建或切换到其他会话，但当前 runtime 不支持。",
+            t("shell.archiveNeedsSession"),
             "warning",
           );
           return;
@@ -1131,7 +1133,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshSessions();
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
-        `归档会话失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.archiveFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         "warning",
       );
     }
@@ -1143,7 +1147,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshSessions();
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
-        `恢复会话失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.restoreFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         "warning",
       );
     }
@@ -1161,7 +1167,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       if (result) await refreshSessions();
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
-        `Fork 会话失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.forkFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         "warning",
       );
     }
@@ -1206,15 +1214,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
     const created = await props.ctx.runtime.sessionNew?.();
     if (!created?.sessionID) {
-      props.ctx.runtime.diagnostic?.(
-        "批量操作当前唯一会话前需要先创建并切换到新会话。",
-        "warning",
-      );
+      props.ctx.runtime.diagnostic?.(t("shell.bulkNeedsSession"), "warning");
       return false;
     }
     await attachAndSelectSession({
       id: created.sessionID,
-      title: "新会话",
+      title: t("shell.newSessionTitle"),
     });
     return true;
   }
@@ -1243,10 +1248,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     if (!ids.length) return;
     if (
       !(await confirm({
-        title: "删除会话",
-        message: `确定彻底删除选中的 ${ids.length} 个会话吗？这会删除会话记录和附件，无法恢复。`,
-        confirmLabel: "确定",
-        cancelLabel: "取消",
+        title: t("shell.deleteSessionTitle"),
+        message: t("shell.deleteSessionsBody", { count: ids.length }),
+        confirmLabel: t("settingsDlg.confirm"),
+        cancelLabel: t("common.cancel"),
         danger: true,
       }))
     )
@@ -1254,10 +1259,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     try {
       if (!(await switchAwayFromActiveIfNeeded(ids))) return;
       if (!props.ctx.runtime.sessionDelete) {
-        props.ctx.runtime.diagnostic?.(
-          "当前 runtime 不支持彻底删除会话。",
-          "warning",
-        );
+        props.ctx.runtime.diagnostic?.(t("shell.purgeUnsupported"), "warning");
         return;
       }
       for (const id of ids) await props.ctx.runtime.sessionDelete(id);
@@ -1266,7 +1268,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       setBulkSelectMode(false);
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
-        `批量删除失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.bulkDeleteFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         "warning",
       );
     }
@@ -1298,7 +1302,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     setPendingRollback({
       turnID: turnID ?? message.id,
       ...(checkpointID ? { checkpointID } : {}),
-      label: userMessage?.content || message.content || "该消息",
+      label: userMessage?.content || message.content || t("shell.thisMessage"),
       hiddenAfter: targetIndex >= 0 ? targetIndex + 1 : undefined,
     });
     setRollbackNotice(undefined);
@@ -1379,7 +1383,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshTranscript();
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
-        `重做失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.redoFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         "warning",
       );
     } finally {
@@ -1392,10 +1398,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     if (!targetID) return;
     if (
       !(await confirm({
-        title: "删除会话",
-        message: `确定要彻底删除会话“${selectedSession()}”吗？这会删除会话记录和附件，无法恢复。`,
-        confirmLabel: "确定",
-        cancelLabel: "取消",
+        title: t("shell.deleteSessionTitle"),
+        message: t("shell.deleteSessionBody", {
+          name: selectedSession(),
+        }),
+        confirmLabel: t("settingsDlg.confirm"),
+        cancelLabel: t("common.cancel"),
         danger: true,
       }))
     ) {
@@ -1404,8 +1412,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const deleteSession = props.ctx.runtime.sessionDelete;
     if (typeof deleteSession !== "function") {
       await alert({
-        title: "删除失败",
-        message: "当前 runtime 不支持彻底删除会话。",
+        title: t("shell.deleteFailed"),
+        message: t("shell.purgeUnsupported"),
       });
       return;
     }
@@ -1414,8 +1422,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         const switched = await switchAwayFromSession(targetID);
         if (!switched) {
           await alert({
-            title: "删除失败",
-            message: "彻底删除当前会话前无法创建或切换到其他会话。",
+            title: t("shell.deleteFailed"),
+            message: t("shell.purgeNeedsSession"),
           });
           return;
         }
@@ -1425,9 +1433,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await refreshSessions();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      props.ctx.runtime.diagnostic?.(`彻底删除会话失败：${message}`, "warning");
+      props.ctx.runtime.diagnostic?.(
+        t("shell.purgeFailed", { message }),
+        "warning",
+      );
       await alert({
-        title: "删除失败",
+        title: t("shell.deleteFailed"),
         message,
       });
     }
@@ -2265,7 +2276,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const listed = availableRungs(config()?.agentModes);
     const standing = currentRung();
     if (!standing || listed.some((rung) => rung.id === standing.id))
-      return listed.map((rung) => ({ value: rung.id, label: rung.label }));
+      return listed.map((rung) => ({
+        value: rung.id,
+        label: t(rung.labelKey),
+      }));
     return [
       ...listed.map((rung) => ({ value: rung.id, label: rung.label })),
       { value: standing.id, label: standing.label },
@@ -2315,7 +2329,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     // looked like it did nothing while writing only the config. A missing face is
     // a refusal the human can see, not a silent no-op.
     if (!call) {
-      setPermissionProblem("当前 runtime 不支持切换权限模式");
+      setPermissionProblem(t("shell.permissionSwitchUnsupported"));
       return;
     }
     let applied: Awaited<ReturnType<typeof call>> | undefined;
@@ -2327,7 +2341,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       });
     } catch (error) {
       setPermissionProblem(
-        `切换权限模式失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.permissionSwitchFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
       return;
     }
@@ -2563,7 +2579,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                   ? {
                       actions: [
                         {
-                          label: "处理",
+                          label: t("shell.handleAction"),
                           primary: true,
                           onClick: () => {
                             // The pending tab is gone (T4-4): the request's
@@ -2719,11 +2735,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     // explains nothing is the bug this button shipped with (the route was
     // missing, the catch was silent, and the user reported "点击后没反应").
     if (!runtime.feedback) {
-      flashFeedbackNotice("评分不可用：运行时没有反馈入口");
+      flashFeedbackNotice(t("shell.feedbackUnavailable"));
       return;
     }
     if (!sessionID) {
-      flashFeedbackNotice("评分不可用：没有活动会话");
+      flashFeedbackNotice(t("shell.feedbackNoSession"));
       return;
     }
     const current = messageVerdicts()[messageID];
@@ -2743,7 +2759,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           recordID: current!.recordID,
         });
         if (result && !result.recorded) {
-          flashFeedbackNotice("撤回未记录");
+          flashFeedbackNotice(t("shell.withdrawUnrecorded"));
           return;
         }
         setMessageVerdicts((map) => {
@@ -2760,7 +2776,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         verdict,
       });
       if (result && !result.recorded) {
-        flashFeedbackNotice("评分未记录");
+        flashFeedbackNotice(t("shell.ratingUnrecorded"));
         return;
       }
       setMessageVerdicts((map) => ({
@@ -2769,7 +2785,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       }));
     } catch (error) {
       flashFeedbackNotice(
-        `评分失败：${error instanceof Error ? error.message : String(error)}`,
+        t("shell.ratingFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     }
   }
@@ -3076,7 +3094,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const groupedTopbarPanels = () => {
     const groups = new Map<string, ReturnType<typeof topbarPanels>>();
     for (const item of topbarPanels()) {
-      const group = item.panel.group ?? "更多";
+      const group = item.panel.group ?? t("shell.moreGroup");
       const list = groups.get(group) ?? [];
       list.push(item);
       groups.set(group, list);
@@ -3367,7 +3385,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             type="button"
             class="neu-collapsed-rail neu-right-rail"
             onClick={() => setRightVisible(true)}
-            title="展开右侧栏（Ctrl+J）"
+            title={t("workbench.expandRight")}
           >
             <span class="neu-rail-dots" />
           </button>

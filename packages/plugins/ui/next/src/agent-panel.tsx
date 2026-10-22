@@ -398,7 +398,7 @@ export function AgentPanel(props: {
           data-active={subTab() === "subagent"}
           onClick={() => setSubTab("subagent")}
         >
-          子 Agent
+          {t("agent.subagent")}
         </button>
         <Show when={teamAvailable()}>
           <button
@@ -602,7 +602,7 @@ export function AgentPanel(props: {
               class="terminal-toolbar-btn"
               onClick={() => void refreshData()}
             >
-              刷新
+              {t("agent.refresh")}
             </button>
           </div>
           <div class="review-meta">

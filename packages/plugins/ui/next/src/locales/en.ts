@@ -232,9 +232,11 @@ export const en = {
   "pluginMgr.noRuntimePlugins": "No runtime plugins",
   "pluginMgr.uninstall": "Uninstall",
   "pluginMgr.reload": "Reload",
+  "rung.read": "read",
+  "rung.ask": "ask",
   "rung.readOnly":
     "Read-only: the whole system is readable and every write is refused (no sandbox)",
-  "rung.ask":
+  "rung.askMeaning":
     "Workspace sandbox; every write asks; the model can request escalation, and one approval allows one write",
   "rung.autoWorkspace": "auto (workspace)",
   "rung.autoWorkspaceDesc":
@@ -594,6 +596,61 @@ export const en = {
   "gov.promotionNotRecorded": "Promotion not recorded: {reason}",
   "gov.evalEmpty":
     "No comparison data. Run `natalia eval` to wire up an external benchmark, or record a run in this session, and this fills in.",
+  "shell.newSessionTitle": "New session",
+  "shell.newSessionName": "New session",
+  "shell.switchWorkspaceUnsupported":
+    "This runtime does not support switching workspaces.",
+  "shell.renameWorkspaceTitle": "Rename workspace",
+  "shell.workspaceExists": "A workspace named “{title}” already exists.",
+  "shell.renameWorkspaceUnsupported":
+    "This runtime does not support renaming workspaces.",
+  "shell.renameFailed": "Rename failed",
+  "shell.deleteWorkspaceTitle": "Remove workspace",
+  "shell.deleteWorkspaceBody":
+    "This removes “{title}” from the workspace list. Its files and sessions are not deleted.",
+  "shell.deleteWorkspaceConfirm": "Remove workspace",
+  "shell.deleteWorkspaceFailed": "Removing the workspace failed",
+  "shell.sessionSwitchUnsupported":
+    "This runtime does not support switching sessions.",
+  "shell.archiveNeedsSession":
+    "Archiving the current session needs another session to switch to, and this runtime does not support that.",
+  "shell.archiveFailed": "Archiving the session failed: {error}",
+  "shell.restoreFailed": "Restoring the session failed: {error}",
+  "shell.forkFailed": "Forking the session failed: {error}",
+  "shell.bulkNeedsSession":
+    "Bulk actions on the only session need a new session first, and this runtime does not support that.",
+  "shell.deleteSessionTitle": "Delete session",
+  "shell.deleteSessionsBody":
+    "Permanently delete the {count} selected sessions? This deletes their records and attachments; it cannot be undone.",
+  "shell.purgeUnsupported":
+    "This runtime does not support permanently deleting sessions.",
+  "shell.bulkDeleteFailed": "Bulk delete failed: {error}",
+  "shell.thisMessage": "this message",
+  "shell.redoFailed": "Redo failed: {error}",
+  "shell.deleteSessionBody":
+    "Permanently delete the session “{name}”? This deletes its record and attachments; it cannot be undone.",
+  "shell.purgeNeedsSession":
+    "Permanently deleting the current session needs another session to switch to, and none could be created.",
+  "shell.purgeFailed": "Permanently deleting the session failed: {message}",
+  "shell.permissionSwitchUnsupported":
+    "This runtime does not support switching permission modes",
+  "shell.permissionSwitchFailed": "Switching permission mode failed: {error}",
+  "shell.handleAction": "Handle",
+  "shell.feedbackUnavailable":
+    "Rating unavailable: the runtime has no feedback entry point",
+  "shell.feedbackNoSession": "Rating unavailable: no active session",
+  "shell.withdrawUnrecorded": "Withdrawal not recorded",
+  "shell.ratingUnrecorded": "Rating not recorded",
+  "shell.ratingFailed": "Rating failed: {error}",
+  "shell.moreGroup": "More",
+  "shell.deleteFailed": "Delete failed",
+  "nia.emptyTitle": "Ask Nia",
+  "nia.emptyHint":
+    "Nia is a read-only audit agent that also talks: ask her about audit findings, project state, or have her explain her judgement. She writes no code and no Plan.",
+  "nia.jumpToBottom": "Jump to bottom",
+  "nia.model": "Nia model",
+  "nia.reasoning": "Nia reasoning",
+  "nia.chatPlaceholder": "Ask Nia about audit findings, or just chat…",
   "settings.row.providers": "Providers & Models",
   "settings.row.defaultModel": "Default Model",
   "settings.row.subConcurrency": "Subagent concurrency",

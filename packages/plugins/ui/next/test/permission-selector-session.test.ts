@@ -117,8 +117,8 @@ test("a session switch drops the previous session's rung echo", () => {
 test("the permission menu carries no 'current' suffix", () => {
   const start = app.indexOf("const permissionOptions = () =>");
   expect(start).toBeGreaterThan(0);
-  const body = app.slice(start, start + 320);
-  expect(body).toContain("label: rung.label");
+  const body = app.slice(start, start + 560);
+  expect(body).toContain("t(rung.labelKey)");
   expect(body).not.toContain("当前");
 });
 

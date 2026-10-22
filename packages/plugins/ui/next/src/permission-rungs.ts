@@ -32,8 +32,10 @@ export type PermissionRungID = "read" | "ask" | "auto" | "auto-system";
 
 export type PermissionRung = {
   id: PermissionRungID;
-  /** What the selector shows. */
+  /** What the selector shows. The stable id; display goes through labelKey. */
   label: string;
+  /** The dictionary key for the label's display text. */
+  labelKey: string;
   /** The agent mode the approval axis needs, by its config name. */
   agentMode: string;
   approval: "ask" | "auto" | "read_only";
@@ -47,6 +49,7 @@ export const PERMISSION_RUNGS: readonly PermissionRung[] = [
   {
     id: "read",
     label: "read",
+    labelKey: "rung.read",
     agentMode: "read_only",
     approval: "read_only",
     confinement: "read-only",
@@ -55,6 +58,7 @@ export const PERMISSION_RUNGS: readonly PermissionRung[] = [
   {
     id: "ask",
     label: "ask",
+    labelKey: "rung.ask",
     agentMode: "ask",
     approval: "ask",
     confinement: "workspace-write",
@@ -63,6 +67,7 @@ export const PERMISSION_RUNGS: readonly PermissionRung[] = [
   {
     id: "auto",
     label: "auto（工作区）",
+    labelKey: "rung.autoWorkspace",
     agentMode: "auto",
     approval: "auto",
     confinement: "workspace-write",
@@ -71,6 +76,7 @@ export const PERMISSION_RUNGS: readonly PermissionRung[] = [
   {
     id: "auto-system",
     label: "auto（系统）",
+    labelKey: "rung.autoSystem",
     agentMode: "auto",
     approval: "auto",
     confinement: "danger-full-access",

@@ -289,7 +289,7 @@ export function PlanPanel(props: {
       });
       setNotice(
         result?.marked && result.planID
-          ? `已{t("plan.markButton")}：${result.planID}`
+          ? t("plan.marked", { planID: result.planID })
           : t("plan.markFailed"),
       );
       setMarkPath("");
@@ -331,7 +331,7 @@ t("plan.summarySection")
       });
       setNotice(
         result?.marked && result.planID
-          ? `已创建并{t("plan.markButton")}：${result.planID}`
+          ? t("plan.createdMarked", { planID: result.planID })
           : t("plan.createFailed"),
       );
       setMarkPath("");
@@ -570,7 +570,9 @@ t("plan.summarySection")
                     class="plan-task-summary"
                     onClick={() => setTasksExpanded(!tasksExpanded())}
                   >
-                    <span class="review-section-label">任务态</span>
+                    <span class="review-section-label">
+                      {t("plan.tasksSection")}
+                    </span>
                     <span class="plan-task-counts">{taskStateSummary()}</span>
                     <span class="plan-task-toggle">
                       {tasksExpanded()

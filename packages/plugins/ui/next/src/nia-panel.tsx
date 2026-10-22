@@ -338,8 +338,8 @@ export function NiaPanel(props: {
         <div class="nia-transcript-wrap">
           <Transcript
             messages={renderedMessages()}
-            emptyTitle="向 Nia 提问"
-            emptyHint="Nia 是只读的审计 agent，也能直接对话：问她审计发现、项目状态，或让她解释她的判断。她不写代码、不写 Plan。"
+            emptyTitle={t("nia.emptyTitle")}
+            emptyHint={t("nia.emptyHint")}
             assistantName="Nia"
             assistantInitial="N"
             apiRef={(api) => {
@@ -358,7 +358,7 @@ export function NiaPanel(props: {
               type="button"
               class="neu-jump-bottom"
               onClick={() => niaApi?.scrollToBottom()}
-              title="跳到底部"
+              title={t("nia.jumpToBottom")}
             >
               ↓
             </button>
@@ -379,7 +379,7 @@ export function NiaPanel(props: {
                 ? undefined
                 : () => props.onOpenSettings?.()
             }
-            placeholder="Nia 模型"
+            placeholder={t("nia.model")}
             onChange={(next) => {
               setModelID(next);
               void saveProfile({ modelID: next });
@@ -406,7 +406,7 @@ export function NiaPanel(props: {
                   | "xhigh",
               });
             }}
-            placeholder="Nia 推理"
+            placeholder={t("nia.reasoning")}
             menuPosition="top"
           />
         </div>
@@ -414,7 +414,7 @@ export function NiaPanel(props: {
         <Composer
           t={props.t}
           value={draft()}
-          placeholder="问 Nia 审计发现，或直接和她聊…"
+          placeholder={t("nia.chatPlaceholder")}
           busy={Boolean(active()) || busy()}
           onInput={setDraft}
           onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}

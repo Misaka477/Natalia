@@ -3195,6 +3195,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar
+          t={t}
           ctx={props.ctx}
           leftVisible={leftVisible}
           leftWidth={leftWidth}

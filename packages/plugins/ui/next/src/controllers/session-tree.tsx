@@ -29,6 +29,7 @@ function StatusDot(props: { status: string }) {
 }
 
 function TreeRow(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   label: string;
   selected?: boolean;
   status?: string;
@@ -47,6 +48,7 @@ function TreeRow(props: {
   onEditCommit?: () => void;
   onEditCancel?: () => void;
 }) {
+  const t = props.t;
   return (
     <button
       type="button"
@@ -68,7 +70,9 @@ function TreeRow(props: {
           <>
             <span class="neu-tree-label">{props.label}</span>
             {props.status === "running" ? (
-              <span class="neu-badge neu-badge-running">并行中</span>
+              <span class="neu-badge neu-badge-running">
+                {t("sidebar.parallelRunning")}
+              </span>
             ) : null}
             {props.badge ? <span class="neu-badge">{props.badge}</span> : null}
             <Show when={!props.bulkMode && (props.onAction || props.onEdit)}>
@@ -90,7 +94,7 @@ function TreeRow(props: {
                   <button
                     type="button"
                     class="neu-tree-edit"
-                    title="重命名"
+                    title={t("sidebar.rename")}
                     onClick={(event) => {
                       event.stopPropagation();
                       props.onEdit?.();
@@ -126,6 +130,7 @@ function TreeRow(props: {
 }
 
 function SessionTree(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   selected: string;
   sessions: RuntimeSessionSummary[];
   workspaces: WorkspaceSummary[];
@@ -141,6 +146,7 @@ function SessionTree(props: {
   bulkSelected?: (id: string) => boolean;
   onBulkToggle?: (id: string) => void;
 }) {
+  const t = props.t;
   const [editingID, setEditingID] = createSignal<string | null>(null);
   const [draftName, setDraftName] = createSignal("");
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set());
@@ -283,12 +289,15 @@ function SessionTree(props: {
     <div class="neu-tree">
       <Show when={runningSessions().length > 0}>
         <div class="neu-workspace-row">
-          <span class="neu-workspace-name">并行会话</span>
+          <span class="neu-workspace-name">
+            {t("sidebar.parallelSessions")}
+          </span>
           <span class="neu-count">{runningSessions().length}</span>
         </div>
         <For each={runningSessions()}>
           {(session) => (
             <TreeRow
+              t={props.t}
               label={session.name}
               selected={props.selected === session.id}
               status={session.status}
@@ -378,7 +387,7 @@ function SessionTree(props: {
                   <button
                     type="button"
                     class="neu-workspace-menu-btn"
-                    title="工作区操作"
+                    title={t("sidebar.workspaceActions")}
                     onClick={(event) =>
                       toggleWorkspaceMenu(group.workspaceID, event)
                     }
@@ -393,7 +402,7 @@ function SessionTree(props: {
                     <button
                       type="button"
                       class="neu-workspace-menu-btn"
-                      title="新建会话"
+                      title={t("sidebar.newSession")}
                       onClick={() => {
                         expandWorkspace(group.workspaceID);
                         props.onCreateSessionInWorkspace?.(group.workspaceID);
@@ -441,7 +450,7 @@ function SessionTree(props: {
                             stroke-linejoin="round"
                           />
                         </svg>
-                        重命名
+                        {t("sidebar.rename")}
                       </button>
                       <button
                         type="button"
@@ -470,7 +479,7 @@ function SessionTree(props: {
                             stroke-width="1.1"
                           />
                         </svg>
-                        工作区设置
+                        {t("sidebar.workspaceSettings")}
                       </button>
                       <button
                         type="button"
@@ -494,7 +503,7 @@ function SessionTree(props: {
                             stroke-linejoin="round"
                           />
                         </svg>
-                        删除工作区
+                        {t("sidebar.deleteWorkspace")}
                       </button>
                     </div>
                   )}
@@ -505,10 +514,15 @@ function SessionTree(props: {
                   <For each={displayedSessions()}>
                     {(session) => (
                       <TreeRow
+                        t={props.t}
                         label={session.name}
                         selected={props.selected === session.id}
                         status={session.status}
-                        badge={session.archived ? "点击恢复" : undefined}
+                        badge={
+                          session.archived
+                            ? t("sidebar.clickToRestore")
+                            : undefined
+                        }
                         depth={1}
                         onClick={() => {
                           if (session.archived && props.onRestore) {
@@ -526,7 +540,11 @@ function SessionTree(props: {
                               ? () => props.onArchive?.(session.id)
                               : undefined
                         }
-                        actionTitle={session.archived ? "恢复会话" : "归档会话"}
+                        actionTitle={
+                          session.archived
+                            ? t("sidebar.restoreSession")
+                            : t("sidebar.archiveSession")
+                        }
                         actionIcon={session.archived ? "↩" : "↓"}
                         bulkMode={props.bulkMode}
                         bulkSelected={props.bulkSelected?.(session.id)}
@@ -568,8 +586,10 @@ function SessionTree(props: {
                       }}
                     >
                       {isSessionsExpanded(group.workspaceID)
-                        ? "收起"
-                        : `展开其余 ${group.sessions.length - 5} 个会话`}
+                        ? t("common.collapse")
+                        : t("sidebar.expandRestSessions", {
+                            count: group.sessions.length - 5,
+                          })}
                     </button>
                   </Show>
                 </>
@@ -583,6 +603,7 @@ function SessionTree(props: {
 }
 export interface SessionSidebarProps {
   ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
   leftVisible: () => boolean;
   leftWidth: () => number;
   setLeftVisible: (visible: boolean) => void;
@@ -627,6 +648,7 @@ export interface SessionSidebarProps {
 
 /** The left session tree: workspace groups, session rows, bulk and search chrome. */
 export function SessionSidebar(props: SessionSidebarProps) {
+  const t = props.t;
   return (
     <>
       {props.leftVisible() ? (
@@ -636,12 +658,12 @@ export function SessionSidebar(props: SessionSidebarProps) {
             style={{ width: `${props.leftWidth()}px` }}
           >
             <div class="neu-sidebar-header">
-              <span class="neu-sidebar-title">工作区</span>
+              <span class="neu-sidebar-title">{t("sidebar.workspace")}</span>
               <div class="neu-sidebar-actions">
                 <button
                   type="button"
                   class="neu-icon-btn"
-                  title="搜索会话"
+                  title={t("sidebar.search")}
                   data-active={props.sessionSearchOpen()}
                   onClick={() => {
                     props.setSessionSearchOpen((value) => !value);
@@ -667,7 +689,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 <button
                   type="button"
                   class="neu-icon-btn"
-                  title="更多会话操作"
+                  title={t("sidebar.moreSessionActions")}
                   data-active={props.sidebarMenuOpen()}
                   onClick={() => {
                     props.setSidebarMenuOpen((value) => !value);
@@ -708,7 +730,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 <button
                   type="button"
                   class="neu-icon-btn"
-                  title="批量选择"
+                  title={t("sidebar.bulkSelect")}
                   data-active={props.bulkSelectMode()}
                   onClick={() => {
                     props.setSidebarMenuOpen(false);
@@ -739,7 +761,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 <button
                   type="button"
                   class="neu-icon-btn"
-                  title="新建会话"
+                  title={t("sidebar.newSession")}
                   onClick={() => {
                     props.setSidebarMenuOpen(false);
                     void props.createSession();
@@ -757,8 +779,8 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 <button
                   type="button"
                   class="neu-icon-btn neu-new-workspace-btn"
-                  data-tooltip="添加工作区"
-                  aria-label="添加工作区"
+                  data-tooltip={t("sidebar.addWorkspace")}
+                  aria-label={t("sidebar.addWorkspace")}
                   onClick={() => {
                     props.setSidebarMenuOpen(false);
                     props.setWorkspaceOpen(true);
@@ -785,7 +807,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
             <Show when={props.sessionSearchOpen()}>
               <input
                 class="neu-session-search"
-                placeholder="搜索会话..."
+                placeholder={t("sidebar.searchSessions")}
                 value={props.sessionQuery()}
                 onInput={(event) =>
                   props.setSessionQuery(event.currentTarget.value)
@@ -795,7 +817,9 @@ export function SessionSidebar(props: SessionSidebarProps) {
             <Show when={props.bulkSelectMode()}>
               <div class="neu-bulk-bar">
                 <span class="neu-bulk-count">
-                  已选 {props.bulkSelected().size} 项
+                  {t("sidebar.selectedCount", {
+                    count: props.bulkSelected().size,
+                  })}
                 </span>
                 <div class="neu-bulk-actions">
                   <button
@@ -803,28 +827,28 @@ export function SessionSidebar(props: SessionSidebarProps) {
                     class="neu-bulk-btn"
                     onClick={() => props.toggleSelectAllVisible()}
                   >
-                    全选
+                    {t("common.selectAll")}
                   </button>
                   <button
                     type="button"
                     class="neu-bulk-btn"
                     onClick={() => void props.bulkArchiveSelected()}
                   >
-                    归档
+                    {t("common.archive")}
                   </button>
                   <button
                     type="button"
                     class="neu-bulk-btn"
                     onClick={() => void props.bulkRestoreSelected()}
                   >
-                    恢复
+                    {t("common.restore")}
                   </button>
                   <button
                     type="button"
                     class="neu-bulk-btn neu-bulk-btn-danger"
                     onClick={() => void props.bulkDeleteSelected()}
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                   <button
                     type="button"
@@ -834,7 +858,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                       props.setBulkSelected(new Set<string>());
                     }}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                 </div>
               </div>
@@ -849,7 +873,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                     props.setSessionMenuOpen(true);
                   }}
                 >
-                  会话操作
+                  {t("sidebar.sessionActions")}
                 </button>
                 <button
                   type="button"
@@ -857,12 +881,13 @@ export function SessionSidebar(props: SessionSidebarProps) {
                   data-active={props.showArchived()}
                   onClick={() => props.setShowArchived((value) => !value)}
                 >
-                  显示归档
+                  {t("sidebar.showArchived")}
                 </button>
               </div>
             </Show>
             <div class="neu-sidebar-content">
               <SessionTree
+                t={t}
                 selected={props.selectedSessionID()}
                 sessions={props.visibleSessions()}
                 workspaces={props.workspaces()}
@@ -922,7 +947,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
           type="button"
           class="neu-collapsed-rail neu-left-rail"
           onClick={() => props.setLeftVisible(true)}
-          title="展开左侧栏（Ctrl+B）"
+          title={t("workbench.collapseLeft")}
         >
           <span class="neu-rail-dots" />
         </button>

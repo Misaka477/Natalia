@@ -78,6 +78,25 @@ export function estimateProviderMessages(messages: ProviderMessage[]) {
 type PermissionMode = "ask" | "auto" | "read_only";
 const maxProtocolCorrections = 2;
 
+/**
+ * Whether a tool reaches the model's schema in this permission mode.
+ *
+ * read_only withholds every tool that requires approval: the model is not
+ * offered a capability a human has not stood behind. ONE definition, because
+ * the rule is read in three places — the two advertised-schema filters and
+ * the skills block, which must not name a tool the schema does not carry.
+ * When the block kept its own copy of the promise in prose ("Call the
+ * skill_load tool..." under every mode), a read_only session was told to use
+ * a capability its schema had withheld — measured, in a real session, as an
+ * instruction to call a tool that did not exist.
+ */
+function isToolAdvertisedInMode(
+  tool: { requiresApproval?: boolean },
+  mode: PermissionMode,
+): boolean {
+  return mode !== "read_only" || !tool.requiresApproval;
+}
+
 function promptData(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -342,6 +361,11 @@ export function createProviderRunner(input: ProviderRunnerInput) {
       }
       const agent = input.selectedAgent();
       const config = input.tsRuntimeConfig();
+      // Whether the model can actually load a skill. read_only withholds
+      // every tool that requires approval from the advertised schema, and
+      // skill_load is one — so the skills block reads this rather than
+      // naming a tool the schema does not carry.
+      const skillLoadTool = input.tools().get("skill_load");
       const runtimeContextInput = () => ({
         workspaceRoot: input.workspaceRoot(),
         permissionMode: activePermissionMode,
@@ -349,6 +373,9 @@ export function createProviderRunner(input: ProviderRunnerInput) {
         sessionStartedAt: input.sessionStartedAt?.(),
         skills: input.skillsList(),
         activeSkill: input.activeSkill(),
+        skillLoadAdvertised: skillLoadTool
+          ? isToolAdvertisedInMode(skillLoadTool, activePermissionMode)
+          : false,
         naviSuggestions: input.naviSuggestions(),
         naviAnswers: input.naviAnswers(),
         naviChats: input.naviChats?.() ?? [],
@@ -675,7 +702,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
       [...input.tools()].filter(
         ([name, tool]) =>
           input.isToolAllowed(name) &&
-          (activePermissionMode !== "read_only" || !tool.requiresApproval) &&
+          isToolAdvertisedInMode(tool, activePermissionMode) &&
           (!agent?.mcpServers.length ||
             !name.startsWith("mcp_") ||
             agent.mcpServers.some((server) =>
@@ -706,7 +733,7 @@ export function createProviderRunner(input: ProviderRunnerInput) {
       [...input.tools()].filter(
         ([name, tool]) =>
           input.isToolAllowed(name) &&
-          (activePermissionMode !== "read_only" || !tool.requiresApproval) &&
+          isToolAdvertisedInMode(tool, activePermissionMode) &&
           (!agent?.mcpServers.length ||
             !name.startsWith("mcp_") ||
             agent.mcpServers.some((server) =>
@@ -1573,6 +1600,14 @@ type RuntimeContextBlockInput = {
   skills?: SkillMetadata[];
   activeSkill?: SkillMetadata;
   /**
+   * Whether the skill_load tool reaches this session's advertised schema.
+   * read_only withholds tools that require approval, and skill_load is one,
+   * so the skills block must not tell the model to call it there. The
+   * runner always sets it; a caller that leaves it unset keeps the old
+   * behaviour (the call is offered).
+   */
+  skillLoadAdvertised?: boolean;
+  /**
    * Navi's pending collaboration suggestions, rendered as a
    * `<navi_collaborations>` block so the main agent sees them at the next turn
    * and can adopt, reject or defer without the user prompting it (the 轮巡).
@@ -1750,13 +1785,23 @@ function runtimeContextBlocks(
   // capability it cannot use.
   const skills = input.skills ?? [];
   if (skills.length) {
+    // Whether the model can actually load one. read_only withholds every
+    // tool that requires approval from the schema, and skill_load is one
+    // (it is an approval family: loading a document is loading
+    // instructions). Naming a tool the schema does not carry is the lie
+    // this guards against — the block used to say "Call the skill_load
+    // tool..." under every mode, so a read_only session was instructed to
+    // use a capability it did not have.
+    const canLoadSkill = input.skillLoadAdvertised ?? true;
     blocks.push({
       source: "skills",
       trust: "runtime",
       lines: [
         "<available_skills>",
         "These skills are installed in this workspace. Each description states when it applies.",
-        "Call the skill_load tool with the exact name to load one before acting on a task it covers.",
+        canLoadSkill
+          ? "Call the skill_load tool with the exact name to load one before acting on a task it covers."
+          : "Loading a skill is not available in this permission mode (read_only withholds tools that require approval, and skill_load is one). Read the descriptions below, tell the user which one applies, and let them load it or switch the mode.",
         ...skills.map((skill) => {
           const description = skill.description.replace(/\s+/gu, " ").trim();
           const bounded =

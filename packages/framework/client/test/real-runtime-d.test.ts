@@ -1604,6 +1604,60 @@ test("the system prompt enumerates installed skills dynamically", async () => {
   expect(withSkill).not.toContain("d".repeat(700));
 });
 
+test("a read_only session is not told to call a tool its schema withholds", async () => {
+  // The skills block said "Call the skill_load tool with the exact name..."
+  // under EVERY permission mode, while read_only withholds every tool that
+  // requires approval from the advertised schema — and skill_load is one.
+  // Measured in a real session: the runtime instructed the model to use a
+  // capability its own tool list did not carry. The block now reads the same
+  // rule the schema filter reads.
+  const root = await mkdtemp(join(tmpdir(), "natalia-prompt-skills-ro-"));
+  const requests: ProviderStreamRequest[] = [];
+  const promptFor = async (
+    sessionID: SessionID,
+    permissionMode: "ask" | "read_only",
+  ) => {
+    requests.length = 0;
+    const client = createRealRuntimeClient({
+      workspaceRoot: root,
+      sessionID,
+      permissionMode,
+      provider: {
+        provider: "test",
+        model: "test",
+        async *stream(request) {
+          requests.push(request);
+          yield { type: "done" as const };
+        },
+      },
+    });
+    client.start(() => undefined);
+    await client.submitAndWait!("hi");
+    await client.dispose?.();
+    return (requests[0]?.messages ?? [])
+      .map((message) => message.content)
+      .join("\n");
+  };
+
+  const readOnly = await promptFor(
+    "ses_prompt_skills_ro" as SessionID,
+    "read_only",
+  );
+  // The tool really is withheld from the schema...
+  expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain(
+    "skill_load",
+  );
+  // ...so the block must not name it, and must say why.
+  expect(readOnly).toContain("<available_skills>");
+  expect(readOnly).not.toContain("Call the skill_load tool");
+  expect(readOnly).toContain("not available in this permission mode");
+
+  // The other half: an ordinary session keeps the instruction it always had.
+  const asking = await promptFor("ses_prompt_skills_ask" as SessionID, "ask");
+  expect(requests[0]?.tools?.map((tool) => tool.name)).toContain("skill_load");
+  expect(asking).toContain("Call the skill_load tool with the exact name");
+});
+
 test("a rejected approval feeds the reason back and lets the turn continue", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-runtime-reject-"));
   const events: RuntimeEvent[] = [];

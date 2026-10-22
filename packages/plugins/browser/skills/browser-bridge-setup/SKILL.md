@@ -1,11 +1,6 @@
 ---
 name: browser-bridge-setup
-description: >-
-  Use when any browser_* tool fails with "extension is not connected", a
-  bridge unreachable/5xx error, or a scan that returns nothing — the setup
-  and recovery path for the Natalia Browser Bridge extension. Also use
-  before the first browser_* call in a new environment, and when a page
-  scan comes back empty or suspiciously short.
+description: Use when any browser_* tool fails with an extension-not-connected, bridge-unreachable or 5xx error, or a scan that returns nothing — the setup and recovery path for the Natalia Browser Bridge extension. Also use before the first browser_* call in a new environment, and when a page scan comes back empty or suspiciously short.
 ---
 
 # Browser Bridge setup and recovery

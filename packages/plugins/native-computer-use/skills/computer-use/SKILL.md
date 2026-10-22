@@ -1,10 +1,6 @@
 ---
 name: computer-use
-description: >-
-  Use before driving the desktop with the computer_* tools — window
-  enumeration, screenshots, clicking, typing, keys — and whenever a click
-  "did nothing". Carries the probe-first rhythm, the physical-coordinate
-  rules, and the verification discipline these tools are built around.
+description: Use before driving the desktop with the computer_* tools — window enumeration, screenshots, clicking, typing, keys — and whenever a click "did nothing". Carries the probe-first rhythm, the physical-coordinate rules, and the verification discipline these tools are built around.
 ---
 
 # Driving the desktop

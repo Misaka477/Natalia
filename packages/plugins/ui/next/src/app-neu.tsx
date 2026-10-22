@@ -3249,6 +3249,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         runningLabel={() =>
           state().natalia.activeTurn ? activityLabel() : undefined
         }
+        sessionLabel={() =>
+          state().sessions.find((session) => session.id === selectedSessionID())
+            ?.title ?? t("shell.newSessionName")
+        }
+        onOpenSessions={() => setLeftVisible(true)}
         slots={slots}
         locale={locale}
         setSearchOpen={setSearchOpen}

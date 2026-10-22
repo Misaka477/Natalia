@@ -5992,4 +5992,23 @@ export const commandPaletteCss = `
     font-size: var(--neu-font-sm);
     white-space: nowrap;
   }
+  /* The topbar's session segment: which session, one click from the list. */
+  .neu-topbar-session {
+    max-width: 220px;
+    margin-left: var(--neu-space-2);
+    padding: 2px var(--neu-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--neu-radius-1);
+    background: transparent;
+    color: var(--neu-text);
+    font: inherit;
+    font-size: var(--neu-font-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .neu-topbar-session:hover {
+    background: var(--neu-hover-overlay);
+  }
   `;

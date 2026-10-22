@@ -16,6 +16,10 @@ export interface TopbarProps {
   slots: SlotsRegistry;
   /** What the turn is doing now; undefined when idle. */
   runningLabel: () => string | undefined;
+  /** The current session's name, for the session segment. */
+  sessionLabel: () => string;
+  /** Reveals the session list (the segment's one action). */
+  onOpenSessions: () => void;
   setSearchOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSettingsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   moreOpen: () => boolean;
@@ -46,6 +50,8 @@ export function Topbar(props: TopbarProps) {
     locale,
     slots,
     runningLabel,
+    sessionLabel,
+    onOpenSessions,
     setSearchOpen,
     setSettingsOpen,
     moreOpen,
@@ -91,6 +97,16 @@ export function Topbar(props: TopbarProps) {
         <Show when={runningLabel()}>
           {(label) => <span class="neu-topbar-status">{label()}</span>}
         </Show>
+        {/* The session segment: which session this is, one click from the
+            list. The tree is the switch surface; this is its door. */}
+        <button
+          type="button"
+          class="neu-topbar-session"
+          onClick={onOpenSessions}
+          title={sessionLabel()}
+        >
+          {sessionLabel()}
+        </button>
       </div>
       <div class="neu-topbar-right">
         {/* The rail toggles are direct buttons in the actions segment — the

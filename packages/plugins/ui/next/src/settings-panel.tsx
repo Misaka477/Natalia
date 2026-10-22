@@ -7,6 +7,7 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
+import { SlotMount } from "./slots/mount";
 import type { AppState } from "@natalia/view-store";
 import {
   describeRuntimeCapabilities,
@@ -254,6 +255,7 @@ function verboseLog(...args: unknown[]) {
 
 export function SettingsPanel(props: {
   t: (key: string, params?: Record<string, unknown>) => string;
+  slots: any;
   open: boolean;
   /** Fill the viewport instead of floating a window. */
   fullscreen?: boolean;
@@ -299,6 +301,7 @@ export function SettingsPanel(props: {
   host?: import("@natalia/ui-host").UiPluginContext["host"];
 }) {
   const t = props.t;
+  const slots = props.slots;
   const [activeCategory, setActiveCategory] = createSignal<CategoryId>("model");
   // Applied on OPENING: the remembered category stays the default for the
   // settings button, and a caller that named one gets it. Reading `props.open`
@@ -1383,6 +1386,8 @@ export function SettingsPanel(props: {
                 </>
               </Show>
             </section>
+            {/* A plugin's own settings section, after the shell's. */}
+            <SlotMount slots={slots} name="settings.end" t={t} />
           </div>
           <div class="neu-settings-footer">
             <span class="neu-settings-footer-title">Natalia</span>

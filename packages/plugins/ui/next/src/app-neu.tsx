@@ -3476,6 +3476,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       </div>
       <ModalLayer
         t={t}
+        slots={slots}
         settingsFullscreen={settingsFullscreen}
         onToggleSettingsFullscreen={toggleSettingsFullscreen}
         ctx={props.ctx}

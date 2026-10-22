@@ -9,6 +9,7 @@ const mcpUiSrc = resolve(workspace, "packages/plugins/mcp/src/ui");
 const skillsUiSrc = resolve(workspace, "packages/plugins/skills/src/ui");
 const uiKitSrc = resolve(workspace, "packages/plugins/ui/kit/src");
 const pluginSrc = resolve(workspace, "packages/plugins/ui/web/src");
+const nextUiSrc = resolve(workspace, "packages/plugins/ui/next/src");
 const frameworkDiffSrc = resolve(workspace, "packages/framework/diff/src");
 const solidJs = resolve(root, "node_modules/solid-js");
 
@@ -25,6 +26,7 @@ function solidJsxSource(): Plugin {
         !file.startsWith(skillsUiSrc) &&
         !file.startsWith(uiKitSrc) &&
         !file.startsWith(pluginSrc) &&
+        !file.startsWith(nextUiSrc) &&
         !file.startsWith(frameworkDiffSrc) &&
         !file.startsWith(resolve(root, "src"))
       )
@@ -45,6 +47,7 @@ export default defineConfig({
         `${skillsUiSrc}/**/*.{js,ts,jsx,tsx}`,
         `${uiKitSrc}/**/*.{js,ts,jsx,tsx}`,
         `${pluginSrc}/**/*.{js,ts,jsx,tsx}`,
+        `${nextUiSrc}/**/*.{js,ts,jsx,tsx}`,
         `${frameworkDiffSrc}/**/*.{js,ts,jsx,tsx}`,
         `${root}/src/**/*.{js,ts,jsx,tsx}`,
       ],

@@ -4187,7 +4187,13 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   animation: neu-pulse 1s infinite;
 }
 
-/* Activity bar above composer */
+/* Activity bar above composer.
+   SHARED VOCABULARY — this cluster (the bar, its label, the pulse and
+   the jump-to-bottom button below) is consumed by three surfaces: the
+   transcript, the agent panel and the Nia panel. It is the runbar's own
+   styling, so it stays global under the migration plan's cross-region
+   rule: localizing it would give three regions three copies of one
+   vocabulary. */
 .neu-activity-bar {
   display: flex;
   align-items: center;
@@ -4942,7 +4948,10 @@ button.wg-node-row:hover {
   font-weight: 600;
 }
 
-/* Jump-to-bottom floating button */
+/* Jump-to-bottom floating button.
+   SHARED VOCABULARY — the same button the transcript, the agent panel
+   and the Nia panel show; it stays global for the reason the activity
+   bar above does. */
 .neu-jump-bottom {
   position: absolute;
   right: 16px;

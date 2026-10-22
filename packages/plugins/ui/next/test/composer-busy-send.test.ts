@@ -36,7 +36,12 @@ const composerStyles = await Bun.file(
 const busyRule = () => {
   const at = composerStyles.indexOf('.submit[data-busy="true"]');
   expect(at).toBeGreaterThan(0);
-  return composerStyles.slice(at, composerStyles.indexOf("}", at));
+  // Prettier wraps long declarations, so the guard compares the rule's
+  // text with whitespace normalized — it checks the shadow EXPRESSION,
+  // not the formatter's line breaks.
+  return composerStyles
+    .slice(at, composerStyles.indexOf("}", at))
+    .replace(/\s+/gu, " ");
 };
 
 test("the busy send key keeps the accent color, not the error color", () => {

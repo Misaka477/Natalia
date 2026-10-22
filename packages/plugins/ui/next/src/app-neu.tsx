@@ -53,6 +53,7 @@ import { ModalLayer } from "./controllers/modals";
 import { SessionSidebar } from "./controllers/session-tree";
 import { MainPanes } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
+import { Topbar } from "./controllers/topbar";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -3139,182 +3140,33 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       data-right-open={rightVisible()}
       data-resizing={resizing()}
     >
-      <header class="neu-topbar">
-        <div class="neu-topbar-left">
-          {/* The app's own mark, not a letter. `/brand.png` is the shell's
-              stable copy — generated from `assets/source/natalia-icon.svg` by
-              `scripts/build-app-icons.ts` into `apps/web/public/`, which Vite
-              copies verbatim. Root-relative because this UI ships as a plugin
-              bundle served by the runtime from a different origin, so neither
-              a hashed asset name nor a bundle-relative path would resolve. */}
-          <img class="neu-topbar-logo" src="/brand.png" alt="Natalia" />
-          <div class="neu-topbar-meta">
-            <span class="neu-topbar-title">Natalia</span>
-            <span class="neu-topbar-sub">
-              The world is not beautiful; therefore it is.
-            </span>
-          </div>
-        </div>
-        <div class="neu-topbar-right">
-          <button
-            type="button"
-            class="neu-topbar-btn"
-            data-active={viewOpen()}
-            onClick={() => setViewOpen((value) => !value)}
-          >
-            视图
-          </button>
-          <button
-            type="button"
-            class="neu-topbar-btn"
-            onClick={() => setSearchOpen(true)}
-          >
-            搜索
-          </button>
-          <button
-            type="button"
-            class="neu-topbar-btn neu-topbar-btn-primary"
-            onClick={() => setSettingsOpen(true)}
-          >
-            设置
-          </button>
-          <button
-            type="button"
-            class="neu-topbar-btn"
-            data-active={moreOpen()}
-            onClick={() => setMoreOpen((value) => !value)}
-          >
-            更多
-          </button>
-        </div>
-        <Show when={topbarPanel()}>
-          <div class="neu-topbar-panel-dropdown">
-            <div class="neu-topbar-panel-content" ref={topbarPanelRef} />
-            <button
-              type="button"
-              class="neu-topbar-panel-close"
-              onClick={() => setTopbarPanel(null)}
-            >
-              关闭
-            </button>
-          </div>
-        </Show>
-        <Show when={viewOpen()}>
-          <div class="neu-topbar-view-dropdown">
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              data-active={leftVisible()}
-              onClick={() => {
-                setLeftVisible((value) => !value);
-                setViewOpen(false);
-              }}
-            >
-              左栏
-            </button>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              data-active={rightVisible()}
-              onClick={() => {
-                setRightVisible((value) => !value);
-                setViewOpen(false);
-              }}
-            >
-              右栏
-            </button>
-            <Show when={layoutMode() === "tiny"}>
-              <button
-                type="button"
-                class="neu-topbar-more-item"
-                data-active={naviOpen()}
-                onClick={() => {
-                  setNaviOpen((value) => !value);
-                  setViewOpen(false);
-                }}
-              >
-                Navi
-              </button>
-            </Show>
-          </div>
-        </Show>
-        <Show when={moreOpen()}>
-          <div class="neu-topbar-more-dropdown">
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              onClick={() => {
-                setStatusOpen(true);
-                setMoreOpen(false);
-              }}
-            >
-              状态
-            </button>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              onClick={() => {
-                setHelpOpen(true);
-                setMoreOpen(false);
-              }}
-            >
-              帮助
-            </button>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              onClick={() => {
-                setStashOpen(true);
-                setMoreOpen(false);
-              }}
-            >
-              暂存
-            </button>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              onClick={() => {
-                setSandboxOpen(true);
-                setMoreOpen(false);
-              }}
-            >
-              沙箱
-            </button>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              onClick={() => {
-                setPluginManagerOpen(true);
-                setMoreOpen(false);
-              }}
-            >
-              插件
-            </button>
-            <div class="neu-topbar-more-separator" />
-            <For each={groupedTopbarPanels()}>
-              {([group, panels]) => (
-                <div class="neu-topbar-more-group">
-                  <span class="neu-topbar-group-label">{group}</span>
-                  <For each={panels}>
-                    {(panel) => (
-                      <button
-                        type="button"
-                        class="neu-topbar-more-item"
-                        onClick={() => {
-                          mountTopbarPanel(panel);
-                          setMoreOpen(false);
-                        }}
-                      >
-                        {panel.panel.title}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-      </header>
+      <Topbar
+        viewOpen={viewOpen}
+        setViewOpen={setViewOpen}
+        setSearchOpen={setSearchOpen}
+        setSettingsOpen={setSettingsOpen}
+        moreOpen={moreOpen}
+        setMoreOpen={setMoreOpen}
+        topbarPanel={topbarPanel}
+        topbarPanelRef={(element) => {
+          topbarPanelRef = element;
+        }}
+        setTopbarPanel={setTopbarPanel}
+        leftVisible={leftVisible}
+        setLeftVisible={setLeftVisible}
+        rightVisible={rightVisible}
+        setRightVisible={setRightVisible}
+        layoutMode={layoutMode}
+        naviOpen={naviOpen}
+        setNaviOpen={setNaviOpen}
+        setStatusOpen={setStatusOpen}
+        setHelpOpen={setHelpOpen}
+        setStashOpen={setStashOpen}
+        setSandboxOpen={setSandboxOpen}
+        setPluginManagerOpen={setPluginManagerOpen}
+        groupedTopbarPanels={groupedTopbarPanels}
+        mountTopbarPanel={mountTopbarPanel}
+      />
       {/*
         The image preview lives HERE, at the shell root: one instance for the whole
         app, a sibling of the panes. Inside a message it could not paint above the

@@ -12,7 +12,7 @@ import { ContextMeter, Transcript } from "@natalia/ui-kit";
 import { PendingTakeover } from "../components/PendingTakeover";
 import { NeuSelect } from "../components/NeuSelect";
 import { QueueDock } from "../components/QueueDock";
-import { Composer } from "../components/Composer";
+import { MainInputArea, ChatInputArea } from "./input-area";
 import { SessionUsageBar } from "../components/SessionUsageBar";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
@@ -588,152 +588,26 @@ export function MainPanes(props: MainPanesProps) {
                     </button>
                   </div>
                 </Show>
-                <QueueDock
-                  items={state().pendingInputs}
-                  onRemove={(id) => {
-                    void props.ctx.runtime.removeInput?.({
-                      id,
-                      sessionID: selectedSessionID() || state().sessionID,
-                    });
-                  }}
-                  onReplace={(id, text) => {
-                    void props.ctx.runtime.replaceInput?.({
-                      id,
-                      text,
-                      sessionID: selectedSessionID() || state().sessionID,
-                    });
-                  }}
-                  onPromote={(id) => {
-                    void props.ctx.runtime.promoteInput?.({
-                      id,
-                      sessionID: selectedSessionID() || state().sessionID,
-                    });
-                  }}
+                <MainInputArea
+                  ctx={props.ctx}
+                  state={state}
+                  selectedSessionID={selectedSessionID}
+                  mainDraft={mainDraft}
+                  setMainDraft={setMainDraft}
+                  mainAttachments={mainAttachments}
+                  setMainAttachments={setMainAttachments}
+                  handlePasteAttachments={handlePasteAttachments}
+                  pendingTakeoverCount={pendingTakeoverCount}
+                  pendingTakeoverMinimized={pendingTakeoverMinimized}
+                  setPendingTakeoverMinimized={setPendingTakeoverMinimized}
+                  pendingTakeoverFocus={pendingTakeoverFocus}
+                  setPendingTakeoverFocus={setPendingTakeoverFocus}
+                  pendingRollback={pendingRollback}
+                  setPendingRollback={setPendingRollback}
+                  setRollbackNotice={setRollbackNotice}
+                  refreshTranscript={refreshTranscript}
+                  perfLog={perfLog}
                 />
-                <SessionUsageBar usage={state().usageByChannel.main} />
-                <Show
-                  when={
-                    pendingTakeoverCount() > 0 && !pendingTakeoverMinimized()
-                  }
-                >
-                  <PendingTakeover
-                    ctx={props.ctx}
-                    minimized={pendingTakeoverMinimized}
-                    onMinimize={setPendingTakeoverMinimized}
-                    focusID={pendingTakeoverFocus}
-                    onFocusHandled={() => setPendingTakeoverFocus(undefined)}
-                  />
-                </Show>
-                <Show
-                  when={
-                    pendingTakeoverCount() === 0 || pendingTakeoverMinimized()
-                  }
-                >
-                  <Composer
-                    value={mainDraft()}
-                    placeholder="输入消息，使用 @ 提及文件…"
-                    busy={Boolean(state().natalia.activeTurn)}
-                    onInput={setMainDraft}
-                    attachments={mainAttachments()}
-                    onRemoveAttachment={(path) =>
-                      setMainAttachments(
-                        mainAttachments().filter((item) => item.path !== path),
-                      )
-                    }
-                    onPaste={(event) =>
-                      handlePasteAttachments(
-                        event,
-                        mainAttachments(),
-                        setMainAttachments,
-                      )
-                    }
-                    onSubmit={() => {
-                      const text = mainDraft();
-                      const paths = mainAttachments().map((item) => item.path);
-                      if (text.trim() || paths.length) {
-                        const rollback = pendingRollback();
-                        const submit = async () => {
-                          try {
-                            if (rollback) {
-                              const sessionID =
-                                selectedSessionID() || state().sessionID;
-                              const messageResult =
-                                rollback.turnID && sessionID
-                                  ? await props.ctx.runtime.sessionRollbackMessages?.(
-                                      sessionID,
-                                      rollback.turnID,
-                                    )
-                                  : undefined;
-                              const preview = rollback.checkpointID
-                                ? await props.ctx.runtime.checkpointRollback?.({
-                                    id: rollback.checkpointID,
-                                    sessionID,
-                                  })
-                                : undefined;
-                              await refreshTranscript();
-                              if (messageResult || preview) {
-                                // No count: the rollback contract
-                                // returns {id, rolledBackTo} and nothing
-                                // about how much was removed, so the
-                                // "1 条消息" this used to print was
-                                // invented — a number that was wrong
-                                // for every rollback that removed more
-                                // than one message and right only by
-                                // coincidence. Saying what happened is
-                                // honest; counting it needs the store
-                                // to return the number.
-                                setRollbackNotice({
-                                  text:
-                                    messageResult && preview
-                                      ? `已还原会话到所选消息，并恢复了工作区检查点。`
-                                      : preview
-                                        ? `已恢复工作区检查点。`
-                                        : messageResult?.safetyCheckpointID
-                                          ? `已还原会话到所选消息，并创建了安全后悔点。`
-                                          : `已还原会话到所选消息。没有可用的文件检查点，因此未恢复工作区更改。`,
-                                  safetyCheckpointID:
-                                    messageResult?.safetyCheckpointID ??
-                                    preview?.safetyCheckpointID,
-                                });
-                              }
-                            } else {
-                              setRollbackNotice(undefined);
-                            }
-                            perfLog("[web-plugin] send", text);
-                            // The Composer opts into mid-turn injection by
-                            // default. The settings panel can switch a busy send
-                            // to `next-turn`, which queues a separate turn.
-                            const busy = Boolean(state().natalia.activeTurn);
-                            const busySendDelivery =
-                              props.ctx.preferences.get<
-                                "next-step" | "next-turn"
-                              >("busySendDelivery") ?? "next-step";
-                            const sessionID =
-                              selectedSessionID() || state().sessionID;
-                            const outgoing =
-                              goalCommandInstruction(text) ?? text;
-                            if (props.ctx.runtime.submitInput) {
-                              props.ctx.runtime.submitInput({
-                                text: outgoing,
-                                ...(paths.length ? { attachments: paths } : {}),
-                                ...(busy ? { delivery: busySendDelivery } : {}),
-                                sessionID,
-                              });
-                            } else {
-                              props.ctx.runtime.submit?.(text, sessionID);
-                            }
-                          } finally {
-                            setMainDraft("");
-                            setMainAttachments([]);
-                            setPendingRollback(undefined);
-                          }
-                        };
-                        void submit();
-                      }
-                    }}
-                    onStop={() => props.ctx.runtime.cancel?.()}
-                  />
-                </Show>
               </div>
             </div>
           </Show>
@@ -890,66 +764,18 @@ export function MainPanes(props: MainPanesProps) {
                     menuPosition="top"
                   />
                 </div>
-                <SessionUsageBar usage={state().usageByChannel.navi} />
-                <Composer
-                  value={chatDraft()}
-                  placeholder="向 Navi 提问…"
-                  busy={Boolean(naviChatActivity())}
-                  onInput={setChatDraft}
-                  onStop={() =>
-                    void props.ctx.runtime.naviChat?.abort?.(
-                      selectedSessionID() || state().sessionID,
-                    )
-                  }
-                  attachments={chatAttachments()}
-                  onRemoveAttachment={(path) =>
-                    setChatAttachments(
-                      chatAttachments().filter((item) => item.path !== path),
-                    )
-                  }
-                  onPaste={(event) =>
-                    handlePasteAttachments(
-                      event,
-                      chatAttachments(),
-                      setChatAttachments,
-                    )
-                  }
-                  onSubmit={() => {
-                    const text = chatDraft();
-                    if (text.trim() || chatAttachments().length) {
-                      perfLog("[navi-ui] submitting chat", {
-                        text,
-                        attachments: chatAttachments().map((item) => item.path),
-                      });
-                      const result = props.ctx.runtime.naviChat?.submit?.({
-                        text,
-                        sessionID: selectedSessionID() || state().sessionID,
-                        ...(chatAttachments().length
-                          ? {
-                              attachments: chatAttachments().map(
-                                (item) => item.path,
-                              ),
-                            }
-                          : {}),
-                      });
-                      if (result && typeof result.then === "function") {
-                        void result
-                          .then((value) =>
-                            perfLog("[navi-ui] chatSubmit resolved", value),
-                          )
-                          .catch((cause) =>
-                            console.error(
-                              "[navi-ui] chatSubmit failed",
-                              cause instanceof Error
-                                ? cause.message
-                                : String(cause),
-                            ),
-                          );
-                      }
-                      setChatDraft("");
-                      setChatAttachments([]);
-                    }
-                  }}
+                <ChatInputArea
+                  naviChatActivity={naviChatActivity}
+                  ctx={props.ctx}
+                  state={state}
+                  selectedSessionID={selectedSessionID}
+                  chatDraft={chatDraft}
+                  setChatDraft={setChatDraft}
+                  chatAttachments={chatAttachments}
+                  setChatAttachments={setChatAttachments}
+                  handlePasteAttachments={handlePasteAttachments}
+                  updateChatProfile={updateChatProfile}
+                  perfLog={perfLog}
                 />
               </div>
             </div>

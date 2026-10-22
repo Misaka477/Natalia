@@ -11,29 +11,15 @@ import { spawn, execSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { browserBridgeExtensionDir } from "../src/extension-dir.js";
 
 const ROOT = dirname(fileURLToPath(new URL("..", import.meta.url))); // packages/plugins/browser
-// Where the Chromium extension actually IS, in this environment.
-//
-// This used to be a single checkout-relative path
-// (`<repo>/packages/plugins/browser/src/extension/chromium`), which exists only
-// in a development checkout. In an installed copy the extension is shipped
-// beside the plugin (`<install>/plugins/natalia-browser/extension/chromium`) —
-// build-standalone.ts stages it there — so the helper printed a path that did
-// not exist and told the user to load a folder that was never there.
-//
-// Candidates are tried in order and the first one that really holds a
-// manifest.json wins, because both layouts are legitimate and which one applies
-// depends on where this script is running from.
-const EXTENSION_CANDIDATES = [
-  // An install: staged next to the plugin.
-  join(ROOT, "extension", "chromium"),
-  // A checkout: the source tree.
-  join(ROOT, "src", "extension", "chromium"),
-];
-const EXT_DIR =
-  EXTENSION_CANDIDATES.find((dir) => existsSync(join(dir, "manifest.json"))) ??
-  EXTENSION_CANDIDATES[0]!;
+// Where the Chromium extension actually IS, in this environment: an install
+// stages it beside the plugin, a checkout keeps it in the source tree, and
+// the shared resolver picks the one that holds a manifest.json. The error
+// messages the runtime prints name the same directory, so the helper and
+// the tools can never send the user to different folders.
+const EXT_DIR = browserBridgeExtensionDir();
 const BRIDGE_URL =
   process.env.NATALIA_BROWSER_BRIDGE_URL || "http://127.0.0.1:18765";
 

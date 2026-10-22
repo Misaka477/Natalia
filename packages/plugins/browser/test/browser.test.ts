@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ import {
   createBrowserPlugin,
   getBrowserBridgeLifecycle,
 } from "../src";
+import { browserBridgeExtensionDir } from "../src/extension-dir";
 
 const originalPort = process.env.NATALIA_BROWSER_BRIDGE_PORT;
 const originalUrl = process.env.NATALIA_BROWSER_BRIDGE_URL;
@@ -70,6 +72,29 @@ test("browser tools report a friendly missing-extension error when no extension 
   await expect(
     tabTool.execute({}, { workspaceRoot: root } as never),
   ).rejects.toThrow(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR);
+});
+
+test("the missing-extension error is a setup path, not a shrug", async () => {
+  // "扩展未安装或未启用。请告诉用户安装该扩展。" told the model nothing it
+  // could act on: no directory, no steps, and no warning that the error
+  // badge the extensions page shows is expected. The message is the whole
+  // setup procedure, and the directory it names is the one that really
+  // holds a manifest.json — a path that does not exist sends the user to
+  // load a folder that was never there.
+  expect(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR).toContain(
+    browserBridgeExtensionDir(),
+  );
+  expect(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR).toContain(
+    "chrome://extensions",
+  );
+  expect(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR).toContain("Developer mode");
+  expect(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR).toContain("Load unpacked");
+  // The expected-but-alarming badge is pre-answered, or the user goes
+  // looking for a bug that is not there.
+  expect(BROWSER_BRIDGE_EXTENSION_MISSING_ERROR).toContain("expected");
+  expect(existsSync(join(browserBridgeExtensionDir(), "manifest.json"))).toBe(
+    true,
+  );
 });
 
 test("browser tools delegate to an external bridge when one is configured", async () => {
@@ -204,6 +229,54 @@ test("plugin setup does not start the bridge server until a tool is used", async
   expect(lifecycle.isConnected()).toBe(false);
   expect(lifecycle.getBaseUrl()).toBeUndefined();
   await registry.unload(BROWSER_PLUGIN_ID);
+});
+
+test("a closing extension connection leaves the others connected", async () => {
+  // One tab disconnecting must not take the other tabs' connections with
+  // it (the close handler used to clear the whole map), and it must not
+  // leave a dead socket behind either (the fallback that removed nothing
+  // when two were connected). healthz reports the live count, so the
+  // bridge's own answer is the assertion.
+  process.env.NATALIA_BROWSER_BRIDGE_PORT = "0";
+  delete process.env.NATALIA_BROWSER_BRIDGE_URL;
+  const lifecycle = getBrowserBridgeLifecycle();
+  await lifecycle.ensureStarted();
+  const base = lifecycle.getBaseUrl();
+  expect(base).toBeDefined();
+
+  const connections = [
+    new WebSocket(`ws://127.0.0.1:${new URL(base!).port}`),
+    new WebSocket(`ws://127.0.0.1:${new URL(base!).port}`),
+  ];
+  await Promise.all(
+    connections.map(
+      (socket) =>
+        new Promise<void>((resolve) => (socket.onopen = () => resolve())),
+    ),
+  );
+  const liveCount = async () => {
+    const health = (await fetch(`${base}/healthz`).then((response) =>
+      response.json(),
+    )) as { extensions: number };
+    return health.extensions;
+  };
+  expect(await liveCount()).toBe(2);
+
+  // The first one goes away; the second must survive it.
+  connections[0]!.close();
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if ((await liveCount()) === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  expect(await liveCount()).toBe(1);
+
+  // And the survivor can still close cleanly down to none.
+  connections[1]!.close();
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if ((await liveCount()) === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  expect(await liveCount()).toBe(0);
 });
 
 test("browser_scan's description teaches its paging", () => {

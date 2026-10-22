@@ -20,6 +20,12 @@ export const BROWSER_PLUGIN_MANIFEST: PluginManifest = {
   dependencies: [],
   hooks: {},
   integrationPoints: ["tools"],
+  // The setup/recovery SOP this package ships. Declared in both places on
+  // purpose: the installer compares the built entry's exported manifest
+  // against the package manifest byte for byte, so a directory declared in
+  // only one of them is a plugin whose skills never install or never
+  // appear.
+  skills: { dir: "skills" },
 };
 
 export function createBrowserPlugin(): Plugin {

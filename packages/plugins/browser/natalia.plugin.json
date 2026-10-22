@@ -12,5 +12,6 @@
   "conflicts": [],
   "dependencies": [],
   "hooks": {},
-  "integrationPoints": ["tools"]
+  "integrationPoints": ["tools"],
+  "skills": { "dir": "skills" }
 }

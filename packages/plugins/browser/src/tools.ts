@@ -16,9 +16,25 @@ import {
 } from "@anthelia/tools";
 import type { RuntimeTool, ToolFamily } from "@anthelia/tools";
 import { getBrowserBridgeLifecycle } from "./browser-bridge-lifecycle";
+import { browserBridgeExtensionDir } from "./extension-dir";
 
-export const BROWSER_BRIDGE_EXTENSION_MISSING_ERROR =
-  "Natalia Browser Bridge 扩展未安装或未启用。请告诉用户安装该扩展。";
+/**
+ * The setup path, spelled the way a reader can act on it.
+ *
+ * The extension is loaded by the user through chrome://extensions — the
+ * registry route this product once tried is dead in current Chrome and
+ * Edge, which is why install.ts no longer writes one — so the error names
+ * the directory to pick and says that the error badge the listing shows
+ * before the bridge runs is expected. A reader told only "not connected"
+ * goes looking for a bug that is not there.
+ */
+export const BROWSER_BRIDGE_EXTENSION_MISSING_ERROR = [
+  "Natalia Browser Bridge extension is not connected.",
+  'Setup for the user: 1) open chrome://extensions in Chrome or Edge; 2) turn on Developer mode; 3) click "Load unpacked" and choose:',
+  browserBridgeExtensionDir(),
+  'The listing shows an "error" badge until the browser bridge is running — that badge is expected, not a failure.',
+  "After loading, open any normal page and retry.",
+].join(" ");
 
 /**
  * The browser-family card (presentation plan P1.3): every browser_* tool

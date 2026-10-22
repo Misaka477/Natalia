@@ -22,6 +22,7 @@ export type BrowserBridgeServer = {
 };
 
 type ExtensionConnection = {
+  id: string;
   send(payload: unknown): void;
   close(): void;
 };
@@ -35,7 +36,7 @@ export function createBrowserBridgeServer(
   const port =
     options.port ??
     Number(process.env.NATALIA_BROWSER_BRIDGE_PORT ?? DEFAULT_PORT);
-  const extensionConnections = new Set<ExtensionConnection>();
+  const extensionConnections = new Map<string, ExtensionConnection>();
   const pending = new Map<
     string,
     {
@@ -56,13 +57,21 @@ export function createBrowserBridgeServer(
     "input",
     "screenshot",
   ]);
-  let server: ReturnType<typeof Bun.serve<{ extension: boolean }>> | undefined;
+  /**
+   * The per-socket data: the extension flag the upgrade sets, plus the
+   * connection id the open handler stores so the close handler can name
+   * exactly the connection that closed.
+   */
+  type BridgeSocketData = { extension: boolean; connectionId?: string };
+
+  let server: ReturnType<typeof Bun.serve<BridgeSocketData>> | undefined;
+  let connectionCounter = 0;
 
   function sendToExtension(message: unknown) {
-    for (const connection of extensionConnections) connection.send(message);
+    for (const connection of extensionConnections.values())
+      connection.send(message);
   }
-
-  const serverInstance = Bun.serve<{ extension: boolean }>({
+  const serverInstance = Bun.serve<BridgeSocketData>({
     hostname: host,
     port,
     async fetch(request, server) {
@@ -124,7 +133,15 @@ export function createBrowserBridgeServer(
     },
     websocket: {
       open(ws) {
+        const connectionId = `ext_${++connectionCounter}_${Date.now()}`;
+        // The id rides the socket itself: the close handler receives the
+        // same ws, and a ServerWebSocket exposes no id of its own. A close
+        // that cannot name its connection removes the wrong one — or, when
+        // it removes nothing, leaves a dead socket in the map that every
+        // later command is sent to.
+        ws.data = { extension: true, connectionId };
         const connection: ExtensionConnection = {
+          id: connectionId,
           send(payload) {
             ws.send(JSON.stringify(payload));
           },
@@ -132,7 +149,7 @@ export function createBrowserBridgeServer(
             ws.close();
           },
         };
-        extensionConnections.add(connection);
+        extensionConnections.set(connectionId, connection);
         options.onConnection?.("extension");
       },
       message(ws, raw) {
@@ -155,11 +172,16 @@ export function createBrowserBridgeServer(
         else entry.resolve(message.result);
       },
       close(ws) {
-        for (const connection of [...extensionConnections]) {
-          // No per-connection id; remove all for simplicity in this base version.
-          extensionConnections.delete(connection);
+        // Remove exactly the connection that closed, named by the id the
+        // open handler stored on the socket. The implementation this
+        // replaces removed every connection on any close, so one tab
+        // disconnecting killed every other tab's connection too.
+        const connectionId = (ws.data as { connectionId?: string } | undefined)
+          ?.connectionId;
+        if (connectionId) extensionConnections.delete(connectionId);
+        if (extensionConnections.size === 0) {
+          options.onConnection?.("tool");
         }
-        options.onConnection?.("tool");
       },
     },
   });

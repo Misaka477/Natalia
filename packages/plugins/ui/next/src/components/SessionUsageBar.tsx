@@ -1,3 +1,4 @@
+import styles from "../styles/usage-bar.module.css";
 import { Show, createMemo } from "solid-js";
 import * as viewStore from "@natalia/view-store";
 import type {
@@ -49,46 +50,46 @@ export function SessionUsageBar(props: {
   );
 
   return (
-    <div class="session-usage-bar">
-      <span class="session-usage-seg" title={t("usage.title")}>
+    <div class={styles.bar}>
+      <span class={styles.seg} title={t("usage.title")}>
         {t("usage.turnsSteps", { turns: view().turns, steps: view().steps })}
       </span>
-      <span class="session-usage-sep">·</span>
+      <span class={styles.sep}>·</span>
       <span
-        class="session-usage-seg"
+        class={styles.seg}
         title={`Input ${view().inputTokens} · cache read ${view().cacheReadInputTokens} · cache write ${view().cacheCreationInputTokens}`}
       >
         In {formatCount(view().inputTokens)} · Out{" "}
         {formatCount(view().outputTokens)}
       </span>
-      <span class="session-usage-sep">·</span>
+      <span class={styles.sep}>·</span>
       <span
-        class="session-usage-seg"
+        class={styles.seg}
         title={`Cache read ${view().cacheReadInputTokens} · write ${view().cacheCreationInputTokens}`}
       >
         Cache R {formatCount(view().cacheReadInputTokens)} · W{" "}
         {formatCount(view().cacheCreationInputTokens)}
       </span>
-      <span class="session-usage-sep">·</span>
-      <span class="session-usage-seg" title="Cache read / total input">
+      <span class={styles.sep}>·</span>
+      <span class={styles.seg} title="Cache read / total input">
         {t("usage.cacheHit", { rate: (view().cacheHitRate * 100).toFixed(1) })}
       </span>
-      <span class="session-usage-sep">·</span>
-      <span class="session-usage-seg" title="Model / tool wall time">
+      <span class={styles.sep}>·</span>
+      <span class={styles.seg} title="Model / tool wall time">
         {t("usage.llmTool", {
           llm: formatMs(view().llmMs),
           tool: formatMs(view().toolMs),
         })}
       </span>
       <Show when={view().ttftSteps > 0}>
-        <span class="session-usage-sep">·</span>
-        <span class="session-usage-seg" title="Average first-token latency">
+        <span class={styles.sep}>·</span>
+        <span class={styles.seg} title="Average first-token latency">
           {t("usage.firstToken", { ms: formatMs(view().avgTtftMs) })}
         </span>
       </Show>
       <Show when={view().tokensPerSecond > 0}>
-        <span class="session-usage-sep">·</span>
-        <span class="session-usage-seg" title="Decode throughput">
+        <span class={styles.sep}>·</span>
+        <span class={styles.seg} title="Decode throughput">
           {view().tokensPerSecond.toFixed(0)} tok/s
         </span>
       </Show>

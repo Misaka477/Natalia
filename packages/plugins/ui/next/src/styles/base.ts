@@ -4062,36 +4062,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   animation: neu-pulse 1s infinite;
 }
 .session-usage-bar {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 26px;
-  padding: 3px 10px;
-  margin: 0 0 4px;
-  border-radius: 8px;
-  background: var(--neu-surface-raised);
-  box-shadow: var(--neu-ring-raised);
-  font-size: 11px;
-  line-height: 1.5;
-  opacity: 0.82;
-  font-variant-numeric: tabular-nums;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.session-usage-bar::-webkit-scrollbar {
-  display: none;
-}
-.session-usage-seg {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.session-usage-sep {
-  opacity: 0.4;
-  flex-shrink: 0;
-}
 /* Work Graph: one fixed-height row model shared by the virtual window
    (WORK_GRAPH_ROW_HEIGHT). Rows are positioned by the virtualizer, never
    DOM-measored, so the height here is the estimate too. */

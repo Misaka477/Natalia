@@ -211,6 +211,15 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 /* ===== Main dual panes ===== */
+/* SHARED VOCABULARY — the pane (with its header, title, status and
+   content) is the shell's one shape for "a panel with a header", used by
+   the transcript, the Nia panel, the agent panel and the shell itself;
+   neu-main and neu-main-toolbar are shared by the transcript and Nia.
+   They stay global under the migration plan's cross-region rule —
+   localizing them would give four surfaces four copies of one shape.
+   The classes that ARE transcript-only (neu-main-panes, the divider,
+   the header's right cluster and the two transcript wraps) move into
+   the transcript module when that region's clusters are cut. */
 .neu-main {
   flex: 1;
   min-width: 0;

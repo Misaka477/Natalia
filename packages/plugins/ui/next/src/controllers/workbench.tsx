@@ -128,6 +128,7 @@ export function RightRail(props: RightRailProps) {
               when={rightTab() === "diff" ? rightPanelScopeKey() : undefined}
             >
               <ReviewPane
+                t={t}
                 runtime={props.ctx.runtime}
                 events={props.ctx.events}
                 requestedTab={reviewRequestedTab()}

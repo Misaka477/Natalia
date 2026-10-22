@@ -87,6 +87,7 @@ function statusFor(operation: string) {
 
 export function ReviewPane(
   props: {
+    t: (key: string, params?: Record<string, unknown>) => string;
     runtime?: RuntimeClient;
     requestedTab?: ReviewSubTab;
     requestedCheckpointID?: string;
@@ -95,8 +96,11 @@ export function ReviewPane(
     events?: {
       subscribe(listener: (event: RuntimeEvent) => void): () => void;
     };
-  } = {},
+  } = {
+    t: (key) => key,
+  },
 ) {
+  const t = props.t;
   const [tab, setTab] = createSignal<ReviewSubTab>("git");
   createEffect(() => {
     if (props.requestedTab) setTab(props.requestedTab);
@@ -691,7 +695,7 @@ export function ReviewPane(
     setAstDiffResult(undefined);
     setAstDiffError(undefined);
     if (!props.runtime?.astDiff) {
-      setAstDiffError("当前 runtime 不支持 AST diff");
+      setAstDiffError(t("review.astDiffUnsupported"));
       return;
     }
     try {
@@ -786,7 +790,7 @@ export function ReviewPane(
     const files = await collectAstSourceFiles();
     if (!files.length) {
       setAstSearchResult(undefined);
-      setAstSearchError("当前没有可做 AST 搜索的文件内容");
+      setAstSearchError(t("review.astSearchNoContent"));
       return;
     }
     setAstSearchLoading(true);
@@ -794,7 +798,7 @@ export function ReviewPane(
     setAstSearchResult(undefined);
     try {
       if (!props.runtime?.astService) {
-        setAstSearchError("当前 runtime 不支持 AST 搜索");
+        setAstSearchError(t("review.astSearchUnsupported"));
         return;
       }
       const result = await props.runtime.astService({
@@ -898,7 +902,7 @@ export function ReviewPane(
     }
     if (!files.length) {
       setAstBatchResult(undefined);
-      setAstBatchError("当前没有可做 AST diff 的文件内容");
+      setAstBatchError(t("review.astBatchNoContent"));
       return;
     }
     setAstBatchLoading(true);
@@ -907,7 +911,7 @@ export function ReviewPane(
     try {
       if (astBatchMode() === "refactor") {
         if (!props.runtime?.astRefactorPreview) {
-          setAstBatchError("当前 runtime 不支持重构预览");
+          setAstBatchError(t("review.astBatchPreviewUnsupported"));
           return;
         }
         const result = await props.runtime.astRefactorPreview({
@@ -917,7 +921,7 @@ export function ReviewPane(
         setAstBatchResult(result);
       } else {
         if (!props.runtime?.astDiffBatch) {
-          setAstBatchError("当前 runtime 不支持批量 AST diff");
+          setAstBatchError(t("review.astBatchUnsupported"));
           return;
         }
         const result = await props.runtime.astDiffBatch({
@@ -936,13 +940,13 @@ export function ReviewPane(
     const from = astPlanFrom().trim();
     const to = astPlanTo().trim();
     if (!from || !to) {
-      setAstPlanError("请输入旧名称和新名称");
+      setAstPlanError(t("review.astNeedNames"));
       return;
     }
     const files = await collectAstSourceFiles();
     if (!files.length) {
       setAstPlanResult(undefined);
-      setAstPlanError("当前没有可做重构计划的文件内容");
+      setAstPlanError(t("review.astPlanNoContent"));
       return;
     }
     setAstPlanLoading(true);
@@ -950,7 +954,7 @@ export function ReviewPane(
     setAstPlanResult(undefined);
     try {
       if (!props.runtime?.astRefactorPlan) {
-        setAstPlanError("当前 runtime 不支持重构计划");
+        setAstPlanError(t("review.astPlanUnsupported"));
         return;
       }
       const result = await props.runtime.astRefactorPlan({
@@ -970,12 +974,12 @@ export function ReviewPane(
     const from = astPlanFrom().trim();
     const to = astPlanTo().trim();
     if (!from || !to) {
-      setAstApplyError("请输入旧名称和新名称");
+      setAstApplyError(t("review.astNeedNames"));
       return;
     }
     const files = await collectAstSourceFiles();
     if (!files.length) {
-      setAstApplyError("当前没有可做自动改写的文件内容");
+      setAstApplyError(t("review.astApplyNoContent"));
       return;
     }
     setAstApplyLoading(true);
@@ -983,7 +987,7 @@ export function ReviewPane(
     setAstApplyResult(undefined);
     try {
       if (!props.runtime?.astApplyRefactor) {
-        setAstApplyError("当前 runtime 不支持自动改写");
+        setAstApplyError(t("review.astApplyUnsupported"));
         return;
       }
       const result = await props.runtime.astApplyRefactor({
@@ -1356,7 +1360,7 @@ export function ReviewPane(
       </Show>
       <Show when={tab() === "checkpoint" && checkpoints().length}>
         <Show when={auditCheckpoints().length}>
-          <div class="review-section-label">审计轮次</div>
+          <div class="review-section-label">{t("review.auditRounds")}</div>
           <div class="review-entity-control">
             <NeuSelect
               value={
@@ -1373,7 +1377,7 @@ export function ReviewPane(
           </div>
         </Show>
         <Show when={userCheckpoints().length}>
-          <div class="review-section-label">我的快照</div>
+          <div class="review-section-label">{t("review.mySnapshots")}</div>
           <div class="review-entity-control">
             <NeuSelect
               value={
@@ -1407,14 +1411,14 @@ export function ReviewPane(
                       if (selected) beginRenameCheckpoint(selected);
                     }}
                   >
-                    重命名
+                    {t("review.rename")}
                   </button>
                 }
               >
                 <input
                   class="review-checkpoint-rename-input"
                   value={checkpointNameDraft()}
-                  placeholder="快照名称"
+                  placeholder={t("review.snapshotNamePh")}
                   onInput={(event) =>
                     setCheckpointNameDraft(event.currentTarget.value)
                   }
@@ -1428,17 +1432,21 @@ export function ReviewPane(
                   class="review-checkpoint-rename-btn"
                   onClick={() => void commitRenameCheckpoint()}
                 >
-                  保存
+                  {t("review.save")}
                 </button>
               </Show>
             </div>
           </Show>
         </Show>
         <Show when={autoCheckpoints().length}>
-          <div class="review-section-label">自动安全点</div>
+          <div class="review-section-label">{t("review.autoCheckpoints")}</div>
           <div class="review-entity-control">
             <details>
-              <summary>{autoCheckpoints().length} 个自动安全点</summary>
+              <summary>
+                {t("review.autoCheckpointCount", {
+                  count: autoCheckpoints().length,
+                })}
+              </summary>
               <NeuSelect
                 value={
                   autoCheckpoints().some((c) => c.id === selectedCheckpoint())
@@ -1455,7 +1463,7 @@ export function ReviewPane(
           </div>
         </Show>
         <Show when={safetyCheckpoints().length}>
-          <div class="review-section-label">安全点</div>
+          <div class="review-section-label">{t("review.safetyPoint")}</div>
           <div class="review-entity-control">
             <NeuSelect
               value={
@@ -1537,12 +1545,14 @@ export function ReviewPane(
                     </svg>
                   </div>
                   <div class="review-empty-title">
-                    {tab() === "rounds" ? "暂无审计轮次" : "暂无变更"}
+                    {tab() === "rounds"
+                      ? t("review.emptyRounds")
+                      : t("review.emptyChanges")}
                   </div>
                   <div class="review-empty-desc">
                     {tab() === "rounds"
-                      ? "完成一次 audit_report 后会出现 Rounds 对比。"
-                      : "当前工作区没有待审阅的变更。"}
+                      ? t("review.emptyRoundsHint")
+                      : t("review.emptyChangesHint")}
                   </div>
                 </div>
               }
@@ -1593,7 +1603,7 @@ export function ReviewPane(
                       type="button"
                       class="review-icon-btn"
                       data-active={diffScope() === "session"}
-                      title="当前会话"
+                      title={t("review.tooltipSession")}
                       onClick={() => {
                         setDiffScope("session");
                         void loadGit();
@@ -1605,7 +1615,7 @@ export function ReviewPane(
                       type="button"
                       class="review-icon-btn"
                       data-active={diffScope() === "all"}
-                      title="全局"
+                      title={t("review.tooltipGlobal")}
                       onClick={() => {
                         setDiffScope("all");
                         void loadGit();
@@ -1617,7 +1627,7 @@ export function ReviewPane(
                       type="button"
                       class="review-icon-btn"
                       data-active={diffIgnoreWhitespace()}
-                      title="忽略空白"
+                      title={t("review.tooltipIgnoreWhitespace")}
                       onClick={() => {
                         setDiffIgnoreWhitespace((value) => !value);
                         void loadGit();
@@ -1664,7 +1674,7 @@ export function ReviewPane(
                         astBatchPanelOpen() &&
                         astBatchMode() === "structure"
                       }
-                      title="批量 AST 结构总览"
+                      title={t("review.tooltipBatchAst")}
                       onClick={() => {
                         setViewMode("ast");
                         setAstBatchPanelOpen(true);
@@ -1682,7 +1692,7 @@ export function ReviewPane(
                         astBatchPanelOpen() &&
                         astBatchMode() === "refactor"
                       }
-                      title="重构预览"
+                      title={t("review.tooltipRefactorPreview")}
                       onClick={() => {
                         setViewMode("ast");
                         setAstBatchPanelOpen(true);
@@ -1700,7 +1710,7 @@ export function ReviewPane(
                         astBatchPanelOpen() &&
                         astBatchMode() === "search"
                       }
-                      title="AST 搜索"
+                      title={t("review.tooltipAstSearch")}
                       onClick={() => {
                         setViewMode("ast");
                         setAstBatchPanelOpen(true);
@@ -1719,7 +1729,7 @@ export function ReviewPane(
                         astBatchPanelOpen() &&
                         astBatchMode() === "plan"
                       }
-                      title="重构计划"
+                      title={t("review.tooltipRefactorPlan")}
                       onClick={() => {
                         setViewMode("ast");
                         setAstBatchPanelOpen(true);
@@ -1744,9 +1754,11 @@ export function ReviewPane(
                   fallback={
                     <div class="review-diff-content">
                       <div class="review-empty">
-                        <div class="review-empty-title">暂无内容级 diff</div>
+                        <div class="review-empty-title">
+                          {t("review.noLineDiff")}
+                        </div>
                         <div class="review-empty-desc">
-                          当前变更只有文件级信息，没有可展示的行级差异。
+                          {t("review.noLineDiffHint")}
                         </div>
                       </div>
                     </div>
@@ -1759,7 +1771,7 @@ export function ReviewPane(
                           <div class="ast-search-form">
                             <input
                               type="text"
-                              placeholder="文本包含，例如 foo"
+                              placeholder={t("review.astContainsPh")}
                               value={astSearchText()}
                               onInput={(event) =>
                                 setAstSearchText(event.currentTarget.value)
@@ -1767,7 +1779,7 @@ export function ReviewPane(
                             />
                             <input
                               type="text"
-                              placeholder="节点类型，例如 function_declaration"
+                              placeholder={t("review.nodeTypePh")}
                               value={astSearchNodeKind()}
                               onInput={(event) =>
                                 setAstSearchNodeKind(event.currentTarget.value)
@@ -1777,19 +1789,21 @@ export function ReviewPane(
                               type="button"
                               onClick={() => void loadAstSearch()}
                             >
-                              搜索
+                              {t("review.search")}
                             </button>
                           </div>
                           <Show when={astSearchLoading()}>
                             <div class="review-empty">
                               <div class="review-empty-title">
-                                AST 搜索中...
+                                {t("review.astSearching")}
                               </div>
                             </div>
                           </Show>
                           <Show when={astSearchError()}>
                             <div class="review-empty">
-                              <div class="review-empty-title">AST 搜索失败</div>
+                              <div class="review-empty-title">
+                                {t("review.astSearchFailed")}
+                              </div>
                               <div class="review-empty-desc">
                                 {astSearchError()}
                               </div>
@@ -1804,7 +1818,7 @@ export function ReviewPane(
                               >
                                 <div class="review-empty">
                                   <div class="review-empty-title">
-                                    没有匹配的结构节点
+                                    {t("review.noMatchNodes")}
                                   </div>
                                 </div>
                               </Show>
@@ -1848,7 +1862,7 @@ export function ReviewPane(
                           <div class="ast-search-form">
                             <input
                               type="text"
-                              placeholder="旧名称，例如 foo"
+                              placeholder={t("review.oldNamePh")}
                               value={astPlanFrom()}
                               onInput={(event) =>
                                 setAstPlanFrom(event.currentTarget.value)
@@ -1856,7 +1870,7 @@ export function ReviewPane(
                             />
                             <input
                               type="text"
-                              placeholder="新名称，例如 bar"
+                              placeholder={t("review.newNamePh")}
                               value={astPlanTo()}
                               onInput={(event) =>
                                 setAstPlanTo(event.currentTarget.value)
@@ -1866,25 +1880,27 @@ export function ReviewPane(
                               type="button"
                               onClick={() => void loadAstPlan()}
                             >
-                              生成计划
+                              {t("review.genPlan")}
                             </button>
                             <button
                               type="button"
                               onClick={() => void applyAstPlan()}
                             >
-                              应用改动
+                              {t("review.applyChanges")}
                             </button>
                           </div>
                           <Show when={astPlanLoading()}>
                             <div class="review-empty">
                               <div class="review-empty-title">
-                                重构计划生成中...
+                                {t("review.planGenerating")}
                               </div>
                             </div>
                           </Show>
                           <Show when={astPlanError()}>
                             <div class="review-empty">
-                              <div class="review-empty-title">重构计划失败</div>
+                              <div class="review-empty-title">
+                                {t("review.planFailed")}
+                              </div>
                               <div class="review-empty-desc">
                                 {astPlanError()}
                               </div>
@@ -1895,7 +1911,7 @@ export function ReviewPane(
                               <Show when={!astPlanResult()!.targets.length}>
                                 <div class="review-empty">
                                   <div class="review-empty-title">
-                                    没有找到需要重构的节点
+                                    {t("review.noRefactorNodes")}
                                   </div>
                                 </div>
                               </Show>
@@ -1923,13 +1939,15 @@ export function ReviewPane(
                           <Show when={astApplyLoading()}>
                             <div class="review-empty">
                               <div class="review-empty-title">
-                                自动改写中...
+                                {t("review.autoApplying")}
                               </div>
                             </div>
                           </Show>
                           <Show when={astApplyError()}>
                             <div class="review-empty">
-                              <div class="review-empty-title">自动改写失败</div>
+                              <div class="review-empty-title">
+                                {t("review.autoApplyFailed")}
+                              </div>
                               <div class="review-empty-desc">
                                 {astApplyError()}
                               </div>
@@ -1938,7 +1956,7 @@ export function ReviewPane(
                           <Show when={astApplyResult()}>
                             <div class="review-empty">
                               <div class="review-empty-title">
-                                已应用改动：
+                                已{t("review.applyChanges")}：
                                 {
                                   astApplyResult()!.applied.filter(
                                     (item) => !item.error,
@@ -1960,8 +1978,8 @@ export function ReviewPane(
                             <div class="review-empty">
                               <div class="review-empty-title">
                                 {astBatchMode() === "refactor"
-                                  ? "重构预览计算中..."
-                                  : "批量 AST 计算中..."}
+                                  ? t("review.previewComputing")
+                                  : t("review.batchComputing")}
                               </div>
                             </div>
                           </Show>
@@ -1969,8 +1987,8 @@ export function ReviewPane(
                             <div class="review-empty">
                               <div class="review-empty-title">
                                 {astBatchMode() === "refactor"
-                                  ? "重构预览失败"
-                                  : "批量 AST 失败"}
+                                  ? t("review.previewFailed")
+                                  : t("review.batchFailed")}
                               </div>
                               <div class="review-empty-desc">
                                 {astBatchError()}
@@ -1982,7 +2000,7 @@ export function ReviewPane(
                               <Show when={!astBatchGroups().length}>
                                 <div class="review-empty">
                                   <div class="review-empty-title">
-                                    无批量结构性变更
+                                    {t("review.noBatchChanges")}
                                   </div>
                                 </div>
                               </Show>
@@ -2032,7 +2050,7 @@ export function ReviewPane(
                               fallback={
                                 <div class="review-empty">
                                   <div class="review-empty-title">
-                                    加载 AST 变更...
+                                    {t("review.loadingAst")}
                                   </div>
                                 </div>
                               }
@@ -2041,7 +2059,7 @@ export function ReviewPane(
                                 <Show when={!astDiffResult()!.changes.length}>
                                   <div class="review-empty">
                                     <div class="review-empty-title">
-                                      无结构性变更
+                                      {t("review.noStructuralChanges")}
                                     </div>
                                   </div>
                                 </Show>
@@ -2138,7 +2156,9 @@ export function ReviewPane(
                           }
                         >
                           <div class="review-empty">
-                            <div class="review-empty-title">AST Diff 失败</div>
+                            <div class="review-empty-title">
+                              {t("review.astDiffFailed")}
+                            </div>
                             <div class="review-empty-desc">
                               {astDiffError()}
                             </div>
@@ -2184,7 +2204,9 @@ export function ReviewPane(
                   >
                     <div class="review-diff-content">
                       <div class="review-diff-raw">
-                        <div class="review-diff-raw-title">Diff 计算失败</div>
+                        <div class="review-diff-raw-title">
+                          {t("review.diffFailed")}
+                        </div>
                         <pre>{structuredDiffError()}</pre>
                       </div>
                     </div>
@@ -2243,7 +2265,7 @@ export function ReviewPane(
           }
         >
           <div class="review-empty">
-            <div class="review-empty-title">正在读取变更...</div>
+            <div class="review-empty-title">{t("review.readingChanges")}</div>
           </div>
         </Show>
       </div>

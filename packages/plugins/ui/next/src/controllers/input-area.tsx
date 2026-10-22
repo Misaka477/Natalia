@@ -8,6 +8,7 @@
 
 import { Show } from "solid-js";
 import { SlotMount } from "../slots/mount";
+import { SlashMenu, slashQuery } from "./slash-menu";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import { QueueDock } from "../components/QueueDock";
@@ -20,6 +21,7 @@ export interface MainInputAreaProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
   slots: any;
+  commands: any;
   state: () => AppState;
   selectedSessionID: () => string;
   mainDraft: () => string;
@@ -53,6 +55,7 @@ export interface MainInputAreaProps {
 export function MainInputArea(props: MainInputAreaProps) {
   const t = props.t;
   const slots = props.slots;
+  const commands = props.commands;
   const {
     ctx,
     state,

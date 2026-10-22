@@ -5947,4 +5947,39 @@ export const commandPaletteCss = `
     border-radius: 0;
     box-shadow: none;
   }
+  /* The composer's slash menu: the command registry above the draft. */
+  .neu-slash-menu {
+    display: flex;
+    flex-direction: column;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: var(--neu-space-1);
+    background: var(--neu-bg);
+    border: 1px solid var(--neu-border);
+    border-radius: var(--neu-radius-2);
+    box-shadow: var(--neu-elevation-float-sm);
+  }
+  .neu-slash-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--neu-space-3);
+    padding: var(--neu-space-2) var(--neu-space-3);
+    border: 0;
+    background: transparent;
+    color: var(--neu-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .neu-slash-item[data-active="true"] {
+    background: var(--neu-accent-soft);
+  }
+  .neu-slash-title {
+    font-size: var(--neu-font-base);
+  }
+  .neu-slash-hint {
+    color: var(--neu-text-dim);
+    font-size: var(--neu-font-sm);
+  }
   `;

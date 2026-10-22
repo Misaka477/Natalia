@@ -33,6 +33,7 @@ export interface MainPanesProps {
   t: (key: string, params?: Record<string, unknown>) => string;
   toolCards: any;
   slots: any;
+  commands: any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   mainDraft: () => string;
@@ -143,6 +144,7 @@ export function MainPanes(props: MainPanesProps) {
     t,
     toolCards,
     slots,
+    commands,
     state,
     setState,
     mainDraft,
@@ -605,6 +607,7 @@ export function MainPanes(props: MainPanesProps) {
                 </Show>
                 <MainInputArea
                   slots={slots}
+                  commands={commands}
                   t={t}
                   ctx={props.ctx}
                   state={state}

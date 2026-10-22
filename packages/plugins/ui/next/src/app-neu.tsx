@@ -3343,6 +3343,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         <MainPanes
           t={t}
           slots={slots}
+          commands={commands}
           ctx={props.ctx}
           toolCards={toolCards}
           state={state}

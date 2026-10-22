@@ -3262,6 +3262,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     leftSidebarWasVisible = visible;
   });
 
+  // Where the terminal's independent frame currently lives. The three dock
+  // modes re-parent one host div rather than re-mounting it, and this
+  // attribute is the seam the modes and their styles read.
   return (
     <div
       class="neu-shell"
@@ -3269,6 +3272,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       data-tiny={layoutMode() === "tiny"}
       data-left-open={leftVisible()}
       data-left-wide={leftWidth() >= 230}
+      data-terminal-dock={dockMode()}
       data-right-open={rightVisible()}
       data-resizing={resizing()}
     >

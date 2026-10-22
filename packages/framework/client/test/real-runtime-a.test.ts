@@ -1378,11 +1378,12 @@ test("skills plugin config reload reconciles its lifecycle", async () => {
   // The project skill plus the official documents the plugins ship
   // (source "plugin", discovered from each package's declared skills
   // directory): the catalog lists both, sorted by qualified name. The
-  // browser and computer-use plugins ship theirs beside the skills
-  // plugin's own five.
+  // browser, computer-use and dev-environment skills ship beside the
+  // skills plugin's own five.
   expect(await client.skills?.()).toEqual([
     expect.objectContaining({ qualifiedName: "plugin:browser-bridge-setup" }),
     expect.objectContaining({ qualifiedName: "plugin:computer-use" }),
+    expect.objectContaining({ qualifiedName: "plugin:dev-environment" }),
     expect.objectContaining({ qualifiedName: "plugin:edit-framework" }),
     expect.objectContaining({ qualifiedName: "plugin:evolve-artifact" }),
     expect.objectContaining({ qualifiedName: "plugin:generation-awareness" }),

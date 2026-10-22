@@ -48,6 +48,14 @@ candidate. Skills, MCP servers, ACP adapters, and code (`packages/**`) are
 all in scope — see `edit-framework` for the code lane's drain-and-restart
 rule and `sandbox-discipline` for the modes.
 
+**The code lane needs a source workspace.** Every generation lane writes
+into the workspace, so a change to `packages/**` requires the workspace to
+BE this project's repository. In an installed deployment the default
+workspace is the user's own project and the install ships no source, so a
+code change aimed there is refused — the runtime checks it before anything
+lands, and `dev-environment` is the detection-and-setup path for getting a
+source workspace in the first place.
+
 There is no candidate format to fill in, no hypothesis to state, no axis to
 pick. The change is the change: make it, look at it, and be able to say in
 one sentence what it does and why.

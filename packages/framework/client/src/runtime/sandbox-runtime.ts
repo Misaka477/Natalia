@@ -21,10 +21,12 @@ import {
   sessionWindowEvents,
 } from "@anthelia/substrate";
 import {
+  isFrameworkSourcePath,
   riskTierForChanges,
   riskTierForPath,
   SandboxPromotionConflict,
 } from "@anthelia/sandbox";
+import { findGuardRoot } from "./generation-tools";
 import { captureRepositoryEvidenceFields } from "@anthelia/substrate";
 import type { GovernanceLedgerController } from "@natalia/governance-ledger";
 import type { WorkLedgerController } from "@natalia/work-ledger";
@@ -295,6 +297,30 @@ export function createSandboxRuntime(
         // rewrite its own contract. The tier is recorded as an audit fact.
         const preview = await sandboxes.previewMerge(id);
         const tier = riskTierForChanges(preview);
+        // The self-iteration boundary, checked BEFORE anything lands: a
+        // promotion that would write THIS PROJECT's own source into a
+        // workspace that is not this project's repository is refused. An
+        // installed deployment's workspace is the user's own project — the
+        // install ships no source at all — so without this check a model
+        // told to "fix packages/**" would write framework files into
+        // somebody's repository, and the guards face would only catch it at
+        // the switch, after the candidate existed and the tests had run.
+        // The check reads the preview's own paths against the guard root, so
+        // it costs nothing and fires before any of that.
+        const frameworkPaths = preview.filter((change) =>
+          isFrameworkSourcePath(change.path),
+        );
+        if (
+          frameworkPaths.length > 0 &&
+          !findGuardRoot(ctx.ports.getWorkspaceRoot())
+        )
+          throw new Error(
+            `this promotion would write ${frameworkPaths.length} framework ` +
+              `source path(s) (e.g. ${frameworkPaths[0]!.path}) into a ` +
+              `workspace that is not this project's repository. Open a ` +
+              `workspace at the shipped source directory (an install keeps ` +
+              `it at <install>/source) and propose the change there.`,
+          );
         // Naming the transition: the manifest can only say "has changes", so the
         // merge lifecycle is unreportable without an explicit status.
         ctx.ports.publishForSession(

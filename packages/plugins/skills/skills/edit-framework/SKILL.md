@@ -106,7 +106,19 @@ approval can let them through (the self-protection patterns, C-TERM-001..003):
 
 If your change needs one of these, the change is wrong.
 
-## 4. Standing discipline
+## 4. The code lane needs a source workspace
+
+Both paths write into the workspace, so a change to packages/\*\* requires
+the workspace to BE this project's repository. An installed deployment's
+default workspace is the user's own project — the install ships no source —
+and the runtime refuses a promotion that would write framework source into
+such a workspace before anything lands. dev-environment is the
+detection-and-setup path: it checks the workspace, the shipped bun's
+version,
+ode_modules, and disk space, and asks before installing
+anything it finds missing.
+
+## 5. Standing discipline
 
 - The full test suite is green BEFORE you propose, not after. A candidate
   built on a red tree proves nothing.

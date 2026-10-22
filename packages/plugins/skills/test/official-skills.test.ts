@@ -72,11 +72,12 @@ test("every official skill parses under the bar a self-sedimented skill must cle
     .list()
     .filter((skill) => skill.source === "plugin")
     .sort((a, b) => a.name.localeCompare(b.name));
-  // Five official documents (the 2026-10-14 self-iteration design): the
-  // three that existed plus `sandbox-discipline` (洞 2's behavior side —
-  // the modes and the escalation) and `generation-awareness` (洞 6's
-  // acceptance — answering "which version am I running").
+  // Six official documents: the 2026-10-14 self-iteration design's five plus
+  // `dev-environment` (the install study's closing gap — an installed
+  // deployment now ships the source and the toolchains, and something has to
+  // teach the model to detect them before proposing a code change).
   expect(official.map((skill) => skill.name)).toEqual([
+    "dev-environment",
     "edit-framework",
     "evolve-artifact",
     "generation-awareness",

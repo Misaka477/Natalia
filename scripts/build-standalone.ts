@@ -18,7 +18,7 @@
  */
 import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashTreeFiles } from "../packages/hosts/platform/src/hash-tree";
 import { resolvePwshPath } from "../packages/hosts/platform/src/pwsh";
@@ -103,6 +103,158 @@ const targets = explicit
  * self-contained and the path the plugin resolves is relative to the plugin
  * rather than to a checkout.
  */
+/**
+ * Stage the SOURCE tree, for self-iteration.
+ *
+ * An installed deployment has no way to change its own code without it: the
+ * runtime is a compiled binary and the plugins are bundles, so a generation
+ * that wants to evolve `packages/**` has nothing to read, edit or rebuild.
+ * Measured on this machine: an install and a release tree hold zero `.ts`
+ * files. Shipping the tracked source (git's own inventory, so nothing
+ * untracked or generated rides along) is what turns "self-iteration" from a
+ * dev-checkout-only capability into a property of the product.
+ *
+ * What is deliberately NOT here: `node_modules` (rebuilt by `bun install`
+ * against the shipped lockfile), `dist` (build output), and the untracked
+ * `diff-wasm/ast/*.wasm` grammars, which are build ARTIFACTS produced by
+ * `scripts/build-ast-packs.ts` from crates.io — those live in `toolchains/`
+ * as a prebuilt pack instead, so a rebuild does not need cargo or network.
+ */
+async function stageSource(outDir: string): Promise<void> {
+  const root = process.cwd();
+  const target = join(outDir, "source");
+  await rm(target, { recursive: true, force: true });
+  await mkdir(target, { recursive: true });
+  // git's own inventory: the tracked files, and nothing else. A directory
+  // walk would copy whatever a developer happened to leave on disk. The
+  // listing arrives on the run's stdout — `run` answers with the process
+  // result, not the text.
+  const listed = (await run("git", ["ls-files", "-z"], root)).stdout;
+  const tracked = listed
+    .split("\0")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (tracked.length === 0)
+    throw new Error("stageSource: git ls-files returned nothing");
+  for (const relativePath of tracked) {
+    const from = join(root, relativePath);
+    if (!(await Bun.file(from).exists())) continue;
+    const to = join(target, relativePath);
+    await mkdir(dirname(to), { recursive: true });
+    await cp(from, to);
+  }
+  // The lockfile the install runs against, so `bun install` inside the
+  // source tree resolves the same versions the build used.
+  //
+  // ONE TRAP this creates, measured: `bun test`'s path filter is a SUBSTRING
+  // match, so a bare `bun test packages/plugins/skills/test` also matches
+  // this copy's own path inside dist/ and runs the release's tests too —
+  // which fail, because the copy has no node_modules beside it. The
+  // repository's own scripts and the CI matrix all use the `./` prefix
+  // (`./packages/...`), which does not match. Keep it that way, and say so
+  // in the dev-environment skill.
+  await Bun.write(
+    join(target, ".gitignore"),
+    [
+      "# This tree is a release artifact, not a repository.",
+      "node_modules/",
+      "dist/",
+      "*.log",
+      "",
+    ].join("\n"),
+  );
+}
+
+/**
+ * Stage the TOOLCHAINS a rebuild needs.
+ *
+ * Two of them, both because "ship the source" without them ships a tree
+ * that cannot build:
+ *
+ *   - `bun`, at exactly the version the build used. The suite's green is a
+ *     statement about ONE bun version, so a rebuild that picks up whatever
+ *     bun is on the user's PATH can produce a green-on-my-machine lie. The
+ *     shipped one is the one the build resolves.
+ *   - the tree-sitter wasm grammars, which are 98 MB of build OUTPUT the
+ *     source tree does not carry. Without them, any change touching
+ *     `packages/framework/diff-wasm` needs cargo and network access to
+ *     crates.io — a dependency the product does not otherwise have.
+ */
+async function stageToolchains(outDir: string): Promise<void> {
+  const root = process.cwd();
+  const target = join(outDir, "toolchains");
+  await rm(target, { recursive: true, force: true });
+  await mkdir(join(target, "bun"), { recursive: true });
+  // The bun THIS process runs under: the build's own version, by
+  // construction, which is the only version whose green means anything.
+  const bunPath = process.execPath;
+  if (!bunPath || !(await Bun.file(bunPath).exists()))
+    throw new Error(`stageToolchains: no bun at process.execPath (${bunPath})`);
+  await cp(bunPath, join(target, "bun", "bun.exe"));
+  // The grammar pack: prebuilt, so a rebuild needs neither cargo nor network.
+  const grammars = join(root, "packages", "framework", "diff-wasm", "ast");
+  const grammarFiles = (await readdir(grammars)).filter((name) =>
+    name.endsWith(".wasm"),
+  );
+  if (grammarFiles.length === 0)
+    throw new Error(
+      "stageToolchains: no tree-sitter grammars found; run " +
+        "`bun run build:ast-packs` first (it builds them from crates.io)",
+    );
+  await mkdir(join(target, "grammars"), { recursive: true });
+  for (const name of grammarFiles)
+    await cp(join(grammars, name), join(target, "grammars", name));
+  // A manifest, so a rebuild can check what it has without guessing — and
+  // so the attribution travels WITH the artifacts. Every grammar is the
+  // compiled output of one crate declared in scripts/build-ast-packs.ts;
+  // recording that crate here is what keeps "98 MB of third-party wasm" from
+  // shipping unrecorded. The license text itself is not vendored: it ships
+  // with the crate's source, and NOTICE says exactly that.
+  await Bun.write(
+    join(target, "toolchains.json"),
+    JSON.stringify(
+      {
+        bun: { version: Bun.version, file: "bun/bun.exe" },
+        grammars: {
+          count: grammarFiles.length,
+          directory: "grammars",
+          source: "packages/framework/diff-wasm/ast",
+          builtBy: "scripts/build-ast-packs.ts",
+          crates: await grammarCrates(),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/**
+ * The crates the shipped grammars were built from, read out of the pack
+ * builder's own table — so the attribution is the builder's declaration, not
+ * a second list that can drift from it.
+ */
+async function grammarCrates(): Promise<
+  Array<{ id: string; crate: string; version: string }>
+> {
+  const root = process.cwd();
+  const builder = await Bun.file(
+    join(root, "scripts", "build-ast-packs.ts"),
+  ).text();
+  // The table's rows are object literals with id/crate/version; reading them
+  // as text keeps this script from importing a script that runs a build.
+  const rows: Array<{ id: string; crate: string; version: string }> = [];
+  const pattern =
+    /id:\s*"([^"]+)"[\s\S]*?crate:\s*"([^"]+)"[\s\S]*?version:\s*"([^"]+)"/gu;
+  for (const match of builder.matchAll(pattern))
+    rows.push({ id: match[1]!, crate: match[2]!, version: match[3]! });
+  if (rows.length === 0)
+    throw new Error(
+      "stageToolchains: no grammar rows found in scripts/build-ast-packs.ts",
+    );
+  return rows;
+}
+
 async function stageBrowserExtension(outDir: string): Promise<void> {
   const staged = join(outDir, "plugins", "natalia-browser", "index.js");
   if (!(await Bun.file(staged).exists())) return;
@@ -984,6 +1136,12 @@ for (const target of targets) {
     await stagePlatformOwner(outDir, platformDir);
     // The browser bridge extension, for the browser_* tools (see the function).
     await stageBrowserExtension(outDir);
+    // Self-iteration (the install study's closing gap): the tracked source
+    // and the toolchains a rebuild needs, so an INSTALLED deployment can
+    // evolve its own code. Staged before the hash walk so SHA256SUMS lists
+    // them and the installer's file list derives them.
+    await stageSource(outDir);
+    await stageToolchains(outDir);
     await stageDesktopHost(outDir, platformDir);
     await stageWebShell(outDir);
     // The application icon, BESIDE THE BINARY. The Windows install plan

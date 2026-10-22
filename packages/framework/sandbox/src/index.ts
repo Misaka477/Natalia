@@ -12,6 +12,7 @@ export {
   requiresApproval,
   riskTierForChanges,
   riskTierForPath,
+  isFrameworkSourcePath,
   type SandboxRiskTier,
 } from "./governance";
 export {

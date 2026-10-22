@@ -18,6 +18,29 @@ const HIGH_RISK = [
   /packages\/core\/plugin\/src\//u,
 ];
 
+/**
+ * Whether a path is THIS PROJECT's own source.
+ *
+ * The self-iteration boundary needs it: a promotion that would write
+ * framework source into a workspace that is not this project's repository is
+ * refused (see the check in the runtime's merge path). An installed
+ * deployment's workspace is the user's own project and ships no source, so
+ * without that check a model told to "fix packages/**" writes framework
+ * files into somebody's repository.
+ *
+ * Forward-slash vocabulary, normalized for the host's spelling for the same
+ * reason `riskTierForPath` is.
+ */
+export function isFrameworkSourcePath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  return (
+    /^packages\//u.test(normalized) ||
+    /^apps\//u.test(normalized) ||
+    /^scripts\//u.test(normalized) ||
+    /^(package|bun\.lock|tsconfig)/u.test(normalized)
+  );
+}
+
 /** The risk tier of one changed path. */
 export function riskTierForPath(path: string): SandboxRiskTier {
   // The tier patterns are forward-slash vocabulary; a change record's path

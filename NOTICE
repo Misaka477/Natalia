@@ -7,3 +7,24 @@ THIRD_PARTY_NOTICES.md. License texts included by installed packages are
 collected in THIRD_PARTY_LICENSES.txt. Those notices and texts must be
 preserved when the corresponding packages or bundled portions are
 redistributed.
+
+SHIPPED TOOLCHAINS (an installed deployment carries these beside the
+binary, under `toolchains/`, so the deployment can rebuild itself):
+
+- bun, at exactly the version the release was built with (recorded in
+  `toolchains/toolchains.json`). Bun is developed by Oven and distributed
+  under the MIT license; its license text ships with bun's own distribution
+  at https://bun.sh and is not vendored here.
+- The tree-sitter grammar wasm files (44 of them), which are BUILD OUTPUTS,
+  not source: each one is the compiled form of a crate declared in
+  `scripts/build-ast-packs.ts` (id, crate name and version are recorded per
+  file in `toolchains/toolchains.json`). Each grammar is therefore covered
+  by its own crate's license, and that license's text ships with the
+  crate's source on crates.io rather than with this binary. Building them
+  requires cargo and network access to crates.io, which is why the release
+  ships them prebuilt rather than making a rebuild depend on both.
+
+The npm dependency tree (THIRD_PARTY_LICENSES.txt) does not cover either of
+these: they are not installed packages. The attribution above is the record
+for them, and `scripts/build-standalone.ts` writes the manifest that names
+every file the release actually carries.

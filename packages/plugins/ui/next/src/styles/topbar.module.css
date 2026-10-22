@@ -1,0 +1,89 @@
+/* The topbar's plugin group and its two panes: the panel mount and the
+   more-menu overflow. Both are single panes the topbar owns; the module
+   grows as the rest of the topbar's rules move. Tokens only. */
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--neu-hairline-accent);
+}
+
+.groupLabel {
+  font-size: 10px;
+  color: var(--neu-muted);
+  white-space: nowrap;
+}
+
+.panelDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 12px;
+  min-width: 320px;
+  max-width: 560px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--neu-bg-light);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: var(--neu-elevation-5);
+  z-index: 100;
+}
+
+.panelContent {
+  flex: 1;
+  min-height: 120px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.moreDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 12px;
+  min-width: 200px;
+  max-height: 70vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--neu-bg-light);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: var(--neu-elevation-5);
+  z-index: 100;
+}
+
+.moreItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.moreItem:hover {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+}
+
+.moreSeparator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--neu-hairline-accent);
+}
+
+.moreGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}

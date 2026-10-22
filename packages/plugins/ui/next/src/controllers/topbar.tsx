@@ -9,6 +9,7 @@ import { For, Show } from "solid-js";
 import type { LocaleRuntime } from "../locale/runtime";
 import type { SlotsRegistry } from "../slots/registry";
 import { SlotMount } from "../slots/mount";
+import styles from "../styles/topbar.module.css";
 
 export interface TopbarProps {
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -162,8 +163,8 @@ export function Topbar(props: TopbarProps) {
         </button>
       </div>
       <Show when={topbarPanel()}>
-        <div class="neu-topbar-panel-dropdown">
-          <div class="neu-topbar-panel-content" ref={topbarPanelRef} />
+        <div class={styles.panelDropdown}>
+          <div class={styles.panelContent} ref={topbarPanelRef} />
           <button
             type="button"
             class="neu-topbar-panel-close"
@@ -174,10 +175,10 @@ export function Topbar(props: TopbarProps) {
         </div>
       </Show>
       <Show when={moreOpen()}>
-        <div class="neu-topbar-more-dropdown">
+        <div class={styles.moreDropdown}>
           <button
             type="button"
-            class="neu-topbar-more-item"
+            class={styles.moreItem}
             onClick={() => {
               setStatusOpen(true);
               setMoreOpen(false);
@@ -187,7 +188,7 @@ export function Topbar(props: TopbarProps) {
           </button>
           <button
             type="button"
-            class="neu-topbar-more-item"
+            class={styles.moreItem}
             onClick={() => {
               setHelpOpen(true);
               setMoreOpen(false);
@@ -197,7 +198,7 @@ export function Topbar(props: TopbarProps) {
           </button>
           <button
             type="button"
-            class="neu-topbar-more-item"
+            class={styles.moreItem}
             onClick={() => {
               setStashOpen(true);
               setMoreOpen(false);
@@ -207,7 +208,7 @@ export function Topbar(props: TopbarProps) {
           </button>
           <button
             type="button"
-            class="neu-topbar-more-item"
+            class={styles.moreItem}
             onClick={() => {
               setSandboxOpen(true);
               setMoreOpen(false);
@@ -217,7 +218,7 @@ export function Topbar(props: TopbarProps) {
           </button>
           <button
             type="button"
-            class="neu-topbar-more-item"
+            class={styles.moreItem}
             onClick={() => {
               setPluginManagerOpen(true);
               setMoreOpen(false);
@@ -225,16 +226,16 @@ export function Topbar(props: TopbarProps) {
           >
             {t("common.plugins")}
           </button>
-          <div class="neu-topbar-more-separator" />
+          <div class={styles.moreSeparator} />
           <For each={groupedTopbarPanels()}>
             {([group, panels]) => (
-              <div class="neu-topbar-more-group">
-                <span class="neu-topbar-group-label">{group}</span>
+              <div class={styles.moreGroup}>
+                <span class={styles.groupLabel}>{group}</span>
                 <For each={panels}>
                   {(panel) => (
                     <button
                       type="button"
-                      class="neu-topbar-more-item"
+                      class={styles.moreItem}
                       onClick={() => {
                         mountTopbarPanel(panel);
                         setMoreOpen(false);

@@ -655,6 +655,13 @@ export const en = {
   "shell.ratingFailed": "Rating failed: {error}",
   "shell.moreGroup": "More",
   "shell.deleteFailed": "Delete failed",
+  "dock.mode.tab": "Terminal: right-rail tab",
+  "dock.mode.split": "Terminal: side split",
+  "dock.mode.float": "Terminal: floating frame",
+  "dock.hint.tab": "The terminal as a tab in the right rail",
+  "dock.hint.split": "The terminal as its own column beside the transcript",
+  "dock.hint.float": "The terminal as a free frame over the shell",
+  "palette.cmd.cycleDock": "Cycle the terminal dock mode",
   "nia.emptyTitle": "Ask Nia",
   "nia.emptyHint":
     "Nia is a read-only audit agent that also talks: ask her about audit findings, project state, or have her explain her judgement. She writes no code and no Plan.",

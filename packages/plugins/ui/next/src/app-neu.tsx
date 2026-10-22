@@ -58,6 +58,12 @@ import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
 import { CommandRegistry } from "./commands/registry";
+import {
+  DOCK_MODE_PREFERENCE_KEY,
+  isDockMode,
+  nextDockMode,
+  type DockMode,
+} from "./terminal/dock";
 import { CommandPalette } from "./controllers/command-palette";
 import { SlotMount } from "./slots/mount";
 import { transcriptRefs } from "./transcript-refs";
@@ -261,6 +267,28 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     keywords: ["language", "locale", "语言"],
     run: () =>
       locale.setLocale(locale.getLocale().active === "zh-CN" ? "en" : "zh-CN"),
+  });
+  // The terminal dock mode is a preference, not a layout the shell
+  // hard-codes: the terminal is an independent frame and where it lives
+  // is the reader choice.
+  const [dockMode, setDockMode] = createSignal<DockMode>(
+    isDockMode(props.ctx.preferences?.get(DOCK_MODE_PREFERENCE_KEY))
+      ? (props.ctx.preferences?.get<DockMode>(DOCK_MODE_PREFERENCE_KEY) ??
+          "tab")
+      : "tab",
+  );
+  const cycleDockMode = () =>
+    setDockMode((current) => {
+      const next = nextDockMode(current);
+      props.ctx.preferences?.set(DOCK_MODE_PREFERENCE_KEY, next);
+      return next;
+    });
+  (props.ctx.extra as { dockMode?: () => DockMode }).dockMode = dockMode;
+  commands.register({
+    id: "shell.cycleDock",
+    title: t("palette.cmd.cycleDock"),
+    keywords: ["terminal", "dock", "终端"],
+    run: cycleDockMode,
   });
   const slots = createSlotsRegistry();
   (

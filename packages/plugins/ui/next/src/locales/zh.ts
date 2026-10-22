@@ -648,6 +648,14 @@ export const zh = {
   "shell.ratingFailed": "评分失败：{error}",
   "shell.moreGroup": "更多",
   "shell.deleteFailed": "删除失败",
+  // terminal dock modes
+  "dock.mode.tab": "终端：右栏标签",
+  "dock.mode.split": "终端：侧分栏",
+  "dock.mode.float": "终端：浮框",
+  "dock.hint.tab": "终端作为右栏的一个标签",
+  "dock.hint.split": "终端作为转录旁的独立分栏",
+  "dock.hint.float": "终端作为壳上的自由浮框",
+  "palette.cmd.cycleDock": "切换终端停靠模式",
   // nia panel
   "nia.emptyTitle": "向 Nia 提问",
   "nia.emptyHint":

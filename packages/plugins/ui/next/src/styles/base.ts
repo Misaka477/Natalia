@@ -76,28 +76,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 /* ===== Left session sidebar ===== */
-.neu-tree-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--neu-muted);
-  padding: 4px 6px 10px;
-}
-.neu-workspace-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  margin: 1px 0;
-  color: var(--neu-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-.neu-workspace-row .neu-workspace-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--neu-muted);
-}
 .neu-workspace-folder {
   display: flex;
   align-items: center;
@@ -148,16 +126,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-workspace-folder:focus-within .neu-workspace-folder-icon,
 .neu-workspace-folder[data-menu-open="true"] .neu-workspace-folder-icon {
   display: none;
-}
-.neu-workspace-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--neu-text);
 }
 .neu-workspace-folder:hover .neu-workspace-actions,
 .neu-workspace-folder:focus-within .neu-workspace-actions,

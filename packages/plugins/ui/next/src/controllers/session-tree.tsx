@@ -289,8 +289,8 @@ function SessionTree(props: {
   return (
     <div class="neu-tree">
       <Show when={runningSessions().length > 0}>
-        <div class="neu-workspace-row">
-          <span class="neu-workspace-name">
+        <div class={styles.workspaceRow}>
+          <span class={styles.workspaceName}>
             {t("sidebar.parallelSessions")}
           </span>
           <span class="neu-count">{runningSessions().length}</span>
@@ -352,7 +352,7 @@ function SessionTree(props: {
                 <Show
                   when={editingWorkspaceID() === group.workspaceID}
                   fallback={
-                    <span class="neu-workspace-name">{group.workspace}</span>
+                    <span class={styles.workspaceName}>{group.workspace}</span>
                   }
                 >
                   <input
@@ -878,7 +878,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
                 <button
                   type="button"
-                  class="neu-sidebar-menu-item neu-sidebar-menu-toggle"
+                  class={`${styles.menuItem} ${styles.menuToggle}`}
                   data-active={props.showArchived()}
                   onClick={() => props.setShowArchived((value) => !value)}
                 >

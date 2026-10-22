@@ -135,3 +135,41 @@
   color: var(--neu-accent);
   box-shadow: var(--neu-inset-2);
 }
+
+/* The tree's group titles and the workspace rows. */
+
+.treeTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--neu-muted);
+  padding: 4px 6px 10px;
+}
+
+.workspaceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  margin: 1px 0;
+  color: var(--neu-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspaceRow .workspaceName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neu-muted);
+}
+
+.workspaceName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--neu-text);
+}

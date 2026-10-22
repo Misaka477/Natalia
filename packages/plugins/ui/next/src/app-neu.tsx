@@ -56,6 +56,7 @@ import { RightRail } from "./controllers/workbench";
 import { Topbar } from "./controllers/topbar";
 import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { ToolCardRegistry } from "./tool-cards/registry";
+import { createSlotsRegistry } from "./slots/registry";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -209,6 +210,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // tool name, and the transcript prefers it over the shared renderers.
   const toolCards = new ToolCardRegistry();
   (props.ctx.extra as { toolCards?: ToolCardRegistry }).toolCards = toolCards;
+  // The slot registry is the third plugin-facing seat on ctx.extra: a UI
+  // plugin fills a named shell slot instead of the shell growing a branch.
+  const slots = createSlotsRegistry();
+  (
+    props.ctx.extra as { slots?: ReturnType<typeof createSlotsRegistry> }
+  ).slots = slots;
   const [state, setState] = createSignal(
     cloneState(props.ctx.projection.getState()),
   );
@@ -3174,6 +3181,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     >
       <Topbar
         t={t}
+        slots={slots}
         locale={locale}
         viewOpen={viewOpen}
         setViewOpen={setViewOpen}

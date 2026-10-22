@@ -7,10 +7,12 @@
 
 import { For, Show } from "solid-js";
 import type { LocaleRuntime } from "../locale/runtime";
+import type { SlotsRegistry } from "../slots/registry";
 
 export interface TopbarProps {
   t: (key: string, params?: Record<string, unknown>) => string;
   locale: LocaleRuntime;
+  slots: SlotsRegistry;
   viewOpen: () => boolean;
   setViewOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSearchOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -41,6 +43,7 @@ export function Topbar(props: TopbarProps) {
   const {
     t,
     locale,
+    slots,
     viewOpen,
     setViewOpen,
     setSearchOpen,

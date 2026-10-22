@@ -220,6 +220,7 @@ const ACADEMIC_NAME =
 type Category = {
   id: CategoryId;
   label: string;
+  labelKey: string;
   items: readonly SettingsRowSpec[];
 };
 
@@ -231,6 +232,7 @@ type Category = {
 type CategoryNavItem = {
   id: CategoryId;
   label: string;
+  labelKey: string;
 };
 
 /**
@@ -245,6 +247,7 @@ function verboseLog(...args: unknown[]) {
 }
 
 export function SettingsPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   /**
@@ -285,6 +288,7 @@ export function SettingsPanel(props: {
   runtime?: RuntimeClient;
   host?: import("@natalia/ui-host").UiPluginContext["host"];
 }) {
+  const t = props.t;
   const [activeCategory, setActiveCategory] = createSignal<CategoryId>("model");
   // Applied on OPENING: the remembered category stays the default for the
   // settings button, and a caller that named one gets it. Reading `props.open`
@@ -455,7 +459,14 @@ export function SettingsPanel(props: {
   // live.
   const categoriesWithPlugins = (): CategoryNavItem[] =>
     settingsPanels().length
-      ? [...SETTINGS_CATEGORIES, { id: "plugin", label: "插件配置" }]
+      ? [
+          ...SETTINGS_CATEGORIES,
+          {
+            id: "plugin",
+            label: "插件配置",
+            labelKey: "settings.pluginCategory",
+          },
+        ]
       : [...SETTINGS_CATEGORIES];
 
   const [runtimeWriteScope, setRuntimeWriteScope] = createSignal(
@@ -474,18 +485,25 @@ export function SettingsPanel(props: {
     // The plugin pseudo-category has no rows in SETTINGS_ROWS; its rows come
     // from the plugin panels themselves.
     if (active === "plugin") {
-      return { id: "plugin", label: "插件配置", items: [] };
+      return {
+        id: "plugin",
+        label: "插件配置",
+        labelKey: "settings.pluginCategory",
+        items: [],
+      };
     }
     const spec = SETTINGS_CATEGORIES.find((item) => item.id === active);
     if (!spec)
       return {
         id: SETTINGS_CATEGORIES[0]!.id,
         label: SETTINGS_CATEGORIES[0]!.label,
+        labelKey: SETTINGS_CATEGORIES[0]!.labelKey,
         items: [],
       };
     return {
       id: spec.id,
       label: spec.label,
+      labelKey: spec.labelKey,
       items: rowsForHost(
         rowsForCategory(spec.id),
         hostFromSegments(props.state?.statusSegments),
@@ -1067,7 +1085,7 @@ export function SettingsPanel(props: {
                       }
                     }}
                   >
-                    {category.label}
+                    {t(category.labelKey)}
                   </button>
                 )}
               </For>
@@ -1137,7 +1155,7 @@ export function SettingsPanel(props: {
               <Show when={current().id !== "plugin"}>
                 <>
                   <div class="neu-settings-content-title">
-                    {current().label}
+                    {t(current().labelKey)}
                   </div>
                   <For each={current().items}>
                     {(item) => {
@@ -1157,7 +1175,7 @@ export function SettingsPanel(props: {
                       // real setting until the runtime's own answer arrived.
                       // An absent value says so; it does not invent one.
                       const value = () =>
-                        runtimeValue(item.label) ?? UNSET_VALUE_LABEL;
+                        runtimeValue(item.label) ?? t("settings.unset");
                       if (
                         item.label === "Providers & Models" &&
                         props.onOpenModels
@@ -1170,10 +1188,10 @@ export function SettingsPanel(props: {
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">
-                                {item.label}
+                                {t(item.labelKey)}
                               </span>
                               <span class="neu-settings-item-description">
-                                {item.description}
+                                {t(item.descKey)}
                               </span>
                             </div>
                           </button>
@@ -1199,10 +1217,10 @@ export function SettingsPanel(props: {
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">
-                                {item.label}
+                                {t(item.labelKey)}
                               </span>
                               <span class="neu-settings-item-description">
-                                {item.description}
+                                {t(item.descKey)}
                               </span>
                             </div>
                             <span class="neu-settings-item-value">
@@ -1227,10 +1245,10 @@ export function SettingsPanel(props: {
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">
-                                {item.label}
+                                {t(item.labelKey)}
                               </span>
                               <span class="neu-settings-item-description">
-                                {item.description}
+                                {t(item.descKey)}
                               </span>
                             </div>
                             <span class="neu-settings-item-value">
@@ -1264,10 +1282,10 @@ export function SettingsPanel(props: {
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">
-                                {item.label}
+                                {t(item.labelKey)}
                               </span>
                               <span class="neu-settings-item-description">
-                                {item.description}
+                                {t(item.descKey)}
                               </span>
                             </div>
                             <span class="neu-settings-item-value">
@@ -1285,10 +1303,10 @@ export function SettingsPanel(props: {
                           >
                             <div class="neu-settings-item-main">
                               <span class="neu-settings-item-label">
-                                {item.label}
+                                {t(item.labelKey)}
                               </span>
                               <span class="neu-settings-item-description">
-                                {item.description}
+                                {t(item.descKey)}
                               </span>
                             </div>
                             <span class="neu-settings-item-value">
@@ -1301,10 +1319,10 @@ export function SettingsPanel(props: {
                         <div class="neu-settings-item">
                           <div class="neu-settings-item-main">
                             <span class="neu-settings-item-label">
-                              {item.label}
+                              {t(item.labelKey)}
                             </span>
                             <span class="neu-settings-item-description">
-                              {item.description}
+                              {t(item.descKey)}
                             </span>
                           </div>
                           <span class="neu-settings-item-value">{value()}</span>

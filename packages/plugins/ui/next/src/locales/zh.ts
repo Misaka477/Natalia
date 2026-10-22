@@ -155,6 +155,54 @@ export const zh = {
   "composer.stopTitle": "停止",
   "composer.sendInjectTitle": "发送并注入当前轮",
   "composer.sendTitle": "发送",
+  // settings: categories (labels stay the stable row identity)
+  "settings.cat.model": "模型与 Agent",
+  "settings.cat.security": "权限与安全",
+  "settings.cat.runtime": "运行时与上下文",
+  "settings.cat.interface": "界面",
+  "settings.cat.storage": "配置保存范围",
+  "settings.pluginCategory": "插件配置",
+  "settings.unset": "未配置",
+  // settings: row labels
+  "settings.row.providers": "Providers & Models",
+  "settings.row.defaultModel": "Default Model",
+  "settings.row.subConcurrency": "子 Agent 并发数",
+  "settings.row.permissionProfile": "Permission Profile",
+  "settings.row.maxSteps": "Max Steps",
+  "settings.row.maxRetry": "Max Retry",
+  "settings.row.requestTimeout": "Request Timeout",
+  "settings.row.compaction": "Compaction",
+  "settings.row.compactionThreshold": "Compaction Threshold",
+  "settings.row.checkpointDirs": "Checkpoint 目录",
+  "settings.row.shellType": "Shell 类型",
+  "settings.row.gitBashPath": "Git Bash 路径",
+  "settings.row.psPath": "PowerShell 路径",
+  "settings.row.themeMode": "Theme Mode",
+  "settings.row.busySend": "运行中发送",
+  "settings.row.uiPrefScope": "界面偏好保存范围",
+  "settings.row.runtimePrefScope": "运行时配置保存范围",
+  // settings: row descriptions
+  "settings.rowDesc.providers": "配置 provider 并导入模型",
+  "settings.rowDesc.defaultModel": "默认使用的模型",
+  "settings.rowDesc.subConcurrency": "团队子 agent 最大并发数",
+  "settings.rowDesc.permissionProfile": "选择、新增、编辑权限配置",
+  "settings.rowDesc.maxSteps": "单轮最大执行步数",
+  "settings.rowDesc.maxRetry": "单步最大重试次数",
+  "settings.rowDesc.requestTimeout": "模型请求超时（0 表示不设置）",
+  "settings.rowDesc.compaction": "上下文压缩",
+  "settings.rowDesc.compactionThreshold": "压缩触发阈值",
+  "settings.rowDesc.checkpointDirs": "额外 checkpoint 目录",
+  "settings.rowDesc.shellType":
+    "命令在哪个 shell 里执行：pwsh（PowerShell 7）、bash（Git Bash / WSL）或 zsh。选「自动」= 跟随平台默认（Windows 用 pwsh，其他用 bash）",
+  "settings.rowDesc.gitBashPath":
+    "Git for Windows 的 bash.exe 位置（仅 Windows 需要；Linux/macOS 默认即 bash，无需设置）。留空 = 自动搜索默认安装位置与 PATH",
+  "settings.rowDesc.psPath":
+    "pwsh.exe 的全路径（仅 Windows 需要）。留空 = 依次搜索 Program Files、当前用户安装目录、PATH，最后退回系统自带的 Windows PowerShell 5.1",
+  "settings.rowDesc.themeMode": "切换浅色 / 深色",
+  "settings.rowDesc.busySend":
+    "busy 时发送默认注入当前轮（next-step），或排到下一轮（next-turn）",
+  "settings.rowDesc.uiPrefScope": "主题 / 密度 / 快捷键保存位置",
+  "settings.rowDesc.runtimePrefScope": "模型 / 权限 / 运行时设置保存位置",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

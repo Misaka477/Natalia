@@ -39,23 +39,29 @@ export type SettingsCategoryId =
 export type SettingsCategorySpec = {
   id: SettingsCategoryId;
   label: string;
+  /** The dictionary key for the label's display text. */
+  labelKey: string;
 };
 
 // "系统" used to hold the only row in it, a Quit button. It is gone: the exit
 // lives in the tray, which is the one affordance that survives a hidden
 // window, and a category with no rows is a nav entry that renders nothing.
 export const SETTINGS_CATEGORIES: readonly SettingsCategorySpec[] = [
-  { id: "model", label: "模型与 Agent" },
-  { id: "security", label: "权限与安全" },
-  { id: "runtime", label: "运行时与上下文" },
-  { id: "interface", label: "界面" },
-  { id: "storage", label: "配置保存范围" },
+  { id: "model", label: "模型与 Agent", labelKey: "settings.cat.model" },
+  { id: "security", label: "权限与安全", labelKey: "settings.cat.security" },
+  { id: "runtime", label: "运行时与上下文", labelKey: "settings.cat.runtime" },
+  { id: "interface", label: "界面", labelKey: "settings.cat.interface" },
+  { id: "storage", label: "配置保存范围", labelKey: "settings.cat.storage" },
 ];
 
 export type SettingsRowSpec = {
   /** The row's label. It is declared here and in the panel's render. */
   label: string;
+  /** The dictionary key for the label's display text. */
+  labelKey: string;
   description: string;
+  /** The dictionary key for the description's display text. */
+  descKey: string;
   category: SettingsCategoryId;
 };
 
@@ -71,50 +77,74 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
   // --- 模型与 Agent -----------------------------------------------------
   {
     label: "Providers & Models",
+    labelKey: "settings.row.providers",
     description: "配置 provider 并导入模型",
+    descKey: "settings.rowDesc.providers",
     category: "model",
   },
   {
     label: "Default Model",
+    labelKey: "settings.row.defaultModel",
     description: "默认使用的模型",
+    descKey: "settings.rowDesc.defaultModel",
     category: "model",
   },
   {
     label: "子 Agent 并发数",
+    labelKey: "settings.row.subConcurrency",
     description: "团队子 agent 最大并发数",
+    descKey: "settings.rowDesc.subConcurrency",
     category: "model",
   },
   // --- 权限与安全 -------------------------------------------------------
   {
     label: "Permission Profile",
+    labelKey: "settings.row.permissionProfile",
     description: "选择、新增、编辑权限配置",
+    descKey: "settings.rowDesc.permissionProfile",
     category: "security",
   },
   // --- 运行时与上下文 ---------------------------------------------------
   {
     label: "Max Steps",
+    labelKey: "settings.row.maxSteps",
     description: "单轮最大执行步数",
+    descKey: "settings.rowDesc.maxSteps",
     category: "runtime",
   },
   {
     label: "Max Retry",
+    labelKey: "settings.row.maxRetry",
     description: "单步最大重试次数",
+    descKey: "settings.rowDesc.maxRetry",
     category: "runtime",
   },
   {
     label: "Request Timeout",
+    labelKey: "settings.row.requestTimeout",
     description: "模型请求超时（0 表示不设置）",
+    descKey: "settings.rowDesc.requestTimeout",
     category: "runtime",
   },
-  { label: "Compaction", description: "上下文压缩", category: "runtime" },
+  {
+    label: "Compaction",
+    labelKey: "settings.row.compaction",
+    description: "上下文压缩",
+    descKey: "settings.rowDesc.compaction",
+    category: "runtime",
+  },
   {
     label: "Compaction Threshold",
+    labelKey: "settings.row.compactionThreshold",
     description: "压缩触发阈值",
+    descKey: "settings.rowDesc.compactionThreshold",
     category: "runtime",
   },
   {
     label: "Checkpoint 目录",
+    labelKey: "settings.row.checkpointDirs",
     description: "额外 checkpoint 目录",
+    descKey: "settings.rowDesc.checkpointDirs",
     category: "runtime",
   },
   // WHICH shell runs a command, as distinct from the two path rows below that
@@ -123,8 +153,10 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
   // setting that exists in the code and nowhere on screen.
   {
     label: "Shell 类型",
+    labelKey: "settings.row.shellType",
     description:
       "命令在哪个 shell 里执行：pwsh（PowerShell 7）、bash（Git Bash / WSL）或 zsh。选「自动」= 跟随平台默认（Windows 用 pwsh，其他用 bash）",
+    descKey: "settings.rowDesc.shellType",
     category: "runtime",
   },
   // Windows-only, filtered out on every other host by settings-host-rows.ts.
@@ -132,8 +164,10 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
   // path can change that, so the resolver off Windows never reads it.
   {
     label: "Git Bash 路径",
+    labelKey: "settings.row.gitBashPath",
     description:
       "Git for Windows 的 bash.exe 位置（仅 Windows 需要；Linux/macOS 默认即 bash，无需设置）。留空 = 自动搜索默认安装位置与 PATH",
+    descKey: "settings.rowDesc.gitBashPath",
     category: "runtime",
   },
   // The PowerShell twin, with the same host guard and the same reason: the
@@ -142,31 +176,41 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
   // the pane on Windows PowerShell 5.1.
   {
     label: "PowerShell 路径",
+    labelKey: "settings.row.psPath",
     description:
       "pwsh.exe 的全路径（仅 Windows 需要）。留空 = 依次搜索 Program Files、当前用户安装目录、PATH，最后退回系统自带的 Windows PowerShell 5.1",
+    descKey: "settings.rowDesc.psPath",
     category: "runtime",
   },
   // --- 界面 -------------------------------------------------------------
   {
     label: "Theme Mode",
+    labelKey: "settings.row.themeMode",
     description: "切换浅色 / 深色",
+    descKey: "settings.rowDesc.themeMode",
     category: "interface",
   },
   {
     label: "运行中发送",
+    labelKey: "settings.row.busySend",
     description:
       "busy 时发送默认注入当前轮（next-step），或排到下一轮（next-turn）",
+    descKey: "settings.rowDesc.busySend",
     category: "interface",
   },
   // --- 配置保存范围 -----------------------------------------------------
   {
     label: "界面偏好保存范围",
+    labelKey: "settings.row.uiPrefScope",
     description: "主题 / 密度 / 快捷键保存位置",
+    descKey: "settings.rowDesc.uiPrefScope",
     category: "storage",
   },
   {
     label: "运行时配置保存范围",
+    labelKey: "settings.row.runtimePrefScope",
     description: "模型 / 权限 / 运行时设置保存位置",
+    descKey: "settings.rowDesc.runtimePrefScope",
     category: "storage",
   },
 ];

@@ -249,6 +249,7 @@ export function ModalLayer(props: ModalLayerProps) {
         ctx={props.ctx}
       />
       <SettingsPanel
+        t={t}
         host={props.ctx.host}
         open={props.settingsOpen()}
         category={props.settingsCategory()}

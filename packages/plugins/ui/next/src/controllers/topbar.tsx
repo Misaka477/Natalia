@@ -6,8 +6,11 @@
  */
 
 import { For, Show } from "solid-js";
+import type { LocaleRuntime } from "../locale/runtime";
 
 export interface TopbarProps {
+  t: (key: string, params?: Record<string, unknown>) => string;
+  locale: LocaleRuntime;
   viewOpen: () => boolean;
   setViewOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSearchOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -36,6 +39,8 @@ export interface TopbarProps {
 /** The shell header. */
 export function Topbar(props: TopbarProps) {
   const {
+    t,
+    locale,
     viewOpen,
     setViewOpen,
     setSearchOpen,
@@ -84,21 +89,21 @@ export function Topbar(props: TopbarProps) {
           data-active={viewOpen()}
           onClick={() => setViewOpen((value) => !value)}
         >
-          视图
+          {t("topbar.view")}
         </button>
         <button
           type="button"
           class="neu-topbar-btn"
           onClick={() => setSearchOpen(true)}
         >
-          搜索
+          {t("topbar.search")}
         </button>
         <button
           type="button"
           class="neu-topbar-btn neu-topbar-btn-primary"
           onClick={() => setSettingsOpen(true)}
         >
-          设置
+          {t("topbar.settings")}
         </button>
         <button
           type="button"
@@ -106,7 +111,7 @@ export function Topbar(props: TopbarProps) {
           data-active={moreOpen()}
           onClick={() => setMoreOpen((value) => !value)}
         >
-          更多
+          {t("topbar.more")}
         </button>
       </div>
       <Show when={topbarPanel()}>
@@ -117,7 +122,7 @@ export function Topbar(props: TopbarProps) {
             class="neu-topbar-panel-close"
             onClick={() => setTopbarPanel(null)}
           >
-            关闭
+            {t("topbar.close")}
           </button>
         </div>
       </Show>
@@ -132,7 +137,7 @@ export function Topbar(props: TopbarProps) {
               setViewOpen(false);
             }}
           >
-            左栏
+            {t("topbar.left")}
           </button>
           <button
             type="button"
@@ -143,7 +148,7 @@ export function Topbar(props: TopbarProps) {
               setViewOpen(false);
             }}
           >
-            右栏
+            {t("topbar.right")}
           </button>
           <Show when={layoutMode() === "tiny"}>
             <button
@@ -155,7 +160,7 @@ export function Topbar(props: TopbarProps) {
                 setViewOpen(false);
               }}
             >
-              Navi
+              {t("topbar.navi")}
             </button>
           </Show>
         </div>
@@ -170,7 +175,7 @@ export function Topbar(props: TopbarProps) {
               setMoreOpen(false);
             }}
           >
-            状态
+            {t("common.status")}
           </button>
           <button
             type="button"
@@ -180,7 +185,7 @@ export function Topbar(props: TopbarProps) {
               setMoreOpen(false);
             }}
           >
-            帮助
+            {t("common.help")}
           </button>
           <button
             type="button"
@@ -190,7 +195,7 @@ export function Topbar(props: TopbarProps) {
               setMoreOpen(false);
             }}
           >
-            暂存
+            {t("common.stash")}
           </button>
           <button
             type="button"
@@ -200,7 +205,7 @@ export function Topbar(props: TopbarProps) {
               setMoreOpen(false);
             }}
           >
-            沙箱
+            {t("common.sandbox")}
           </button>
           <button
             type="button"
@@ -210,7 +215,7 @@ export function Topbar(props: TopbarProps) {
               setMoreOpen(false);
             }}
           >
-            插件
+            {t("common.plugins")}
           </button>
           <div class="neu-topbar-more-separator" />
           <For each={groupedTopbarPanels()}>

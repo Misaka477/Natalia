@@ -54,6 +54,7 @@ import { SessionSidebar } from "./controllers/session-tree";
 import { MainPanes } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
 import { Topbar } from "./controllers/topbar";
+import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -195,6 +196,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   perfLog(
     `[perf] AppNeu component start +${(appNeuStart - ((globalThis as unknown as { __nataliaStartupStart?: number }).__nataliaStartupStart ?? appNeuStart)).toFixed(1)}ms`,
   );
+  // The locale runtime is the shell's single source of truth for product
+  // copy. It rides ctx.extra so every UI plugin can register its own
+  // dictionaries under its own namespace and switch together with the
+  // shell.
+  const locale = createLocaleRuntime(props.ctx.preferences);
+  (props.ctx.extra as { locale?: LocaleRuntime }).locale = locale;
+  const t = locale.t;
   const [state, setState] = createSignal(
     cloneState(props.ctx.projection.getState()),
   );
@@ -3020,11 +3028,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const rightTabs = () => {
     panelRevision();
     const tabs: { id: RightTab; label: string }[] = [
-      { id: "diff", label: "审阅 / Diff" },
-      { id: "plan", label: "计划" },
-      { id: "governance", label: "治理" },
-      { id: "nia", label: "Nia" },
-      { id: "agent", label: "协同" },
+      { id: "diff", label: t("tab.diff") },
+      { id: "plan", label: t("tab.plan") },
+      { id: "governance", label: t("tab.governance") },
+      { id: "nia", label: t("tab.nia") },
+      { id: "agent", label: t("tab.agent") },
       ...sidePanels().map((item) => ({
         id: item.panel.id,
         label: item.panel.title,
@@ -3141,6 +3149,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       data-resizing={resizing()}
     >
       <Topbar
+        t={t}
+        locale={locale}
         viewOpen={viewOpen}
         setViewOpen={setViewOpen}
         setSearchOpen={setSearchOpen}

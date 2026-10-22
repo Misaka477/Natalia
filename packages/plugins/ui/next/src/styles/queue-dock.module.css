@@ -1,0 +1,102 @@
+/* The queue dock: the queued messages above the composer, their rows and
+   the row actions. The pane is shared vocabulary and stays the global
+   ancestor; these rules style this component's own classes under it.
+   Tokens only. */
+
+.neu-pane .dock {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.neu-pane .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+
+.neu-pane .title {
+  font-weight: 600;
+}
+
+.neu-pane .toggle {
+  border: none;
+  background: transparent;
+  color: var(--neu-accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.neu-pane .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.neu-pane .chip {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+}
+
+.neu-pane .row[data-status="steering"] .chip {
+  color: var(--neu-accent);
+}
+
+.neu-pane .text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--neu-text);
+}
+
+.neu-pane .edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: none;
+  outline: none;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.neu-pane .actions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.neu-pane .action {
+  border: none;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.neu-pane .action:hover {
+  background: var(--neu-hover-overlay);
+  color: var(--neu-text);
+}
+
+.neu-pane .action[data-danger="true"]:hover {
+  color: var(--neu-error);
+}

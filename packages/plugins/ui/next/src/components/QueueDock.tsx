@@ -1,3 +1,4 @@
+import styles from "../styles/queue-dock.module.css";
 import { For, Show, createSignal } from "solid-js";
 
 export interface QueueDockItem {
@@ -47,15 +48,15 @@ export function QueueDock(props: QueueDockProps) {
 
   return (
     <Show when={props.items.length > 0}>
-      <div class="natalia-queue-dock">
-        <div class="natalia-queue-head">
-          <span class="natalia-queue-title">
+      <div class={styles.dock}>
+        <div class={styles.head}>
+          <span class={styles.title}>
             {t("queue.title", { count: props.items.length })}
           </span>
           <Show when={hiddenCount() > 0}>
             <button
               type="button"
-              class="natalia-queue-toggle"
+              class={styles.toggle}
               onClick={() => setExpanded((value) => !value)}
             >
               {expanded()
@@ -66,8 +67,8 @@ export function QueueDock(props: QueueDockProps) {
         </div>
         <For each={visible()}>
           {(item) => (
-            <div class="natalia-queue-row" data-status={item.status}>
-              <span class="natalia-queue-chip">
+            <div class={styles.row} data-status={item.status}>
+              <span class={styles.chip}>
                 {item.delivery === "next-step"
                   ? t("queue.waitingInject")
                   : t("queue.queued")}
@@ -75,13 +76,13 @@ export function QueueDock(props: QueueDockProps) {
               <Show
                 when={editing() === item.id}
                 fallback={
-                  <span class="natalia-queue-text" title={item.text}>
+                  <span class={styles.text} title={item.text}>
                     {item.text}
                   </span>
                 }
               >
                 <input
-                  class="natalia-queue-edit"
+                  class={styles.edit}
                   value={draft()}
                   autofocus
                   onInput={(event) => setDraft(event.currentTarget.value)}
@@ -95,11 +96,11 @@ export function QueueDock(props: QueueDockProps) {
                   }}
                 />
               </Show>
-              <div class="natalia-queue-actions">
+              <div class={styles.actions}>
                 <Show when={item.delivery === "next-turn"}>
                   <button
                     type="button"
-                    class="natalia-queue-action"
+                    class={styles.action}
                     onClick={() => props.onPromote(item.id)}
                     title={t("queue.promoteTitle")}
                   >
@@ -111,7 +112,7 @@ export function QueueDock(props: QueueDockProps) {
                   fallback={
                     <button
                       type="button"
-                      class="natalia-queue-action"
+                      class={styles.action}
                       onClick={() => beginEdit(item.id, item.text)}
                       title={t("queue.editTitle")}
                     >
@@ -121,7 +122,7 @@ export function QueueDock(props: QueueDockProps) {
                 >
                   <button
                     type="button"
-                    class="natalia-queue-action"
+                    class={styles.action}
                     onClick={() => commitEdit(item.id)}
                     title={t("queue.saveTitle")}
                   >
@@ -130,7 +131,7 @@ export function QueueDock(props: QueueDockProps) {
                 </Show>
                 <button
                   type="button"
-                  class="natalia-queue-action"
+                  class={styles.action}
                   data-danger="true"
                   onClick={() => props.onRemove(item.id)}
                   title={t("queue.deleteTitle")}

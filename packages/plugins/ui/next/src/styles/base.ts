@@ -1284,18 +1284,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   right: 16px;
 }
 .main-transcript-wrap,
-.chat-transcript-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.main-transcript-wrap .neu-jump-bottom,
-.chat-transcript-wrap .neu-jump-bottom {
-  bottom: 16px;
-  right: 16px;
-}
 
 .review-empty {
   flex: 1;

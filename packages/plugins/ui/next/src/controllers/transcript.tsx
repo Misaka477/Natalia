@@ -9,6 +9,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { Attachment, Message, ToolCall } from "@natalia/ui-kit";
 import { ContextMeter, Transcript } from "@natalia/ui-kit";
+import styles from "../styles/transcript.module.css";
 import { PendingTakeover } from "../components/PendingTakeover";
 import { NeuSelect } from "../components/NeuSelect";
 import { QueueDock } from "../components/QueueDock";
@@ -262,7 +263,7 @@ export function MainPanes(props: MainPanesProps) {
                   <Show when={feedbackNotice()}>
                     <div class="neu-gov-action-note">{feedbackNotice()}</div>
                   </Show>
-                  <div class="main-transcript-wrap">
+                  <div class={styles.mainWrap}>
                     <Transcript
                       messages={renderedMainMessages()}
                       emptyTitle={t("transcript.emptyMainTitle")}
@@ -659,7 +660,7 @@ export function MainPanes(props: MainPanesProps) {
                   when={selectedSessionID() || state().sessionID || "none"}
                   keyed
                 >
-                  <div class="chat-transcript-wrap">
+                  <div class={styles.chatWrap}>
                     <Transcript
                       messages={renderedChatMessages()}
                       emptyTitle={t("transcript.emptyChatTitle")}

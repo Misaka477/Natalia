@@ -1,0 +1,20 @@
+/* The transcript's own wrap: the relative flex column the transcript and
+   its jump-to-bottom button live in. The button itself is shared
+   vocabulary (three surfaces use it) and stays global; these two rules
+   only POSITION it inside this region's wrap, so they travel with the
+   wrap. Tokens only. */
+
+.mainWrap,
+.chatWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mainWrap :global(.neu-jump-bottom),
+.chatWrap :global(.neu-jump-bottom) {
+  bottom: 16px;
+  right: 16px;
+}

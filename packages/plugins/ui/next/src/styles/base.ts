@@ -76,32 +76,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 /* ===== Left session sidebar ===== */
-.neu-sidebar {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--neu-bg-light);
-  border-radius: var(--neu-radius);
-  box-shadow: var(--neu-elevation-3);
-  padding: 18px;
-  overflow: hidden;
-  min-width: 0;
-  position: relative;
-}
-.neu-sidebar-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neu-muted);
-  letter-spacing: 0.04em;
-  margin-bottom: 14px;
-}
-.neu-sidebar-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-}
 .neu-tree-title {
   font-size: 11px;
   font-weight: 600;
@@ -2448,10 +2422,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   box-shadow: inset 0 0 0 2px var(--neu-bg-light);
 }
 /* ===== Left sidebar compact header ===== */
-.neu-sidebar-header .neu-sidebar-title {
-  margin-bottom: 0;
-}
-.neu-sidebar-header {
+.neu-sidebar-header .neu-sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4398,10 +4369,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   .neu-sidebar { max-width: 240px; }
 }
 @media (max-width: 1700px) {
-  .neu-shell[data-compact="true"] .neu-sidebar {
-    width: min(320px, 32vw);
-  }
-  .neu-shell[data-compact="true"] .neu-secondary {
+  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] .neu-secondary {
     width: min(720px, 66vw);
   }
   .neu-shell[data-compact="true"] .neu-resizer {

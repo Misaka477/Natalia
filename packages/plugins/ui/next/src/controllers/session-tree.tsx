@@ -13,6 +13,7 @@ import {
   For,
   Show,
 } from "solid-js";
+import styles from "../styles/sidebar.module.css";
 import type {
   RuntimeSessionSummary,
   WorkspaceSummary,
@@ -654,11 +655,11 @@ export function SessionSidebar(props: SessionSidebarProps) {
       {props.leftVisible() ? (
         <>
           <aside
-            class="neu-sidebar"
+            class={styles.sidebar}
             style={{ width: `${props.leftWidth()}px` }}
           >
             <div class="neu-sidebar-header">
-              <span class="neu-sidebar-title">{t("sidebar.workspace")}</span>
+              <span class={styles.title}>{t("sidebar.workspace")}</span>
               <div class="neu-sidebar-actions">
                 <button
                   type="button"
@@ -885,7 +886,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
               </div>
             </Show>
-            <div class="neu-sidebar-content">
+            <div class={styles.content}>
               <SessionTree
                 t={t}
                 selected={props.selectedSessionID()}

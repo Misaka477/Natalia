@@ -1,0 +1,32 @@
+/* The left session sidebar: the rail itself, its title and its scrolling
+   content column. Tokens only; the module grows as the rest of the
+   sidebar region moves. */
+
+.sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-3);
+  padding: 18px;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: 14px;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}

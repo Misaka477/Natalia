@@ -5982,4 +5982,14 @@ export const commandPaletteCss = `
     color: var(--neu-text-dim);
     font-size: var(--neu-font-sm);
   }
+  /* The topbar's status segment: the running turn, always in view. */
+  .neu-topbar-status {
+    margin-left: var(--neu-space-3);
+    padding: 2px var(--neu-space-2);
+    border-radius: var(--neu-radius-1);
+    background: var(--neu-state-info-bg);
+    color: var(--neu-state-info-text);
+    font-size: var(--neu-font-sm);
+    white-space: nowrap;
+  }
   `;

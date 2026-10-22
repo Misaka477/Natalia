@@ -3246,6 +3246,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     >
       <Topbar
         t={t}
+        runningLabel={() =>
+          state().natalia.activeTurn ? activityLabel() : undefined
+        }
         slots={slots}
         locale={locale}
         setSearchOpen={setSearchOpen}

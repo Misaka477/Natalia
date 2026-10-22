@@ -14,6 +14,8 @@ export interface TopbarProps {
   t: (key: string, params?: Record<string, unknown>) => string;
   locale: LocaleRuntime;
   slots: SlotsRegistry;
+  /** What the turn is doing now; undefined when idle. */
+  runningLabel: () => string | undefined;
   setSearchOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSettingsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   moreOpen: () => boolean;
@@ -43,6 +45,7 @@ export function Topbar(props: TopbarProps) {
     t,
     locale,
     slots,
+    runningLabel,
     setSearchOpen,
     setSettingsOpen,
     moreOpen,
@@ -83,6 +86,11 @@ export function Topbar(props: TopbarProps) {
             The world is not beautiful; therefore it is.
           </span>
         </div>
+        {/* The status segment: what the turn is doing now, always visible
+            rather than only where the transcript happens to be scrolled. */}
+        <Show when={runningLabel()}>
+          {(label) => <span class="neu-topbar-status">{label()}</span>}
+        </Show>
       </div>
       <div class="neu-topbar-right">
         {/* The rail toggles are direct buttons in the actions segment — the

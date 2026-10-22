@@ -24,12 +24,19 @@ const stores: ObjectStore[] = [];
 (
   globalThis as unknown as { __NATALIA_OBJECT_STORE_NO_WORKER?: boolean }
 ).__NATALIA_OBJECT_STORE_NO_WORKER = true;
-afterAll(() => {
+afterAll(async () => {
   // Dispose the stores first: on Windows an open SQLite meta db or a live
   // pack daemon holds the temp root open (EBUSY on rm).
   for (const store of stores) store.dispose();
-  for (const root of roots) rm(root, { recursive: true, force: true });
-  delete process.env.NATALIA_OBJECT_STORE_BACKEND;
+  // Awaited, and tolerant of the unlink failing. Under the full suite's
+  // concurrency the rust backend's handles can outlive dispose() long
+  // enough for the unlink to answer EBUSY, and an UNHANDLED rejection here
+  // fails the whole run — the teardown could not unlink is exactly what
+  // `guard:test-workspaces` reclaims, so the catch is the contract, not a
+  // sweep-under-the-rug.
+  for (const root of roots)
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+  delete process.env.NATIALIA_OBJECT_STORE_BACKEND;
 });
 
 /** One op's answer: the value, or the normalized error text. */

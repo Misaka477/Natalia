@@ -84,9 +84,27 @@ export function ensureSessionFullEvents(
     const full = await sessionStore.loadFullAsync(exec.session.id, {
       runtimeEvents: true,
     });
+    // Events published while we loaded land in the old tail AFTER the flush
+    // this drained, so the loaded log does not carry them. Merging them is
+    // what keeps a concurrent publish from being dropped: the assignment
+    // below replaces the tail wholesale, and a record_validation published
+    // mid-load was then missing from every later read (measured: the
+    // evidence read answered with one of two records, the publish having
+    // raced the load). Id-deduped, so a persisted event is never doubled,
+    // and appended after the log, which is journal order for what landed
+    // after it.
+    const loaded = new Set(
+      full.events
+        .map((event) => (event as { id?: string }).id)
+        .filter((id): id is string => id !== undefined),
+    );
+    const duringLoad = exec.session.events.filter((event) => {
+      const id = (event as { id?: string }).id;
+      return id !== undefined && !loaded.has(id);
+    });
     exec.session.events = windowRuntimeEvents(
       filterRuntimeRetainedEvents(
-        full.events,
+        [...full.events, ...duringLoad],
         sessionStore.status().mode,
         true,
       ),

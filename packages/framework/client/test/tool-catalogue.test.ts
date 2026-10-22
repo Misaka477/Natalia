@@ -230,4 +230,3 @@ test("the static tool catalogue contains only unmigrated tools", () => {
     .sort((left, right) => left[0].localeCompare(right[0]));
   expect(actual).toEqual(expected);
 });
-

@@ -3,9 +3,10 @@ export const nataliaNeuBaseStyles = `
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   background: var(--neu-bg);
   color: var(--neu-text);
-  --neu-radius: 22px;
-  --neu-radius-sm: 12px;
-  --neu-font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+  /* Palette values and shape tokens are written by the theme layer
+     (src/theme): palettes.ts owns every color value, shape.ts owns radius,
+     spacing, typography, motion and elevation. Only derived aliases that
+     compose palette slots live here. */
   --neu-scrollbar: color-mix(in srgb, var(--neu-muted) 45%, transparent);
   --neu-scrollbar-hover: color-mix(in srgb, var(--neu-accent) 60%, transparent);
   --neu-accent-shadow: color-mix(in srgb, var(--neu-accent) 35%, transparent);
@@ -16,13 +17,6 @@ export const nataliaNeuBaseStyles = `
   --neu-diff-added-bg: color-mix(in srgb, var(--neu-success) 10%, transparent);
   --neu-error-soft: color-mix(in srgb, var(--neu-error) 12%, transparent);
   --neu-danger: var(--neu-error);
-  --neu-on-accent: #1c211f;
-  --neu-on-error: #fff;
-  --neu-thumb: #fff;
-  --neu-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  --neu-badge-inset: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
-  --neu-inset-pressed-dark: rgba(0, 0, 0, 0.18);
-  --neu-inset-pressed-light: rgba(255, 255, 255, 0.35);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,7 +54,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 10px 18px;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-3);
 }
 .neu-topbar-left {
   display: flex;
@@ -141,12 +135,12 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
-.neu-topbar-btn:hover { box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light); color: var(--neu-accent); }
-.neu-topbar-btn:active { box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); }
-.neu-topbar-btn[data-active="true"] { box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); color: var(--neu-accent); }
+.neu-topbar-btn:hover { box-shadow: var(--neu-elevation-1); color: var(--neu-accent); }
+.neu-topbar-btn:active { box-shadow: var(--neu-inset-2); }
+.neu-topbar-btn[data-active="true"] { box-shadow: var(--neu-inset-2); color: var(--neu-accent); }
 .neu-topbar-group {
   display: flex;
   align-items: center;
@@ -172,7 +166,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg-light);
   border-radius: 16px;
   padding: 12px;
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   z-index: 100;
 }
 .neu-topbar-panel-content {
@@ -192,7 +186,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg-light);
   border-radius: 16px;
   padding: 8px;
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   z-index: 100;
 }
 .neu-topbar-more-dropdown {
@@ -208,7 +202,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg-light);
   border-radius: 16px;
   padding: 8px;
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   z-index: 100;
 }
 .neu-topbar-more-item {
@@ -246,7 +240,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-3);
   padding: 18px;
   overflow: hidden;
   min-width: 0;
@@ -374,7 +368,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-family: inherit;
   font-size: 12px;
   outline: none;
-  box-shadow: inset 1px 1px 2px var(--neu-shadow-dark), inset -1px -1px 2px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-1);
 }
 .neu-workspace-menu-btn {
   display: inline-flex;
@@ -405,7 +399,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 4px;
   background: var(--neu-bg-light);
   border-radius: 10px;
-  box-shadow: 3px 3px 10px var(--neu-shadow-dark), -1px -1px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-4);
 }
 .neu-workspace-popup button {
   display: flex;
@@ -480,7 +474,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 .neu-tree-row:active {
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-tree-row:focus-visible {
   outline: 2px solid var(--neu-accent);
@@ -492,7 +486,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 .neu-tree-row[data-selected="true"] {
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   color: var(--neu-text);
 }
 .neu-tree-actions {
@@ -525,7 +519,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
   font-size: 12px;
   outline: none;
-  box-shadow: inset 1px 1px 2px var(--neu-shadow-dark), inset -1px -1px 2px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-1);
 }
 .neu-tree-label {
   flex: 1;
@@ -644,7 +638,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 .neu-collapsed-rail:hover {
   background: var(--neu-bg);
-  box-shadow: 2px 2px 6px var(--neu-shadow-dark), -2px -2px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-left-rail {
   border-radius: 18px;
@@ -688,7 +682,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-3);
   padding: 14px;
   overflow: hidden;
 }
@@ -761,7 +755,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   white-space: nowrap;
 }
 .natalia-context-meter[data-status="warning"] {
-  --context-meter-color: var(--neu-warning, #d97706);
+  --context-meter-color: var(--neu-warning);
 }
 .natalia-context-meter[data-status="critical"],
 .natalia-context-meter[data-status="compacting"] {
@@ -839,14 +833,14 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   min-width: 0;
   padding: 10px 14px;
   border-radius: 16px;
-  background: var(--neu-assistant-bubble, var(--neu-bg-light));
+  background: var(--neu-assistant-bubble);
   border: 1px solid var(--neu-border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--neu-elevation-flat);
 }
 .neu-pane .natalia-message[data-role="user"] {
   align-self: flex-end;
   background: var(--neu-user-bubble);
-  border-color: var(--neu-user-bubble-border, var(--neu-border));
+  border-color: var(--neu-user-bubble-border);
   color: var(--neu-user-bubble-text);
 }
 .neu-pane .natalia-message[data-role="user"] .natalia-message-author,
@@ -875,7 +869,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   justify-content: center;
   border-radius: 50%;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   font-size: 10px;
   font-weight: 700;
   color: var(--neu-accent);
@@ -921,7 +915,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--neu-thinking, var(--neu-accent));
+  color: var(--neu-thinking);
   font-style: normal;
 }
 .neu-pane .natalia-thinking-text { color: var(--neu-muted); }
@@ -931,7 +925,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   border-radius: 10px;
   margin: 6px 0;
   overflow: hidden;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-pane .natalia-code-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; color: var(--neu-muted); font-size: 11px; }
 .neu-pane .natalia-code-block pre { padding: 10px; overflow-x: auto; font-family: var(--neu-font-mono); font-size: 12px; }
@@ -939,7 +933,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-badge-running { color: var(--neu-success); }
 .neu-pane .natalia-badge-success { color: var(--neu-success); }
 .neu-pane .natalia-badge-error { color: var(--neu-error); }
-.neu-pane .natalia-badge-steering { color: var(--neu-accent); box-shadow: inset 0 0 0 1px var(--neu-accent-soft); }
+.neu-pane .natalia-badge-steering { color: var(--neu-accent); box-shadow: var(--neu-ring-accent); }
 /* What the call cost, in the runner's own measurement. Monospaced figures so a
    column of cards reads down, and muted so the status badge stays the loudest
    thing on the header. */
@@ -1006,7 +1000,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   border-radius: 12px;
   overflow: hidden;
   background: var(--neu-bg-light);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   margin: 6px 0;
   min-width: 0;
   max-width: 100%;
@@ -1131,9 +1125,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 .neu-pane .natalia-streaming-indicator { display: flex; align-items: center; gap: 4px; color: var(--neu-muted); font-size: 12px; }
 .neu-pane .natalia-streaming-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--neu-accent); animation: neu-blink 1s infinite; }
-.neu-pane .natalia-action-btn { padding: 5px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); box-shadow: 4px 4px 8px var(--neu-shadow-dark), -4px -4px 8px var(--neu-shadow-light); font-size: 12px; cursor: pointer; }
-.neu-pane .natalia-action-btn:active { box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light); }
-.neu-pane .natalia-action-btn-primary { background: var(--neu-accent); color: var(--neu-on-accent); box-shadow: 4px 4px 8px var(--neu-accent-shadow), -4px -4px 8px var(--neu-shadow-light); }
+.neu-pane .natalia-action-btn { padding: 5px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); box-shadow: var(--neu-elevation-4); font-size: 12px; cursor: pointer; }
+.neu-pane .natalia-action-btn:active { box-shadow: var(--neu-inset-3); }
+.neu-pane .natalia-action-btn-primary { background: var(--neu-accent); color: var(--neu-on-accent); box-shadow: var(--neu-elevation-accent); }
 .neu-pane .natalia-message-group {
   display: flex;
   flex-direction: column;
@@ -1212,7 +1206,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
    background: var(--neu-bg);
    color: var(--neu-text);
    font-size: 12px;
-   box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+   box-shadow: var(--neu-inset-2);
  }
  .neu-pane .neu-rollback-hint {
    color: var(--neu-muted);
@@ -1293,15 +1287,15 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   border-radius: 12px;
   background: var(--neu-bg-light);
   color: var(--neu-accent);
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   cursor: pointer;
 }
 .neu-pane .natalia-composer-submit:hover {
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
   color: var(--neu-accent-soft);
 }
 .neu-pane .natalia-composer-submit:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   color: var(--neu-accent);
 }
 .neu-pane .natalia-composer-submit svg {
@@ -1338,14 +1332,14 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   margin-right: 6px;
   background: var(--neu-error-soft);
   color: var(--neu-error);
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   cursor: pointer;
 }
 .neu-pane .natalia-composer-stop:hover {
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-pane .natalia-composer-stop:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-pane .natalia-queue-dock {
   margin-bottom: 6px;
@@ -1355,7 +1349,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   gap: 4px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-pane .natalia-queue-head {
   display: flex;
@@ -1420,7 +1414,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
 }
 .neu-pane .natalia-queue-action[data-danger="true"]:hover { color: var(--neu-error); }
-.neu-pane .natalia-attachment-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--neu-bg); border-radius: 12px; font-size: 12px; color: var(--neu-muted); box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light); }
+.neu-pane .natalia-attachment-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--neu-bg); border-radius: 12px; font-size: 12px; color: var(--neu-muted); box-shadow: var(--neu-elevation-1); }
 .neu-pane .natalia-attachment-chip[data-image="true"] {
   padding-right: 6px;
 }
@@ -1456,7 +1450,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-3);
   padding: 16px 16px 14px;
   overflow: hidden;
   min-width: 0;
@@ -1481,15 +1475,15 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-muted);
   font-size: 12px;
   font-weight: 500;
-  box-shadow: 4px 4px 8px var(--neu-shadow-dark), -4px -4px 8px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-4);
   cursor: pointer;
   white-space: nowrap;
 }
-.neu-secondary-tab:hover { box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light); color: var(--neu-text); }
+.neu-secondary-tab:hover { box-shadow: var(--neu-elevation-1); color: var(--neu-text); }
 .neu-secondary-tab[data-active="true"] {
   background: var(--neu-bg-light);
   color: var(--neu-accent);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-secondary-content {
   position: relative;
@@ -1530,7 +1524,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-muted);
   font-size: 11px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .review-subtab:hover {
   color: var(--neu-text);
@@ -1538,7 +1532,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .review-subtab[data-active="true"] {
   background: var(--neu-bg-light);
   color: var(--neu-text);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .review-section-label {
   padding: 0 12px 4px;
@@ -1582,7 +1576,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-family: inherit;
   font-size: 11px;
   outline: none;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .review-checkpoint-rename-btn {
   padding: 4px 8px;
@@ -1606,7 +1600,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
   font-size: 11px;
   outline: none;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .review-diff-raw {
   padding: 8px 12px;
@@ -1633,7 +1627,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   margin: 0 12px 8px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .review-pr-row {
   font-size: 11px;
@@ -1676,12 +1670,12 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-muted);
   font-size: 11px;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .review-entity-button[data-active="true"] {
   background: var(--neu-bg-light);
   color: var(--neu-text);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .review-entity-count {
   font-weight: 700;
@@ -1693,7 +1687,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   margin-bottom: 10px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .review-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--neu-text); }
 .review-title svg { color: var(--neu-accent); }
@@ -1765,7 +1759,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   height: 56px;
   border-radius: 18px;
   background: var(--neu-bg);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   color: var(--neu-accent);
 }
 .review-empty-title {
@@ -1794,7 +1788,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow-x: hidden;
   background: var(--neu-bg);
   border-radius: 12px;
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   padding: 6px;
 }
 .review-files-heading { padding: 8px 10px; font-size: 10px; font-weight: 600; color: var(--neu-muted); text-transform: uppercase; }
@@ -1806,7 +1800,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-family: var(--neu-font-mono); font-size: 11px; text-align: left; cursor: pointer;
 }
 .review-file-row:hover { background: var(--neu-bg-light); }
-.review-file-row[data-active="true"] { background: var(--neu-bg-light); box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); color: var(--neu-text); }
+.review-file-row[data-active="true"] { background: var(--neu-bg-light); box-shadow: var(--neu-inset-2); color: var(--neu-text); }
 .review-file-status.is-added { color: var(--neu-success); }
 .review-file-status.is-modified { color: var(--neu-warning); }
 .review-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1818,7 +1812,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 8px 10px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   font-family: var(--neu-font-mono); font-size: 11px; color: var(--neu-text);
 }
 .review-diff-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1831,7 +1825,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .review-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: transparent; border: none; color: var(--neu-muted); cursor: pointer; border-radius: 8px; }
 .review-icon-btn:hover { background: var(--neu-bg-light); color: var(--neu-text); }
 .review-icon-btn[data-active="true"] { background: var(--neu-bg-light); color: var(--neu-accent); }
-.review-diff-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto; position: relative; font-family: var(--neu-font-mono); font-size: 11px; line-height: 1.65; background: var(--neu-bg-light); color: var(--neu-text); border-radius: 12px; box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light); padding: 12px 0 14px; }
+.review-diff-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto; position: relative; font-family: var(--neu-font-mono); font-size: 11px; line-height: 1.65; background: var(--neu-bg-light); color: var(--neu-text); border-radius: 12px; box-shadow: var(--neu-inset-3); padding: 12px 0 14px; }
 .diff-hunk-nav {
   position: sticky;
   top: 8px;
@@ -1941,7 +1935,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow: hidden;
   background: var(--neu-bg);
   border-radius: 18px;
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .review-commit-btn {
   display: inline-flex;
@@ -1963,15 +1957,15 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 .review-commit-btn:hover {
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
   color: var(--neu-accent-soft);
 }
 .review-commit-btn:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
   color: var(--neu-accent);
 }
 .review-commit-btn svg {
@@ -1993,17 +1987,17 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-muted);
   font-size: 11px;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .agent-subtab[data-active="true"] {
   background: var(--neu-bg-light);
   color: var(--neu-text);
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .agent-layout { display: flex; flex: 1; min-height: 0; }
 .agent-sidebar { width: 220px; flex-shrink: 0; overflow-y: auto; padding: 8px; border-right: 1px solid var(--neu-divider); }
-.agent-card { display: block; width: 100%; text-align: left; border: none; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: var(--neu-bg); color: var(--neu-text); cursor: pointer; box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light); }
-.agent-card[data-active="true"] { box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); }
+.agent-card { display: block; width: 100%; text-align: left; border: none; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: var(--neu-bg); color: var(--neu-text); cursor: pointer; box-shadow: var(--neu-elevation-1); }
+.agent-card[data-active="true"] { box-shadow: var(--neu-inset-2); }
 .agent-card-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
 .agent-card-status { font-size: 10px; color: var(--neu-muted); margin-bottom: 2px; }
 .agent-card-detail { font-size: 11px; color: var(--neu-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2025,7 +2019,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   line-height: 1.65;
   resize: none;
   outline: none;
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .plan-panel-preview {
   flex: 1;
@@ -2124,13 +2118,13 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .plan-panel-btn:hover {
   color: var(--neu-accent);
 }
 .plan-panel-btn:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .todo-row {
   display: flex;
@@ -2180,11 +2174,11 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .team-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
 .team-header { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .team-stat { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 10px; background: var(--neu-bg); margin-bottom: 8px; font-size: 12px; }
-.team-card { padding: 8px 10px; border-radius: 10px; background: var(--neu-bg); margin-bottom: 6px; box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light); }
+.team-card { padding: 8px 10px; border-radius: 10px; background: var(--neu-bg); margin-bottom: 6px; box-shadow: var(--neu-elevation-1); }
 .team-card-title { font-size: 12px; font-weight: 600; }
 .team-card-detail { font-size: 11px; color: var(--neu-muted); }
 .team-card-result { font-size: 11px; color: var(--neu-success); margin-top: 4px; }
-.team-queue-card { padding: 10px 12px; border-radius: 12px; background: var(--neu-bg); margin-bottom: 8px; box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); }
+.team-queue-card { padding: 10px 12px; border-radius: 12px; background: var(--neu-bg); margin-bottom: 8px; box-shadow: var(--neu-inset-2); }
 .team-queue-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .team-queue-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--neu-muted); }
 .team-queue-result { margin-top: 6px; font-size: 11px; color: var(--neu-text); white-space: pre-wrap; }
@@ -2231,7 +2225,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow-y: auto;
   border-radius: 18px;
   background: var(--neu-bg);
-  box-shadow: 8px 8px 16px var(--neu-shadow-dark), -8px -8px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-6);
   padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: var(--neu-scrollbar) transparent;
@@ -2267,7 +2261,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
   font-size: 11px;
   cursor: pointer;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-confirm-backdrop {
   position: fixed;
@@ -2283,7 +2277,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 16px;
   border-radius: 16px;
   background: var(--neu-bg);
-  box-shadow: 8px 8px 20px var(--neu-shadow-dark), -8px -8px 20px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-6);
 }
 .neu-confirm-title {
   font-size: 14px;
@@ -2307,7 +2301,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   border-color: transparent;
 }
 .neu-plugin-btn:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   transform: translateY(1px);
 }
 .neu-plugin-switch {
@@ -2358,7 +2352,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
   font-size: 12px;
   outline: none;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-settings-backdrop {
   position: fixed;
@@ -2377,7 +2371,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-settings-header {
@@ -2404,10 +2398,10 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg);
   color: var(--neu-muted);
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-settings-close:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-settings-body {
   flex: 1;
@@ -2443,7 +2437,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-settings-category[data-active="true"] {
   background: var(--neu-bg);
   color: var(--neu-accent);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-settings-content {
   flex: 1;
@@ -2492,7 +2486,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   margin-bottom: 8px;
   background: var(--neu-bg);
   border-radius: 12px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-settings-item-main {
   display: flex;
@@ -2516,7 +2510,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 4px 10px;
   border-radius: 10px;
   background: var(--neu-bg-light);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 button.neu-settings-item.neu-settings-item-button {
   width: 100%;
@@ -2526,17 +2520,17 @@ button.neu-settings-item.neu-settings-item-button {
   cursor: pointer;
 }
 button.neu-settings-item.neu-settings-item-button:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 /* The exit. It reads as an action among settings, not as one more toggle —
    the one row whose default press is destructive. */
 button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger
   .neu-settings-item-label {
-  color: var(--neu-danger, #c0392b);
+  color: var(--neu-danger);
   font-weight: 600;
 }
 button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-settings-plugin-panel {
   margin-bottom: 8px;
@@ -2545,7 +2539,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-bottom: 0;
 }
 .neu-settings-plugin-panel button.neu-settings-item[data-active="true"] {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-settings-plugin-panel button.neu-settings-item[data-active="true"] .neu-settings-item-label {
   color: var(--neu-accent);
@@ -2567,7 +2561,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 6px;
   border-radius: 10px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-bulk-count {
   font-size: 11px;
@@ -2648,7 +2642,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-icon-btn[data-active="true"] {
   background: var(--neu-bg);
   color: var(--neu-accent);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-new-workspace-btn:hover {
   color: var(--neu-accent);
@@ -2672,7 +2666,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   opacity: 0;
   visibility: hidden;
   transform: translateY(-2px);
-  box-shadow: 2px 2px 6px var(--neu-shadow-dark), -1px -1px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
   transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
   pointer-events: none;
 }
@@ -2693,7 +2687,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-family: inherit;
   font-size: 12px;
   outline: none;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-sidebar-menu {
   position: absolute;
@@ -2707,7 +2701,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 6px;
   background: var(--neu-bg-light);
   border-radius: 12px;
-  box-shadow: 4px 4px 12px var(--neu-shadow-dark), -4px -4px 12px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-4);
 }
 .neu-sidebar-menu-item {
   padding: 8px 10px;
@@ -2727,7 +2721,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-sidebar-menu-toggle[data-active="true"] {
   background: var(--neu-bg);
   color: var(--neu-accent);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 
 /* ===== Session action toolbar / panel ===== */
@@ -2750,20 +2744,20 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-session-toolbar-btn:hover {
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
   color: var(--neu-accent);
 }
 .neu-session-toolbar-btn:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-session-window {
   width: min(420px, 90vw);
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-session-current {
@@ -2773,7 +2767,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-muted);
   background: var(--neu-bg);
   border-radius: 12px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-session-current strong {
   color: var(--neu-text);
@@ -2796,7 +2790,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-session-action-row:hover {
   background: var(--neu-bg-light);
@@ -2819,7 +2813,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-checkpoint-current {
@@ -2829,7 +2823,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   background: var(--neu-bg);
   font-size: 13px;
   color: var(--neu-muted);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-checkpoint-current strong { color: var(--neu-text); }
 .neu-checkpoint-list {
@@ -2848,7 +2842,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-checkpoint-main {
   flex: 1;
@@ -2892,10 +2886,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-checkpoint-action:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-checkpoint-action:disabled {
   opacity: 0.4;
@@ -2917,10 +2911,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-accent-shadow), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-accent);
 }
 .neu-checkpoint-create:active {
-  box-shadow: inset 3px 3px 6px var(--neu-inset-pressed-dark), inset -3px -3px 6px var(--neu-inset-pressed-light);
+  box-shadow: var(--neu-inset-accent);
 }
 
 /* ===== Permission approval panel ===== */
@@ -2928,7 +2922,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   width: min(520px, 90vw);
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-permission-body {
@@ -2962,7 +2956,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   background: var(--neu-bg);
   border-radius: 12px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-permission-label {
   font-size: 11px;
@@ -2996,11 +2990,11 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 .neu-permission-btn:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-permission-deny {
   background: var(--neu-bg);
@@ -3040,7 +3034,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-permission-reason::placeholder {
   color: var(--neu-muted);
@@ -3058,7 +3052,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-status-tabs {
@@ -3089,7 +3083,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-status-card-label {
   font-size: 11px;
@@ -3112,7 +3106,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-diagnostic-level {
   width: 48px;
@@ -3153,7 +3147,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-status-tool-row {
   width: 100%;
@@ -3172,7 +3166,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg-light);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-status-tool-detail-summary {
   font-size: 12px;
@@ -3230,7 +3224,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-model-tabs {
@@ -3259,7 +3253,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-model-name {
   flex: 1;
@@ -3298,10 +3292,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-model-set-default:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-model-set-default:disabled {
   opacity: 0.4;
@@ -3322,10 +3316,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-accent-shadow), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-accent);
 }
 .neu-model-add:active {
-  box-shadow: inset 3px 3px 6px var(--neu-inset-pressed-dark), inset -3px -3px 6px var(--neu-inset-pressed-light);
+  box-shadow: var(--neu-inset-accent);
 }
 
 /* ===== Model tree ===== */
@@ -3341,7 +3335,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-model-provider {
   border-radius: 14px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   padding: 4px;
 }
 .neu-model-provider-header {
@@ -3380,10 +3374,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-accent);
   font-size: 11px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-model-edit:hover {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 
 .neu-model-children {
@@ -3396,7 +3390,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-left: 8px;
   background: var(--neu-bg-light);
   color: var(--neu-text);
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 
 /* ===== Model form ===== */
@@ -3428,7 +3422,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-family: inherit;
   font-size: 13px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-form-input::placeholder {
   color: var(--neu-muted);
@@ -3468,7 +3462,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-select-trigger:disabled {
   opacity: 0.5;
@@ -3500,7 +3494,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 4px;
   border-radius: 12px;
   background: var(--neu-bg-light);
-  box-shadow: 4px 4px 10px var(--neu-shadow-dark), -4px -4px 10px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-4);
 }
 .neu-select-option {
   display: block;
@@ -3534,7 +3528,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   background: var(--neu-bg);
   color: var(--neu-text);
   font-size: 12px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   cursor: pointer;
 }
 .neu-form-checkbox input[type="checkbox"] {
@@ -3545,7 +3539,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   border-radius: 50%;
   border: none;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -3569,11 +3563,11 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 .neu-form-btn:active {
-  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-3);
 }
 .neu-form-cancel {
   background: var(--neu-bg);
@@ -3609,10 +3603,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-error);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-model-remove:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-model-add-full {
   display: flex;
@@ -3630,7 +3624,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-extensions-tabs {
@@ -3659,7 +3653,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-extension-name {
   width: 110px;
@@ -3744,10 +3738,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-accent-shadow), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-accent);
 }
 .neu-extension-add:active {
-  box-shadow: inset 3px 3px 6px var(--neu-inset-pressed-dark), inset -3px -3px 6px var(--neu-inset-pressed-light);
+  box-shadow: var(--neu-inset-accent);
 }
 
 /* ===== Inline extensions in settings ===== */
@@ -3770,11 +3764,11 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
   white-space: nowrap;
 }
 .neu-extension-btn:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-extension-remove {
   color: var(--neu-error);
@@ -3783,7 +3777,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
    be: it explains the absent button instead of leaving a gap. */
 .neu-extension-source {
   font-size: 11px;
-  color: var(--neu-text-dim, var(--neu-text));
+  color: var(--neu-text-dim);
   border: 1px solid var(--neu-shadow-dark);
   border-radius: 10px;
   padding: 2px 8px;
@@ -3826,7 +3820,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-search-body {
@@ -3860,7 +3854,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-search-result:hover {
   background: var(--neu-bg-light);
@@ -3885,7 +3879,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-help-body {
@@ -3910,7 +3904,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-help-item-title {
   font-size: 13px;
@@ -3928,7 +3922,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 8px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-help-shortcut-keys {
   min-width: 130px;
@@ -3950,7 +3944,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-stash-body {
@@ -3969,7 +3963,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-stash-item-main {
   flex: 1;
@@ -3999,10 +3993,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-stash-btn:active {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-stash-remove {
   color: var(--neu-error);
@@ -4026,7 +4020,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-flow-tabs {
@@ -4055,7 +4049,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-flow-name {
   flex: 1;
@@ -4095,7 +4089,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-flow-card:hover {
   background: var(--neu-bg-light);
@@ -4122,7 +4116,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-flow-detail-title {
   font-size: 15px;
@@ -4146,7 +4140,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-flow-module-head {
   display: flex;
@@ -4181,7 +4175,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   background: var(--neu-bg);
   color: var(--neu-text);
   font-size: 12px;
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 
 /* ===== Flow editor section title ===== */
@@ -4200,7 +4194,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-flow-preview-title {
   font-size: 12px;
@@ -4228,7 +4222,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-sandbox-body {
@@ -4256,7 +4250,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-governance-tabs {
@@ -4295,7 +4289,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-gov-title {
   font-size: 12px;
@@ -4334,8 +4328,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-bottom: 6px;
   padding: 7px 9px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  background: var(--neu-surface-raised);
+  box-shadow: var(--neu-ring-raised);
   font-size: 12px;
 }
 .gov-scope-switch {
@@ -4346,7 +4340,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .gov-scope-btn {
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--neu-border-strong);
   background: transparent;
   color: var(--neu-muted);
   cursor: pointer;
@@ -4354,11 +4348,11 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 }
 .gov-scope-btn[data-active="true"] {
   color: var(--neu-text);
-  border-color: rgba(140, 180, 255, 0.65);
-  background: rgba(140, 180, 255, 0.14);
+  border-color: var(--neu-state-info-border);
+  background: var(--neu-state-info-bg);
 }
 .gov-completion-card {
-  border-left: 3px solid rgba(120, 200, 150, 0.7);
+  border-left: 3px solid var(--neu-state-ok-border);
 }
 .gov-card-head {
   display: flex;
@@ -4374,7 +4368,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .gov-card-section {
   margin-top: 5px;
   padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--neu-surface-raised-strong);
 }
 .gov-card-label {
   margin-bottom: 2px;
@@ -4392,7 +4386,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-top: 8px;
   padding: 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--neu-surface-sunken);
   color: var(--neu-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -4402,8 +4396,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-bottom: 6px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(220, 80, 80, 0.14);
-  color: #e6a0a0;
+  background: var(--neu-state-danger-bg);
+  color: var(--neu-state-danger-text);
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -4412,8 +4406,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   margin-bottom: 6px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(120, 160, 255, 0.12);
-  color: #a9c2ff;
+  background: var(--neu-state-info-bg);
+  color: var(--neu-state-info-text);
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -4424,7 +4418,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   width: min(480px, 90vw);
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
-  box-shadow: 6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-5);
   overflow: hidden;
 }
 .neu-workspace-body {
@@ -4448,7 +4442,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 .neu-workspace-item-info {
   display: flex;
@@ -4488,7 +4482,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   border: 1px solid var(--neu-hairline);
   font-size: 12px;
   font-weight: 600;
-  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-workspace-item-actions .neu-workspace-switch:hover:not(:disabled) {
   color: var(--neu-accent);
@@ -4506,7 +4500,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   border: 1px solid color-mix(in srgb, var(--neu-error) 35%, transparent);
   font-size: 12px;
   font-weight: 600;
-  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-1);
 }
 .neu-workspace-item-actions .neu-workspace-remove:hover {
   background: color-mix(in srgb, var(--neu-error) 18%, var(--neu-bg));
@@ -4721,10 +4715,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: var(--neu-accent);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
 }
 .neu-permission-edit:hover {
-  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  box-shadow: var(--neu-inset-2);
 }
 
 .neu-main-toolbar {
@@ -4747,9 +4741,9 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-question-item { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .neu-question-header { font-size: 14px; font-weight: 600; color: var(--neu-text); }
 .neu-question-options { display: flex; flex-direction: column; gap: 8px; }
-.neu-question-option-active { color: var(--neu-accent) !important; box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light) !important; }
+.neu-question-option-active { color: var(--neu-accent) !important; box-shadow: var(--neu-inset-2) !important; }
 .neu-question-option-description { display: block; font-size: 12px; color: var(--neu-muted); }
-.neu-question-custom { width: 100%; box-sizing: border-box; padding: 10px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); font-family: inherit; font-size: 13px; box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); outline: none; }
+.neu-question-custom { width: 100%; box-sizing: border-box; padding: 10px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); font-family: inherit; font-size: 13px; box-shadow: var(--neu-inset-2); outline: none; }
 
 /* Live status pulse */
 @keyframes neu-pulse {
@@ -4798,16 +4792,16 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   gap: 1px;
   padding: 2px;
   border-radius: 999px;
-  background: rgba(120, 160, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.22);
+  background: var(--neu-state-info-bg);
+  box-shadow: var(--neu-ring-info);
 }
 .neu-goal-control[data-phase="paused"] {
-  background: rgba(230, 180, 90, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(230, 180, 90, 0.32);
+  background: var(--neu-state-warn-bg);
+  box-shadow: var(--neu-ring-warn);
 }
 .neu-goal-control[data-phase="blocked"] {
-  background: rgba(220, 90, 90, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(220, 90, 90, 0.36);
+  background: var(--neu-state-danger-bg);
+  box-shadow: var(--neu-ring-danger);
 }
 .neu-goal-control[data-phase="complete"] {
   opacity: 0.7;
@@ -4839,9 +4833,9 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 .neu-goal-chip-done {
   padding: 0 6px;
   border-radius: 999px;
-  background: rgba(46, 160, 67, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(46, 160, 67, 0.45);
-  color: #3fb950;
+  background: var(--neu-state-ok-bg);
+  box-shadow: var(--neu-ring-ok);
+  color: var(--neu-state-ok-text);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -4856,8 +4850,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 3px 10px;
   margin: 0 0 4px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: var(--neu-surface-raised);
+  box-shadow: var(--neu-ring-raised);
   font-size: 11px;
   line-height: 1.5;
   opacity: 0.82;
@@ -4922,9 +4916,9 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 4px 7px;
   border: none;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--neu-surface-raised-strong);
   color: inherit;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: var(--neu-ring-raised);
   font-size: 11px;
 }
 .wg-search-clear {
@@ -4947,13 +4941,13 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   padding: 3px 5px;
   border: none;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--neu-surface-raised);
   color: inherit;
   cursor: pointer;
   text-align: left;
 }
 .wg-search-result:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--neu-surface-raised-strong);
 }
 /* One row height for every section header and tree node (12px × 1.5 line +
    2×2px padding); the virtualizer's fixed-height estimate must match. */
@@ -4981,13 +4975,13 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
    recursive renderer used to express by nesting); the indent itself is set as
    an inline padding because it depends on the row's depth. */
 .wg-node-row {
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--neu-surface-raised-strong);
 }
 .wg-node-row[data-depth="0"] {
   border-left-color: transparent;
 }
 .wg-node-row[data-unattributed="true"] {
-  background: rgba(230, 180, 90, 0.08);
+  background: var(--neu-state-warn-bg);
 }
 .wg-row-section[data-tone="inbound"] {
   color: color-mix(in srgb, var(--neu-accent) 70%, var(--neu-text));
@@ -4996,7 +4990,7 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   color: color-mix(in srgb, var(--neu-success) 70%, var(--neu-text));
 }
 .wg-row-section[data-tone="unattributed"] {
-  color: color-mix(in srgb, #e6b45a 80%, var(--neu-text));
+  color: color-mix(in srgb, var(--neu-state-warn-text) 80%, var(--neu-text));
 }
 /* Pagination is scroll-driven (no button, no status line): reaching the end of
    the window appends the next page. */
@@ -5007,7 +5001,7 @@ button.wg-node-row:disabled {
   cursor: default;
 }
 button.wg-node-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--neu-surface-raised);
 }
 .wg-twisty {
   flex: none;
@@ -5019,7 +5013,7 @@ button.wg-node-row:hover {
   flex: none;
   padding: 0 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--neu-surface-raised-strong);
   font-size: 10px;
   letter-spacing: 0.03em;
   opacity: 0.85;
@@ -5048,7 +5042,7 @@ button.wg-node-row:hover {
 .plan-constraints {
   margin: 6px 0 0;
   padding: 6px 10px;
-  border: 1px solid var(--neu-border, rgba(128, 128, 128, 0.3));
+  border: 1px solid var(--neu-border);
   border-radius: 6px;
   font-size: 12px;
 }
@@ -5086,8 +5080,8 @@ button.wg-node-row:hover {
   padding: 3px 8px;
   margin: 0 0 6px;
   border-radius: 6px;
-  background: rgba(120, 160, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.2);
+  background: var(--neu-state-info-bg);
+  box-shadow: var(--neu-ring-info);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -5095,13 +5089,13 @@ button.wg-node-row:hover {
   white-space: nowrap;
 }
 .plan-contract-seg[data-status="current"] {
-  color: #8fd48f;
+  color: var(--neu-state-ok-text);
 }
 .plan-contract-seg[data-status="draft"] {
   opacity: 0.75;
 }
 .plan-contract-seg[data-status="stale"] {
-  color: #e6b45a;
+  color: var(--neu-state-warn-text);
 }
 .plan-task-states {
   flex: 0 0 auto;
@@ -5111,8 +5105,8 @@ button.wg-node-row:hover {
   padding: 4px 8px;
   margin: 0 0 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: var(--neu-surface-sunken);
+  box-shadow: var(--neu-ring-raised);
 }
 .plan-task-summary {
   display: flex;
@@ -5153,21 +5147,21 @@ button.wg-node-row:hover {
   flex: 0 0 auto;
   padding: 0 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--neu-surface-raised-strong);
   font-size: 10px;
   white-space: nowrap;
 }
 .plan-task-badge[data-state="verified"] {
-  background: rgba(143, 212, 143, 0.16);
-  color: #8fd48f;
+  background: var(--neu-state-ok-bg);
+  color: var(--neu-state-ok-text);
 }
 .plan-task-badge[data-state="gap"] {
-  background: rgba(230, 120, 120, 0.18);
-  color: #e78a8a;
+  background: var(--neu-state-danger-bg);
+  color: var(--neu-state-danger-text);
 }
 .plan-task-badge[data-state="in_progress"] {
-  background: rgba(120, 160, 255, 0.18);
-  color: #8ab4f8;
+  background: var(--neu-state-info-bg);
+  color: var(--neu-state-info-text);
 }
 .plan-task-badge[data-state="skipped"] {
   opacity: 0.6;
@@ -5182,7 +5176,7 @@ button.wg-node-row:hover {
 .plan-task-text code {
   padding: 0 3px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--neu-surface-raised-strong);
   font-family: var(--neu-font-mono);
   font-size: 10px;
 }
@@ -5193,8 +5187,8 @@ button.wg-node-row:hover {
   padding: 6px 8px;
   margin-bottom: 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  background: var(--neu-surface-raised);
+  box-shadow: var(--neu-ring-raised);
   font-size: 12px;
 }
 .drift-card-head {
@@ -5206,15 +5200,15 @@ button.wg-node-row:hover {
 .drift-card-status {
   padding: 0 6px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--neu-surface-raised-strong);
   font-size: 10px;
   opacity: 0.8;
 }
 .drift-card-status[data-status="explained"] {
-  color: #8fd48f;
+  color: var(--neu-state-ok-text);
 }
 .drift-card-status[data-status="disputed"] {
-  color: #e6b45a;
+  color: var(--neu-state-warn-text);
 }
 .drift-card-goal,
 .drift-card-current {
@@ -5230,7 +5224,7 @@ button.wg-node-row:hover {
 .drift-card-section {
   margin-top: 5px;
   padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--neu-surface-raised-strong);
 }
 .drift-card-section-title {
   margin-bottom: 2px;
@@ -5254,7 +5248,7 @@ button.wg-node-row:hover {
 .drift-card-rationale {
   margin-top: 3px;
   padding-left: 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.15);
+  border-left: 2px solid var(--neu-border-strong);
   opacity: 0.75;
   font-style: italic;
 }
@@ -5267,32 +5261,32 @@ button.wg-node-row:hover {
   padding: 2px 10px;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--neu-border);
   color: inherit;
   cursor: pointer;
   font-size: 11px;
 }
 .drift-card-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--neu-surface-raised-strong);
 }
 .drift-card-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
 .drift-card-btn[data-kind="dispute"] {
-  background: rgba(230, 180, 90, 0.18);
+  background: var(--neu-state-warn-bg);
 }
 .drift-card-btn[data-kind="dismiss"] {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--neu-surface-raised-strong);
 }
 .drift-card-btn[data-kind="reopen"] {
-  background: rgba(143, 212, 143, 0.16);
+  background: var(--neu-state-ok-bg);
 }
 .drift-card-reopened {
   padding: 0 6px;
   border-radius: 4px;
-  background: rgba(143, 212, 143, 0.14);
-  color: #8fd48f;
+  background: var(--neu-state-ok-bg);
+  color: var(--neu-state-ok-text);
   font-size: 10px;
 }
 .drift-card-expand {
@@ -5300,14 +5294,14 @@ button.wg-node-row:hover {
   padding: 0 7px;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--neu-surface-raised-strong);
   color: var(--neu-accent);
   cursor: pointer;
   font-size: 10px;
   opacity: 0.85;
 }
 .drift-card-expand:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--neu-surface-raised-strong);
   opacity: 1;
 }
 .constitution-row {
@@ -5318,7 +5312,7 @@ button.wg-node-row:hover {
   padding: 5px 8px;
   margin-bottom: 4px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--neu-surface-sunken);
 }
 .constitution-toolbar {
   display: flex;
@@ -5332,7 +5326,7 @@ button.wg-node-row:hover {
   padding: 8px;
   margin-bottom: 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--neu-surface-raised);
 }
 .constitution-editor-row {
   display: flex;
@@ -5343,9 +5337,9 @@ button.wg-node-row:hover {
   flex: 1 1 140px;
   min-width: 0;
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--neu-border-strong);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--neu-surface-raised);
   color: inherit;
   font-size: 12px;
 }
@@ -5355,12 +5349,12 @@ button.wg-node-row:hover {
   flex: 0 0 auto;
   cursor: pointer;
   color: var(--neu-accent);
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--neu-border-strong);
+  background: var(--neu-surface-raised-strong);
   font-size: 12px;
 }
 .constitution-browse:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--neu-border);
 }
 .constitution-textarea {
   width: 100%;
@@ -5390,19 +5384,19 @@ button.wg-node-row:hover {
   padding: 2px 9px;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--neu-surface-raised-strong);
   color: inherit;
   cursor: pointer;
   font-size: 11px;
 }
 .constitution-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--neu-surface-raised-strong);
 }
 .constitution-btn[data-danger] {
-  background: rgba(220, 90, 90, 0.18);
+  background: var(--neu-state-danger-bg);
 }
 .constitution-btn[data-danger]:hover {
-  background: rgba(220, 90, 90, 0.3);
+  background: var(--neu-state-danger-border);
 }
 /* EI Phase 1 panel pagination: scrolling to the end of the pane appends the
    next durable page (unified-scroll plan §9); there is no per-page affordance
@@ -5414,8 +5408,8 @@ button.wg-node-row:hover {
   align-self: center;
   padding: 2px 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.55);
+  background: var(--neu-surface-raised);
+  color: var(--neu-muted);
   font-size: 11px;
   cursor: help;
   user-select: none;
@@ -5437,7 +5431,7 @@ button.wg-node-row:hover {
   transition: background 120ms ease, color 120ms ease, transform 120ms ease;
 }
 .neu-goal-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--neu-border-strong);
 }
 .neu-goal-action:active:not(:disabled) {
   transform: scale(0.94);
@@ -5452,17 +5446,17 @@ button.wg-node-row:hover {
 }
 .neu-goal-toggle[data-phase="paused"],
 .neu-goal-toggle[data-phase="blocked"] {
-  background: rgba(120, 160, 255, 0.3);
+  background: var(--neu-state-info-border);
   color: var(--neu-accent);
 }
 .neu-goal-clear:hover:not(:disabled) {
-  background: rgba(220, 90, 90, 0.24);
+  background: var(--neu-state-danger-bg);
 }
 .neu-goal-notice {
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(220, 90, 90, 0.16);
-  color: var(--neu-danger, #e88);
+  background: var(--neu-state-danger-bg);
+  color: var(--neu-danger);
   font-size: 11px;
 }
 .neu-goal-editor {
@@ -5476,9 +5470,9 @@ button.wg-node-row:hover {
   gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid var(--neu-border, rgba(255, 255, 255, 0.14));
+  border: 1px solid var(--neu-border);
   background: var(--neu-bg);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--neu-elevation-float-sm);
 }
 .neu-goal-editor-field {
   display: flex;
@@ -5495,8 +5489,8 @@ button.wg-node-row:hover {
   box-sizing: border-box;
   padding: 5px 7px;
   border-radius: 6px;
-  border: 1px solid var(--neu-border, rgba(255, 255, 255, 0.18));
-  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--neu-border);
+  background: var(--neu-float-scrim);
   color: inherit;
   font: inherit;
   resize: vertical;
@@ -5509,7 +5503,7 @@ button.wg-node-row:hover {
 .neu-goal-editor-actions button {
   padding: 3px 12px;
   border-radius: 6px;
-  border: 1px solid var(--neu-border, rgba(255, 255, 255, 0.18));
+  border: 1px solid var(--neu-border);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -5518,7 +5512,7 @@ button.wg-node-row:hover {
 .neu-goal-editor-save {
   border-color: transparent;
   background: var(--neu-accent);
-  color: #0b0d12;
+  color: var(--neu-float-surface);
   font-weight: 600;
 }
 
@@ -5535,7 +5529,7 @@ button.wg-node-row:hover {
   color: var(--neu-accent);
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  box-shadow: var(--neu-elevation-2);
   z-index: 2;
 }
 .neu-pane-content { position: relative; }
@@ -5829,52 +5823,54 @@ export const confirmDialogCss = `
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--neu-float-scrim);
   backdrop-filter: blur(2px);
 }
 .neu-confirm-dialog {
   min-width: 280px;
   max-width: 420px;
-  background: #25272b;
-  color: #e8e8e8;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 18px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  background: var(--neu-float-surface);
+  color: var(--neu-text);
+  border: 1px solid var(--neu-border-strong);
+  border-radius: var(--neu-radius-sm);
+  padding: var(--neu-space-4);
+  box-shadow: var(--neu-elevation-float);
 }
 .neu-confirm-title {
-  font-size: 14px;
+  font-size: var(--neu-font-base);
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: var(--neu-space-2);
 }
 .neu-confirm-message {
-  font-size: 13px;
+  font-size: var(--neu-font-md);
   line-height: 1.6;
-  color: #c9c9c9;
+  color: var(--neu-text-dim);
   white-space: pre-wrap;
 }
 .neu-confirm-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--neu-space-2);
+  margin-top: var(--neu-radius-4);
 }
 .neu-confirm-cancel,
 .neu-confirm-ok {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
+  border: 1px solid var(--neu-border-strong);
+  border-radius: var(--neu-radius-1);
   padding: 6px 14px;
-  font-size: 13px;
+  font-size: var(--neu-font-md);
   cursor: pointer;
   background: transparent;
-  color: #e8e8e8;
+  color: var(--neu-text);
 }
 .neu-confirm-ok {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--neu-accent);
+  border-color: var(--neu-accent);
+  color: var(--neu-on-accent);
 }
 .neu-confirm-ok[data-danger="true"] {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--neu-error);
+  border-color: var(--neu-error);
+  color: var(--neu-on-error);
 }
 `;

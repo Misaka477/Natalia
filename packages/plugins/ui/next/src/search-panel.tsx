@@ -8,11 +8,13 @@ type SearchResult = RuntimeWorkspaceMatch & {
 };
 
 export function SearchPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   onSearch?: (query: string) => Promise<RuntimeWorkspaceMatch[]> | void;
   onSelect?: (result: SearchResult) => void;
 }) {
+  const t = props.t;
   const [query, setQuery] = createSignal("");
   const [results, setResults] = createSignal<RuntimeWorkspaceMatch[]>([]);
   const [loading, setLoading] = createSignal(false);
@@ -33,7 +35,7 @@ export function SearchPanel(props: {
     }
     if (!props.onSearch) {
       setResults([]);
-      setError("当前 runtime 不支持工作区搜索");
+      setError(t("search.unsupported"));
       setLoading(false);
       return;
     }
@@ -76,12 +78,12 @@ export function SearchPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">搜索工作区</span>
+            <span class="neu-settings-title">{t("search.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭搜索"
+              aria-label={t("search.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -98,12 +100,12 @@ export function SearchPanel(props: {
               ref={(element) => queueMicrotask(() => element.focus())}
               class="neu-form-input neu-search-input"
               value={query()}
-              placeholder="正则表达式搜索，例如 createSignal|FileEditor"
+              placeholder={t("search.placeholder")}
               onInput={(event) => runSearch(event.currentTarget.value)}
             />
             <div class="neu-search-results" aria-live="polite">
               <Show when={loading()}>
-                <div class="neu-search-status">搜索中…</div>
+                <div class="neu-search-status">{t("search.searching")}</div>
               </Show>
               <Show when={!loading() && error()}>
                 <div class="neu-search-status neu-search-error">{error()}</div>
@@ -116,7 +118,7 @@ export function SearchPanel(props: {
                   results().length === 0
                 }
               >
-                <div class="neu-search-status">没有匹配结果</div>
+                <div class="neu-search-status">{t("search.noResults")}</div>
               </Show>
               <For each={results()}>
                 {(result) => (

@@ -2,18 +2,27 @@ import { Show, onCleanup, onMount, For } from "solid-js";
 
 type ActionId = "pin" | "snapshot" | "rollback" | "delete";
 
-const actions: Array<{ id: ActionId; label: string; description: string }> = [
-  { id: "pin", label: "固定/取消固定", description: "切换会话置顶状态" },
+const actions: Array<{
+  id: ActionId;
+  labelKey: string;
+  descKey: string;
+}> = [
+  { id: "pin", labelKey: "session.pin", descKey: "session.pinDesc" },
   {
     id: "snapshot",
-    label: "创建快照",
-    description: "保存当前会话状态，方便回滚",
+    labelKey: "session.snapshot",
+    descKey: "session.snapshotDesc",
   },
-  { id: "rollback", label: "回滚到快照", description: "恢复到最近一次快照" },
-  { id: "delete", label: "删除会话", description: "删除当前会话及其附件" },
+  {
+    id: "rollback",
+    labelKey: "session.rollback",
+    descKey: "session.rollbackDesc",
+  },
+  { id: "delete", labelKey: "session.delete", descKey: "session.deleteDesc" },
 ];
 
 export function SessionActionsPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   session: string;
   onClose: () => void;
@@ -22,6 +31,7 @@ export function SessionActionsPanel(props: {
   onRollback?: () => unknown;
   onDelete?: () => unknown;
 }) {
+  const t = props.t;
   onMount(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") props.onClose();
@@ -38,12 +48,12 @@ export function SessionActionsPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">会话操作</span>
+            <span class="neu-settings-title">{t("session.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭会话操作"
+              aria-label={t("session.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -56,7 +66,8 @@ export function SessionActionsPanel(props: {
             </button>
           </div>
           <div class="neu-session-current">
-            当前会话：<strong>{props.session}</strong>
+            {t("session.current", { name: props.session })}
+            <strong>{props.session}</strong>
           </div>
           <div class="neu-session-actions">
             <For each={actions}>
@@ -71,9 +82,11 @@ export function SessionActionsPanel(props: {
                     else if (action.id === "delete") props.onDelete?.();
                   }}
                 >
-                  <span class="neu-session-action-label">{action.label}</span>
+                  <span class="neu-session-action-label">
+                    {t(action.labelKey)}
+                  </span>
                   <span class="neu-session-action-description">
-                    {action.description}
+                    {t(action.descKey)}
                   </span>
                 </button>
               )}

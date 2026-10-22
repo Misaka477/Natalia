@@ -29,7 +29,12 @@ function loadStash(): StashItem[] {
   }
 }
 
-export function StashPanel(props: { open: boolean; onClose: () => void }) {
+export function StashPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const t = props.t;
   const [items, setItems] = createSignal<StashItem[]>(loadStash());
 
   createEffect(() => {
@@ -80,12 +85,12 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">Prompt 暂存</span>
+            <span class="neu-settings-title">{t("stash.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭暂存"
+              aria-label={t("stash.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -107,7 +112,7 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
                   </div>
                   <span class="neu-stash-time">{item.time}</span>
                   <button type="button" class="neu-stash-btn">
-                    复制
+                    {t("stash.copy")}
                   </button>
                   <button
                     type="button"
@@ -118,7 +123,7 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
                       )
                     }
                   >
-                    删除
+                    {t("stash.delete")}
                   </button>
                 </div>
               )}
@@ -128,13 +133,13 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
                 <input
                   class="neu-form-input"
                   value={title()}
-                  placeholder="标题"
+                  placeholder={t("stash.titlePh")}
                   onInput={(event) => setTitle(event.currentTarget.value)}
                 />
                 <textarea
                   class="neu-form-input neu-stash-textarea"
                   value={content()}
-                  placeholder="暂存内容"
+                  placeholder={t("stash.contentPh")}
                   onInput={(event) => setContent(event.currentTarget.value)}
                 />
                 <div class="neu-form-actions">
@@ -143,14 +148,14 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
                     class="neu-form-btn neu-form-cancel"
                     onClick={() => setAdding(false)}
                   >
-                    取消
+                    {t("stash.cancel")}
                   </button>
                   <button
                     type="button"
                     class="neu-form-btn neu-form-primary"
                     onClick={save}
                   >
-                    保存
+                    {t("stash.save")}
                   </button>
                 </div>
               </div>
@@ -161,7 +166,7 @@ export function StashPanel(props: { open: boolean; onClose: () => void }) {
                 class="neu-extension-add"
                 onClick={() => setAdding(true)}
               >
-                新建暂存
+                {t("stash.create")}
               </button>
             </div>
           </div>

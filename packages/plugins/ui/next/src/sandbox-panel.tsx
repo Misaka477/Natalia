@@ -3,6 +3,7 @@ import type { SandboxView } from "@natalia/view-store";
 import type { RuntimeClient, RuntimeSandbox } from "@anthelia/contracts";
 
 export function SandboxPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   sandboxes: Record<string, SandboxView>;
@@ -16,6 +17,7 @@ export function SandboxPanel(props: {
     | "sandboxResources"
   >;
 }) {
+  const t = props.t;
   const [selected, setSelected] = createSignal<SandboxView | null>(null);
   const [list, setList] = createSignal<RuntimeSandbox[] | undefined>(undefined);
 
@@ -52,12 +54,12 @@ export function SandboxPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">沙箱管理</span>
+            <span class="neu-settings-title">{t("sandbox.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭沙箱管理"
+              aria-label={t("sandbox.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -88,7 +90,7 @@ export function SandboxPanel(props: {
               </For>
               <div class="neu-extension-actions">
                 <button type="button" class="neu-extension-add">
-                  新建沙箱
+                  {t("sandbox.create")}
                 </button>
               </div>
             </Show>
@@ -98,7 +100,7 @@ export function SandboxPanel(props: {
                 class="neu-flow-back"
                 onClick={() => setSelected(null)}
               >
-                ← 返回
+                {t("sandbox.back")}
               </button>
               <div class="neu-flow-detail-title">{selected()?.id}</div>
               <div class="neu-flow-detail-field">
@@ -113,7 +115,7 @@ export function SandboxPanel(props: {
                   showed a row claiming three pending changes. */}
               <Show when={(selected()?.changedFiles ?? 0) > 0}>
                 <div class="neu-sandbox-change">
-                  {selected()?.changedFiles} 个待合并变更
+                  {t("sandbox.changes", { count: selected()?.changedFiles })}
                 </div>
               </Show>
               <div class="neu-flow-section-title">Resources</div>
@@ -131,10 +133,10 @@ export function SandboxPanel(props: {
                     )
                   }
                 >
-                  合并变更
+                  {t("sandbox.merge")}
                 </button>
                 <button type="button" class="neu-form-btn neu-form-cancel">
-                  停止资源
+                  {t("sandbox.stop")}
                 </button>
                 <button
                   type="button"
@@ -146,7 +148,7 @@ export function SandboxPanel(props: {
                     )
                   }
                 >
-                  删除沙箱
+                  {t("sandbox.delete")}
                 </button>
               </div>
             </Show>

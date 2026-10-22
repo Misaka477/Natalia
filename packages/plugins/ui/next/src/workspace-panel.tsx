@@ -3,6 +3,7 @@ import type { RuntimeClient } from "@anthelia/contracts";
 import { PathBrowseButton } from "./path-browse-button";
 
 export function WorkspacePanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   onAdd?: (path: string) => Promise<void> | void;
@@ -18,6 +19,7 @@ export function WorkspacePanel(props: {
   runtime?: RuntimeClient;
   error?: string;
 }) {
+  const t = props.t;
   const [path, setPath] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [localError, setLocalError] = createSignal("");
@@ -38,12 +40,12 @@ export function WorkspacePanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">添加工作区</span>
+            <span class="neu-settings-title">{t("workspace.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭添加工作区"
+              aria-label={t("workspace.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -64,11 +66,11 @@ export function WorkspacePanel(props: {
             <input
               class="neu-form-input"
               value={path()}
-              placeholder="工作区路径，例如 /home/user/project"
+              placeholder={t("workspace.pathPh")}
               onInput={(event) => setPath(event.currentTarget.value)}
             />
             <Show when={busy()}>
-              <div class="neu-workspace-error">正在添加工作区…</div>
+              <div class="neu-workspace-error">{t("workspace.adding")}</div>
             </Show>
             <div class="neu-form-actions">
               {/* The chooser rides the SAME action row as 取消/添加, not a row of
@@ -85,7 +87,7 @@ export function WorkspacePanel(props: {
                 onClick={props.onClose}
                 disabled={busy()}
               >
-                取消
+                {t("workspace.cancel")}
               </button>
               <button
                 type="button"
@@ -102,9 +104,7 @@ export function WorkspacePanel(props: {
                     typeof (result as Promise<void>).then !== "function"
                   ) {
                     setBusy(false);
-                    setLocalError(
-                      "内部错误：添加请求未返回 Promise，请查看控制台",
-                    );
+                    setLocalError(t("workspace.internalError"));
                     return;
                   }
                   void (result as Promise<void>)
@@ -119,7 +119,7 @@ export function WorkspacePanel(props: {
                     });
                 }}
               >
-                添加
+                {t("workspace.add")}
               </button>
             </div>
           </div>

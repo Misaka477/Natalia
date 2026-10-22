@@ -7,11 +7,13 @@ import type {
 import { NeuSelect } from "./components/NeuSelect";
 
 export function WorkspaceSettingsPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   workspaceID?: string;
   runtime?: RuntimeClient;
   onClose: () => void;
 }) {
+  const t = props.t;
   const [permission, setPermission] = createSignal<WorkspacePermissionSettings>(
     {
       permissionProfile: "default",
@@ -88,12 +90,12 @@ export function WorkspaceSettingsPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">工作区设置</span>
+            <span class="neu-settings-title">{t("wsSettings.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭工作区设置"
+              aria-label={t("wsSettings.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -137,7 +139,9 @@ export function WorkspaceSettingsPanel(props: {
               />
             </div>
             <div class="neu-form-field">
-              <label class="neu-form-label">启用工具（每行一个）</label>
+              <label class="neu-form-label">
+                {t("wsSettings.enableTools")}
+              </label>
               <textarea
                 class="neu-form-input neu-stash-textarea"
                 value={enabledText()}
@@ -145,7 +149,9 @@ export function WorkspaceSettingsPanel(props: {
               />
             </div>
             <div class="neu-form-field">
-              <label class="neu-form-label">禁用工具（每行一个）</label>
+              <label class="neu-form-label">
+                {t("wsSettings.disableTools")}
+              </label>
               <textarea
                 class="neu-form-input neu-stash-textarea"
                 value={disabledText()}
@@ -158,14 +164,14 @@ export function WorkspaceSettingsPanel(props: {
                 class="neu-form-btn neu-form-cancel"
                 onClick={props.onClose}
               >
-                取消
+                {t("wsSettings.cancel")}
               </button>
               <button
                 type="button"
                 class="neu-form-btn neu-form-primary"
                 onClick={save}
               >
-                保存
+                {t("wsSettings.save")}
               </button>
             </div>
           </div>

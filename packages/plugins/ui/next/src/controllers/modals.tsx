@@ -97,6 +97,7 @@ export function ModalLayer(props: ModalLayerProps) {
   return (
     <>
       <WorkspaceSettingsPanel
+        t={t}
         open={props.workspaceSettingsOpen()}
         workspaceID={
           props.settingsWorkspaceID() ??
@@ -107,6 +108,7 @@ export function ModalLayer(props: ModalLayerProps) {
         onClose={() => props.setWorkspaceSettingsOpen(false)}
       />
       <WorkspacePanel
+        t={t}
         open={props.workspaceOpen()}
         onClose={() => props.setWorkspaceOpen(false)}
         error={props.workspaceError()}
@@ -139,6 +141,7 @@ export function ModalLayer(props: ModalLayerProps) {
         }}
       />
       <SessionActionsPanel
+        t={t}
         open={props.sessionMenuOpen()}
         session={props.selectedSession()}
         onClose={() => props.setSessionMenuOpen(false)}
@@ -165,6 +168,7 @@ export function ModalLayer(props: ModalLayerProps) {
         onDelete={() => props.physicallyDeleteSelectedSession()}
       />
       <SandboxPanel
+        t={t}
         open={props.sandboxOpen()}
         onClose={() => props.setSandboxOpen(false)}
         sandboxes={props.state().sandboxes}
@@ -172,14 +176,17 @@ export function ModalLayer(props: ModalLayerProps) {
         runtime={runtime()}
       />
       <StashPanel
+        t={t}
         open={props.stashOpen()}
         onClose={() => props.setStashOpen(false)}
       />
       <HelpPanel
+        t={t}
         open={props.helpOpen()}
         onClose={() => props.setHelpOpen(false)}
       />
       <SearchPanel
+        t={t}
         open={props.searchOpen()}
         onClose={() => props.setSearchOpen(false)}
         onSearch={(query) =>
@@ -244,6 +251,7 @@ export function ModalLayer(props: ModalLayerProps) {
         runtime={runtime()}
       />
       <PluginManagerPanel
+        t={t}
         open={props.pluginManagerOpen()}
         onClose={() => props.setPluginManagerOpen(false)}
         ctx={props.ctx}

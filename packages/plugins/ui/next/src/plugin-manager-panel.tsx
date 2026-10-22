@@ -16,10 +16,12 @@ type UiRegistryEntry = {
 };
 
 export function PluginManagerPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   ctx: UiPluginContext;
 }) {
+  const t = props.t;
   const [runtimePlugins, setRuntimePlugins] = createSignal<PluginStatus[]>([]);
   const [runtimeCatalog, setRuntimeCatalog] = createSignal<
     Array<{
@@ -175,9 +177,9 @@ export function PluginManagerPanel(props: {
             class="neu-confirm-box"
             onClick={(event) => event.stopPropagation()}
           >
-            <div class="neu-confirm-title">确认卸载</div>
+            <div class="neu-confirm-title">{t("pluginMgr.confirmTitle")}</div>
             <div class="neu-confirm-text">
-              确定要卸载 <strong>{confirmUninstall()!.name}</strong> 吗？
+              {t("pluginMgr.confirmBody", { name: confirmUninstall()!.name })}
             </div>
             <div class="neu-confirm-actions">
               <button
@@ -185,14 +187,14 @@ export function PluginManagerPanel(props: {
                 class="neu-plugin-btn"
                 onClick={() => setConfirmUninstall(null)}
               >
-                取消
+                {t("pluginMgr.cancel")}
               </button>
               <button
                 type="button"
                 class="neu-plugin-btn neu-confirm-danger"
                 onClick={() => void uninstallRuntime(confirmUninstall()!.id)}
               >
-                确认卸载
+                {t("pluginMgr.confirm")}
               </button>
             </div>
           </div>
@@ -204,12 +206,12 @@ export function PluginManagerPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">插件管理</span>
+            <span class="neu-settings-title">{t("pluginMgr.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭插件管理"
+              aria-label={t("pluginMgr.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -237,14 +239,16 @@ export function PluginManagerPanel(props: {
                 class="neu-plugin-btn"
                 onClick={() => void installRuntime()}
               >
-                安装
+                {t("pluginMgr.install")}
               </button>
             </div>
-            <div class="neu-plugin-section-title">UI 插件</div>
+            <div class="neu-plugin-section-title">
+              {t("pluginMgr.uiPlugins")}
+            </div>
             <Show
               when={uiRegistry().length || uiPlugins().length}
               fallback={
-                <div class="neu-plugin-empty">没有已加载的 UI 插件</div>
+                <div class="neu-plugin-empty">{t("pluginMgr.noUiPlugins")}</div>
               }
             >
               <For each={uiRegistry()}>
@@ -279,10 +283,16 @@ export function PluginManagerPanel(props: {
                 }}
               </For>
             </Show>
-            <div class="neu-plugin-section-title">运行时插件</div>
+            <div class="neu-plugin-section-title">
+              {t("pluginMgr.runtimePlugins")}
+            </div>
             <Show
               when={runtimeCatalog().length}
-              fallback={<div class="neu-plugin-empty">没有运行时插件</div>}
+              fallback={
+                <div class="neu-plugin-empty">
+                  {t("pluginMgr.noRuntimePlugins")}
+                </div>
+              }
             >
               <For each={runtimeCatalog()}>
                 {(plugin) => (
@@ -299,7 +309,7 @@ export function PluginManagerPanel(props: {
                       class="neu-plugin-btn"
                       onClick={() => requestUninstall(plugin.id, plugin.name)}
                     >
-                      卸载
+                      {t("pluginMgr.uninstall")}
                     </button>
                     <label class="neu-plugin-switch">
                       <input
@@ -323,7 +333,7 @@ export function PluginManagerPanel(props: {
                       class="neu-plugin-btn"
                       onClick={() => void reloadRuntime(plugin.id)}
                     >
-                      重新加载
+                      {t("pluginMgr.reload")}
                     </button>
                   </div>
                 )}

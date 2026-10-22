@@ -21,6 +21,7 @@ import {
   type ToolCall,
   type ToolCard,
 } from "./message";
+import type { ToolCardComponent, ToolCardRegistryLike } from "./tool-cards";
 import {
   ThumbsDownFill,
   ThumbsDownOutline,
@@ -120,6 +121,13 @@ export interface TranscriptProps {
   hasOlder?: boolean;
   /** Exposes scroll/measure methods so hosts do not write scrollTop directly. */
   apiRef?: (handle: TranscriptHandle | undefined) => void;
+  /**
+   * Tool-owned cards. A tool (or its plugin) registers a component under
+   * its tool name; the transcript prefers it over the shared renderers.
+   * Absent means the shared renderers only — every tool still gets a card
+   * through the generic fallback.
+   */
+  toolCards?: ToolCardRegistryLike;
 }
 
 export function Transcript(props: TranscriptProps) {
@@ -797,6 +805,7 @@ export function Transcript(props: TranscriptProps) {
                     loadAttachmentUrl={props.loadAttachmentUrl}
                     onFork={props.onFork}
                     onRollback={props.onRollback}
+                    toolCards={props.toolCards}
                   />
                 )}
               </For>
@@ -819,6 +828,7 @@ export function Transcript(props: TranscriptProps) {
                   loadAttachmentUrl={props.loadAttachmentUrl}
                   onFork={props.onFork}
                   onRollback={props.onRollback}
+                  toolCards={props.toolCards}
                 />
               )}
             </For>
@@ -963,6 +973,8 @@ function MessageGroup(props: {
   onRollback?: (message: Message) => void;
   rowRef?: (el: HTMLDivElement) => void;
   style?: JSX.CSSProperties;
+  /** Tool-owned cards, threaded from the transcript's host. */
+  toolCards?: ToolCardRegistryLike;
 }) {
   /**
    * What the copy button copies: the row's prose, or — for a tool row, whose
@@ -1003,6 +1015,7 @@ function MessageGroup(props: {
         assistantName={props.assistantName}
         assistantInitial={props.assistantInitial}
         loadAttachmentUrl={props.loadAttachmentUrl}
+        toolCards={props.toolCards}
       />
       <Show when={props.message.role !== "system"}>
         <div class="natalia-message-group-actions">
@@ -1147,6 +1160,8 @@ export interface MessageRowProps {
   assistantName?: string;
   assistantInitial?: string;
   loadAttachmentUrl?: (attachment: Attachment) => Promise<string>;
+  /** Tool-owned cards, threaded from the transcript's host. */
+  toolCards?: ToolCardRegistryLike;
 }
 
 function imageBox(attachment: Attachment) {
@@ -1576,6 +1591,8 @@ function ToolCallCard(props: {
   expansionKey: string;
   /** The attachment-URL loader, for a media read's renderer (audit ⑦). */
   loadAttachmentUrl?: (attachment: Attachment) => Promise<string>;
+  /** Tool-owned cards, threaded from the transcript's host. */
+  toolCards?: ToolCardRegistryLike;
 }) {
   // The row object is stable while the call streams (its arguments arrive in
   // fragments, then its result): every field is read through the live view so
@@ -1726,6 +1743,15 @@ function ToolCallCard(props: {
       .join("\n");
   const outputLines = () => output().split("\n");
 
+  // A tool's own card wins over the shared renderers: the tool author
+  // wrote a presentation for exactly this call. The registry's revision
+  // is read here so a late registration (a plugin bundle arriving after
+  // the row mounted) re-renders the row onto its own card.
+  const customCard = (): ToolCardComponent | undefined => {
+    props.toolCards?.revision?.();
+    return props.toolCards?.get(view().name);
+  };
+
   // The collapse criterion is the model layer's (P0.2): it knows the
   // single-line-JSON shape that the old line/char count missed.
   // The session's cwd, for path relativization (P3.3). The host publishes
@@ -1823,6 +1849,11 @@ function ToolCallCard(props: {
     );
   };
 
+  // Three tiers: the tool's own registered card, then the shared
+  // renderer the structured `card` slot selects, then the generic card
+  // every tool without either still gets.
+  const custom = customCard();
+  if (custom) return custom({ view: view() });
   return (
     <div
       class="natalia-tool-card"
@@ -2128,6 +2159,7 @@ export function MessageRow(props: MessageRowProps) {
                 toolCall={toolCall}
                 expansionKey={toolCardKey(toolCall, props.message.id, index())}
                 loadAttachmentUrl={props.loadAttachmentUrl}
+                toolCards={props.toolCards}
               />
             )}
           </For>

@@ -30,6 +30,7 @@ import type { PermissionRungID } from "../permission-rungs";
 import type { GoalEditorTarget } from "../app-neu";
 export interface MainPanesProps {
   ctx: UiPluginContext;
+  toolCards: any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   mainDraft: () => string;
@@ -137,6 +138,7 @@ export interface MainPanesProps {
 export function MainPanes(props: MainPanesProps) {
   const {
     ctx,
+    toolCards,
     state,
     setState,
     mainDraft,
@@ -260,6 +262,7 @@ export function MainPanes(props: MainPanesProps) {
                       emptyHint="Natalia 会直接处理工作区任务。"
                       assistantName="Natalia"
                       assistantInitial="N"
+                      toolCards={toolCards}
                       apiRef={(api) => {
                         transcriptRefs.main = api;
                       }}
@@ -642,6 +645,7 @@ export function MainPanes(props: MainPanesProps) {
                       emptyHint="Navi 用于规划和审查，不直接操作工作区。"
                       assistantName="Navi"
                       assistantInitial="V"
+                      toolCards={toolCards}
                       apiRef={(api) => {
                         transcriptRefs.chat = api;
                       }}

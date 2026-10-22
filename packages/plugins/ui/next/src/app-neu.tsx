@@ -55,6 +55,7 @@ import { MainPanes } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
 import { Topbar } from "./controllers/topbar";
 import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
+import { ToolCardRegistry } from "./tool-cards/registry";
 import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
@@ -203,6 +204,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const locale = createLocaleRuntime(props.ctx.preferences);
   (props.ctx.extra as { locale?: LocaleRuntime }).locale = locale;
   const t = locale.t;
+  // The tool card registry is the second plugin-facing seat on
+  // ctx.extra: a tool (or its plugin) registers its own card under its
+  // tool name, and the transcript prefers it over the shared renderers.
+  const toolCards = new ToolCardRegistry();
+  (props.ctx.extra as { toolCards?: ToolCardRegistry }).toolCards = toolCards;
   const [state, setState] = createSignal(
     cloneState(props.ctx.projection.getState()),
   );
@@ -3237,6 +3243,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         {/* Middle dual agent panes */}
         <MainPanes
           ctx={props.ctx}
+          toolCards={toolCards}
           state={state}
           setState={setState}
           mainDraft={mainDraft}

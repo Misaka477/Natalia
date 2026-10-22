@@ -7,6 +7,7 @@ export {
   fixedRowHeight,
 } from "./transcript";
 export type { TranscriptHandle, TranscriptProps } from "./transcript";
+export type { ToolCardComponent, ToolCardRegistryLike } from "./tool-cards";
 export { ContextMeter } from "./context-meter";
 export type { ContextUsageView } from "./context-meter";
 // The image preview is a SHELL overlay, not a row's child: the row is a stacking

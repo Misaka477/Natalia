@@ -28,3 +28,58 @@
   gap: 8px;
   min-width: 0;
 }
+
+/* The panes wrapper and the divider between the two panes. Their
+   responsive passes travel with them: the shell is the ANCESTOR, so the
+   selectors keep the global .neu-shell prefix and take the local names
+   for the two classes this module owns — a module may style its own
+   classes under a global ancestor. */
+.panes {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 14px;
+}
+
+.divider {
+  width: 8px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background: transparent;
+}
+
+@media (max-width: 1200px) {
+  .neu-shell[data-compact="true"] .panes {
+    flex-direction: column;
+  }
+  .neu-shell[data-compact="true"] .divider {
+    height: 8px;
+    width: auto;
+  }
+  .panes {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 1700px) and (min-width: 1001px) and (max-height: 1000px) {
+  .neu-shell[data-compact="true"] .panes {
+    flex-direction: row;
+  }
+  .neu-shell[data-compact="true"] .divider {
+    height: auto;
+    width: 8px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .panes {
+    gap: 6px;
+  }
+  .divider {
+    height: 8px;
+    width: auto;
+  }
+  .neu-shell[data-tiny="true"] .panes {
+    flex-direction: column;
+  }
+}

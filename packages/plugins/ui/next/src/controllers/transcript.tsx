@@ -237,7 +237,7 @@ export function MainPanes(props: MainPanesProps) {
     <>
       {/* Middle dual agent panes */}
       <section class="neu-main">
-        <div class="neu-main-panes">
+        <div class={styles.panes}>
           <Show when={nataliaVisible()}>
             <div class="neu-pane">
               <div class="neu-pane-header">
@@ -638,7 +638,7 @@ export function MainPanes(props: MainPanesProps) {
           </Show>
 
           <Show when={layoutMode() !== "tiny"}>
-            <div class="neu-pane-divider" />
+            <div class={styles.divider} />
           </Show>
 
           <Show when={naviVisible()}>

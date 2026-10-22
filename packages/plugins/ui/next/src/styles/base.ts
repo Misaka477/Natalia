@@ -217,20 +217,14 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
    neu-main and neu-main-toolbar are shared by the transcript and Nia.
    They stay global under the migration plan's cross-region rule —
    localizing them would give four surfaces four copies of one shape.
-   The classes that ARE transcript-only (neu-main-panes, the divider,
-   the header's right cluster and the two transcript wraps) move into
-   the transcript module when that region's clusters are cut. */
+   The transcript's own classes (the panes wrapper and its divider with
+   their responsive passes, the header's right cluster and the two
+   transcript wraps) have moved into the transcript module. */
 .neu-main {
   flex: 1;
   min-width: 0;
   display: flex;
   overflow: visible;
-}
-.neu-main-panes {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  gap: 14px;
 }
 .neu-pane {
   flex: 1;
@@ -242,12 +236,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   box-shadow: var(--neu-elevation-3);
   padding: 14px;
   overflow: hidden;
-}
-.neu-pane-divider {
-  width: 8px;
-  flex-shrink: 0;
-  align-self: stretch;
-  background: transparent;
 }
 .neu-pane-header {
   display: flex;
@@ -3982,37 +3970,19 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   .neu-shell[data-compact="true"] .neu-resizer {
     display: block;
   }
-  .neu-shell[data-compact="true"] .neu-main-panes {
-    flex-direction: column;
-  }
-  .neu-shell[data-compact="true"] .neu-pane-divider {
-    height: 8px;
-    width: auto;
-  }
-  .neu-shell[data-compact="true"] .neu-pane {
+  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] .neu-pane {
     min-height: 220px;
   }
-  .neu-main-panes { gap: 10px; }
 }
 
 /* Compact but short viewports: horizontal main panes are better than
    stacking two panes vertically when height is at or below 1000px. */
 @media (max-width: 1700px) and (min-width: 1001px) and (max-height: 1000px) {
-  .neu-shell[data-compact="true"] .neu-main-panes {
-    flex-direction: row;
-  }
-  .neu-shell[data-compact="true"] .neu-pane-divider {
-    height: auto;
-    width: 8px;
-  }
-}
+  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] }
 @media (max-width: 1000px) {
   .neu-shell { padding: 6px; gap: 6px; }
   .neu-app { gap: 6px; }
-  .neu-main-panes { gap: 6px; }
-  .neu-pane-divider { height: 8px; width: auto; }
   .neu-pane { min-height: 220px; }
-  .neu-shell[data-tiny="true"] .neu-main-panes { flex-direction: column; }
   .neu-secondary-tabs { flex-wrap: nowrap; overflow-x: auto; }
   .neu-secondary-tab { white-space: nowrap; flex-shrink: 0; }
 

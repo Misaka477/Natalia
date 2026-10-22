@@ -299,6 +299,7 @@
         "@anthelia/sandbox": "workspace:*",
         "@anthelia/session": "workspace:*",
         "@anthelia/session-store": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@anthelia/subagents": "workspace:*",
         "@anthelia/substrate": "workspace:*",
         "@anthelia/tools": "workspace:*",
@@ -393,6 +394,7 @@
         "@anthelia/runtime": "workspace:*",
         "@anthelia/runtime-services": "workspace:*",
         "@anthelia/session": "workspace:*",
+        "@anthelia/shell": "workspace:*",
         "@anthelia/tools": "workspace:*",
         "@natalia/agent-prompts": "workspace:*",
       },
@@ -643,6 +645,14 @@
         "@anthelia/tools": "workspace:*",
         "@natalia/ui-host": "workspace:*",
         "solid-js": "1.9.12",
+      },
+    },
+    "packages/plugins/native-computer-use": {
+      "name": "@natalia/plugin-native-computer-use",
+      "version": "1.0.0",
+      "dependencies": {
+        "@anthelia/plugin": "workspace:*",
+        "@anthelia/tools": "workspace:*",
       },
     },
     "packages/plugins/native-terminal": {
@@ -1174,6 +1184,8 @@
     "@natalia/plugin-local-tools": ["@natalia/plugin-local-tools@workspace:packages/plugins/local-tools"],
 
     "@natalia/plugin-mcp": ["@natalia/plugin-mcp@workspace:packages/plugins/mcp"],
+
+    "@natalia/plugin-native-computer-use": ["@natalia/plugin-native-computer-use@workspace:packages/plugins/native-computer-use"],
 
     "@natalia/plugin-native-terminal": ["@natalia/plugin-native-terminal@workspace:packages/plugins/native-terminal"],
 

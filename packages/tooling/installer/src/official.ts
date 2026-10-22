@@ -39,6 +39,14 @@ export const OFFICIAL_PLUGIN_PACKAGES = [
     directory: "natalia-browser",
   },
   {
+    // The desktop driver. The manifest id is the distribution directory
+    // name here, so no second spelling is introduced (the browser entry
+    // above is why this comment exists at all).
+    id: "natalia-tool-computer-use",
+    packageName: "@natalia/plugin-native-computer-use",
+    directory: "natalia-tool-computer-use",
+  },
+  {
     id: "natalia-skills",
     packageName: "@natalia/plugin-skills",
     directory: "natalia-skills",

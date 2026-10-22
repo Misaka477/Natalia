@@ -743,10 +743,10 @@ test("custom global config participates in maintenance reads and writes", async 
   ).toBe(true);
 });
 
-test("official catalog contains 15 prebuilt packages and excludes PDF", () => {
-  // 15, not 16: the pending-inbox side tab is gone (T4-4) — its job moved to
-  // the web plugin's composer takeover.
-  expect(OFFICIAL_PLUGIN_PACKAGES).toHaveLength(15);
+test("official catalog contains 16 prebuilt packages and excludes PDF", () => {
+  // 16, not 17: the pending-inbox side tab is gone (T4-4) — its job moved
+  // to the web plugin's composer takeover.
+  expect(OFFICIAL_PLUGIN_PACKAGES).toHaveLength(16);
   expect(
     OFFICIAL_PLUGIN_PACKAGES.map(({ id }) => id) as readonly string[],
   ).not.toContain("natalia-pending-inbox");

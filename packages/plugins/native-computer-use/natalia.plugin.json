@@ -1,0 +1,17 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-tool-computer-use",
+  "version": "1.0.0",
+  "name": "Computer Use Tools",
+  "description": "Drive the desktop itself: enumerate windows, capture the screen, click, type and send keys, with every action verified against the pixels it changed.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"],
+  "skills": { "dir": "skills" }
+}

@@ -215,6 +215,7 @@ jobs:
               bun test --max-concurrency=4 --timeout 60000 ./packages/plugins/local-tools/test \
                               ./packages/plugins/team/test ./packages/framework/tool-policy/test \
                               ./packages/plugins/native-terminal/test ./packages/plugins/browser/test \
+                              ./packages/plugins/native-computer-use/test \
                               ./packages/plugins/skills/test ./packages/hosts/transport/test \
                               ./packages/plugins/mcp/test ./packages/framework/subagents/test \
                               ./packages/framework/agent/test ./packages/plugins/tools/ask/test

@@ -1370,6 +1370,8 @@ test("runtime skill catalog exposes discovery metadata without skill body", asyn
   // no extra fields).
   const catalog = await client.skills?.();
   expect(catalog?.map((entry) => entry.qualifiedName)).toEqual([
+    "plugin:browser-bridge-setup",
+    "plugin:computer-use",
     "plugin:edit-framework",
     "plugin:evolve-artifact",
     "plugin:generation-awareness",

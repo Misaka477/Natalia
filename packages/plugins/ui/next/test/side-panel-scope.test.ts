@@ -33,12 +33,19 @@ const app = readFileSync(
   "utf8",
 );
 
+// The right rail moved into its own controller; the guards below read the
+// file the markup actually lives in.
+const rail = readFileSync(
+  join(import.meta.dir, "..", "src", "controllers", "workbench.tsx"),
+  "utf8",
+);
+
 /** The rail's own slot markup, from its <For> to the closing </For>. */
 function railSlot(): string {
-  const start = app.indexOf("<For each={sidePanels()}>");
+  const start = rail.indexOf("<For each={sidePanels()}>");
   expect(start).toBeGreaterThan(-1);
-  const end = app.indexOf("</For>", start);
-  return app.slice(start, end);
+  const end = rail.indexOf("</For>", start);
+  return rail.slice(start, end);
 }
 
 /**
@@ -75,7 +82,7 @@ test("first activation, not eagerness: mounting the terminal would start a pane"
 });
 
 test("the five shell-owned panels keep the session-scoped key", () => {
-  expect(app.match(/rightPanelScopeKey\(\)/gu)?.length).toBe(5);
+  expect(rail.match(/rightPanelScopeKey\(\)/gu)?.length).toBe(5);
   // One source, computed by the pure helper — no session-list lookup mixed in.
   expect(app).toContain("panelScopeKey({");
   expect(app).toContain("workspaceID: state().activeWorkspaceID,");
@@ -86,8 +93,8 @@ test("collapsing the rail hides it instead of unmounting it", () => {
   // The collapse toggle used to be `{rightVisible() ? (<aside…>) : (button)}`,
   // so collapsing destroyed every panel the rail hosts — including an editor's
   // unsaved buffers. It is a CSS display toggle now.
-  expect(app).not.toContain("{rightVisible() ? (");
-  expect(app).toContain('display: rightVisible() ? "contents" : "none"');
+  expect(rail).not.toContain("{rightVisible() ? (");
+  expect(rail).toContain('display: rightVisible() ? "contents" : "none"');
   // The way back is still offered while it is hidden.
   expect(app).toContain("{rightVisible() ? null : (");
   expect(app).toContain("neu-collapsed-rail neu-right-rail");

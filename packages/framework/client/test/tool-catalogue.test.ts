@@ -129,6 +129,11 @@ const migratedPluginTools = new Set([
   "browser_click",
   "browser_input",
   "computer_windows",
+  "computer_state",
+  "computer_find",
+  "computer_fill",
+  "computer_wait",
+  "computer_action",
   "computer_screenshot",
   "computer_click",
   "computer_type",
@@ -225,3 +230,4 @@ test("the static tool catalogue contains only unmigrated tools", () => {
     .sort((left, right) => left[0].localeCompare(right[0]));
   expect(actual).toEqual(expected);
 });
+

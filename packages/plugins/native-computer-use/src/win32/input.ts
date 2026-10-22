@@ -37,6 +37,30 @@ export function clickPointer(button: "left" | "right" = "left"): void {
   libs.user32.mouse_event(up, 0, 0, 0, null);
 }
 
+/** Press a mouse button WITHOUT releasing it (a drag's first half). */
+export function mouseDown(button: "left" | "right" = "left"): void {
+  const libs = desktopLibraries();
+  libs.user32.mouse_event(
+    button === "left" ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN,
+    0,
+    0,
+    0,
+    null,
+  );
+}
+
+/** Release a mouse button (a drag's second half). */
+export function mouseUp(button: "left" | "right" = "left"): void {
+  const libs = desktopLibraries();
+  libs.user32.mouse_event(
+    button === "left" ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_RIGHTUP,
+    0,
+    0,
+    0,
+    null,
+  );
+}
+
 /**
  * Click at a physical point.
  *

@@ -29,26 +29,38 @@ test("the family describes the tools it ships", () => {
   expect(family.tools).toEqual(computerUseTools);
   expect(computerUseTools.map((tool) => tool.name)).toEqual([
     "computer_windows",
+    "computer_state",
+    "computer_find",
     "computer_screenshot",
     "computer_click",
+    "computer_fill",
     "computer_type",
     "computer_key",
     "computer_activate",
+    "computer_wait",
+    "computer_action",
   ]);
 });
 
-test("only the read-only probe runs without approval", () => {
+test("only the read-only probes run without approval", () => {
   // Everything else acts on the user's real desktop, so a human is asked
-  // first; the enumeration is a read, and asking about it would train the
-  // user to click through the dialogs that matter.
+  // first; the reads are reads, and asking about them would train the user
+  // to click through the dialogs that matter.
+  const reads = new Set([
+    "computer_windows",
+    "computer_state",
+    "computer_find",
+    "computer_wait",
+  ]);
   for (const tool of computerUseTools)
-    expect(tool.requiresApproval).toBe(tool.name !== "computer_windows");
+    expect(tool.requiresApproval).toBe(!reads.has(tool.name));
 });
 
 test("every tool declares a timeout the runtime can enforce", () => {
   for (const tool of computerUseTools) {
     expect(tool.timeoutSec).toBeGreaterThan(0);
-    expect(tool.timeoutSec).toBeLessThanOrEqual(60);
+    // computer_wait polls until its own deadline, so it outlives the rest.
+    expect(tool.timeoutSec).toBeLessThanOrEqual(90);
   }
 });
 

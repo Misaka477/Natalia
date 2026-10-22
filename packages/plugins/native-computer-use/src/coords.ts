@@ -17,6 +17,15 @@
  */
 
 export type Rect = { x: number; y: number; w: number; h: number };
+export type Point = { x: number; y: number };
+
+/** The centre of a rectangle, rounded to a pixel. */
+export function centerOf(rect: Rect): Point {
+  return {
+    x: Math.round(rect.x + rect.w / 2),
+    y: Math.round(rect.y + rect.h / 2),
+  };
+}
 
 export function rectContains(rect: Rect, x: number, y: number): boolean {
   return (

@@ -13,6 +13,10 @@
  * honest: the tools answer with the reason rather than a fake success.
  */
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computerUseTools } from "../src";
 import { desktopLibraries } from "../src/win32/ffi";
 import { captureRegion } from "../src/win32/capture";
@@ -26,6 +30,12 @@ import {
   readableWindows,
 } from "../src/win32/windows";
 import { ensureDpiAware, virtualScreen } from "../src/win32/screen";
+import {
+  findElements,
+  focusedElement,
+  releaseElement,
+  walkWindowTree,
+} from "../src/win32/uia";
 
 const windowsOnly = process.platform === "win32" ? test : test.skip;
 
@@ -181,6 +191,243 @@ noDesktop(
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("computer use is unavailable");
     expect((error as Error).message).toContain(process.platform);
+  },
+);
+
+// The accessibility layer, against the real desktop. Read-only: nothing
+// here focuses, invokes or writes.
+// A real UIA walk is cross-process: against a busy application it takes
+// seconds, not milliseconds. The timeout is the walk's, not a hope.
+windowsOnly(
+  "the raw accessibility walk sees rendered content",
+  () => {
+    // The control view sees a window's chrome; the raw view sees what is
+    // rendered inside it. Which window is richest varies with what the user
+    // has open, so the assertion is over the desktop rather than one window:
+    // at least one visible window exposes content a caller could address.
+    const readable = readableWindows(enumerateWindows());
+    let walked = 0;
+    let addressable = 0;
+    for (const record of readable.slice(0, 6)) {
+      const tree = walkWindowTree(Number(record.hwnd), {
+        maxNodes: 400,
+        maxDepth: 12,
+      });
+      walked += tree.length;
+      for (const node of tree) {
+        expect(typeof node.name).toBe("string");
+        expect(node.controlTypeName.length).toBeGreaterThan(0);
+        if (node.rect) {
+          expect(node.rect.w).toBeGreaterThanOrEqual(0);
+          expect(node.rect.h).toBeGreaterThanOrEqual(0);
+        }
+        if (node.name.length > 0 && (node.rect?.w ?? 0) > 0) addressable += 1;
+      }
+      if (addressable > 0) break;
+    }
+    expect(walked).toBeGreaterThan(0);
+    // A name and a rectangle together are what make a node addressable.
+    expect(addressable).toBeGreaterThan(0);
+  },
+  60_000,
+);
+
+windowsOnly(
+  "a rendered input box is findable by name and readable",
+  () => {
+    // The measurement that decided this design: a webview's input box is an
+    // Edit with a NAME, a RECT and a ValuePattern. Find the VS Code window's
+    // editor or sidebar edit by name and check the three facts together.
+    const readable = readableWindows(enumerateWindows());
+    const code = readable.find(
+      (record) =>
+        record.title.includes("Visual Studio Code") ||
+        record.title.includes("Code"),
+    );
+    if (!code) return; // No editor open: nothing to assert against.
+    const tree = walkWindowTree(Number(code.hwnd), {
+      maxNodes: 1500,
+      maxDepth: 30,
+    });
+    const edits = tree.filter((node) => node.controlTypeName === "edit");
+    for (const edit of edits) {
+      expect(edit.name.length).toBeGreaterThan(0);
+      // A value pattern means the field's text can be read back — which is
+      // what makes `landed` a real answer rather than always null.
+      expect(edit.value).toBeDefined();
+      expect(edit.valueReadOnly).toBe(false);
+      expect(edit.rect).toBeDefined();
+      expect(edit.rect!.w).toBeGreaterThan(0);
+    }
+  },
+  60_000,
+);
+
+windowsOnly(
+  "the focus element answers with a live node",
+  () => {
+    const focus = focusedElement();
+    // Focus may sit on the desktop with nothing meaningful named; what must
+    // hold is that the call answers at all, with a typed node.
+    if (focus) {
+      expect(focus.controlTypeName.length).toBeGreaterThan(0);
+      expect(typeof focus.name).toBe("string");
+    }
+  },
+  30_000,
+);
+
+windowsOnly(
+  "a search keeps its matches and gives the rest back",
+  () => {
+    // findElements keeps each match's interface for a caller that writes
+    // through it. The contract worth pinning: the matches are readable, and
+    // releasing them afterwards does not disturb the layer (a second search
+    // still works — a use-after-free would crash here rather than there).
+    const readable = readableWindows(enumerateWindows());
+    const target = readable[0]!;
+    const first = findElements(Number(target.hwnd), target.title.slice(0, 8), {
+      maxNodes: 400,
+      maxDepth: 12,
+    });
+    for (const match of first) {
+      expect(match.name.length).toBeGreaterThan(0);
+      expect(match.pointer).toBeGreaterThan(0);
+    }
+    for (const match of first) releaseElement(match);
+    // A second search after the releases: the layer is still alive.
+    const second = findElements(Number(target.hwnd), target.title.slice(0, 8), {
+      maxNodes: 400,
+      maxDepth: 12,
+    });
+    expect(second.length).toBe(first.length);
+    for (const match of second) releaseElement(match);
+  },
+  60_000,
+);
+
+windowsOnly(
+  "a screenshot with no path lands in the OS temporary directory",
+  async () => {
+    // The default used to be "write into the workspace", which litters the
+    // project a model was asked to look at. A capture is evidence: it lands
+    // in temp unless a path names somewhere the image should stay.
+    const screenshot = computerUseTools.find(
+      (tool) => tool.name === "computer_screenshot",
+    )!;
+    const result = await screenshot.execute({}, {
+      workspaceRoot: process.cwd(),
+    } as never);
+    const answer = JSON.parse(String(result)) as {
+      path: string;
+      location?: string;
+      width: number;
+      height: number;
+    };
+    expect(answer.location).toBe("os-temp");
+    expect(answer.path.startsWith(tmpdir())).toBe(true);
+    expect(existsSync(answer.path)).toBe(true);
+    expect(answer.width).toBeGreaterThan(0);
+    expect(answer.height).toBeGreaterThan(0);
+    // The PNG on disk is the frame that was captured, not a promise.
+    const bytes = await readFile(answer.path);
+    expect([...bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    await rm(answer.path, { force: true });
+  },
+);
+
+windowsOnly(
+  "a screenshot with a path still lands in the workspace",
+  async () => {
+    const screenshot = computerUseTools.find(
+      (tool) => tool.name === "computer_screenshot",
+    )!;
+    const root = await mkdtemp(join(tmpdir(), "natalia-shot-path-"));
+    try {
+      const result = await screenshot.execute({ path: "shots/probe.png" }, {
+        workspaceRoot: root,
+      } as never);
+      const answer = JSON.parse(String(result)) as {
+        path: string;
+        workspacePath?: string;
+      };
+      // node:path relative is platform-spelled: forward on POSIX, backslash on\n  // Windows. The assertion is about WHERE it landed, not about the separator.\n  expect(answer.workspacePath?.replaceAll("\\\\", "/")).toBe("shots/probe.png");
+      expect(existsSync(join(root, "shots", "probe.png"))).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+windowsOnly(
+  "a fill that cannot locate its target stops at phase one",
+  async () => {
+    // The contract that matters most: a failure names the phase and what it
+    // saw, so "no such field" is never confused with "the field would not
+    // take the text" or "the target was busy". And it stops — no phases run
+    // after the one that failed.
+    const fill = computerUseTools.find(
+      (tool) => tool.name === "computer_fill",
+    )!;
+    const result = await fill.execute(
+      {
+        target: "一个绝对不存在的控件名 12345",
+        value: "hello",
+        submit: "none",
+      },
+      { workspaceRoot: process.cwd() } as never,
+    );
+    const answer = JSON.parse(String(result)) as {
+      ok: boolean;
+      abortedAt: number;
+      phases: Array<{ phase: string; ok: boolean }>;
+    };
+    expect(answer.ok).toBe(false);
+    expect(answer.abortedAt).toBe(1);
+    expect(answer.phases).toHaveLength(1);
+    expect(answer.phases[0]).toMatchObject({ phase: "locate", ok: false });
+  },
+);
+
+windowsOnly(
+  "an atomic gesture reports each step and stops at the first failure",
+  async () => {
+    // Fail-fast is the whole point of the sequence: a batch that continues
+    // after a failed step is faster at causing damage, not more convenient.
+    const action = computerUseTools.find(
+      (tool) => tool.name === "computer_action",
+    )!;
+    const ok = await action.execute(
+      {
+        steps: [
+          { op: "move", x: 10, y: 10 },
+          { op: "wait", ms: 10 },
+        ],
+      },
+      { workspaceRoot: process.cwd() } as never,
+    );
+    expect(JSON.parse(String(ok))).toMatchObject({ ok: true });
+
+    // An unknown op is a failure, and the sequence stops there.
+    const stopped = await action.execute(
+      {
+        steps: [
+          { op: "move", x: 10, y: 10 },
+          { op: "nonsense" },
+          { op: "move", x: 20, y: 20 },
+        ],
+      },
+      { workspaceRoot: process.cwd() } as never,
+    );
+    const answer = JSON.parse(String(stopped)) as {
+      ok: boolean;
+      abortedAt: number;
+      steps: Array<{ op: string; ok: boolean }>;
+    };
+    expect(answer.ok).toBe(false);
+    expect(answer.abortedAt).toBe(2);
+    expect(answer.steps).toHaveLength(2);
+    expect(answer.steps[1]).toMatchObject({ op: "nonsense", ok: false });
   },
 );
 

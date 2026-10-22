@@ -7,7 +7,7 @@
  * switching the theme never touches color values.
  */
 
-import { applyUiSkin, defineUiSkin, type UiSkin } from "@natalia/ui-kit";
+import { defineUiSkin, type UiSkin } from "@natalia/ui-kit";
 import {
   PALETTES,
   PALETTE_BOOT_BG,
@@ -59,27 +59,28 @@ export function bootThemeStyle(mode: PaletteMode): string {
  * Apply the theme to a document root. Body portals (context menus and
  * friends) must inherit the same theme as the shell, so the document
  * element is always themed alongside the given root.
+ *
+ * The switch is ONE attribute. Both palettes are already scoped in the
+ * stylesheet (`:root, [data-theme="light"]` and `[data-theme="dark"]`),
+ * so switching the scheme writes `data-theme` and lets the cascade do
+ * the work — no variable is written per switch any more. The shape
+ * tokens are mode-independent and stay a one-time write.
  */
 export function applyTheme(
   mode: string | undefined | null,
   root?: HTMLElement,
 ): PaletteMode {
   const resolved = resolveThemeMode(mode);
-  const skin = themeSkin(resolved);
   const documentRoot =
     root?.ownerDocument?.documentElement ??
     (typeof document === "undefined" ? undefined : document.documentElement);
-  if (documentRoot) {
-    applyUiSkin(skin, documentRoot);
+  const writeShape = (element: HTMLElement) => {
+    element.dataset.theme = resolved;
     for (const [name, value] of Object.entries(shapeTokens)) {
-      documentRoot.style.setProperty(name, value);
+      element.style.setProperty(name, value);
     }
-  }
-  if (root && root !== documentRoot) {
-    applyUiSkin(skin, root);
-    for (const [name, value] of Object.entries(shapeTokens)) {
-      root.style.setProperty(name, value);
-    }
-  }
+  };
+  if (documentRoot) writeShape(documentRoot);
+  if (root && root !== documentRoot) writeShape(root);
   return resolved;
 }

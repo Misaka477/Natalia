@@ -22,6 +22,15 @@ const app = await Bun.file(
   ),
 ).text();
 
+// The dual panes moved into their own controller; the permission trigger
+// lives there now, so source guards read both files.
+const panes = await Bun.file(
+  new URL(
+    "../src/controllers/transcript.tsx",
+    import.meta.url,
+  ).pathname.replace(/^\/([A-Za-z]:)/u, "$1"),
+).text();
+
 test("moving the rung is ONE session-scoped write carrying both axes", () => {
   const start = app.indexOf("async function changePermission");
   expect(start).toBeGreaterThan(0);
@@ -154,13 +163,14 @@ test("the trigger's fallback is a rung id, never an agent-mode name", () => {
   // And the trigger actually uses it rather than the raw mode string. Matched
   // on the expression itself: the file holds several `<NeuSelect>`s, so an
   // index-of-`value={` lands on the wrong one.
-  const value = app.slice(
-    app.indexOf("currentRung()?.id ?? configRungID()") - 60,
-    app.indexOf("currentRung()?.id ?? configRungID()") + 60,
+  const value = panes.slice(
+    panes.indexOf("currentRung()?.id ?? configRungID()") - 60,
+    panes.indexOf("currentRung()?.id ?? configRungID()") + 60,
   );
   expect(value).toContain("currentRung()?.id ?? configRungID()");
   // The agent-mode name is never fed to the control directly.
   expect(app).not.toContain("?? config()?.defaultAgentMode");
+  expect(panes).not.toContain("?? config()?.defaultAgentMode");
 });
 
 test("the permission read carries BOTH axes for the session it names", async () => {

@@ -51,6 +51,8 @@ import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { ModalLayer } from "./controllers/modals";
 import { SessionSidebar } from "./controllers/session-tree";
+import { MainPanes } from "./controllers/transcript";
+import { transcriptRefs } from "./transcript-refs";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
 import { QueueDock } from "./components/QueueDock";
@@ -179,7 +181,7 @@ function rightPanelMaxWidth(): number {
   return Math.max(MIN_RIGHT_WIDTH, Math.floor((window.innerWidth * 2) / 3));
 }
 
-type GoalEditorTarget = {
+export type GoalEditorTarget = {
   goalID: string;
   revision: number;
   objective: string;
@@ -449,11 +451,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [chatElapsedMs, setChatElapsedMs] = createSignal(0);
 
   function scrollMainTranscriptToBottom() {
-    transcriptApi?.scrollToBottom();
+    transcriptRefs.main?.scrollToBottom();
   }
 
   function scrollChatTranscriptToBottom() {
-    chatTranscriptApi?.scrollToBottom();
+    transcriptRefs.chat?.scrollToBottom();
   }
 
   // --- Goal status-bar controls: one pause/resume toggle + inline editor ---
@@ -3370,755 +3372,94 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         />
 
         {/* Middle dual agent panes */}
-        <section class="neu-main">
-          <div class="neu-main-panes">
-            <Show when={nataliaVisible()}>
-              <div class="neu-pane">
-                <div class="neu-pane-header">
-                  <span class="neu-pane-title">Natalia</span>
-                  <span class="neu-pane-header-right">
-                    <ContextMeter
-                      usage={state().natalia.context ?? state().context}
-                      compact
-                    />
-                    <span
-                      class="neu-pane-status"
-                      data-running={Boolean(state().natalia.activeTurn)}
-                    >
-                      {state().natalia.activeTurn ? "running" : "idle"}
-                    </span>
-                  </span>
-                </div>
-                <div class="neu-pane-content">
-                  <Show
-                    when={selectedSessionID() || state().sessionID || "none"}
-                    keyed
-                  >
-                    <Show when={feedbackNotice()}>
-                      <div class="neu-gov-action-note">{feedbackNotice()}</div>
-                    </Show>
-                    <div class="main-transcript-wrap">
-                      <Transcript
-                        messages={renderedMainMessages()}
-                        emptyTitle="Natalia 已准备好"
-                        emptyHint="Natalia 会直接处理工作区任务。"
-                        assistantName="Natalia"
-                        assistantInitial="N"
-                        apiRef={(api) => {
-                          transcriptApi = api;
-                        }}
-                        onFollowChange={(following) =>
-                          setShowJumpToBottom(!following)
-                        }
-                        onNearTop={() => void loadOlderHistory()}
-                        hasOlder={mainPaging().hasOlder}
-                        historyLoading={transcriptHistoryLoading()}
-                        olderHistoryLoading={transcriptOlderLoading()}
-                        loadAttachmentUrl={loadAttachmentUrl}
-                        onFork={forkSessionAtTurn}
-                        onRollback={rollbackDraftFromMessage}
-                        checkpointIDForMessage={checkpointIDForMessage}
-                        suspendVirtualization={resizing()}
-                      />
-                      <Show when={showJumpToBottom()}>
-                        <button
-                          type="button"
-                          class="neu-jump-bottom"
-                          onClick={jumpToBottom}
-                          title="跳到底部"
-                        >
-                          ↓
-                        </button>
-                      </Show>
-                    </div>
-                  </Show>
-                  <div
-                    class="neu-activity-bar"
-                    data-running={Boolean(state().natalia.activeTurn)}
-                  >
-                    <span class="neu-activity-pulse" />
-                    <Show when={state().goal}>
-                      {(goal) => (
-                        <span class="neu-goal-slot">
-                          <span
-                            class="neu-goal-control"
-                            data-phase={goal()!.phase}
-                          >
-                            <span
-                              class="neu-goal-chip"
-                              title={`${goal()!.objective}${
-                                goal()!.blockedReason
-                                  ? ` — ${goal()!.blockedReason!.code}: ${goal()!.blockedReason!.message}`
-                                  : ""
-                              }`}
-                            >
-                              <span class="neu-goal-chip-label">Goal</span>
-                              <span class="neu-goal-chip-text">
-                                {goal()!.objective.length > 40
-                                  ? `${goal()!.objective.slice(0, 40)}…`
-                                  : goal()!.objective}
-                              </span>
-                              <span class="neu-goal-chip-round">
-                                {`Round ${goal()!.roundsStarted}${
-                                  goal()!.maxGoalRounds === 0
-                                    ? ""
-                                    : `/${goal()!.maxGoalRounds}`
-                                }`}
-                              </span>
-                              {/* A completed goal SAYS so. The chip used to
-                                  keep showing the round count with the
-                                  pause/resume button simply gone — neither
-                                  disappearing (the reference harness's
-                                  GoalBar drops a complete goal) nor stating
-                                  the completion, so a finished goal read as
-                                  a stalled one until the human cleared it
-                                  by hand. */}
-                              <Show when={goal()!.phase === "complete"}>
-                                <span
-                                  class="neu-goal-chip-done"
-                                  title="目标已完成——清除后可设定新目标"
-                                >
-                                  ✓ 完成
-                                </span>
-                              </Show>
-                            </span>
-                            <Show when={goal()!.phase !== "complete"}>
-                              <button
-                                class="neu-goal-action neu-goal-toggle"
-                                data-phase={goal()!.phase}
-                                disabled={goalBusy()}
-                                title={
-                                  goal()!.phase === "active"
-                                    ? "暂停（停止当前轮，稍后可继续）"
-                                    : "继续（开启新一轮）"
-                                }
-                                onClick={() =>
-                                  void runGoalControl(
-                                    goal()!.phase === "active"
-                                      ? "pause"
-                                      : "resume",
-                                  )
-                                }
-                              >
-                                {goal()!.phase === "active" ? "❚❚" : "▶"}
-                              </button>
-                            </Show>
-                            <button
-                              class="neu-goal-action"
-                              disabled={goalBusy()}
-                              title="编辑 goal 目标 / 轮次上限"
-                              onClick={() => openGoalEditor(goal()!)}
-                            >
-                              ✎
-                            </button>
-                            <button
-                              class="neu-goal-action neu-goal-clear"
-                              disabled={goalBusy()}
-                              title="清除 goal"
-                              onClick={() => void runGoalControl("clear")}
-                            >
-                              ✕
-                            </button>
-                          </span>
-                          <Show when={goalEditOpen()}>
-                            <div class="neu-goal-editor">
-                              <label class="neu-goal-editor-field">
-                                <span>目标</span>
-                                <textarea
-                                  rows={2}
-                                  value={goalEditObjective()}
-                                  onInput={(event) =>
-                                    setGoalEditObjective(
-                                      event.currentTarget.value,
-                                    )
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (
-                                      event.key === "Enter" &&
-                                      !event.shiftKey
-                                    ) {
-                                      event.preventDefault();
-                                      void saveGoalEditor(goal()!);
-                                    } else if (event.key === "Escape")
-                                      setGoalEditOpen(false);
-                                  }}
-                                />
-                              </label>
-                              <label class="neu-goal-editor-field neu-goal-editor-cap">
-                                <span>轮次上限</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  placeholder="留空=不改，0=无限"
-                                  value={goalEditCap()}
-                                  onInput={(event) =>
-                                    setGoalEditCap(event.currentTarget.value)
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter")
-                                      void saveGoalEditor(goal()!);
-                                    else if (event.key === "Escape")
-                                      setGoalEditOpen(false);
-                                  }}
-                                />
-                              </label>
-                              <div class="neu-goal-editor-actions">
-                                <button
-                                  class="neu-goal-editor-save"
-                                  disabled={goalBusy()}
-                                  onClick={() => void saveGoalEditor(goal()!)}
-                                >
-                                  保存
-                                </button>
-                                <button
-                                  class="neu-goal-editor-cancel"
-                                  onClick={() => setGoalEditOpen(false)}
-                                >
-                                  取消
-                                </button>
-                              </div>
-                            </div>
-                          </Show>
-                        </span>
-                      )}
-                    </Show>
-                    <Show when={goalNotice()}>
-                      <span class="neu-goal-notice">{goalNotice()}</span>
-                    </Show>
-                    <span class="neu-activity-label">
-                      {state().natalia.activeTurn
-                        ? `${activityLabel()} · ${
-                            turnStartAt() === undefined
-                              ? "计时未知"
-                              : formatDuration(turnElapsedMs())
-                          }`
-                        : "idle"}
-                    </span>
-                  </div>
-                  <div class="neu-main-toolbar">
-                    <NeuSelect
-                      value={modelSelectionSignal()?.modelID ?? ""}
-                      options={modelOptions()}
-                      // No provider configured means an empty menu, so this
-                      // click goes to the model settings instead of listing
-                      // nothing. The control itself is untouched: same box,
-                      // same chevron, in the same position. With a model to
-                      // pick, the menu opens as it always did.
-                      onActivate={
-                        modelOptions().length > 0
-                          ? undefined
-                          : openModelSettings
-                      }
-                      onChange={(modelID) => {
-                        const sessionID =
-                          selectedSessionID() || state().sessionID;
-                        setModelSelectionSignal({
-                          modelID,
-                          variant: undefined,
-                        });
-                        void props.ctx.runtime.selectModel?.(
-                          modelID,
-                          undefined,
-                          sessionID,
-                        );
-                      }}
-                      placeholder="选择模型"
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={reasoningEffort()}
-                      options={[
-                        { value: "minimal", label: "minimal" },
-                        { value: "low", label: "low" },
-                        { value: "medium", label: "medium" },
-                        { value: "high", label: "high" },
-                        { value: "xhigh", label: "xhigh" },
-                      ]}
-                      onChange={(effort) => {
-                        const sessionID =
-                          selectedSessionID() || state().sessionID;
-                        setReasoningEffortSignal(effort);
-                        void props.ctx.runtime.setReasoningEffort?.(
-                          effort as
-                            | "minimal"
-                            | "low"
-                            | "medium"
-                            | "high"
-                            | "xhigh",
-                          sessionID,
-                        );
-                      }}
-                      placeholder="推理强度"
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={currentRung()?.id ?? configRungID() ?? "ask"}
-                      options={
-                        startupDataDegraded()
-                          ? [
-                              {
-                                value: "__retry",
-                                label: "配置加载失败，点击重试",
-                              },
-                            ]
-                          : permissionOptions()
-                      }
-                      // With no permissions to choose from the menu would open
-                      // empty — the same bug the model controls had — and the
-                      // place to configure this is the settings' model page, so
-                      // the click goes there. The degraded state keeps its
-                      // retry: that entry IS a real option with a real action.
-                      onActivate={
-                        !startupDataDegraded() &&
-                        permissionOptions().length === 0
-                          ? openModelSettings
-                          : undefined
-                      }
-                      onChange={(permission) => {
-                        // The degraded entry is the retry, not a mode:
-                        // choosing it re-runs the fetch instead of
-                        // writing a config value that does not exist.
-                        if (permission === "__retry") {
-                          void loadSecondaryStartupData();
-                          return;
-                        }
-                        void changePermission(permission);
-                      }}
-                      placeholder={
-                        startupDataDegraded() ? "配置加载失败" : "选择权限"
-                      }
-                      menuPosition="top"
-                    />
-                  </div>
-                  {/* A switch that did not take says so. A control that looks
-                      alive while writing nothing is the exact failure this path
-                      had before the runtime face was wired. */}
-                  <Show when={permissionProblem()}>
-                    <div class="neu-rollback-banner">
-                      <span>{permissionProblem()}</span>
-                    </div>
-                  </Show>
-                  <Show when={pendingRollback()}>
-                    <div class="neu-rollback-banner">
-                      <span>已准备回滚：{pendingRollback()!.label}</span>
-                      <span class="neu-rollback-hint">发送新消息后生效</span>
-                      <button
-                        type="button"
-                        class="neu-rollback-cancel"
-                        onClick={() => cancelPendingRollback()}
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </Show>
-                  <Show when={!pendingRollback() && rollbackNotice()}>
-                    <div class="neu-rollback-banner">
-                      <span>{rollbackNotice()!.text}</span>
-                      <span class="neu-rollback-hint">
-                        发送新消息前可以重做这些更改
-                      </span>
-                      <Show when={rollbackNotice()!.safetyCheckpointID}>
-                        <button
-                          type="button"
-                          class="neu-rollback-redo"
-                          onClick={() => void redoAppliedRollback()}
-                        >
-                          重做
-                        </button>
-                      </Show>
-                      <button
-                        type="button"
-                        class="neu-rollback-cancel"
-                        onClick={() => setRollbackNotice(undefined)}
-                      >
-                        知道了
-                      </button>
-                    </div>
-                  </Show>
-                  <QueueDock
-                    items={state().pendingInputs}
-                    onRemove={(id) => {
-                      void props.ctx.runtime.removeInput?.({
-                        id,
-                        sessionID: selectedSessionID() || state().sessionID,
-                      });
-                    }}
-                    onReplace={(id, text) => {
-                      void props.ctx.runtime.replaceInput?.({
-                        id,
-                        text,
-                        sessionID: selectedSessionID() || state().sessionID,
-                      });
-                    }}
-                    onPromote={(id) => {
-                      void props.ctx.runtime.promoteInput?.({
-                        id,
-                        sessionID: selectedSessionID() || state().sessionID,
-                      });
-                    }}
-                  />
-                  <SessionUsageBar usage={state().usageByChannel.main} />
-                  <Show
-                    when={
-                      pendingTakeoverCount() > 0 && !pendingTakeoverMinimized()
-                    }
-                  >
-                    <PendingTakeover
-                      ctx={props.ctx}
-                      minimized={pendingTakeoverMinimized}
-                      onMinimize={setPendingTakeoverMinimized}
-                      focusID={pendingTakeoverFocus}
-                      onFocusHandled={() => setPendingTakeoverFocus(undefined)}
-                    />
-                  </Show>
-                  <Show
-                    when={
-                      pendingTakeoverCount() === 0 || pendingTakeoverMinimized()
-                    }
-                  >
-                    <Composer
-                      value={mainDraft()}
-                      placeholder="输入消息，使用 @ 提及文件…"
-                      busy={Boolean(state().natalia.activeTurn)}
-                      onInput={setMainDraft}
-                      attachments={mainAttachments()}
-                      onRemoveAttachment={(path) =>
-                        setMainAttachments(
-                          mainAttachments().filter(
-                            (item) => item.path !== path,
-                          ),
-                        )
-                      }
-                      onPaste={(event) =>
-                        handlePasteAttachments(
-                          event,
-                          mainAttachments(),
-                          setMainAttachments,
-                        )
-                      }
-                      onSubmit={() => {
-                        const text = mainDraft();
-                        const paths = mainAttachments().map(
-                          (item) => item.path,
-                        );
-                        if (text.trim() || paths.length) {
-                          const rollback = pendingRollback();
-                          const submit = async () => {
-                            try {
-                              if (rollback) {
-                                const sessionID =
-                                  selectedSessionID() || state().sessionID;
-                                const messageResult =
-                                  rollback.turnID && sessionID
-                                    ? await props.ctx.runtime.sessionRollbackMessages?.(
-                                        sessionID,
-                                        rollback.turnID,
-                                      )
-                                    : undefined;
-                                const preview = rollback.checkpointID
-                                  ? await props.ctx.runtime.checkpointRollback?.(
-                                      {
-                                        id: rollback.checkpointID,
-                                        sessionID,
-                                      },
-                                    )
-                                  : undefined;
-                                await refreshTranscript();
-                                if (messageResult || preview) {
-                                  // No count: the rollback contract
-                                  // returns {id, rolledBackTo} and nothing
-                                  // about how much was removed, so the
-                                  // "1 条消息" this used to print was
-                                  // invented — a number that was wrong
-                                  // for every rollback that removed more
-                                  // than one message and right only by
-                                  // coincidence. Saying what happened is
-                                  // honest; counting it needs the store
-                                  // to return the number.
-                                  setRollbackNotice({
-                                    text:
-                                      messageResult && preview
-                                        ? `已还原会话到所选消息，并恢复了工作区检查点。`
-                                        : preview
-                                          ? `已恢复工作区检查点。`
-                                          : messageResult?.safetyCheckpointID
-                                            ? `已还原会话到所选消息，并创建了安全后悔点。`
-                                            : `已还原会话到所选消息。没有可用的文件检查点，因此未恢复工作区更改。`,
-                                    safetyCheckpointID:
-                                      messageResult?.safetyCheckpointID ??
-                                      preview?.safetyCheckpointID,
-                                  });
-                                }
-                              } else {
-                                setRollbackNotice(undefined);
-                              }
-                              perfLog("[web-plugin] send", text);
-                              // The Composer opts into mid-turn injection by
-                              // default. The settings panel can switch a busy send
-                              // to `next-turn`, which queues a separate turn.
-                              const busy = Boolean(state().natalia.activeTurn);
-                              const busySendDelivery =
-                                props.ctx.preferences.get<
-                                  "next-step" | "next-turn"
-                                >("busySendDelivery") ?? "next-step";
-                              const sessionID =
-                                selectedSessionID() || state().sessionID;
-                              const outgoing =
-                                goalCommandInstruction(text) ?? text;
-                              if (props.ctx.runtime.submitInput) {
-                                props.ctx.runtime.submitInput({
-                                  text: outgoing,
-                                  ...(paths.length
-                                    ? { attachments: paths }
-                                    : {}),
-                                  ...(busy
-                                    ? { delivery: busySendDelivery }
-                                    : {}),
-                                  sessionID,
-                                });
-                              } else {
-                                props.ctx.runtime.submit?.(text, sessionID);
-                              }
-                            } finally {
-                              setMainDraft("");
-                              setMainAttachments([]);
-                              setPendingRollback(undefined);
-                            }
-                          };
-                          void submit();
-                        }
-                      }}
-                      onStop={() => props.ctx.runtime.cancel?.()}
-                    />
-                  </Show>
-                </div>
-              </div>
-            </Show>
-
-            <Show when={layoutMode() !== "tiny"}>
-              <div class="neu-pane-divider" />
-            </Show>
-
-            <Show when={naviVisible()}>
-              <div class="neu-pane">
-                <div class="neu-pane-header">
-                  <span class="neu-pane-title">Navi</span>
-                  <span class="neu-pane-header-right">
-                    <ContextMeter usage={state().navi.context} compact />
-                    <span
-                      class="neu-pane-status"
-                      data-running={Boolean(naviChatActivity())}
-                    >
-                      {naviChatActivity() ? "running" : "idle"}
-                    </span>
-                  </span>
-                </div>
-                <div class="neu-pane-content">
-                  <Show
-                    when={selectedSessionID() || state().sessionID || "none"}
-                    keyed
-                  >
-                    <div class="chat-transcript-wrap">
-                      <Transcript
-                        messages={renderedChatMessages()}
-                        emptyTitle="向 Navi 提问"
-                        emptyHint="Navi 用于规划和审查，不直接操作工作区。"
-                        assistantName="Navi"
-                        assistantInitial="V"
-                        apiRef={(api) => {
-                          chatTranscriptApi = api;
-                        }}
-                        onFollowChange={(following) =>
-                          setChatShowJumpToBottom(!following)
-                        }
-                        onNearTop={() => void loadOlderNaviChat()}
-                        hasOlder={naviPaging().hasOlder}
-                        historyLoading={!naviPaging().initialized}
-                        olderHistoryLoading={naviPaging().loadingOlder}
-                        loadAttachmentUrl={loadAttachmentUrl}
-                        suspendVirtualization={resizing()}
-                      />
-                      <Show when={chatShowJumpToBottom()}>
-                        <button
-                          type="button"
-                          class="neu-jump-bottom"
-                          onClick={jumpChatToBottom}
-                          title="跳到底部"
-                        >
-                          ↓
-                        </button>
-                      </Show>
-                    </div>
-                  </Show>
-                  <div
-                    class="neu-activity-bar"
-                    data-running={Boolean(naviChatActivity())}
-                  >
-                    <span class="neu-activity-pulse" />
-                    <span class="neu-activity-label">
-                      {naviChatActivity()
-                        ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
-                        : "idle"}
-                    </span>
-                  </div>
-                  <div class="neu-main-toolbar">
-                    <NeuSelect
-                      value={chatProfile().normal?.modelID ?? ""}
-                      options={modelOptions()}
-                      // See the main toolbar's model control: no model to
-                      // choose means this click opens the model settings.
-                      onActivate={
-                        modelOptions().length > 0
-                          ? undefined
-                          : openModelSettings
-                      }
-                      onChange={(modelID) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          normal: { ...chatProfile().normal, modelID },
-                        })
-                      }
-                      placeholder="Chat 模型"
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={chatProfile().normal?.reasoningEffort ?? ""}
-                      options={[
-                        { value: "minimal", label: "minimal" },
-                        { value: "low", label: "low" },
-                        { value: "medium", label: "medium" },
-                        { value: "high", label: "high" },
-                        { value: "xhigh", label: "xhigh" },
-                      ]}
-                      onChange={(effort) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          normal: {
-                            ...chatProfile().normal,
-                            reasoningEffort: effort as
-                              | "minimal"
-                              | "low"
-                              | "medium"
-                              | "high"
-                              | "xhigh",
-                          },
-                        })
-                      }
-                      placeholder="Chat 推理"
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={chatProfile().expert?.modelID ?? ""}
-                      options={modelOptions()}
-                      onActivate={
-                        modelOptions().length > 0
-                          ? undefined
-                          : openModelSettings
-                      }
-                      onChange={(modelID) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          expert: { ...chatProfile().expert, modelID },
-                        })
-                      }
-                      placeholder="专家模型"
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={chatProfile().expert?.reasoningEffort ?? ""}
-                      options={[
-                        { value: "minimal", label: "minimal" },
-                        { value: "low", label: "low" },
-                        { value: "medium", label: "medium" },
-                        { value: "high", label: "high" },
-                        { value: "xhigh", label: "xhigh" },
-                      ]}
-                      onChange={(effort) =>
-                        void updateChatProfile({
-                          ...chatProfile(),
-                          expert: {
-                            ...chatProfile().expert,
-                            reasoningEffort: effort as
-                              | "minimal"
-                              | "low"
-                              | "medium"
-                              | "high"
-                              | "xhigh",
-                          },
-                        })
-                      }
-                      placeholder="专家推理"
-                      menuPosition="top"
-                    />
-                  </div>
-                  <SessionUsageBar usage={state().usageByChannel.navi} />
-                  <Composer
-                    value={chatDraft()}
-                    placeholder="向 Navi 提问…"
-                    busy={Boolean(naviChatActivity())}
-                    onInput={setChatDraft}
-                    onStop={() =>
-                      void props.ctx.runtime.naviChat?.abort?.(
-                        selectedSessionID() || state().sessionID,
-                      )
-                    }
-                    attachments={chatAttachments()}
-                    onRemoveAttachment={(path) =>
-                      setChatAttachments(
-                        chatAttachments().filter((item) => item.path !== path),
-                      )
-                    }
-                    onPaste={(event) =>
-                      handlePasteAttachments(
-                        event,
-                        chatAttachments(),
-                        setChatAttachments,
-                      )
-                    }
-                    onSubmit={() => {
-                      const text = chatDraft();
-                      if (text.trim() || chatAttachments().length) {
-                        perfLog("[navi-ui] submitting chat", {
-                          text,
-                          attachments: chatAttachments().map(
-                            (item) => item.path,
-                          ),
-                        });
-                        const result = props.ctx.runtime.naviChat?.submit?.({
-                          text,
-                          sessionID: selectedSessionID() || state().sessionID,
-                          ...(chatAttachments().length
-                            ? {
-                                attachments: chatAttachments().map(
-                                  (item) => item.path,
-                                ),
-                              }
-                            : {}),
-                        });
-                        if (result && typeof result.then === "function") {
-                          void result
-                            .then((value) =>
-                              perfLog("[navi-ui] chatSubmit resolved", value),
-                            )
-                            .catch((cause) =>
-                              console.error(
-                                "[navi-ui] chatSubmit failed",
-                                cause instanceof Error
-                                  ? cause.message
-                                  : String(cause),
-                              ),
-                            );
-                        }
-                        setChatDraft("");
-                        setChatAttachments([]);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </Show>
-          </div>
-        </section>
+        <MainPanes
+          ctx={props.ctx}
+          state={state}
+          setState={setState}
+          mainDraft={mainDraft}
+          setMainDraft={setMainDraft}
+          chatDraft={chatDraft}
+          setChatDraft={setChatDraft}
+          mainAttachments={mainAttachments}
+          setMainAttachments={setMainAttachments}
+          chatAttachments={chatAttachments}
+          setChatAttachments={setChatAttachments}
+          selectedSessionID={selectedSessionID}
+          selectedSession={selectedSession}
+          sessionList={sessionList}
+          layoutMode={layoutMode}
+          naviOpen={naviOpen}
+          setNaviOpen={setNaviOpen}
+          showJumpToBottom={showJumpToBottom}
+          setShowJumpToBottom={setShowJumpToBottom}
+          chatShowJumpToBottom={chatShowJumpToBottom}
+          setChatShowJumpToBottom={setChatShowJumpToBottom}
+          pendingTakeoverMinimized={pendingTakeoverMinimized}
+          setPendingTakeoverMinimized={setPendingTakeoverMinimized}
+          pendingTakeoverFocus={pendingTakeoverFocus}
+          setPendingTakeoverFocus={setPendingTakeoverFocus}
+          pendingRollback={pendingRollback}
+          setPendingRollback={setPendingRollback}
+          jumpToBottom={jumpToBottom}
+          jumpChatToBottom={jumpChatToBottom}
+          activityLabel={activityLabel}
+          chatActivityLabel={chatActivityLabel}
+          naviChatActivity={naviChatActivity}
+          pendingTakeoverCount={pendingTakeoverCount}
+          formatDuration={formatDuration}
+          turnStartAt={turnStartAt}
+          currentRung={currentRung}
+          configRungID={configRungID}
+          modelOptions={modelOptions}
+          permissionOptions={permissionOptions}
+          nataliaVisible={nataliaVisible}
+          naviVisible={naviVisible}
+          renderedMainMessages={renderedMainMessages}
+          renderedChatMessages={renderedChatMessages}
+          loadAttachmentUrl={loadAttachmentUrl}
+          loadOlderHistory={loadOlderHistory}
+          loadOlderNaviChat={loadOlderNaviChat}
+          loadSecondaryStartupData={loadSecondaryStartupData}
+          refreshTranscript={refreshTranscript}
+          updateChatProfile={updateChatProfile}
+          handlePasteAttachments={handlePasteAttachments}
+          openModelSettings={openModelSettings}
+          openGoalEditor={openGoalEditor}
+          saveGoalEditor={saveGoalEditor}
+          runGoalControl={runGoalControl}
+          forkSessionAtTurn={forkSessionAtTurn}
+          rollbackDraftFromMessage={rollbackDraftFromMessage}
+          checkpointIDForMessage={checkpointIDForMessage}
+          redoAppliedRollback={redoAppliedRollback}
+          cancelPendingRollback={cancelPendingRollback}
+          changePermission={changePermission}
+          perfLog={perfLog}
+          feedbackNotice={feedbackNotice}
+          mainPaging={mainPaging}
+          transcriptHistoryLoading={transcriptHistoryLoading}
+          transcriptOlderLoading={transcriptOlderLoading}
+          resizing={resizing}
+          goalBusy={goalBusy}
+          goalEditOpen={goalEditOpen}
+          goalEditObjective={goalEditObjective}
+          setGoalEditObjective={setGoalEditObjective}
+          setGoalEditOpen={setGoalEditOpen}
+          goalEditCap={goalEditCap}
+          setGoalEditCap={setGoalEditCap}
+          goalNotice={goalNotice}
+          turnElapsedMs={turnElapsedMs}
+          modelSelectionSignal={modelSelectionSignal}
+          setModelSelectionSignal={setModelSelectionSignal}
+          setReasoningEffortSignal={setReasoningEffortSignal}
+          startupDataDegraded={startupDataDegraded}
+          permissionProblem={permissionProblem}
+          rollbackNotice={rollbackNotice}
+          setRollbackNotice={setRollbackNotice}
+          naviPaging={naviPaging}
+          chatElapsedMs={chatElapsedMs}
+          chatProfile={chatProfile}
+          reasoningEffort={reasoningEffort}
+        />
 
         {/* Right secondary tabs */}
         {/*

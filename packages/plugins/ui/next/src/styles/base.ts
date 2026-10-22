@@ -4061,7 +4061,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   background: var(--neu-accent);
   animation: neu-pulse 1s infinite;
 }
-.session-usage-bar {
 /* Work Graph: one fixed-height row model shared by the virtual window
    (WORK_GRAPH_ROW_HEIGHT). Rows are positioned by the virtualizer, never
    DOM-measored, so the height here is the estimate too. */

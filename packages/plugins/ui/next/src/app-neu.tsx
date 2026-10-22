@@ -3248,8 +3248,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         t={t}
         slots={slots}
         locale={locale}
-        viewOpen={viewOpen}
-        setViewOpen={setViewOpen}
         setSearchOpen={setSearchOpen}
         setSettingsOpen={setSettingsOpen}
         moreOpen={moreOpen}

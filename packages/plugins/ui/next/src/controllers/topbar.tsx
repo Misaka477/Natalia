@@ -14,8 +14,6 @@ export interface TopbarProps {
   t: (key: string, params?: Record<string, unknown>) => string;
   locale: LocaleRuntime;
   slots: SlotsRegistry;
-  viewOpen: () => boolean;
-  setViewOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSearchOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setSettingsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   moreOpen: () => boolean;
@@ -45,8 +43,6 @@ export function Topbar(props: TopbarProps) {
     t,
     locale,
     slots,
-    viewOpen,
-    setViewOpen,
     setSearchOpen,
     setSettingsOpen,
     moreOpen,
@@ -89,14 +85,35 @@ export function Topbar(props: TopbarProps) {
         </div>
       </div>
       <div class="neu-topbar-right">
+        {/* The rail toggles are direct buttons in the actions segment — the
+          four-segment topbar keeps every action one click from the bar
+          instead of behind a dropdown. */}
         <button
           type="button"
           class="neu-topbar-btn"
-          data-active={viewOpen()}
-          onClick={() => setViewOpen((value) => !value)}
+          data-active={leftVisible()}
+          onClick={() => setLeftVisible((value) => !value)}
         >
-          {t("topbar.view")}
+          {t("topbar.left")}
         </button>
+        <button
+          type="button"
+          class="neu-topbar-btn"
+          data-active={rightVisible()}
+          onClick={() => setRightVisible((value) => !value)}
+        >
+          {t("topbar.right")}
+        </button>
+        <Show when={layoutMode() === "tiny"}>
+          <button
+            type="button"
+            class="neu-topbar-btn"
+            data-active={naviOpen()}
+            onClick={() => setNaviOpen((value) => !value)}
+          >
+            {t("topbar.navi")}
+          </button>
+        </Show>
         <button
           type="button"
           class="neu-topbar-btn"
@@ -130,45 +147,6 @@ export function Topbar(props: TopbarProps) {
           >
             {t("topbar.close")}
           </button>
-        </div>
-      </Show>
-      <Show when={viewOpen()}>
-        <div class="neu-topbar-view-dropdown">
-          <button
-            type="button"
-            class="neu-topbar-more-item"
-            data-active={leftVisible()}
-            onClick={() => {
-              setLeftVisible((value) => !value);
-              setViewOpen(false);
-            }}
-          >
-            {t("topbar.left")}
-          </button>
-          <button
-            type="button"
-            class="neu-topbar-more-item"
-            data-active={rightVisible()}
-            onClick={() => {
-              setRightVisible((value) => !value);
-              setViewOpen(false);
-            }}
-          >
-            {t("topbar.right")}
-          </button>
-          <Show when={layoutMode() === "tiny"}>
-            <button
-              type="button"
-              class="neu-topbar-more-item"
-              data-active={naviOpen()}
-              onClick={() => {
-                setNaviOpen((value) => !value);
-                setViewOpen(false);
-              }}
-            >
-              {t("topbar.navi")}
-            </button>
-          </Show>
         </div>
       </Show>
       <Show when={moreOpen()}>

@@ -658,12 +658,12 @@ export function SessionSidebar(props: SessionSidebarProps) {
             class={styles.sidebar}
             style={{ width: `${props.leftWidth()}px` }}
           >
-            <div class="neu-sidebar-header">
+            <div class={styles.header}>
               <span class={styles.title}>{t("sidebar.workspace")}</span>
-              <div class="neu-sidebar-actions">
+              <div class={styles.actions}>
                 <button
                   type="button"
-                  class="neu-icon-btn"
+                  class={styles.iconBtn}
                   title={t("sidebar.search")}
                   data-active={props.sessionSearchOpen()}
                   onClick={() => {
@@ -689,7 +689,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
                 <button
                   type="button"
-                  class="neu-icon-btn"
+                  class={styles.iconBtn}
                   title={t("sidebar.moreSessionActions")}
                   data-active={props.sidebarMenuOpen()}
                   onClick={() => {
@@ -730,7 +730,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
                 <button
                   type="button"
-                  class="neu-icon-btn"
+                  class={styles.iconBtn}
                   title={t("sidebar.bulkSelect")}
                   data-active={props.bulkSelectMode()}
                   onClick={() => {
@@ -761,7 +761,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
                 <button
                   type="button"
-                  class="neu-icon-btn"
+                  class={styles.iconBtn}
                   title={t("sidebar.newSession")}
                   onClick={() => {
                     props.setSidebarMenuOpen(false);
@@ -807,7 +807,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
             </div>
             <Show when={props.sessionSearchOpen()}>
               <input
-                class="neu-session-search"
+                class={styles.search}
                 placeholder={t("sidebar.searchSessions")}
                 value={props.sessionQuery()}
                 onInput={(event) =>
@@ -865,10 +865,10 @@ export function SessionSidebar(props: SessionSidebarProps) {
               </div>
             </Show>
             <Show when={props.sidebarMenuOpen()}>
-              <div class="neu-sidebar-menu">
+              <div class={styles.menu}>
                 <button
                   type="button"
-                  class="neu-sidebar-menu-item"
+                  class={styles.menuItem}
                   onClick={() => {
                     props.setSidebarMenuOpen(false);
                     props.setSessionMenuOpen(true);

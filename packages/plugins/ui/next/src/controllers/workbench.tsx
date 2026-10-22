@@ -21,6 +21,7 @@ import { cloneState } from "@natalia/view-store";
 export interface RightRailProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
+  slots: any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   rightVisible: () => boolean;
@@ -53,6 +54,7 @@ export interface RightRailProps {
 /** The right rail: tabbed panes plus the plugin side panels it hosts. */
 export function RightRail(props: RightRailProps) {
   const t = props.t;
+  const slots = props.slots;
   const {
     ctx,
     state,

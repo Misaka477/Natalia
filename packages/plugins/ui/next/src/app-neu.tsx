@@ -3436,6 +3436,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         {/* Right secondary tabs */}
         <RightRail
           t={t}
+          slots={slots}
           ctx={props.ctx}
           state={state}
           setState={setState}

@@ -5935,4 +5935,16 @@ export const commandPaletteCss = `
     font-size: var(--neu-font-sm);
     text-align: center;
   }
+  /* Settings, fullscreen presentation: the window fills the viewport and
+     drops its chrome. Tokens only, like the rest of the sheet. */
+  .neu-settings-backdrop[data-fullscreen="true"] {
+    padding: 0;
+  }
+  .neu-settings-backdrop[data-fullscreen="true"] .neu-settings-window {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
   `;

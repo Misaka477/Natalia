@@ -255,6 +255,10 @@ function verboseLog(...args: unknown[]) {
 export function SettingsPanel(props: {
   t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
+  /** Fill the viewport instead of floating a window. */
+  fullscreen?: boolean;
+  /** Offered only when the host wires the toggle. */
+  onToggleFullscreen?: () => void;
   onClose: () => void;
   /**
    * The category to show when the panel is opened by a caller that names one.
@@ -1045,13 +1049,43 @@ export function SettingsPanel(props: {
 
   return (
     <Show when={props.open}>
-      <div class="neu-settings-backdrop" onClick={props.onClose}>
+      {/* The fullscreen presentation fills the viewport instead of
+          floating a window: a settings surface is read, not glanced at,
+          and the window chrome is weight with nothing behind it. The
+          backdrop still closes on an outside click in window mode only —
+          in fullscreen there is no outside. */}
+      <div
+        class="neu-settings-backdrop"
+        data-fullscreen={props.fullscreen ? "true" : undefined}
+        onClick={() => {
+          if (!props.fullscreen) props.onClose();
+        }}
+      >
         <div
           class="neu-settings-window"
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("settingsDlg.title")}</span>
+            <Show when={props.onToggleFullscreen}>
+              <button
+                type="button"
+                class="neu-settings-close"
+                data-active={props.fullscreen ? "true" : undefined}
+                onClick={() => props.onToggleFullscreen?.()}
+                aria-label={t("settingsDlg.fullscreen")}
+                title={t("settingsDlg.fullscreen")}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M2 6V2h4M14 10v4h-4M10 2h4v4M6 14H2v-4"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </Show>
             <button
               type="button"
               class="neu-settings-close"

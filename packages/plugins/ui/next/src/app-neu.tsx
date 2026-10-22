@@ -661,6 +661,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [chatProfile, setChatProfile] = createSignal<ChatModelProfile>({});
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  // The settings window fills the viewport when this preference is on.
+  const [settingsFullscreen, setSettingsFullscreen] = createSignal(
+    props.ctx.preferences?.get<boolean>("uiSettingsFullscreen") ?? false,
+  );
+  const toggleSettingsFullscreen = () =>
+    setSettingsFullscreen((value) => {
+      const next = !value;
+      props.ctx.preferences?.set("uiSettingsFullscreen", next);
+      return next;
+    });
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [stashOpen, setStashOpen] = createSignal(false);
   const [sandboxOpen, setSandboxOpen] = createSignal(false);
@@ -3464,6 +3474,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       </div>
       <ModalLayer
         t={t}
+        settingsFullscreen={settingsFullscreen}
+        onToggleSettingsFullscreen={toggleSettingsFullscreen}
         ctx={props.ctx}
         state={state}
         config={config}

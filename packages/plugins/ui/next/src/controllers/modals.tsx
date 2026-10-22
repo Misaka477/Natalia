@@ -40,6 +40,8 @@ const perfLog = (...args: unknown[]) => {
 export interface ModalLayerProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
+  settingsFullscreen?: () => boolean;
+  onToggleSettingsFullscreen?: () => void;
   state: () => AppState;
   config: () => ConfigV4 | undefined;
   setStateConfig: (config: ConfigV4) => void;
@@ -260,6 +262,8 @@ export function ModalLayer(props: ModalLayerProps) {
       />
       <SettingsPanel
         t={t}
+        fullscreen={props.settingsFullscreen?.()}
+        onToggleFullscreen={props.onToggleSettingsFullscreen}
         host={props.ctx.host}
         open={props.settingsOpen()}
         category={props.settingsCategory()}

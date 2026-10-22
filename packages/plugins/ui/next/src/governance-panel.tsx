@@ -1171,7 +1171,9 @@ export function GovernancePane(props: {
       setActionNotice(
         result?.recorded
           ? t("gov.humanValidated")
-          : t("gov.failedUnknown", { reason: result?.reason ?? "未知原因" }),
+          : t("gov.failedUnknown", {
+              reason: result?.reason ?? t("gov.unknownReason"),
+            }),
       );
       if (result?.recorded) await load();
     } catch (error) {
@@ -1314,7 +1316,9 @@ export function GovernancePane(props: {
           ? editor.mode === "add"
             ? t("gov.ruleAdded")
             : t("gov.ruleUpdated")
-          : t("gov.failedUnknown", { reason: outcome?.reason ?? "未知原因" }),
+          : t("gov.failedUnknown", {
+              reason: outcome?.reason ?? t("gov.unknownReason"),
+            }),
       );
       if (ok) setRuleEditor(undefined);
       await load();
@@ -1364,7 +1368,9 @@ export function GovernancePane(props: {
         );
       else
         setActionNotice(
-          t("gov.failedUnknown", { reason: result?.reason ?? "未知原因" }),
+          t("gov.failedUnknown", {
+            reason: result?.reason ?? t("gov.unknownReason"),
+          }),
         );
       if (result?.requested) setOverrideEditor(undefined);
       await load();
@@ -1438,7 +1444,9 @@ export function GovernancePane(props: {
       setActionNotice(
         outcome?.updated
           ? t("gov.docRuleUpdated", { section: editor.section })
-          : t("gov.failedUnknown", { reason: outcome?.reason ?? "未知原因" }),
+          : t("gov.failedUnknown", {
+              reason: outcome?.reason ?? t("gov.unknownReason"),
+            }),
       );
       if (outcome?.updated) setDocRuleEditor(undefined);
       await load();
@@ -1465,7 +1473,9 @@ export function GovernancePane(props: {
       setActionNotice(
         result?.reopened
           ? t("gov.reopened", { id: findingID })
-          : t("gov.reopenFailed", { reason: result?.reason ?? "未知原因" }),
+          : t("gov.reopenFailed", {
+              reason: result?.reason ?? t("gov.unknownReason"),
+            }),
       );
       await load();
     } catch (error) {
@@ -1904,7 +1914,7 @@ export function GovernancePane(props: {
                 <Show when={constitutionRuleAffordance(rule) === "protected"}>
                   <span
                     class="constitution-protected"
-                    title="Runtime 硬保护规则：由执行路径（SELF_PROTECTION_PATTERNS）强制，面板不可编辑/停用/删除，模型也只能提案、不能修改；journal 行仅是镜像。"
+                    title={t("gov.systemProtectedTitle")}
                   >
                     系统保护
                   </span>
@@ -1947,7 +1957,8 @@ export function GovernancePane(props: {
                             result?.promoted
                               ? t("gov.promoted", { ruleID: result.ruleID })
                               : t("gov.promoteFailed", {
-                                  reason: result?.reason ?? "未知原因",
+                                  reason:
+                                    result?.reason ?? t("gov.unknownReason"),
                                 }),
                           );
                           await load();
@@ -2472,7 +2483,8 @@ export function GovernancePane(props: {
                                 next: result.next,
                               })
                             : t("gov.promotionNotRecorded", {
-                                reason: result?.reason ?? "未知原因",
+                                reason:
+                                  result?.reason ?? t("gov.unknownReason"),
                               }),
                         );
                         await load();

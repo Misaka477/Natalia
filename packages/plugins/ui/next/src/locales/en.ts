@@ -536,6 +536,7 @@ export const en = {
   "gov.humanValidatePrompt":
     "Record human acceptance for {taskID} (writes a completion card; you are the authority):",
   "gov.humanValidated": "Human acceptance recorded",
+  "gov.unknownReason": "unknown reason",
   "gov.failedUnknown": "Failed: {reason}",
   "gov.updated": "Updated: {id} → {status}",
   "gov.notUpdated":

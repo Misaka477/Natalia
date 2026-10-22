@@ -538,6 +538,7 @@ export const zh = {
   "gov.humanValidatePrompt":
     "为 {taskID} 记录人工验收（写入 completion 卡片，用户为准）：",
   "gov.humanValidated": "已记录人工验收",
+  "gov.unknownReason": "未知原因",
   "gov.failedUnknown": "失败：{reason}",
   "gov.updated": "已更新：{id} → {status}",
   "gov.notUpdated": "未更新：{id} 已不是 open，或服务端没找到这条 finding。",

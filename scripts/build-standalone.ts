@@ -117,6 +117,17 @@ async function stageBrowserExtension(outDir: string): Promise<void> {
   const target = join(outDir, "plugins", "natalia-browser", "extension");
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
+  // The shared page-scan script both engines inject: Chromium through
+  // scripting.executeScript({files}), Firefox through one concatenated
+  // tabs.executeScript({code}) call. An engine directory staged without it
+  // ships an extension whose scan, click and input all fail on a missing
+  // global, so it rides the release beside them rather than beside neither.
+  const shared = join(source, "shared");
+  if (!(await Bun.file(join(shared, "page-scan.js")).exists()))
+    throw new Error(
+      "packages/plugins/browser/src/extension/shared/page-scan.js is missing",
+    );
+  await cp(shared, join(target, "shared"), { recursive: true });
   for (const engine of ["chromium", "firefox"]) {
     const from = join(source, engine);
     if (!(await Bun.file(join(from, "manifest.json")).exists())) continue;

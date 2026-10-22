@@ -662,13 +662,16 @@ export function findWorkspaceManagerBoundaryViolation(
  * 51): compiled artifacts AND ORPHANS (a twin whose .ts MOVED AWAY —
  * exactly how contract-constitution-check's stale compiled test kept
  * running in the full suite after its source left, asserting old logic
- * against a missing module). These six are genuine third-party or
- * platform sources: browser extension entrypoints and vendored wezterm
- * docs assets.
+ * against a missing module). These are genuine third-party or platform
+ * sources: the browser extension's entrypoints and the page-scan script
+ * both engines inject (a plain script with no imports or exports, so the
+ * extension can inject it as a file and the suite can import it to drive
+ * the pure policy), plus vendored wezterm docs assets.
  */
 export const ALLOWED_LEGACY_JS = [
   "packages/plugins/browser/src/extension/chromium/background.js",
   "packages/plugins/browser/src/extension/firefox/background.js",
+  "packages/plugins/browser/src/extension/shared/page-scan.js",
   "packages/plugins/native-terminal/wezterm/deps/freetype/freetype2/docs/markdown/javascripts/extra.js",
   "packages/plugins/native-terminal/wezterm/docs/asciinema-player.min.js",
   "packages/plugins/native-terminal/wezterm/docs/javascript/fix-codeblock-console-copy-button.js",

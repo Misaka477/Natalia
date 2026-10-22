@@ -3,6 +3,11 @@
 // against the user's existing Chrome/Edge browser.
 
 const BRIDGE_URL = "ws://127.0.0.1:18765";
+// The shared page-scan script, injected into a tab before the func that
+// calls it. Both engines run the same file (see ../shared/page-scan.js), so
+// a page is perceived and acted on identically everywhere.
+const PAGE_SCAN_FILE = "shared/page-scan.js";
+
 function normalizeTabId(tabId) {
   if (tabId == null || tabId === "") return undefined;
   const id = Number(tabId);
@@ -55,34 +60,41 @@ async function activeTab(tabId) {
   return tab.id;
 }
 
-async function scan(tabId, options = {}) {
+/**
+ * Run the shared page-scan script in the tab, then call into it.
+ *
+ * The file injection and the call are two executeScript calls in the same
+ * isolated world, so the global the file installs is the one the call
+ * reads. A page whose CSP refuses inline code is still fine: extension
+ * injection is not subject to the page's policy.
+ */
+async function runInTab(tabId, call, args) {
   const id = await activeTab(tabId);
-  const offset = Number(options.offset) || 0;
-  const maxlen = Number(options.maxlen) || 35000;
+  await chrome.scripting.executeScript({
+    target: { tabId: id },
+    files: [PAGE_SCAN_FILE],
+  });
   const results = await chrome.scripting.executeScript({
     target: { tabId: id },
-    func: (offset, maxlen) => {
-      const text = document.body?.innerText || "";
-      const html = document.body?.innerHTML || "";
-      const title = document.title;
-      const url = location.href;
-      const textEnd = Math.min(text.length, offset + maxlen);
-      const htmlEnd = Math.min(html.length, offset + maxlen);
-      return {
-        text: text.slice(offset, textEnd),
-        html: html.slice(offset, htmlEnd),
-        totalTextLength: text.length,
-        totalHtmlLength: html.length,
-        offset,
-        maxlen,
-        title,
-        url,
-        truncated: textEnd < text.length || htmlEnd < html.length,
-      };
-    },
-    args: [offset, maxlen],
+    func: call,
+    args,
   });
-  return results[0]?.result || { text: "", html: "", title: "", url: "" };
+  return results?.[0]?.result;
+}
+
+async function scan(tabId, options = {}) {
+  const result = await runInTab(
+    tabId,
+    (scanOptions) => {
+      const api = globalThis.NataliaPageScan;
+      // A missing global means the injection failed; an empty scan would
+      // read as "the page has nothing on it", which is a lie.
+      if (!api) throw new Error("page-scan script was not injected");
+      return api.scan(document, window, scanOptions);
+    },
+    [options],
+  );
+  return result || { text: "", html: "", title: "", url: "" };
 }
 
 async function attachDebugger(tabId) {
@@ -175,7 +187,11 @@ async function handle(message) {
         break;
       }
       case "scan": {
-        result = await scan(payload.tabId, payload);
+        result = await scan(payload.tabId, {
+          textOnly: payload.textOnly !== false,
+          maxlen: Number(payload.maxlen) || 35000,
+          offset: Number(payload.offset) || 0,
+        });
         break;
       }
       case "read": {
@@ -249,18 +265,25 @@ async function handle(message) {
       case "click": {
         const x = Number(payload.x);
         const y = Number(payload.y);
-        result = await evaluate(
-          `(() => { const el = document.elementFromPoint(${x},${y}); if (el) { el.click(); return "ok"; } return "no_element"; })()`,
+        // The shared click: the full pointer sequence plus a description of
+        // what was hit, so the caller learns whether the coordinates named
+        // the element it meant to hit.
+        result = await runInTab(
           payload.tabId,
+          (px, py) => globalThis.NataliaPageScan.clickAt(document, px, py),
+          [x, y],
         );
         result = { result, tabId: payload.tabId };
         break;
       }
       case "input": {
-        const text = JSON.stringify(String(payload.text || ""));
-        result = await evaluate(
-          `(() => { const el = document.activeElement; if (!el) return "no_active"; if (el.value !== undefined) el.value = ${text}; el.dispatchEvent(new Event("input", {bubbles:true})); return "ok"; })()`,
+        const text = String(payload.text || "");
+        // The shared type: the prototype's own value setter plus the input
+        // and change events, which a controlled component is wired to.
+        result = await runInTab(
           payload.tabId,
+          (value) => globalThis.NataliaPageScan.typeIntoActive(document, value),
+          [text],
         );
         result = { result, tabId: payload.tabId };
         break;

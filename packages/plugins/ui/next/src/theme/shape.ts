@@ -35,29 +35,28 @@ export const shapeTokens = {
   "--neu-motion-fast": "0.12s ease",
   "--neu-motion-base": "0.25s ease",
   // elevation: outer (raised)
-  "--neu-elevation-1":
-    "2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light)",
-  "--neu-elevation-2":
-    "3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light)",
-  "--neu-elevation-3":
-    "3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light)",
-  "--neu-elevation-4":
-    "4px 4px 12px var(--neu-shadow-dark), -4px -4px 12px var(--neu-shadow-light)",
-  "--neu-elevation-5":
-    "6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light)",
-  "--neu-elevation-6":
-    "8px 8px 20px var(--neu-shadow-dark), -8px -8px 20px var(--neu-shadow-light)",
-  "--neu-elevation-accent":
-    "3px 3px 6px var(--neu-accent-shadow), -3px -3px 6px var(--neu-shadow-light)",
+  //
+  // The neumorphic language was a DUAL shadow — dark from one corner,
+  // light from the opposite — which is what made every surface read as
+  // pressed rubber. The theme's language now takes its depth from
+  // surface color and hairlines, so a raised surface carries ONE very
+  // soft shadow and nothing else: the ramp below still orders six
+  // levels, but no level plays a light-direction trick.
+  "--neu-elevation-1": "0 1px 1px var(--neu-float-scrim)",
+  "--neu-elevation-2": "0 1px 2px var(--neu-float-scrim)",
+  "--neu-elevation-3": "0 2px 4px var(--neu-float-scrim)",
+  "--neu-elevation-4": "0 2px 6px var(--neu-float-scrim)",
+  "--neu-elevation-5": "0 4px 10px var(--neu-float-scrim)",
+  "--neu-elevation-6": "0 6px 16px var(--neu-float-scrim)",
+  "--neu-elevation-accent": "0 1px 2px var(--neu-float-scrim)",
   // elevation: inner (inset / pressed)
-  "--neu-inset-1":
-    "inset 1px 1px 2px var(--neu-shadow-dark), inset -1px -1px 2px var(--neu-shadow-light)",
-  "--neu-inset-2":
-    "inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light)",
-  "--neu-inset-3":
-    "inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light)",
-  "--neu-inset-accent":
-    "inset 3px 3px 6px var(--neu-inset-pressed-dark), inset -3px -3px 6px var(--neu-inset-pressed-light)",
+  //
+  // A pressed field reads as a hairline, not as a dent carved by two
+  // opposing lights.
+  "--neu-inset-1": "inset 0 0 0 1px var(--neu-border)",
+  "--neu-inset-2": "inset 0 0 0 1px var(--neu-border)",
+  "--neu-inset-3": "inset 0 0 0 1px var(--neu-border)",
+  "--neu-inset-accent": "inset 0 0 0 1px var(--neu-border)",
   // elevation: flat drop shadow and hairline ring (non-neumorphic surfaces)
   "--neu-elevation-flat": "0 4px 12px var(--neu-float-scrim)",
   "--neu-elevation-float": "0 18px 48px var(--neu-float-scrim)",

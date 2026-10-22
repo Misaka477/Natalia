@@ -8,6 +8,7 @@
 import { For, Show } from "solid-js";
 import type { LocaleRuntime } from "../locale/runtime";
 import type { SlotsRegistry } from "../slots/registry";
+import { SlotMount } from "../slots/mount";
 
 export interface TopbarProps {
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -71,6 +72,8 @@ export function Topbar(props: TopbarProps) {
   return (
     <header class="neu-topbar">
       <div class="neu-topbar-left">
+        {/* A plugin entry, before the shell's brand block. */}
+        <SlotMount slots={slots} name="topbar.start" t={t} />
         {/* The app's own mark, not a letter. `/brand.png` is the shell's
               stable copy — generated from `assets/source/natalia-icon.svg` by
               `scripts/build-app-icons.ts` into `apps/web/public/`, which Vite

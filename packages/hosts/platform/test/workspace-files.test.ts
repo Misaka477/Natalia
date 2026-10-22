@@ -129,6 +129,81 @@ test(".natalia/plans is searchable; the runtime's internals are not (F7)", async
   await rm(root, { recursive: true, force: true });
 });
 
+// The F7 rule was written into glob's DFS and never into grep's, and the
+// comment that claimed they shared it ("the same default heavy-directory
+// skips as grep") was the only thing holding them together. Measured on a
+// real workspace: a glob of `.natalia` reported four files, a grep of the
+// same tree walked 233 files of the runtime's own object store. Two tools,
+// one question, two answers — and the answer a model believes is the one
+// it happened to ask.
+test("grep hides the runtime's internals the way glob does", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-f7-grep-"));
+  try {
+    for (const dir of [
+      ".natalia/plans",
+      ".natalia/objects",
+      ".natalia/sessions",
+    ])
+      await mkdir(join(root, dir, "0a"), { recursive: true });
+    await writeFile(join(root, ".natalia/plans/my-plan.md"), "# plan\n");
+    // The content-addressed object store: the 233-file case.
+    await writeFile(
+      join(root, ".natalia/objects/0a/blob.json"),
+      '{"kind":"attachment"}\n',
+    );
+    await writeFile(join(root, ".natalia/sessions/s.json"), '{"turn":1}\n');
+    await writeFile(join(root, "src.ts"), "src\n");
+    const hits = await grepWorkspaceFilesBounded({
+      workspaceRoot: root,
+      pattern: ".",
+    });
+    const paths = hits.matches.map((match) => match.path);
+    expect(paths).toContain(".natalia/plans/my-plan.md");
+    expect(paths).toContain("src.ts");
+    expect(paths).not.toContain(".natalia/objects/0a/blob.json");
+    expect(paths).not.toContain(".natalia/sessions/s.json");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// The second half of the same hole, pinned from the other side: a scan's
+// frames are rooted at the scope, so a `.natalia` scope's children are
+// ".natalia/objects" — but grep had no `.natalia` rule at all, so aiming a
+// search at the state directory listed the state while a glob of the same
+// scope hid it. Both walks now answer the same question the same way.
+test("scoping a search into .natalia does not un-hide the internals", async () => {
+  const root = await mkdtemp(join(tmpdir(), "natalia-f7-scope-"));
+  try {
+    await mkdir(join(root, ".natalia", "plans"), { recursive: true });
+    await mkdir(join(root, ".natalia", "objects", "0a"), { recursive: true });
+    await writeFile(join(root, ".natalia/plans/my-plan.md"), "# plan\n");
+    await writeFile(join(root, ".natalia/objects/0a/blob.json"), "{}\n");
+    for (const tool of [
+      () =>
+        globWorkspaceFilesBounded({
+          workspaceRoot: root,
+          pattern: "**/*",
+          path: ".natalia",
+        }),
+      () =>
+        grepWorkspaceFilesBounded({
+          workspaceRoot: root,
+          pattern: ".",
+          path: ".natalia",
+        }),
+    ]) {
+      const result = await tool();
+      const paths =
+        "paths" in result ? result.paths : result.matches.map((m) => m.path);
+      expect(paths).toContain(".natalia/plans/my-plan.md");
+      expect(paths).not.toContain(".natalia/objects/0a/blob.json");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 // The workspace UI offers delete on directories and files alike, and the
 // Windows trash API is TWO functions: DeleteFile fails on a directory with
 // "could not find the file" (exit 1), which is what made deleting a

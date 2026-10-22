@@ -515,16 +515,15 @@ export async function globWorkspaceFilesBounded(
 
     if (child.isDirectory()) {
       // F7: `.natalia/plans/` is searchable like any source directory; the
-      // runtime's own internals under `.natalia` are not. An explicit pattern
-      // still reaches either.
-      const nataliaInternal =
-        childRelative === ".natalia" || childRelative.startsWith(".natalia/");
+      // runtime's own internals under `.natalia` are not. An explicit
+      // pattern still reaches either.
       if (
-        (DEFAULT_GREP_IGNORED_DIRECTORIES.has(child.name) ||
-          (nataliaInternal &&
-            !isSearchableNataliaSubdirectory(childRelative))) &&
-        childRelative !== scope &&
-        !includeMayEnterDirectory(childRelative, input.pattern)
+        !mayEnterDirectory({
+          name: child.name,
+          childRelative,
+          scope,
+          pattern: input.pattern,
+        })
       )
         continue;
       const real = await realpath(childAbsolute).catch(() => undefined);
@@ -634,6 +633,50 @@ const DEFAULT_GREP_IGNORED_DIRECTORIES = new Set([
   "node_modules",
   "target",
 ]);
+
+/**
+ * Whether a traversal may descend into a directory — ONE predicate for both
+ * walks.
+ *
+ * It exists because the promise that used to keep them together was a
+ * comment ("the same deterministic DFS and default heavy-directory skips as
+ * grep"): the `.natalia` rule was written into glob's DFS and never into
+ * grep's, so a grep from the workspace root walked the runtime's own state
+ * — measured, 233 files under `.natalia/objects` — while a glob of the same
+ * tree reported four. Two tools, one question, two answers, and the answer
+ * a model believes is the one it happened to ask.
+ *
+ * `childRelative` is ROOT-relative in both walks: the DFS starts at the
+ * scope (`stack: [{ path: scope }]`), so every frame's path already carries
+ * it and a `.natalia` scope's child is ".natalia/objects", not "objects".
+ * (A first version of this helper prefixed the scope again and silently
+ * skipped `.natalia/plans` for a scoped search; the pinned test below is
+ * what caught it.)
+ *
+ * The escape hatch (`includeMayEnterDirectory`) only opens the first level
+ * of a named prefix — it was written for the name-based set and is equally
+ * shallow there, which is a separate pre-existing limitation and not
+ * something this predicate changes.
+ */
+function mayEnterDirectory(input: {
+  name: string;
+  childRelative: string;
+  scope: string;
+  pattern?: string;
+}): boolean {
+  const nataliaInternal =
+    input.childRelative === ".natalia" ||
+    input.childRelative.startsWith(".natalia/");
+  if (
+    (DEFAULT_GREP_IGNORED_DIRECTORIES.has(input.name) ||
+      (nataliaInternal &&
+        !isSearchableNataliaSubdirectory(input.childRelative))) &&
+    input.childRelative !== input.scope &&
+    !includeMayEnterDirectory(input.childRelative, input.pattern)
+  )
+    return false;
+  return true;
+}
 
 const maxGrepScannedFiles = 500;
 const maxGrepScannedBytes = 4 * 1024 * 1024;
@@ -899,9 +942,12 @@ export async function grepWorkspaceFilesBounded(
 
     if (child.isDirectory()) {
       if (
-        DEFAULT_GREP_IGNORED_DIRECTORIES.has(child.name) &&
-        childRelative !== scope &&
-        !includeMayEnterDirectory(childRelative, include)
+        !mayEnterDirectory({
+          name: child.name,
+          childRelative,
+          scope,
+          pattern: include,
+        })
       )
         continue;
       const real = await realpath(childAbsolute).catch(() => undefined);

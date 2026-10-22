@@ -49,6 +49,7 @@ import {
 import type { UiPanelDefinition } from "@natalia/ui-host";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
+import { ModalLayer } from "./controllers/modals";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
 import { QueueDock } from "./components/QueueDock";
@@ -5116,200 +5117,54 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           </button>
         )}
       </div>
-      <WorkspaceSettingsPanel
-        open={workspaceSettingsOpen()}
-        workspaceID={
-          settingsWorkspaceID() ??
-          workspaces().find((entry) => entry.status === "active")?.workspaceID
-        }
-        runtime={props.ctx.runtime}
-        onClose={() => setWorkspaceSettingsOpen(false)}
-      />
-      <WorkspacePanel
-        open={workspaceOpen()}
-        onClose={() => setWorkspaceOpen(false)}
-        error={workspaceError()}
-        runtime={props.ctx.runtime}
-        onAdd={async (path) => {
-          setWorkspaceError("");
-          try {
-            if (!path) return;
-            if (!props.ctx.runtime.workspaceAdd) {
-              setWorkspaceError(
-                "当前 runtime 不支持 workspaceAdd，请确认连接的是 Natalia runtime serve",
-              );
-              throw new Error("workspaceAdd unsupported");
-            }
-            const workspace = (await props.ctx.runtime.workspaceAdd({
-              path,
-            })) as WorkspaceSummary;
-            if (!workspace)
-              throw new Error("workspaceAdd returned no workspace");
-            if (workspace.status !== "active") {
-              await props.ctx.runtime.workspaceActivate?.(
-                workspace.workspaceID,
-              );
-            }
-            await refreshWorkspaces();
-            await refreshSessions();
-          } catch (error: unknown) {
-            setWorkspaceError(
-              error instanceof Error ? error.message : String(error),
-            );
-            throw error;
-          }
-        }}
-      />
-      <SessionActionsPanel
-        open={sessionMenuOpen()}
-        session={selectedSession()}
-        onClose={() => setSessionMenuOpen(false)}
-        onPin={async () => {
-          if (!selectedSessionID()) return;
-          const target = sessionList().find(
-            (entry) => entry.id === selectedSessionID(),
-          );
-          await props.ctx.runtime.sessionPin?.(
-            selectedSessionID(),
-            !target?.pinned,
-          );
-          await refreshSessions();
-        }}
-        onSnapshot={() => props.ctx.runtime.snapshot()}
-        onRollback={() =>
-          props.ctx.runtime.checkpointRollback?.({
-            id: state().checkpoints[state().checkpoints.length - 1]?.id ?? "",
-            sessionID: selectedSessionID() || state().sessionID,
-          })
-        }
-        onDelete={() => physicallyDeleteSelectedSession()}
-      />
-      <SandboxPanel
-        open={sandboxOpen()}
-        onClose={() => setSandboxOpen(false)}
-        sandboxes={state().sandboxes}
-        sessionID={selectedSessionID() || state().sessionID}
-        runtime={props.ctx.runtime}
-      />
-      <StashPanel open={stashOpen()} onClose={() => setStashOpen(false)} />
-      <HelpPanel open={helpOpen()} onClose={() => setHelpOpen(false)} />
-      <SearchPanel
-        open={searchOpen()}
-        onClose={() => setSearchOpen(false)}
-        onSearch={(query) =>
-          props.ctx.runtime.workspaceSearch?.({
-            workspaceID: workspaceIDForSelectedSession(),
-            query,
-            limit: 50,
-          })
-        }
-        onSelect={(result) => {
-          window.dispatchEvent(
-            new CustomEvent("natalia:open-file", {
-              detail: { path: result.path, line: result.line },
-            }),
-          );
-          setSearchOpen(false);
-        }}
-      />
-      <ModelPanel
-        open={modelOpen()}
-        onClose={() => setModelOpen(false)}
-        catalog={modelCatalog()}
-        selection={modelSelectionSignal() ?? undefined}
-        providers={config()?.providers}
-        config={config()}
-        onSetDefault={async (modelID) => {
-          // The same post-write refresh the add/remove handlers do: the
-          // runtime reloads its config, and the panel's rows (the 默认 tag)
-          // are only re-read on a restart otherwise — the click looked dead.
-          const result = await props.ctx.runtime.setDefaultModel?.(modelID);
-          await refreshModelConfig();
-          return result;
-        }}
-        onAddProvider={async (input) => {
-          if (!props.ctx.runtime.providerAdd) {
-            throw new Error("providerAdd runtime method unavailable");
-          }
-          const result = await props.ctx.runtime.providerAdd(input);
-          if (!result.saved)
-            throw new Error("providerAdd did not save provider");
-          await refreshModelConfig();
-        }}
-        onDiscoverModels={async (input) => {
-          if (!props.ctx.runtime.providerDiscover) {
-            throw new Error("providerDiscover runtime method unavailable");
-          }
-          return await props.ctx.runtime.providerDiscover(input);
-        }}
-        onRemoveProvider={async (name) => {
-          if (!props.ctx.runtime.providerRemove) {
-            throw new Error("providerRemove runtime method unavailable");
-          }
-          const result = await props.ctx.runtime.providerRemove(name);
-          if (result.removed) await refreshModelConfig();
-          return result;
-        }}
-      />
-      <StatusPanel
-        open={statusOpen()}
-        onClose={() => setStatusOpen(false)}
-        state={state()}
-        runtime={props.ctx.runtime}
-      />
-      <PluginManagerPanel
-        open={pluginManagerOpen()}
-        onClose={() => setPluginManagerOpen(false)}
+      <ModalLayer
         ctx={props.ctx}
+        state={state}
+        config={config}
+        setStateConfig={setConfig}
+        modelCatalog={modelCatalog}
+        modelSelectionSignal={modelSelectionSignal}
+        registeredTools={registeredTools}
+        workspaces={workspaces}
+        selectedSession={selectedSession}
+        selectedSessionID={selectedSessionID}
+        sessionList={sessionList}
+        themeMode={themeMode}
+        cycleThemeMode={cycleThemeMode}
+        refreshModelConfig={refreshModelConfig}
+        refreshWorkspaces={refreshWorkspaces}
+        refreshSessions={refreshSessions}
+        physicallyDeleteSelectedSession={physicallyDeleteSelectedSession}
+        workspaceIDForSelectedSession={workspaceIDForSelectedSession}
+        settingsOpen={settingsOpen}
+        settingsCategory={settingsCategory}
+        setSettingsOpen={setSettingsOpen}
+        setSettingsCategory={setSettingsCategory}
+        pluginManagerOpen={pluginManagerOpen}
+        setPluginManagerOpen={setPluginManagerOpen}
+        modelOpen={modelOpen}
+        setModelOpen={setModelOpen}
+        searchOpen={searchOpen}
+        setSearchOpen={setSearchOpen}
+        helpOpen={helpOpen}
+        setHelpOpen={setHelpOpen}
+        stashOpen={stashOpen}
+        setStashOpen={setStashOpen}
+        sandboxOpen={sandboxOpen}
+        setSandboxOpen={setSandboxOpen}
+        statusOpen={statusOpen}
+        setStatusOpen={setStatusOpen}
+        workspaceOpen={workspaceOpen}
+        setWorkspaceOpen={setWorkspaceOpen}
+        workspaceError={workspaceError}
+        setWorkspaceError={setWorkspaceError}
+        workspaceSettingsOpen={workspaceSettingsOpen}
+        setWorkspaceSettingsOpen={setWorkspaceSettingsOpen}
+        settingsWorkspaceID={settingsWorkspaceID}
+        sessionMenuOpen={sessionMenuOpen}
+        setSessionMenuOpen={setSessionMenuOpen}
+        dialog={dialog}
       />
-      <SettingsPanel
-        host={props.ctx.host}
-        open={settingsOpen()}
-        category={settingsCategory()}
-        onClose={() => {
-          setSettingsOpen(false);
-          // The category request belongs to the opening that carried it, so
-          // the next open through the settings button keeps its own memory.
-          setSettingsCategory(undefined);
-        }}
-        onOpenModels={() => {
-          setModelOpen(true);
-          setSettingsOpen(false);
-        }}
-        themeMode={themeMode()}
-        onCycleThemeMode={cycleThemeMode}
-        state={state()}
-        config={config()}
-        preferences={props.ctx.preferences}
-        registeredTools={registeredTools()}
-        runtime={props.ctx.runtime}
-        onUpdateConfig={async (patch) => {
-          perfLog("[settings] write ->", JSON.stringify(patch));
-          const applied = await props.ctx.runtime.updateConfig?.({
-            patch,
-            scope: "global",
-          });
-          perfLog("[settings] write applied <-", applied);
-          const next = await props.ctx.runtime.configGet?.();
-          perfLog(
-            "[settings] re-read <-",
-            JSON.stringify({
-              compactionEnabled: next?.context?.compactionEnabled,
-              shellExecutable: next?.runtime?.shell?.executable,
-              maxSteps: next?.runtime?.maxStepsPerTurn,
-            }),
-          );
-          if (next) setConfig(next);
-        }}
-        // The runtime's own answer after a write: the panel's `config` prop is a
-        // snapshot, and a compose-time row changes the live runtime rather than
-        // that snapshot, so the re-read keeps the value cell honest.
-        onConfig={(next) => {
-          perfLog("[settings] onConfig ->", JSON.stringify(next));
-          setConfig(next as unknown as ConfigV4);
-        }}
-      />
-      {dialog}
     </div>
   );
 }

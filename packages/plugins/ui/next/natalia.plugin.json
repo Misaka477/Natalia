@@ -1,0 +1,16 @@
+{
+  "apiVersion": 2,
+  "id": "natalia-ui-next",
+  "version": "1.0.0",
+  "name": "Natalia UI (Next Shell)",
+  "description": "Next-generation modular UI shell: theme, palette, layout and language packs with a clean core.",
+  "entry": "src/index.ts",
+  "scope": "process",
+  "provides": ["ui"],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["ui"]
+}

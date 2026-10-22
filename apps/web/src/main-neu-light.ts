@@ -1,5 +1,5 @@
 import { perfLog } from "./perf-log";
-import { createNataliaNeuLightPlugin } from "@natalia/plugin-web-ui";
+import { createNataliaNeuLightPlugin } from "@natalia/plugin-web-ui-next";
 import { UI_PLUGIN_REGISTRY } from "./ui-plugin-registry";
 import {
   createConsoleLogger,

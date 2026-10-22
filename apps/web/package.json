@@ -15,7 +15,7 @@
     "@natalia/transport": "workspace:*",
     "@natalia/ui-host": "workspace:*",
     "solid-js": "1.9.12",
-    "@natalia/plugin-web-ui": "workspace:*"
+    "@natalia/plugin-web-ui-next": "workspace:*"
   },
   "devDependencies": {
     "vite": "7.1.5",

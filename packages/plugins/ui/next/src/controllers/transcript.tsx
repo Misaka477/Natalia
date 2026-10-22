@@ -12,6 +12,7 @@ import { ContextMeter, Transcript } from "@natalia/ui-kit";
 import { PendingTakeover } from "../components/PendingTakeover";
 import { NeuSelect } from "../components/NeuSelect";
 import { QueueDock } from "../components/QueueDock";
+import { SlotMount } from "../slots/mount";
 import { MainInputArea, ChatInputArea } from "./input-area";
 import { SessionUsageBar } from "../components/SessionUsageBar";
 import type { UiPluginContext } from "@natalia/ui-host";
@@ -295,6 +296,9 @@ export function MainPanes(props: MainPanesProps) {
                         ↓
                       </button>
                     </Show>
+                    {/* A plugin's own entry beside an empty transcript, under
+                        the shell's empty state. */}
+                    <SlotMount slots={slots} name="transcript.empty" t={t} />
                   </div>
                 </Show>
                 <div

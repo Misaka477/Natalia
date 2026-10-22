@@ -39,6 +39,7 @@ import { materializeTools } from "@anthelia/tools";
 import { confinementContextLine } from "@anthelia/confinement";
 import { shellContextLine } from "@anthelia/shell";
 import { noopOperationLog } from "@anthelia/operation-log";
+import { isWithheldInReadOnly } from "@anthelia/runtime-services";
 import type {
   ConstitutionDocRule,
   ProviderRunnerInput,
@@ -81,20 +82,20 @@ const maxProtocolCorrections = 2;
 /**
  * Whether a tool reaches the model's schema in this permission mode.
  *
- * read_only withholds every tool that requires approval: the model is not
- * offered a capability a human has not stood behind. ONE definition, because
- * the rule is read in three places — the two advertised-schema filters and
- * the skills block, which must not name a tool the schema does not carry.
- * When the block kept its own copy of the promise in prose ("Call the
- * skill_load tool..." under every mode), a read_only session was told to use
- * a capability its schema had withheld — measured, in a real session, as an
- * instruction to call a tool that did not exist.
+ * read_only withholds approval-requiring tools that have a write effect —
+ * ONE definition (`isWithheldInReadOnly`), because the rule is read here
+ * twice and in three more places downstream. When the skills block kept its
+ * own copy of the promise in prose ("Call the skill_load tool..." under
+ * every mode), a read_only session was told to use a capability its schema
+ * had withheld — measured, in a real session, as an instruction to call a
+ * tool that did not exist.
  */
 function isToolAdvertisedInMode(
-  tool: { requiresApproval?: boolean },
+  tool: { name: string; requiresApproval?: boolean },
   mode: PermissionMode,
 ): boolean {
-  return mode !== "read_only" || !tool.requiresApproval;
+  if (mode !== "read_only") return true;
+  return !isWithheldInReadOnly(tool);
 }
 
 function promptData(value: string): string {

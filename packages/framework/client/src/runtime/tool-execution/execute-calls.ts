@@ -17,7 +17,10 @@ import {
   sessionFactConstitutionOverrides,
   sessionFactConstitutionRules,
 } from "@anthelia/session";
-import { readOnlyToolMessage } from "@anthelia/runtime-services";
+import {
+  isWithheldInReadOnly,
+  readOnlyToolMessage,
+} from "@anthelia/runtime-services";
 import { workLedgerController as workLedgerControllerToken } from "@natalia/work-ledger";
 import { toolPolicy as toolPolicyToken } from "@natalia/tool-policy";
 import { type ToolPolicyService } from "@anthelia/runtime-services";
@@ -436,25 +439,26 @@ export function createExecuteCalls(
           error: reason ?? "",
         });
         const registered = tools.get(call.name);
-        if (
-          registered &&
-          (!isToolAllowed(call.name, exec) ||
-            (exec?.permissionMode === "read_only" &&
-              registered.requiresApproval))
-        )
+        // The one read_only rule (isWithheldInReadOnly), read here too: this
+        // is the path a call takes when the tool never resolved, and a
+        // second spelling of the rule here is how a session gets one answer
+        // for a resolved call and another for an unresolved one.
+        const withheld =
+          exec?.permissionMode === "read_only" &&
+          registered !== undefined &&
+          isWithheldInReadOnly(registered);
+        if (registered && (!isToolAllowed(call.name, exec) || withheld))
           publish({
             type: "policy.decision",
             turnID,
             toolName: call.name,
             toolCallID: call.id,
             decision: "deny",
-            reason:
-              exec?.permissionMode === "read_only" &&
-              registered.requiresApproval
-                ? readOnlyToolMessage(call.name)
-                : (extensionToolPermission(call.name, exec?.permissionProfile)
-                    .diagnostics[0] ??
-                  "tool is excluded from the runtime catalog by policy"),
+            reason: withheld
+              ? readOnlyToolMessage(call.name)
+              : (extensionToolPermission(call.name, exec?.permissionProfile)
+                  .diagnostics[0] ??
+                "tool is excluded from the runtime catalog by policy"),
           });
         publish({
           type: "tool.update",
@@ -470,9 +474,7 @@ export function createExecuteCalls(
           turnID,
           call.id,
           call.name,
-          registered && exec?.permissionMode === "read_only"
-            ? "rejected"
-            : "failed",
+          withheld ? "rejected" : "failed",
         );
         messages.push({
           role: "tool",

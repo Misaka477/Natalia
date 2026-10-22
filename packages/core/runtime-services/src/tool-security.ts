@@ -1,5 +1,61 @@
 import { tryParseToolArguments } from "@anthelia/tools";
 
+/**
+ * The tools a read_only session may still call.
+ *
+ * read_only withholds every tool that requires approval — the model is not
+ * offered a capability a human has not stood behind. The exemption is for
+ * tools with NO WRITE EFFECT: they read a document and answer with text,
+ * and withholding them punishes a session for a mode that promised to stop
+ * WRITES. The client's own sandbox-rung already says exactly that
+ * ("every tool that writes is refused outright"); the implementation was
+ * wider than the promise, and this is the narrowing.
+ *
+ * `skill_load` is the one member. Loading a skill appends a document to
+ * the conversation: it changes no file, no process, no screen. The
+ * instruction-injection surface is real and stays guarded where it
+ * matters — ask/auto still require approval for it (it is an approval
+ * family, with the session-level "Allow skills" affordance), and a
+ * skill's SCRIPTS still need the shell, which read_only withholds.
+ *
+ * The bar for joining this set is "changes nothing outside the
+ * conversation", not "feels safe": a tool that writes a file, sends
+ * input, or spawns a process does not belong here however read-only it
+ * looks. `sandbox_create`/`sandbox_execute`/`sandbox_write`/`sandbox_merge`
+ * are all withheld; `sandbox_list`/`sandbox_diff` are already
+ * approval-free and need no exemption.
+ */
+export const READ_ONLY_SAFE_TOOLS: ReadonlySet<string> = new Set([
+  "skill_load",
+]);
+
+/** Whether a read_only session may call this tool. */
+export function isReadOnlySafe(toolName: string): boolean {
+  return READ_ONLY_SAFE_TOOLS.has(toolName);
+}
+
+/**
+ * Whether read_only WITHHOLDS this tool — the whole rule, in one place.
+ *
+ * It is read in five places, and that is the reason it exists here: the two
+ * advertised-schema filters (provider-runner), the execution pre-stage, the
+ * unresolved-call report (execute-calls) and the approval seam
+ * (interactive-waiter). When each carried its own copy the copies drifted,
+ * and both drifts were measured in a real session: a read_only session told
+ * to call a tool its schema did not carry, and then a tool advertised and
+ * refused anyway. One definition is the fix; a comment promising they agree
+ * is not.
+ *
+ * The rule is the write-effect test, not a trust vote — see
+ * READ_ONLY_SAFE_TOOLS for the bar.
+ */
+export function isWithheldInReadOnly(tool: {
+  name: string;
+  requiresApproval?: boolean;
+}): boolean {
+  return Boolean(tool.requiresApproval) && !isReadOnlySafe(tool.name);
+}
+
 export function terminalApprovalScope(toolName: string, rawArguments: string) {
   const args = tryParseToolArguments(rawArguments);
   const terminalID = typeof args.id === "string" ? args.id : undefined;

@@ -7,7 +7,10 @@
  * `execute-run.ts`), then the postExecute-on-success post stage. Reads host
  * state through `RuntimeContext` at call time.
  */
-import { readOnlyToolMessage } from "@anthelia/runtime-services";
+import {
+  isWithheldInReadOnly,
+  readOnlyToolMessage,
+} from "@anthelia/runtime-services";
 import { toolPolicy as toolPolicyToken } from "@natalia/tool-policy";
 import {
   terminalController,
@@ -161,7 +164,14 @@ export function createExecuteOne(
         return { decision: "deny" as const, reason };
       })
       .preStage(() => {
-        if (!(exec?.permissionMode === "read_only" && tool.requiresApproval))
+        // The same rule the advertised schema reads (isWithheldInReadOnly):
+        // read_only withholds approval-requiring tools that have a write
+        // effect. Five copies of this rule is how a tool ends up advertised
+        // and then refused — or withheld and then callable — so the whole
+        // rule lives in one place and every layer reads it.
+        if (
+          !(exec?.permissionMode === "read_only" && isWithheldInReadOnly(tool))
+        )
           return { decision: "allow" as const };
         const message = readOnlyToolMessage(tool.name);
         publish({

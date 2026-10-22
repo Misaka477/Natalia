@@ -1604,13 +1604,16 @@ test("the system prompt enumerates installed skills dynamically", async () => {
   expect(withSkill).not.toContain("d".repeat(700));
 });
 
-test("a read_only session is not told to call a tool its schema withholds", async () => {
-  // The skills block said "Call the skill_load tool with the exact name..."
-  // under EVERY permission mode, while read_only withholds every tool that
-  // requires approval from the advertised schema — and skill_load is one.
-  // Measured in a real session: the runtime instructed the model to use a
-  // capability its own tool list did not carry. The block now reads the same
-  // rule the schema filter reads.
+test("a read_only session can still load a skill", async () => {
+  // read_only withholds every tool that requires approval — the model is
+  // not offered a capability a human has not stood behind. The exemption is
+  // the write-effect test: `skill_load` reads a document and answers with
+  // text, changing no file, process or screen, and the mode's own promise
+  // (the sandbox rung's "every tool that writes is refused outright") never
+  // covered it. Measured before the fix: a read_only session was TOLD to
+  // call skill_load while its schema withheld it; the first fix then hid
+  // the instruction too, which over-corrected into the same lie from the
+  // other side. The rule is the write-effect test, read by both gates.
   const root = await mkdtemp(join(tmpdir(), "natalia-prompt-skills-ro-"));
   const requests: ProviderStreamRequest[] = [];
   const promptFor = async (
@@ -1643,19 +1646,107 @@ test("a read_only session is not told to call a tool its schema withholds", asyn
     "ses_prompt_skills_ro" as SessionID,
     "read_only",
   );
-  // The tool really is withheld from the schema...
-  expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain(
-    "skill_load",
-  );
-  // ...so the block must not name it, and must say why.
+  // The tool is in the schema...
+  expect(requests[0]?.tools?.map((tool) => tool.name)).toContain("skill_load");
+  // ...so the block names it, exactly as it does for an ordinary session.
   expect(readOnly).toContain("<available_skills>");
-  expect(readOnly).not.toContain("Call the skill_load tool");
-  expect(readOnly).toContain("not available in this permission mode");
+  expect(readOnly).toContain("Call the skill_load tool with the exact name");
+  // And the tools that DO write are still withheld: a skill's scripts need
+  // the shell, which read_only keeps out.
+  expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain(
+    "run_shell",
+  );
 
-  // The other half: an ordinary session keeps the instruction it always had.
+  // An ordinary session is unchanged.
   const asking = await promptFor("ses_prompt_skills_ask" as SessionID, "ask");
   expect(requests[0]?.tools?.map((tool) => tool.name)).toContain("skill_load");
   expect(asking).toContain("Call the skill_load tool with the exact name");
+});
+
+test("a read_only session can load a skill end to end", async () => {
+  // The schema half is the test above; this is the execution half. A tool
+  // advertised and then refused is the same lie in the other direction, and
+  // the two gates are separate code — so the call is actually made here and
+  // its answer read back.
+  // The workspace comes from officialPluginWorkspace, not a bare mkdtemp:
+  // a bare directory has no plugin store, and every tool call in it fails
+  // with "Unknown tool" (fs-read-e2e's header counts the rounds that cost).
+  const root = await mkdtemp("skill-ro-exec");
+  const skillRoot = join(root, ".natalia", "skills", "probe-skill");
+  await mkdir(skillRoot, { recursive: true });
+  await writeFile(
+    join(skillRoot, "SKILL.md"),
+    "---\nname: probe-skill\ndescription: A probe skill for the read-only execution test, loaded to prove the call lands.\n---\n\n# probe\n",
+  );
+  const events: RuntimeEvent[] = [];
+  // The harness's factory, not the bare one: it restores the official
+  // plugin config for the workspace, and without the skills plugin the call
+  // answers "Unknown tool" — a test that passes for the wrong reason.
+  const client = createRealRuntimeClient({
+    workspaceRoot: root,
+    sessionID: "ses_skill_ro_exec" as SessionID,
+    permissionMode: "read_only",
+    provider: {
+      provider: "test",
+      model: "test",
+      async *stream(request) {
+        // One step: call skill_load, then close the turn once the tool
+        // result is in the transcript.
+        if (!request.messages.some((message) => message.role === "tool")) {
+          yield {
+            type: "tool_call" as const,
+            calls: [
+              {
+                id: "call_skill_ro",
+                name: "skill_load",
+                arguments: JSON.stringify({ name: "probe-skill" }),
+              },
+            ],
+          };
+          return;
+        }
+        yield { type: "content" as const, text: "loaded" };
+        yield { type: "done" as const };
+      },
+    },
+  });
+  client.start((event) => {
+    events.push(event);
+    // skill_load is an approval FAMILY, and read_only removes the mode's
+    // blanket refusal — not the human's say. So the call still parks on an
+    // approval, and this responder is the human answering it. A test that
+    // skipped this would park forever and read as a timeout.
+    if (event.type === "approval.request")
+      client.respondApproval({ requestID: event.id, decision: "once" });
+  });
+  try {
+    await client.submitAndWait!("load it");
+    const loaded = events.find(
+      (event) =>
+        event.type === "tool.update" &&
+        event.name === "skill_load" &&
+        event.status === "succeeded",
+    );
+    expect(loaded).toBeDefined();
+    // The document's own body came back, not a refusal.
+    expect(String((loaded as { result?: unknown }).result)).toContain(
+      "# probe",
+    );
+    // And it was not the mode that refused it: no read-only denial exists.
+    expect(
+      events.find(
+        (event) =>
+          event.type === "policy.decision" &&
+          (event as { toolName?: string }).toolName === "skill_load" &&
+          (event as { decision?: string }).decision === "deny",
+      ),
+    ).toBeUndefined();
+  } finally {
+    // Disposed even when an assertion fails: a leaked client keeps its turn
+    // machinery alive, and the next test in this file reads its own event
+    // stream — the pane test below is what caught that.
+    await client.dispose?.();
+  }
 });
 
 test("a rejected approval feeds the reason back and lets the turn continue", async () => {

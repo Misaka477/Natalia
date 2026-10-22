@@ -44,6 +44,7 @@ import type {
 } from "@natalia/collaboration";
 import {
   defineService,
+  isWithheldInReadOnly,
   readOnlyToolMessage,
   terminalApprovalScope,
 } from "@anthelia/runtime-services";
@@ -113,7 +114,11 @@ export function createInteractiveWaiter(
     options?: { force?: boolean; reason?: string },
   ): Promise<{ reason: string } | undefined> {
     const permissionMode = deps.permissionMode(turnID);
-    if (permissionMode === "read_only")
+    // The one read_only rule (isWithheldInReadOnly). This seam is where a
+    // withheld call actually dies, so it reading its own copy of the rule is
+    // how a tool ends up advertised by the schema and refused here — the
+    // drift that made a read_only skill_load call reach this line at all.
+    if (permissionMode === "read_only" && isWithheldInReadOnly(tool))
       return { reason: readOnlyToolMessage(tool.name) };
     if (permissionMode === "auto" && !options?.force) return undefined;
     const session = deps.sessionIDForTurn(turnID);

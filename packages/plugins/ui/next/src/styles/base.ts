@@ -736,139 +736,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 
-.neu-pane .natalia-composer {
-  flex-shrink: 0;
-  background: var(--neu-bg);
-  border-radius: 16px;
-  box-shadow: none;
-  padding: 10px 12px 12px;
-  margin-top: 6px;
-}
-.neu-pane .natalia-composer-textarea {
-  width: 100%;
-  min-height: 46px;
-  max-height: 160px;
-  resize: none;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--neu-text);
-  padding: 6px 8px;
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-}
-.neu-pane .natalia-composer-toolbar { display: flex; align-items: center; justify-content: space-between; }
-.neu-pane .natalia-composer-controls { display: flex; gap: 4px; }
-.neu-pane .natalia-composer-icon-btn {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--neu-muted);
-  box-shadow: none;
-  cursor: pointer;
-}
-.neu-pane .natalia-composer-icon-btn:hover {
-  background: var(--neu-hover-overlay);
-  color: var(--neu-text);
-}
-.neu-pane .natalia-composer-submit {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 12px;
-  background: var(--neu-bg-light);
-  color: var(--neu-accent);
-  box-shadow: var(--neu-elevation-2);
-  cursor: pointer;
-}
-.neu-pane .natalia-composer-submit:hover {
-  box-shadow: var(--neu-elevation-1);
-  color: var(--neu-accent-soft);
-}
-.neu-pane .natalia-composer-submit:active {
-  box-shadow: var(--neu-inset-3);
-  color: var(--neu-accent);
-}
-.neu-pane .natalia-composer-submit svg {
-  transition: transform 0.15s ease, color 0.15s ease;
-}
-.neu-pane .natalia-composer-submit:active svg {
-  transform: scale(0.82);
-  opacity: 0.85;
-}
-/* A running turn does NOT restyle the send key. ZCode's composer state machine
-   is explicit about it: streaming with an EMPTY draft shows Stop, and with a
-   draft the send key stays the ordinary send key — the message is queued
-   (showStopControl = canStop && !hasDraftToSubmit), so "queued" is a delivery
-   mode, not a dangerous action. The reference harness spells the same one
-   (BusyEnterBehavior = 'queue' | 'steer'). This rule used to paint the key
-   --neu-error and give it INSET shadows while a turn ran, which read as a
-   pressed, refused control; the delivery mode is what the tooltip says
-   ("发送并注入当前轮"), and the color stays the accent's. Stop keeps the red —
-   it is the control that actually interrupts the turn. */
-.neu-pane .natalia-composer-submit[data-busy="true"] {
-  color: var(--neu-accent);
-  background: var(--neu-bg-light);
-  box-shadow: 3px 3px 6px var(--neu-shadow-dark),
-    -3px -3px 6px var(--neu-shadow-light);
-}
-.neu-pane .natalia-composer-stop {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 12px;
-  margin-right: 6px;
-  background: var(--neu-error-soft);
-  color: var(--neu-error);
-  box-shadow: var(--neu-elevation-2);
-  cursor: pointer;
-}
-.neu-pane .natalia-composer-stop:hover {
-  box-shadow: var(--neu-elevation-1);
-}
-.neu-pane .natalia-composer-stop:active {
-  box-shadow: var(--neu-inset-3);
-}
-.neu-pane .natalia-attachment-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--neu-bg); border-radius: 12px; font-size: 12px; color: var(--neu-muted); box-shadow: var(--neu-elevation-1); }
-.neu-pane .natalia-attachment-chip[data-image="true"] {
-  padding-right: 6px;
-}
-.neu-pane .natalia-attachment-thumb {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: var(--neu-bg-light);
-}
-.neu-pane .natalia-attachment-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--neu-muted);
-  cursor: pointer;
-}
-.neu-pane .natalia-attachment-remove:hover {
-  background: var(--neu-bg);
-  color: var(--neu-error);
-}
 
 /* ===== Right secondary sidebar ===== */
 .neu-secondary {
@@ -3822,11 +3689,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 
 /* ===== Smooth transitions ===== */
 .neu-workspace-row,
-.neu-tree-row,
 .neu-secondary-tab,
 .neu-pane .natalia-action-btn,
-.neu-pane .natalia-composer-icon-btn,
-.neu-pane .natalia-composer-submit,
 .file-tree-item,
 .review-file-row,
 .review-icon-btn,

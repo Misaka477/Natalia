@@ -1,3 +1,4 @@
+import styles from "../styles/composer.module.css";
 import {
   For,
   Show,
@@ -99,20 +100,20 @@ export function Composer(props: ComposerProps) {
     Boolean(props.busy && props.onStop && !props.value.trim());
 
   return (
-    <div class="natalia-composer" data-focused={isFocused()}>
+    <div class={styles.composer} data-focused={isFocused()}>
       <Show when={props.attachments && props.attachments.length > 0}>
         <div class="natalia-composer-attachments">
           <For each={props.attachments}>
             {(attachment) => (
               <div
-                class="natalia-attachment-chip"
+                class={styles.attachmentChip}
                 data-image={Boolean(attachment.previewUrl)}
               >
                 <Show
                   when={attachment.previewUrl}
                   fallback={
                     <svg
-                      class="natalia-attachment-icon"
+                      class={styles.attachmentIcon}
                       viewBox="0 0 16 16"
                       fill="none"
                     >
@@ -127,17 +128,17 @@ export function Composer(props: ComposerProps) {
                   }
                 >
                   <img
-                    class="natalia-attachment-thumb"
+                    class={styles.attachmentThumb}
                     src={attachment.previewUrl}
                     alt={attachment.name ?? ""}
                   />
                 </Show>
-                <span class="natalia-attachment-name">
+                <span class={styles.attachmentName}>
                   {attachment.name ?? attachment.path.split("/").pop()}
                 </span>
                 <button
                   type="button"
-                  class="natalia-attachment-remove"
+                  class={styles.attachmentRemove}
                   onClick={() => props.onRemoveAttachment?.(attachment.path)}
                   aria-label="Remove attachment"
                 >
@@ -158,7 +159,7 @@ export function Composer(props: ComposerProps) {
 
       <textarea
         ref={textareaRef}
-        class="natalia-composer-textarea"
+        class={styles.textarea}
         value={props.value}
         placeholder={props.placeholder ?? t("composer.placeholder")}
         disabled={props.disabled}
@@ -169,13 +170,13 @@ export function Composer(props: ComposerProps) {
         onPaste={props.onPaste}
       />
 
-      <div class="natalia-composer-toolbar">
-        <div class="natalia-composer-controls">{props.children}</div>
-        <div class="natalia-composer-actions">
+      <div class={styles.toolbar}>
+        <div class={styles.controls}>{props.children}</div>
+        <div class={styles.actions}>
           <Show when={props.onAddAttachment}>
             <button
               type="button"
-              class="natalia-composer-icon-btn"
+              class={styles.iconBtn}
               onClick={props.onAddAttachment}
               disabled={props.disabled}
               title={t("composer.attachTitle")}
@@ -200,7 +201,7 @@ export function Composer(props: ComposerProps) {
           <Show when={showStop()}>
             <button
               type="button"
-              class="natalia-composer-stop"
+              class={styles.stop}
               onClick={props.onStop}
               disabled={props.disabled}
               title={t("composer.stopTitle")}
@@ -220,7 +221,7 @@ export function Composer(props: ComposerProps) {
           <Show when={!showStop()}>
             <button
               type="button"
-              class="natalia-composer-submit"
+              class={styles.submit}
               data-busy={props.busy}
               onClick={handleSubmit}
               disabled={props.disabled || !canSubmit()}

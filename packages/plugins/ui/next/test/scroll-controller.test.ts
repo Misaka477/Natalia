@@ -328,8 +328,18 @@ test("a message's own body carries no height bound and no inner scrollbar", () =
   expect(css).not.toContain("max-height: 860px");
   expect(css).not.toContain("max-height: 420px");
   // The composer is the one box that legitimately bounds itself (the input
-  // grows to a cap, the way the reference implementation's does).
-  expect(rule(".natalia-composer-textarea")).toContain("max-height");
+  // grows to a cap, the way the reference implementation's does). Its rules
+  // moved into the composer CSS module, so the guard reads both.
+  const composerCss = readFileSync(
+    join(import.meta.dir, "..", "src", "styles", "composer.module.css"),
+    "utf8",
+  );
+  const composerRule = (selector: string) => {
+    const at = composerCss.indexOf(selector);
+    expect(at, `${selector} must exist`).toBeGreaterThan(-1);
+    return composerCss.slice(at, composerCss.indexOf("}", at));
+  };
+  expect(composerRule(".textarea")).toContain("max-height");
 });
 
 test("a streaming frame cannot re-arm follow the reader just broke", () => {

@@ -24,10 +24,19 @@ const styles = await Bun.file(
   ),
 ).text();
 
+// The composer's rules moved into its own CSS module; the guard reads the
+// module the markup now lives in.
+const composerStyles = await Bun.file(
+  new URL(
+    "../src/styles/composer.module.css",
+    import.meta.url,
+  ).pathname.replace(/^\/([A-Za-z]:)/u, "$1"),
+).text();
+
 const busyRule = () => {
-  const at = styles.indexOf('.natalia-composer-submit[data-busy="true"]');
+  const at = composerStyles.indexOf('.submit[data-busy="true"]');
   expect(at).toBeGreaterThan(0);
-  return styles.slice(at, styles.indexOf("}", at));
+  return composerStyles.slice(at, composerStyles.indexOf("}", at));
 };
 
 test("the busy send key keeps the accent color, not the error color", () => {
@@ -62,10 +71,10 @@ test("the delivery mode rides the tooltip, and Stop keeps the red", async () => 
   expect(zh).toContain('"composer.sendInjectTitle": "发送并注入当前轮"');
   expect(zh).toContain('"composer.sendTitle": "发送"');
   // The interrupt control is the red one, and it is a separate control.
-  expect(composer).toContain("natalia-composer-stop");
-  const stopRule = styles.slice(
-    styles.indexOf(".neu-pane .natalia-composer-stop {"),
-    styles.indexOf("}", styles.indexOf(".neu-pane .natalia-composer-stop {")),
+  expect(composer).toContain("styles.stop");
+  const stopRule = composerStyles.slice(
+    composerStyles.indexOf(".neu-pane .stop {"),
+    composerStyles.indexOf("}", composerStyles.indexOf(".neu-pane .stop {")),
   );
   expect(stopRule).toContain("var(--neu-error)");
   expect(stopRule).not.toContain("inset");

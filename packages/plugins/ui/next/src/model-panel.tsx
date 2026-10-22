@@ -76,6 +76,7 @@ const providerApis = [
 ];
 
 export function ModelPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   catalog?: RuntimeModelCatalogEntry[];
@@ -111,6 +112,7 @@ export function ModelPanel(props: {
     defaultModel?: string;
   }>;
 }) {
+  const t = props.t;
   const { confirm, dialog } = useConfirmDialog();
   const [editingProvider, setEditingProvider] = createSignal<
     string | undefined
@@ -134,8 +136,8 @@ export function ModelPanel(props: {
       label: props.providers?.[providerName]?.name ?? providerName,
       status:
         props.providers?.[providerName]?.enabled === false
-          ? "已禁用"
-          : "已连接",
+          ? t("model.disabled")
+          : t("model.connected"),
       models: models.map((entry) => ({
         name: entry.id,
         // The 默认 tag is the CONFIG's default model (what a fresh boot
@@ -398,14 +400,14 @@ export function ModelPanel(props: {
       return;
     if (!props.onDiscoverModels) {
       setDiscoveryStatusError(true);
-      setDiscoveryStatus("自动探测不可用");
+      setDiscoveryStatus(t("model.discoveryUnavailable"));
       return;
     }
     const snapshot = discoverySnapshot();
     const requestID = ++discoveryRequestID;
     setDiscoveryInProgress(true);
     setDiscoveryStatusError(false);
-    setDiscoveryStatus("正在自动探测模型...");
+    setDiscoveryStatus(t("model.discovering"));
     try {
       const result = await props.onDiscoverModels({
         type: providerApi(),
@@ -420,13 +422,17 @@ export function ModelPanel(props: {
       setModels((current) => mergeDiscoveredModels(current, discoveredIDs));
       setDiscoveryStatusError(false);
       setDiscoveryStatus(
-        `自动探测成功，发现 ${new Set(discoveredIDs.map((id) => id.trim())).size} 个模型`,
+        t("model.discoverySuccess", {
+          count: new Set(discoveredIDs.map((id) => id.trim())).size,
+        }),
       );
     } catch (error: unknown) {
       if (!isCurrentDiscovery(snapshot)) return;
       setDiscoveryStatusError(true);
       setDiscoveryStatus(
-        `自动探测失败：${error instanceof Error ? error.message : String(error)}`,
+        t("model.discoveryFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       if (requestID === discoveryRequestID) {
@@ -438,17 +444,18 @@ export function ModelPanel(props: {
   async function removeProvider(provider: { name: string; label: string }) {
     if (providerActionInProgress()) return;
     if (!props.onRemoveProvider) {
-      setProviderAction(
-        "删除不可用：providerRemove runtime method unavailable",
-      );
+      setProviderAction(t("model.removeUnavailable"));
       return;
     }
     if (
       !(await confirm({
-        title: "删除提供商",
-        message: `确定删除提供商“${provider.label}”（ID: ${provider.name}）吗？同时删除模型目录和配置；不能撤销`,
-        confirmLabel: "确定",
-        cancelLabel: "取消",
+        title: t("model.deleteTitle"),
+        message: t("model.deleteBody", {
+          label: provider.label,
+          name: provider.name,
+        }),
+        confirmLabel: t("settingsDlg.confirm"),
+        cancelLabel: t("model.cancel"),
         danger: true,
       }))
     )
@@ -458,17 +465,23 @@ export function ModelPanel(props: {
     try {
       const result = await props.onRemoveProvider(provider.name);
       if (!result.removed) {
-        setProviderAction(`删除失败：${result.reason || "运行时拒绝删除"}`);
+        setProviderAction(
+          t("model.deleteFailedReason", {
+            reason: result.reason || t("settingsDlg.auto"),
+          }),
+        );
       } else {
         setProviderAction(
           result.defaultModel
-            ? `已删除，默认模型已自动切换为 ${result.defaultModel}`
-            : "已删除",
+            ? t("model.deletedSwitched", { model: result.defaultModel })
+            : t("model.deleted"),
         );
       }
     } catch (error: unknown) {
       setProviderAction(
-        `删除失败：${error instanceof Error ? error.message : String(error)}`,
+        t("model.deleteFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setProviderActionInProgress(false);
@@ -478,7 +491,7 @@ export function ModelPanel(props: {
   async function submitProvider() {
     if (providerSaveInProgress() || discoveryInProgress()) return;
     if (!props.onAddProvider) {
-      setProviderSaveStatus("提交失败：providerAdd runtime method unavailable");
+      setProviderSaveStatus(t("model.submitUnavailable"));
       return;
     }
     const headerRecordValue = headerRecord();
@@ -526,7 +539,9 @@ export function ModelPanel(props: {
       backToTree();
     } catch (error: unknown) {
       setProviderSaveStatus(
-        `提交失败：${error instanceof Error ? error.message : String(error)}`,
+        t("model.submitFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setProviderSaveInProgress(false);
@@ -571,13 +586,15 @@ export function ModelPanel(props: {
           `}</style>
           <div class="neu-settings-header">
             <span class="neu-settings-title">
-              {view() === "edit-provider" ? "编辑提供商" : "Providers & Models"}
+              {view() === "edit-provider"
+                ? t("model.editProvider")
+                : t("model.panelTitle")}
             </span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={closePanel}
-              aria-label="关闭模型管理"
+              aria-label={t("model.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -636,7 +653,9 @@ export function ModelPanel(props: {
                       </span>
                       <span
                         class="neu-model-status"
-                        data-connected={provider.status === "已连接"}
+                        data-connected={
+                          provider.status === t("model.connected")
+                        }
                       >
                         {provider.status}
                       </span>
@@ -648,7 +667,7 @@ export function ModelPanel(props: {
                           openEditProvider(provider.name);
                         }}
                       >
-                        编辑
+                        {t("model.edit")}
                       </button>
                       <button
                         type="button"
@@ -659,7 +678,7 @@ export function ModelPanel(props: {
                           void removeProvider(provider);
                         }}
                       >
-                        删除
+                        {t("model.delete")}
                       </button>
                     </div>
                     <Show when={expanded().has(provider.name)}>
@@ -669,7 +688,9 @@ export function ModelPanel(props: {
                             <div class="neu-model-row">
                               <span class="neu-model-name">{model.name}</span>
                               <Show when={model.default}>
-                                <span class="neu-model-default">默认</span>
+                                <span class="neu-model-default">
+                                  {t("model.default")}
+                                </span>
                               </Show>
                               <button
                                 type="button"
@@ -677,7 +698,7 @@ export function ModelPanel(props: {
                                 disabled={model.default}
                                 onClick={() => props.onSetDefault?.(model.name)}
                               >
-                                设为默认
+                                {t("model.setDefault")}
                               </button>
                             </div>
                           )}
@@ -693,7 +714,7 @@ export function ModelPanel(props: {
                   class="neu-model-add"
                   onClick={openAddProvider}
                 >
-                  添加 Provider
+                  {t("model.addProvider")}
                 </button>
               </div>
             </div>
@@ -712,13 +733,13 @@ export function ModelPanel(props: {
               </Show>
               <div class="neu-form-field">
                 <label class="neu-form-label" for="provider-name">
-                  提供商 ID
+                  {t("model.providerID")}
                 </label>
                 <input
                   id="provider-name"
                   class="neu-form-input"
                   value={providerName()}
-                  placeholder="小写字母、数字、连字符或下划线"
+                  placeholder={t("model.providerIDPh")}
                   onInput={(event) =>
                     setProviderNameFromInput(event.currentTarget.value)
                   }
@@ -726,13 +747,13 @@ export function ModelPanel(props: {
               </div>
               <div class="neu-form-field">
                 <label class="neu-form-label" for="provider-label">
-                  Provider Name（显示名）
+                  {t("model.providerName")}
                 </label>
                 <input
                   id="provider-label"
                   class="neu-form-input"
                   value={providerLabel()}
-                  placeholder="例如 GPT"
+                  placeholder={t("model.providerNamePh")}
                   onInput={(event) =>
                     setProviderLabelFromInput(event.currentTarget.value)
                   }
@@ -750,7 +771,7 @@ export function ModelPanel(props: {
               </div>
               <div class="neu-form-field">
                 <label class="neu-form-label" for="provider-url">
-                  基础 URL
+                  {t("model.baseURL")}
                 </label>
                 <input
                   id="provider-url"
@@ -764,14 +785,14 @@ export function ModelPanel(props: {
               </div>
               <div class="neu-form-field">
                 <label class="neu-form-label" for="provider-key">
-                  API 密钥
+                  {t("model.apiKey")}
                 </label>
                 <input
                   id="provider-key"
                   class="neu-form-input"
                   type="password"
                   value={apiKey()}
-                  placeholder="可选。请求头管理认证时可留空"
+                  placeholder={t("model.apiKeyPh")}
                   onInput={(event) =>
                     setApiKeyFromInput(event.currentTarget.value)
                   }
@@ -779,7 +800,7 @@ export function ModelPanel(props: {
               </div>
 
               <div class="neu-form-section-title neu-form-section-title-actions">
-                <span>模型（只需填写模型 ID，名称会自动使用 ID）</span>
+                <span>{t("model.modelsSection")}</span>
                 <button
                   type="button"
                   class="neu-model-add neu-model-add-secondary"
@@ -790,7 +811,7 @@ export function ModelPanel(props: {
                   }
                   onClick={() => void discoverModels()}
                 >
-                  自动探测模型
+                  {t("model.discover")}
                 </button>
               </div>
               <Show when={discoveryStatus()}>
@@ -822,8 +843,8 @@ export function ModelPanel(props: {
                       class="neu-form-input"
                       type="number"
                       min="1"
-                      placeholder="上下文窗口"
-                      title="上下文窗口 tokens"
+                      placeholder={t("model.contextWindowPh")}
+                      title={t("model.contextWindowTitle")}
                       value={model().contextWindow ?? ""}
                       onInput={(event) => {
                         const value = Number(event.currentTarget.value);
@@ -842,8 +863,8 @@ export function ModelPanel(props: {
                       class="neu-form-input"
                       type="number"
                       min="1"
-                      placeholder="最大输出"
-                      title="单次回复最多 tokens（从上下文窗口里预留）"
+                      placeholder={t("model.maxOutputPh")}
+                      title={t("model.maxOutputTitle")}
                       value={model().maxOutputTokens ?? ""}
                       onInput={(event) => {
                         const value = Number(event.currentTarget.value);
@@ -865,7 +886,7 @@ export function ModelPanel(props: {
                           })
                         }
                       />
-                      <span>推理</span>
+                      <span>{t("model.reasoning")}</span>
                     </label>
                     <label class="neu-form-checkbox">
                       <input
@@ -875,14 +896,14 @@ export function ModelPanel(props: {
                           updateModel(index, { image: !model().image })
                         }
                       />
-                      <span>图片</span>
+                      <span>{t("model.image")}</span>
                     </label>
                     <button
                       type="button"
                       class="neu-model-remove"
                       onClick={() => removeModel(index)}
                     >
-                      删除
+                      {t("model.delete")}
                     </button>
                   </div>
                 )}
@@ -892,10 +913,10 @@ export function ModelPanel(props: {
                 class="neu-model-add neu-model-add-secondary neu-model-add-full"
                 onClick={addModelRow}
               >
-                + 添加模型
+                {t("model.addModel")}
               </button>
 
-              <div class="neu-form-section-title">请求头</div>
+              <div class="neu-form-section-title">{t("model.headers")}</div>
               <Index each={headers()}>
                 {(header, index) => (
                   <div class="neu-model-edit-row">
@@ -924,7 +945,7 @@ export function ModelPanel(props: {
                       class="neu-model-remove"
                       onClick={() => removeHeaderRow(index)}
                     >
-                      删除
+                      {t("model.delete")}
                     </button>
                   </div>
                 )}
@@ -934,7 +955,7 @@ export function ModelPanel(props: {
                 class="neu-model-add neu-model-add-secondary neu-model-add-full"
                 onClick={addHeaderRow}
               >
-                + 添加请求头
+                {t("model.addHeader")}
               </button>
 
               <div class="neu-form-actions">
@@ -943,7 +964,7 @@ export function ModelPanel(props: {
                   class="neu-form-btn neu-form-cancel"
                   onClick={backToTree}
                 >
-                  取消
+                  {t("model.cancel")}
                 </button>
                 <button
                   type="button"
@@ -951,7 +972,9 @@ export function ModelPanel(props: {
                   disabled={providerSaveInProgress() || discoveryInProgress()}
                   onClick={() => void submitProvider()}
                 >
-                  {providerSaveInProgress() ? "提交中..." : "提交"}
+                  {providerSaveInProgress()
+                    ? t("model.submitting")
+                    : t("model.submit")}
                 </button>
               </div>
             </div>

@@ -13,7 +13,10 @@ import { humanizeToolResult } from "@natalia/ui-model";
 
 type Tab = "status" | "diagnostics" | "tools";
 
-function formatToolDetail(tool: ToolBlock): string {
+function formatToolDetail(
+  tool: ToolBlock,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string {
   const raw = tool.result ?? tool.summary ?? tool.argumentsRaw ?? "";
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -23,14 +26,15 @@ function formatToolDetail(tool: ToolBlock): string {
       if (typeof parsed.terminalID === "string")
         parts.push(`terminal: ${parsed.terminalID}`);
       if (typeof parsed.writtenBytes === "number")
-        parts.push(`写入 ${parsed.writtenBytes} 字节`);
+        parts.push(t("status.writeBytes", { bytes: parsed.writtenBytes }));
       if (typeof parsed.delivery === "string")
         parts.push(`delivery: ${parsed.delivery}`);
       if ("submitted" in parsed)
         parts.push(`submitted: ${String(parsed.submitted)}`);
       if (typeof parsed.terminalKey === "string")
-        parts.push(`按键: ${parsed.terminalKey}`);
-      if (typeof parsed.path === "string") parts.push(`路径: ${parsed.path}`);
+        parts.push(t("status.key", { key: parsed.terminalKey }));
+      if (typeof parsed.path === "string")
+        parts.push(t("status.path", { path: parsed.path }));
       if (typeof parsed.text === "string" && parsed.text)
         parts.push(parsed.text);
       if (typeof parsed.command === "string" && parsed.command)
@@ -48,9 +52,12 @@ function formatToolDetail(tool: ToolBlock): string {
   return raw.length > 2000 ? `${raw.slice(0, 2000)}\n…` : raw;
 }
 
-function needsRawDetail(tool: ToolBlock): boolean {
+function needsRawDetail(
+  tool: ToolBlock,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): boolean {
   const raw = tool.result ?? tool.summary ?? tool.argumentsRaw ?? "";
-  return formatToolDetail(tool).trim() !== raw.trim();
+  return formatToolDetail(tool, t).trim() !== raw.trim();
 }
 
 function shortToolLabel(tool: ToolBlock): string {
@@ -73,11 +80,13 @@ function shortToolLabel(tool: ToolBlock): string {
 }
 
 export function StatusPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
   onClose: () => void;
   state: AppState;
   runtime?: RuntimeClient;
 }) {
+  const t = props.t;
   const [tab, setTab] = createSignal<Tab>("status");
   const [statusData, setStatusData] = createSignal<
     RuntimeStatusSnapshot | undefined
@@ -89,7 +98,8 @@ export function StatusPanel(props: {
     const cache = props.state.intelligence?.cache;
     if (!cache) return undefined;
     const total = cache.hits + cache.misses;
-    if (!total) return { text: "无查询", title: "尚无读查询经过缓存" };
+    if (!total)
+      return { text: t("status.noQuery"), title: t("status.noQueryTitle") };
     const percent = Math.round((cache.hits / total) * 1000) / 10;
     const perKind = Object.entries(cache.byKind)
       .map(
@@ -98,8 +108,8 @@ export function StatusPanel(props: {
       )
       .join(" · ");
     return {
-      text: `命中 ${percent}%（${cache.hits}/${total}）`,
-      title: perKind || "无分类计数",
+      text: t("status.cacheHit", { percent, hits: cache.hits, total }),
+      title: perKind || t("status.noKindCounts"),
     };
   };
   // The provider prefix-cache tier (RINA Phase 5): the share of the
@@ -110,7 +120,7 @@ export function StatusPanel(props: {
     const percent = Math.round(provider.hitShare * 1000) / 10;
     return {
       text: `命中 ${percent}%（${provider.cacheReadTokens}/${provider.inputTokens + provider.cacheReadTokens}）`,
-      title: `${provider.steps} 步的 provider 前缀缓存（静态前缀稳定是其命中前提）`,
+      title: t("status.providerCacheTitle", { steps: provider.steps }),
     };
   };
   const [opRows, setOpRows] = createSignal<
@@ -152,12 +162,12 @@ export function StatusPanel(props: {
           onClick={(event) => event.stopPropagation()}
         >
           <div class="neu-settings-header">
-            <span class="neu-settings-title">状态与诊断</span>
+            <span class="neu-settings-title">{t("status.title")}</span>
             <button
               type="button"
               class="neu-settings-close"
               onClick={props.onClose}
-              aria-label="关闭状态与诊断"
+              aria-label={t("status.closeAria")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
@@ -176,7 +186,7 @@ export function StatusPanel(props: {
               data-active={tab() === "status"}
               onClick={() => setTab("status")}
             >
-              运行时状态
+              {t("status.runtimeState")}
             </button>
             <button
               type="button"
@@ -184,7 +194,7 @@ export function StatusPanel(props: {
               data-active={tab() === "diagnostics"}
               onClick={() => setTab("diagnostics")}
             >
-              诊断
+              {t("status.diagnostics")}
             </button>
             <button
               type="button"
@@ -192,7 +202,7 @@ export function StatusPanel(props: {
               data-active={tab() === "tools"}
               onClick={() => setTab("tools")}
             >
-              工具与能力
+              {t("status.toolsCapabilities")}
             </button>
           </div>
           <div class="neu-status-content">
@@ -205,29 +215,35 @@ export function StatusPanel(props: {
                   </span>
                 </div>
                 <div class="neu-status-card">
-                  <span class="neu-status-card-label">当前模型</span>
+                  <span class="neu-status-card-label">
+                    {t("status.currentModel")}
+                  </span>
                   <span class="neu-status-card-value">
                     {statusData()?.model ??
                       props.state.modelSelection?.modelID ??
-                      "未选择"}
+                      t("status.unselected")}
                   </span>
                 </div>
                 <div class="neu-status-card">
                   <span class="neu-status-card-label">Provider</span>
                   <span class="neu-status-card-value">
-                    {statusData()?.provider ?? "未选择"}
+                    {statusData()?.provider ?? t("status.unselected")}
                   </span>
                 </div>
                 <div class="neu-status-card">
-                  <span class="neu-status-card-label">工作区</span>
+                  <span class="neu-status-card-label">
+                    {t("status.workspace")}
+                  </span>
                   <span class="neu-status-card-value">
                     {statusData()?.cwd ?? "unknown"}
                   </span>
                 </div>
                 <div class="neu-status-card">
-                  <span class="neu-status-card-label">会话</span>
+                  <span class="neu-status-card-label">
+                    {t("status.session")}
+                  </span>
                   <span class="neu-status-card-value">
-                    {props.state.sessionID ?? "无"}
+                    {props.state.sessionID ?? t("status.none")}
                   </span>
                 </div>
                 {/*
@@ -239,7 +255,9 @@ export function StatusPanel(props: {
                 <Show when={cacheLine()}>
                   {(line) => (
                     <div class="neu-status-card">
-                      <span class="neu-status-card-label">读缓存 L1</span>
+                      <span class="neu-status-card-label">
+                        {t("status.readCacheL1")}
+                      </span>
                       <span class="neu-status-card-value" title={line().title}>
                         {line().text}
                       </span>
@@ -252,7 +270,9 @@ export function StatusPanel(props: {
                 <Show when={providerCacheLine()}>
                   {(line) => (
                     <div class="neu-status-card">
-                      <span class="neu-status-card-label">前缀缓存</span>
+                      <span class="neu-status-card-label">
+                        {t("status.prefixCache")}
+                      </span>
                       <span class="neu-status-card-value" title={line().title}>
                         {line().text}
                       </span>
@@ -260,7 +280,9 @@ export function StatusPanel(props: {
                   )}
                 </Show>
                 <div class="neu-status-card">
-                  <span class="neu-status-card-label">上下文</span>
+                  <span class="neu-status-card-label">
+                    {t("status.context")}
+                  </span>
                   <span class="neu-status-card-value">
                     {statusData()?.context ?? "—"}
                   </span>
@@ -271,10 +293,10 @@ export function StatusPanel(props: {
                       measure that used to be printed as "steps" and made one
                       run read as 422 here and 140 on the usage bar. */}
                 <div class="neu-status-card">
-                  <span class="neu-status-card-label">步数</span>
+                  <span class="neu-status-card-label">{t("status.steps")}</span>
                   <span
                     class="neu-status-card-value"
-                    title="provider 步数：每次模型调用计一步"
+                    title={t("status.stepsTitle")}
                   >
                     {statusData()?.steps ?? "—"}
                   </span>
@@ -299,7 +321,7 @@ export function StatusPanel(props: {
                 face — the same records the debug bundle reads.
               */}
               <Show when={opRows().length > 0}>
-                <div class="neu-status-section-title">操作日志</div>
+                <div class="neu-status-section-title">{t("status.opLog")}</div>
                 <div class="neu-status-diagnostics">
                   <For each={newestOperationRecords(opRows())}>
                     {(record) => {
@@ -324,7 +346,7 @@ export function StatusPanel(props: {
             </Show>
             <Show when={tab() === "tools"}>
               <div class="neu-status-tools">
-                <div class="neu-status-section-title">工具</div>
+                <div class="neu-status-section-title">{t("status.tools")}</div>
                 <For each={Object.values(props.state.tools).slice(-60)}>
                   {(tool: ToolBlock) => (
                     <div>
@@ -353,9 +375,9 @@ export function StatusPanel(props: {
                       <Show when={expandedTool() === tool.name + tool.callID}>
                         <div class="neu-status-tool-detail">
                           <div class="neu-status-tool-detail-summary">
-                            {formatToolDetail(tool)}
+                            {formatToolDetail(tool, t)}
                           </div>
-                          <Show when={needsRawDetail(tool)}>
+                          <Show when={needsRawDetail(tool, t)}>
                             <pre class="neu-status-tool-detail-raw">
                               {tool.result ??
                                 tool.summary ??
@@ -368,7 +390,9 @@ export function StatusPanel(props: {
                     </div>
                   )}
                 </For>
-                <div class="neu-status-section-title">能力</div>
+                <div class="neu-status-section-title">
+                  {t("status.capabilities")}
+                </div>
                 <For each={Object.values(props.state.capabilities)}>
                   {(cap: CapabilityView) => (
                     <div class="neu-status-cap-row">

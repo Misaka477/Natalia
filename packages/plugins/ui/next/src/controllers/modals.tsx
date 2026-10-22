@@ -206,6 +206,7 @@ export function ModalLayer(props: ModalLayerProps) {
         }}
       />
       <ModelPanel
+        t={t}
         open={props.modelOpen()}
         onClose={() => props.setModelOpen(false)}
         catalog={props.modelCatalog()}
@@ -245,6 +246,7 @@ export function ModalLayer(props: ModalLayerProps) {
         }}
       />
       <StatusPanel
+        t={t}
         open={props.statusOpen()}
         onClose={() => props.setStatusOpen(false)}
         state={props.state()}

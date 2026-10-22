@@ -202,6 +202,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "state-first",
     note: "the unanswered-call scan reads the exec's RESIDENT events — the window this process already holds — so the poison check costs no store read and the next build finds the journal already balanced",
   },
+  "packages/framework/substrate/src/session-full-events.ts": {
+    count: 1,
+    cls: "fold-direct",
+    note: "the full load's own merge: the resident tail folded against the loaded log so events published while the load ran are not dropped by the tail replacement",
+  },
   "packages/framework/client/src/runtime/record-tools.ts": {
     count: 1,
     cls: "state-first",

@@ -1864,40 +1864,27 @@ const UNANSWERED_TOOL_CALL_TEXT =
   "This tool call was never answered: its turn ended before the result was recorded, so its outcome is unknown. Retry only if the operation is read-only or idempotent; if it may have side effects, verify the external state or ask the human before retrying. Do not retry blindly.";
 
 /**
- * Repair an assistant tool call whose arguments are not valid JSON.
+ * The arguments a tool call may put on the wire: the original when it parses
+ * as JSON, `{}` when it does not.
  *
- * A model can emit a syntactically invalid arguments string while the stream
- * itself completes — measured on this host: a write_file call whose arguments
- * were `{ content placeholder` followed by a bare filename, which the runtime
- * could not parse and recorded as the call's argumentsDelta anyway (the tool
- * then failed with "JSON Parse error", which is the right model-facing
- * answer). The gateway validates EVERY tool call's `function.arguments` as
- * JSON and answers `input_invalid` for the whole request — proved minimally:
- * that one call alone is a 400, the same call with `{}` is a 200. A session
- * whose journal carries such a call is therefore unsendable forever: the same
- * history replays on every turn.
- *
- * The repair keeps the call visible and replaces only its arguments with an
- * empty object. The model still sees the call it made and its result — the
- * runtime's own "JSON Parse error" text names what was wrong — so nothing is
- * hidden, and the wire stays within the format. The execution side keeps the
- * raw arguments (the deepseek harness's `parseArguments` preserves them the
- * same way), which is what makes the tool fail loudly rather than silently.
+ * The gateway validates EVERY tool call's `function.arguments` as a JSON
+ * object and answers `input_invalid` for the whole request when one is not —
+ * proved minimally on this host: one call with `{ content placeholder` and a
+ * bare filename is a 400, the same call with `{}` is a 200, and a session
+ * whose journal carries such a call is unsendable forever because the same
+ * history replays on every turn. The journal keeps the raw text (the tool
+ * failed with "JSON Parse error", the right model-facing answer, and the
+ * deepseek harness's `parseArguments` preserves it the same way); the wire
+ * gets `{}`, so the model still sees the call it made and the result naming
+ * what was wrong.
  */
-function sanitizeToolCallArguments(
-  messages: ProviderMessage[],
-): ProviderMessage[] {
-  for (const message of messages) {
-    if (message.role !== "assistant" || !message.toolCalls?.length) continue;
-    for (const call of message.toolCalls) {
-      try {
-        JSON.parse(call.arguments);
-      } catch {
-        call.arguments = "{}";
-      }
-    }
+export function safeToolCallArguments(raw: string): string {
+  try {
+    JSON.parse(raw);
+    return raw;
+  } catch {
+    return "{}";
   }
-  return messages;
 }
 /**
  * Close every assistant tool call the request would carry with no result.
@@ -2031,7 +2018,7 @@ export function contextEntriesToProviderMessages(
     const message = contextEntryToProviderMessage(entry);
     if (message) messages.push(message);
   }
-  return closeUnansweredToolCalls(sanitizeToolCallArguments(messages));
+  return closeUnansweredToolCalls(messages);
 }
 
 function contextEntryToProviderMessage(
@@ -3197,7 +3184,21 @@ function toOpenAIMessage(
         .map((call) => ({
           id: call.id,
           type: "function",
-          function: { name: call.name, arguments: call.arguments },
+          function: {
+            name: call.name,
+            // The wire requires every call's arguments to be a JSON
+            // OBJECT. A model can emit a syntactically invalid string
+            // while the stream completes (measured: `{ content
+            // placeholder` and a bare filename), and the gateway answers
+            // input_invalid for the WHOLE request — proved minimally, one
+            // such call alone is a 400 and the same call with `{}` is a
+            // 200. The assembly keeps the journal's raw text (the tool
+            // failed with "JSON Parse error", which is the right
+            // model-facing answer); the WIRE gets `{}`. Sanitized here,
+            // in the adapter, because it is the gateway's rule and not a
+            // fact about the conversation.
+            arguments: safeToolCallArguments(call.arguments),
+          },
         })),
     };
   }

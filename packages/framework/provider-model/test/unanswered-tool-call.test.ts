@@ -19,7 +19,10 @@
  */
 import { expect, test } from "bun:test";
 import type { ContextEntry } from "@anthelia/runtime";
-import { contextEntriesToProviderMessages } from "@anthelia/runtime";
+import {
+  contextEntriesToProviderMessages,
+  safeToolCallArguments,
+} from "@anthelia/runtime";
 
 /** The restored ledger's shape for a turn with one bad-arguments call. */
 function poisonedEntries(): ContextEntry[] {
@@ -58,20 +61,20 @@ function poisonedEntries(): ContextEntry[] {
   ] as unknown as ContextEntry[];
 }
 
-test("a tool call whose arguments are not valid JSON is sanitized, not dropped", () => {
-  const messages = contextEntriesToProviderMessages(poisonedEntries());
-  const assistant = messages.find((m) => m.role === "assistant")!;
-  const call = assistant.toolCalls!.find((c) => c.id === "call_bad_args")!;
-  // The arguments go out as valid JSON: the gateway validates them and a
-  // non-JSON string is answered input_invalid for the WHOLE request.
-  expect(() => JSON.parse(call.arguments)).not.toThrow();
-  expect(call.arguments).toBe("{}");
-  // And the call is NOT dropped: the model sees it made the call, and its
-  // result (the runtime's own parse error) names what was wrong.
-  const result = messages.find(
-    (m) => m.role === "tool" && m.toolCallID === "call_bad_args",
-  )!;
-  expect(String(result.content)).toContain("JSON Parse error");
+test("the wire sanitizes arguments that are not valid JSON, and keeps valid ones", () => {
+  // The measured poison: a model emitted `{ content placeholder` and a bare
+  // filename while the stream completed, the runtime recorded the raw string
+  // as the call's argumentsDelta, and the gateway answered input_invalid for
+  // the whole request — proved minimally: one such call is a 400, the same
+  // call with `{}` is a 200. The journal keeps the raw (the tool's own
+  // "JSON Parse error" result names what was wrong); the WIRE gets `{}`.
+  expect(
+    safeToolCallArguments("{ content placeholder\n\nstageB_dft.py\n"),
+  ).toBe("{}");
+  // Valid arguments pass through untouched — including a bare string, which
+  // the assembly preserves and only the wire would question.
+  expect(safeToolCallArguments('{"path": "x.md"}')).toBe('{"path": "x.md"}');
+  expect(safeToolCallArguments("a.ts")).toBe("{}");
 });
 
 test("a call with valid arguments is passed through untouched", () => {

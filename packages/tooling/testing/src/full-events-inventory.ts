@@ -197,6 +197,11 @@ export const FULL_READ_INVENTORY: Readonly<Record<string, InventoryEntry>> = {
     cls: "derivation",
     note: "the shell_switch notice's revision — the same monotonic counter the sandbox_rung notice reads, on the same latest-win channel",
   },
+  "packages/framework/client/src/runtime/tool-call-recovery.ts": {
+    count: 1,
+    cls: "state-first",
+    note: "the unanswered-call scan reads the exec's RESIDENT events — the window this process already holds — so the poison check costs no store read and the next build finds the journal already balanced",
+  },
   "packages/framework/client/src/runtime/record-tools.ts": {
     count: 1,
     cls: "state-first",

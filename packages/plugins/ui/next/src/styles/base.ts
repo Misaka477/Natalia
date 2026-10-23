@@ -3716,21 +3716,19 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   .neu-sidebar { max-width: 240px; }
 }
 @media (max-width: 1700px) {
-  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] .neu-secondary {
+  .neu-shell[data-compact="true"] .neu-secondary {
     width: min(720px, 66vw);
   }
   .neu-shell[data-compact="true"] .neu-resizer {
     display: block;
   }
-  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] .neu-pane {
+  .neu-shell[data-compact="true"] .neu-pane {
     min-height: 220px;
   }
 }
 
 /* Compact but short viewports: horizontal main panes are better than
    stacking two panes vertically when height is at or below 1000px. */
-@media (max-width: 1700px) and (min-width: 1001px) and (max-height: 1000px) {
-  .neu-shell[data-compact="true"]   .neu-shell[data-compact="true"] }
 @media (max-width: 1000px) {
   .neu-shell { padding: 6px; gap: 6px; }
   .neu-app { gap: 6px; }

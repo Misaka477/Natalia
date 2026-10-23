@@ -1,3 +1,4 @@
+import styles from "./styles/help-panel.module.css";
 import { Show, For, onCleanup, onMount } from "solid-js";
 
 // ONLY what the shell actually handles. The list used to advertise
@@ -41,10 +42,7 @@ export function HelpPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-help-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("help.title")}</span>
             <button
@@ -63,24 +61,24 @@ export function HelpPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-help-body">
-            <div class="neu-help-section-title">{t("help.quickstart")}</div>
+          <div class={styles.body}>
+            <div class={styles.sectionTitle}>{t("help.quickstart")}</div>
             <For each={sections}>
               {(section) => (
-                <div class="neu-help-item">
-                  <span class="neu-help-item-title">{t(section.titleKey)}</span>
-                  <span class="neu-help-item-text">{t(section.textKey)}</span>
+                <div class={styles.item}>
+                  <span class={styles.itemTitle}>{t(section.titleKey)}</span>
+                  <span class={styles.itemText}>{t(section.textKey)}</span>
                 </div>
               )}
             </For>
-            <div class="neu-help-section-title">{t("help.shortcuts")}</div>
+            <div class={styles.sectionTitle}>{t("help.shortcuts")}</div>
             <For each={shortcuts}>
               {(shortcut) => (
-                <div class="neu-help-shortcut">
-                  <span class="neu-help-shortcut-keys">
+                <div class={styles.shortcut}>
+                  <span class={styles.shortcutKeys}>
                     {shortcut.keys.join(" + ")}
                   </span>
-                  <span class="neu-help-shortcut-desc">
+                  <span class={styles.shortcutDesc}>
                     {t(shortcut.descriptionKey)}
                   </span>
                 </div>

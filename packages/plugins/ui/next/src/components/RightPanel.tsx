@@ -1,3 +1,4 @@
+import styles from "../styles/review-panel.module.css";
 import {
   createSignal,
   createEffect,
@@ -1198,7 +1199,7 @@ export function ReviewPane(
         </button>
       </div>
       <Show when={tab() === "git"}>
-        <div class="review-git-ranges">
+        <div class={styles.gitRanges}>
           <NeuSelect
             value={gitFrom()}
             options={[
@@ -1216,7 +1217,7 @@ export function ReviewPane(
               void loadGit();
             }}
           />
-          <span class="review-git-arrow">→</span>
+          <span class={styles.gitArrow}>→</span>
           <NeuSelect
             value={gitTo()}
             options={[
@@ -1237,7 +1238,7 @@ export function ReviewPane(
         </div>
       </Show>
       <Show when={tab() === "rounds"}>
-        <div class="review-git-ranges">
+        <div class={styles.gitRanges}>
           <NeuSelect
             value={roundPlanID()}
             options={[...new Set(auditRounds().map((item) => item.planID))].map(
@@ -1261,7 +1262,7 @@ export function ReviewPane(
               void runRoundDiff();
             }}
           />
-          <span class="review-git-arrow">→</span>
+          <span class={styles.gitArrow}>→</span>
           <NeuSelect
             value={roundFrom() === undefined ? "" : String(roundFrom()!)}
             options={auditRounds()
@@ -1275,7 +1276,7 @@ export function ReviewPane(
               void runRoundDiff();
             }}
           />
-          <span class="review-git-arrow">→</span>
+          <span class={styles.gitArrow}>→</span>
           <NeuSelect
             value={roundTo() === undefined ? "" : String(roundTo()!)}
             options={auditRounds()
@@ -1298,12 +1299,12 @@ export function ReviewPane(
             {(pr) => (
               <button
                 type="button"
-                class="review-entity-button"
+                class={styles.entityButton}
                 data-active={selectedSandbox() === pr.sandboxID}
                 onClick={() => void selectSandbox(pr.sandboxID)}
               >
                 {pr.id}
-                <span class="review-entity-count">{pr.status}</span>
+                <span class={styles.entityCount}>{pr.status}</span>
               </button>
             )}
           </For>
@@ -1315,43 +1316,43 @@ export function ReviewPane(
             {(sandbox) => (
               <button
                 type="button"
-                class="review-entity-button"
+                class={styles.entityButton}
                 data-active={selectedSandbox() === sandbox.id}
                 onClick={() => void selectSandbox(sandbox.id)}
               >
                 {sandbox.id}
-                <span class="review-entity-count">{sandbox.changedFiles}</span>
+                <span class={styles.entityCount}>{sandbox.changedFiles}</span>
               </button>
             )}
           </For>
         </div>
       </Show>
       <Show when={tab() === "sandbox" && selectedTeamPR()}>
-        <div class="review-pr-detail">
-          <div class="review-pr-row">
-            <span class="review-pr-label">Task</span>
-            <span class="review-pr-text">{selectedTeamPR()!.task}</span>
+        <div class={styles.prDetail}>
+          <div class={styles.prRow}>
+            <span class={styles.prLabel}>Task</span>
+            <span class={styles.prText}>{selectedTeamPR()!.task}</span>
           </div>
-          <div class="review-pr-row">
-            <span class="review-pr-label">Status</span>
-            <span class="review-pr-text">{selectedTeamPR()!.status}</span>
+          <div class={styles.prRow}>
+            <span class={styles.prLabel}>Status</span>
+            <span class={styles.prText}>{selectedTeamPR()!.status}</span>
           </div>
           <Show when={selectedTeamPR()!.result}>
-            <div class="review-pr-row">
-              <span class="review-pr-label">Result</span>
-              <pre class="review-pr-result">{selectedTeamPR()!.result}</pre>
+            <div class={styles.prRow}>
+              <span class={styles.prLabel}>Result</span>
+              <pre class={styles.prResult}>{selectedTeamPR()!.result}</pre>
             </div>
           </Show>
           <Show when={selectedTeamPR()!.buildEvidence}>
-            <div class="review-pr-row">
-              <span class="review-pr-label">Build</span>
-              <span class="review-pr-text">
+            <div class={styles.prRow}>
+              <span class={styles.prLabel}>Build</span>
+              <span class={styles.prText}>
                 {selectedTeamPR()!.buildEvidence!.ok ? "passed" : "failed"} ·
                 exit {selectedTeamPR()!.buildEvidence!.exitCode}
               </span>
             </div>
             <Show when={selectedTeamPR()!.buildEvidence!.output}>
-              <pre class="review-pr-result">
+              <pre class={styles.prResult}>
                 {selectedTeamPR()!.buildEvidence!.output}
               </pre>
             </Show>
@@ -1403,7 +1404,7 @@ export function ReviewPane(
                 fallback={
                   <button
                     type="button"
-                    class="review-checkpoint-rename-btn"
+                    class={styles.checkpointRenameBtn}
                     onClick={() => {
                       const selected = userCheckpoints().find(
                         (checkpoint) => checkpoint.id === selectedCheckpoint(),
@@ -1429,7 +1430,7 @@ export function ReviewPane(
                 />
                 <button
                   type="button"
-                  class="review-checkpoint-rename-btn"
+                  class={styles.checkpointRenameBtn}
                   onClick={() => void commitRenameCheckpoint()}
                 >
                   {t("review.save")}
@@ -1502,8 +1503,8 @@ export function ReviewPane(
         </div>
         <div class="review-meta">
           <span class="review-count">{changesForTab().length} files</span>
-          <span class="review-additions">+{totalAdditions()}</span>
-          <span class="review-deletions">-{totalDeletions()}</span>
+          <span class={styles.additions}>+{totalAdditions()}</span>
+          <span class={styles.deletions}>-{totalDeletions()}</span>
         </div>
       </div>
       <div class="review-body">
@@ -1598,10 +1599,10 @@ export function ReviewPane(
                   <span class="review-diff-path">
                     {selectedFile()?.path ?? ""}
                   </span>
-                  <div class="review-diff-actions">
+                  <div class={styles.diffActions}>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={diffScope() === "session"}
                       title={t("review.tooltipSession")}
                       onClick={() => {
@@ -1613,7 +1614,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={diffScope() === "all"}
                       title={t("review.tooltipGlobal")}
                       onClick={() => {
@@ -1625,7 +1626,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={diffIgnoreWhitespace()}
                       title={t("review.tooltipIgnoreWhitespace")}
                       onClick={() => {
@@ -1637,7 +1638,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={viewMode() === "unified"}
                       title="Unified"
                       onClick={() => setViewMode("unified")}
@@ -1646,7 +1647,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={viewMode() === "split"}
                       title="Split"
                       onClick={() => setViewMode("split")}
@@ -1655,7 +1656,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={viewMode() === "ast" && !astBatchPanelOpen()}
                       title="AST"
                       onClick={() => {
@@ -1668,7 +1669,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={
                         viewMode() === "ast" &&
                         astBatchPanelOpen() &&
@@ -1686,7 +1687,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={
                         viewMode() === "ast" &&
                         astBatchPanelOpen() &&
@@ -1704,7 +1705,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={
                         viewMode() === "ast" &&
                         astBatchPanelOpen() &&
@@ -1723,7 +1724,7 @@ export function ReviewPane(
                     </button>
                     <button
                       type="button"
-                      class="review-icon-btn"
+                      class={styles.iconBtn}
                       data-active={
                         viewMode() === "ast" &&
                         astBatchPanelOpen() &&
@@ -1768,7 +1769,7 @@ export function ReviewPane(
                     <div class="review-diff-content">
                       <Show when={astBatchPanelOpen()}>
                         <Show when={astBatchMode() === "search"}>
-                          <div class="ast-search-form">
+                          <div class={styles.astSearchForm}>
                             <input
                               type="text"
                               placeholder={t("review.astContainsPh")}
@@ -1810,7 +1811,7 @@ export function ReviewPane(
                             </div>
                           </Show>
                           <Show when={astSearchResult()}>
-                            <div class="ast-diff-list">
+                            <div class={styles.astDiffList}>
                               <Show
                                 when={
                                   !(astSearchResult()!.matches ?? []).length
@@ -1824,28 +1825,28 @@ export function ReviewPane(
                               </Show>
                               <For each={astSearchResult()!.matches ?? []}>
                                 {(file) => (
-                                  <div class="ast-change-group">
-                                    <div class="ast-group-header">
+                                  <div class={styles.astChangeGroup}>
+                                    <div class={styles.astGroupHeader}>
                                       <span class="ast-group-name">
                                         {file.path ?? "?"}
                                       </span>
-                                      <span class="ast-group-count">
+                                      <span class={styles.astGroupCount}>
                                         {file.nodes.length}
                                       </span>
                                     </div>
                                     <For each={file.nodes}>
                                       {(node) => (
                                         <div
-                                          class="ast-change-row"
+                                          class={styles.astChangeRow}
                                           data-kind={node.nodeKind}
                                         >
-                                          <span class="ast-change-kind">
+                                          <span class={styles.astChangeKind}>
                                             {node.nodeKind}
                                           </span>
-                                          <span class="ast-change-node">
+                                          <span class={styles.astChangeNode}>
                                             {node.text || "—"}
                                           </span>
-                                          <span class="ast-change-pos">
+                                          <span class={styles.astChangePos}>
                                             {node.start}-{node.end}
                                           </span>
                                         </div>
@@ -1859,7 +1860,7 @@ export function ReviewPane(
                         </Show>
 
                         <Show when={astBatchMode() === "plan"}>
-                          <div class="ast-search-form">
+                          <div class={styles.astSearchForm}>
                             <input
                               type="text"
                               placeholder={t("review.oldNamePh")}
@@ -1907,7 +1908,7 @@ export function ReviewPane(
                             </div>
                           </Show>
                           <Show when={astPlanResult()}>
-                            <div class="ast-diff-list">
+                            <div class={styles.astDiffList}>
                               <Show when={!astPlanResult()!.targets.length}>
                                 <div class="review-empty">
                                   <div class="review-empty-title">
@@ -1918,17 +1919,17 @@ export function ReviewPane(
                               <For each={astPlanResult()!.targets}>
                                 {(target) => (
                                   <div
-                                    class="ast-change-row"
+                                    class={styles.astChangeRow}
                                     data-kind={target.nodeKind}
                                   >
-                                    <span class="ast-change-kind">
+                                    <span class={styles.astChangeKind}>
                                       {target.nodeKind}
                                     </span>
-                                    <span class="ast-change-node">
+                                    <span class={styles.astChangeNode}>
                                       {target.text} →{" "}
                                       {target.suggestedText ?? "?"}
                                     </span>
-                                    <span class="ast-change-pos">
+                                    <span class={styles.astChangePos}>
                                       {target.path ?? "?"}
                                     </span>
                                   </div>
@@ -1996,7 +1997,7 @@ export function ReviewPane(
                             </div>
                           </Show>
                           <Show when={astBatchResult()}>
-                            <div class="ast-diff-list">
+                            <div class={styles.astDiffList}>
                               <Show when={!astBatchGroups().length}>
                                 <div class="review-empty">
                                   <div class="review-empty-title">
@@ -2006,28 +2007,28 @@ export function ReviewPane(
                               </Show>
                               <For each={astBatchGroups()}>
                                 {(group) => (
-                                  <div class="ast-change-group">
-                                    <div class="ast-group-header">
+                                  <div class={styles.astChangeGroup}>
+                                    <div class={styles.astGroupHeader}>
                                       <span class="ast-group-name">
                                         {group.nodeKind}
                                       </span>
-                                      <span class="ast-group-count">
+                                      <span class={styles.astGroupCount}>
                                         {group.items.length}
                                       </span>
                                     </div>
                                     <For each={group.items}>
                                       {(item) => (
                                         <div
-                                          class="ast-change-row"
+                                          class={styles.astChangeRow}
                                           data-kind={item.change.kind}
                                         >
-                                          <span class="ast-change-kind">
+                                          <span class={styles.astChangeKind}>
                                             {item.change.kind}
                                           </span>
-                                          <span class="ast-change-node">
+                                          <span class={styles.astChangeNode}>
                                             {item.change.nodeKind}
                                           </span>
-                                          <span class="ast-change-pos">
+                                          <span class={styles.astChangePos}>
                                             {item.path ?? "?"}
                                           </span>
                                         </div>
@@ -2055,7 +2056,7 @@ export function ReviewPane(
                                 </div>
                               }
                             >
-                              <div class="ast-diff-list">
+                              <div class={styles.astDiffList}>
                                 <Show when={!astDiffResult()!.changes.length}>
                                   <div class="review-empty">
                                     <div class="review-empty-title">
@@ -2065,10 +2066,10 @@ export function ReviewPane(
                                 </Show>
                                 <For each={astGroups()}>
                                   {(group) => (
-                                    <div class="ast-change-group">
+                                    <div class={styles.astChangeGroup}>
                                       <button
                                         type="button"
-                                        class="ast-group-header"
+                                        class={styles.astGroupHeader}
                                         onClick={() =>
                                           setCollapsedAstGroups((prev) => {
                                             const next = new Set(prev);
@@ -2087,7 +2088,7 @@ export function ReviewPane(
                                             : "▾"}{" "}
                                           {group.nodeKind}
                                         </span>
-                                        <span class="ast-group-count">
+                                        <span class={styles.astGroupCount}>
                                           {group.changes.length}
                                         </span>
                                       </button>
@@ -2101,7 +2102,7 @@ export function ReviewPane(
                                         <For each={group.changes}>
                                           {(change) => (
                                             <div
-                                              class="ast-change-row"
+                                              class={styles.astChangeRow}
                                               data-kind={change.kind}
                                               onClick={() => {
                                                 const file = selectedFile();
@@ -2128,13 +2129,17 @@ export function ReviewPane(
                                                 });
                                               }}
                                             >
-                                              <span class="ast-change-kind">
+                                              <span
+                                                class={styles.astChangeKind}
+                                              >
                                                 {change.kind}
                                               </span>
-                                              <span class="ast-change-node">
+                                              <span
+                                                class={styles.astChangeNode}
+                                              >
                                                 {change.nodeKind}
                                               </span>
-                                              <span class="ast-change-pos">
+                                              <span class={styles.astChangePos}>
                                                 {change.kind === "removed"
                                                   ? `${change.oldStart}-${change.oldEnd}`
                                                   : `${change.newStart}-${change.newEnd}`}
@@ -2148,7 +2153,7 @@ export function ReviewPane(
                                 </For>
                               </div>
                               <Show when={astSnippet()}>
-                                <pre class="ast-snippet">
+                                <pre class={styles.astSnippet}>
                                   {astSnippet()!.text}
                                 </pre>
                               </Show>
@@ -2203,8 +2208,8 @@ export function ReviewPane(
                     }
                   >
                     <div class="review-diff-content">
-                      <div class="review-diff-raw">
-                        <div class="review-diff-raw-title">
+                      <div class={styles.diffRaw}>
+                        <div class={styles.diffRawTitle}>
                           {t("review.diffFailed")}
                         </div>
                         <pre>{structuredDiffError()}</pre>
@@ -2236,8 +2241,8 @@ export function ReviewPane(
                     }
                   >
                     <div class="review-diff-content">
-                      <div class="review-diff-raw">
-                        <div class="review-diff-raw-title">Before</div>
+                      <div class={styles.diffRaw}>
+                        <div class={styles.diffRawTitle}>Before</div>
                         <pre>{selectedFile()!.before}</pre>
                       </div>
                     </div>
@@ -2253,8 +2258,8 @@ export function ReviewPane(
                     }
                   >
                     <div class="review-diff-content">
-                      <div class="review-diff-raw">
-                        <div class="review-diff-raw-title">After</div>
+                      <div class={styles.diffRaw}>
+                        <div class={styles.diffRawTitle}>After</div>
                         <pre>{selectedFile()!.after}</pre>
                       </div>
                     </div>

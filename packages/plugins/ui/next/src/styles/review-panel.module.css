@@ -1,0 +1,284 @@
+/* The review panel's own rules: the git range picker, the checkpoint
+   rename button, the raw diff, the PR rows, the entity buttons, the
+   diff actions with their icon buttons, and the AST search and diff
+   renderers. The review surface they sit in (pane, header, subtabs,
+   diff, file rows, entity list, empty states, section labels) is shared
+   with the agent and plan panels and stays global. Tokens only. */
+
+.gitRanges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 8px;
+}
+
+.gitRanges :global(.neu-select) {
+  flex: 1;
+  min-width: 0;
+}
+
+.gitArrow {
+  color: var(--neu-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.checkpointRenameBtn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.checkpointRenameBtn:hover {
+  color: var(--neu-accent);
+}
+
+.diffRaw {
+  padding: 8px 12px;
+  margin: 6px 12px;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+}
+
+.diffRawTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neu-muted);
+  margin-bottom: 4px;
+}
+
+.diffRaw pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 0 12px 8px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.prRow {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.prLabel {
+  font-weight: 700;
+  margin-right: 6px;
+  color: var(--neu-muted);
+}
+
+.prText {
+  color: var(--neu-text);
+}
+
+.prResult {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  max-height: 80px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  white-space: pre-wrap;
+  font-family: var(--neu-font-mono);
+  font-size: 10px;
+}
+
+.entityButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+}
+
+.entityButton[data-active="true"] {
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  box-shadow: var(--neu-inset-3);
+}
+
+.entityCount {
+  font-weight: 700;
+  color: var(--neu-accent);
+}
+
+.additions {
+  color: var(--neu-success);
+  font-weight: 600;
+}
+
+.deletions {
+  color: var(--neu-error);
+  font-weight: 600;
+}
+
+.diffActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: var(--neu-muted);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.iconBtn:hover {
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+}
+
+.iconBtn[data-active="true"] {
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+}
+
+/* The AST search and diff renderers. */
+
+.astDiffList {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.astSearchForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.astSearchForm input {
+  flex: 1 1 160px;
+  min-width: 120px;
+  padding: 5px 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  border: 1px solid var(--neu-border);
+  border-radius: 8px;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+}
+
+.astSearchForm button {
+  padding: 5px 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  border: 1px solid var(--neu-border);
+  border-radius: 8px;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.astChangeRow {
+  display: grid;
+  grid-template-columns: 70px 1fr auto;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+}
+
+.astChangeRow[data-kind="added"] {
+  background: var(--neu-diff-added-bg);
+}
+
+.astChangeRow[data-kind="removed"] {
+  background: var(--neu-diff-removed-bg);
+}
+
+.astChangeRow[data-kind="moved"] {
+  background: color-mix(in srgb, var(--neu-accent) 12%, transparent);
+}
+
+.astChangeKind {
+  color: var(--neu-muted);
+  text-transform: uppercase;
+}
+
+.astChangeNode {
+  color: var(--neu-text);
+  font-weight: 600;
+}
+
+.astChangePos {
+  color: var(--neu-muted);
+}
+
+.astChangeGroup {
+  margin-bottom: 8px;
+}
+
+.astGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--neu-bg);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--neu-badge-inset);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  color: var(--neu-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.astGroupCount {
+  color: var(--neu-muted);
+}
+
+.astSnippet {
+  margin: 6px 12px;
+  padding: 8px 10px;
+  background: var(--neu-bg);
+  border-radius: 8px;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  color: var(--neu-text);
+  white-space: pre-wrap;
+  box-shadow: var(--neu-badge-inset);
+}
+
+/* The smooth-transition pass the global sheet applied to the icon button. */
+.iconBtn {
+  transition:
+    box-shadow 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}

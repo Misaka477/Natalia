@@ -1,0 +1,62 @@
+/* The session actions panel: its window, the current-session card and
+   the action rows. The modal chrome is shared vocabulary and stays
+   global. Tokens only. */
+
+.window {
+  width: min(420px, 90vw);
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.current {
+  margin: 14px 20px 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--neu-muted);
+  background: var(--neu-bg);
+  border-radius: 12px;
+  box-shadow: var(--neu-inset-2);
+}
+
+.current strong {
+  color: var(--neu-text);
+}
+
+.actions {
+  padding: 14px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+}
+
+.actionRow:hover {
+  background: var(--neu-bg-light);
+}
+
+.actionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.actionDescription {
+  font-size: 12px;
+  color: var(--neu-muted);
+}

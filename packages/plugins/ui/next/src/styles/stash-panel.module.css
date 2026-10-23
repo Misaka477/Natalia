@@ -1,0 +1,85 @@
+/* The stash panel: its window, body, the stash items and the new-stash
+   form. The modal chrome and the shared form controls stay global; the
+   textarea is shared with the workspace-settings panel, so it stays
+   global too. Tokens only. */
+
+.window {
+  width: min(620px, 90vw);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.itemMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.content {
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+
+.time {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.btn {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.btn:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+.remove {
+  color: var(--neu-error);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+}

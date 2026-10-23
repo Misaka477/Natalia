@@ -1,3 +1,4 @@
+import styles from "./styles/stash-panel.module.css";
 import {
   createSignal,
   createEffect,
@@ -80,10 +81,7 @@ export function StashPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-stash-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("stash.title")}</span>
             <button
@@ -102,21 +100,21 @@ export function StashPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-stash-body">
+          <div class={styles.body}>
             <For each={items()}>
               {(item) => (
-                <div class="neu-stash-item">
-                  <div class="neu-stash-item-main">
-                    <span class="neu-stash-title">{item.title}</span>
-                    <span class="neu-stash-content">{item.content}</span>
+                <div class={styles.item}>
+                  <div class={styles.itemMain}>
+                    <span class={styles.title}>{item.title}</span>
+                    <span class={styles.content}>{item.content}</span>
                   </div>
-                  <span class="neu-stash-time">{item.time}</span>
-                  <button type="button" class="neu-stash-btn">
+                  <span class={styles.time}>{item.time}</span>
+                  <button type="button" class={styles.btn}>
                     {t("stash.copy")}
                   </button>
                   <button
                     type="button"
-                    class="neu-stash-btn neu-stash-remove"
+                    class={`${styles.btn} ${styles.remove}`}
                     onClick={() =>
                       setItems((prev) =>
                         prev.filter((row) => row.id !== item.id),
@@ -129,7 +127,7 @@ export function StashPanel(props: {
               )}
             </For>
             <Show when={adding()}>
-              <div class="neu-stash-form">
+              <div class={styles.form}>
                 <input
                   class="neu-form-input"
                   value={title()}

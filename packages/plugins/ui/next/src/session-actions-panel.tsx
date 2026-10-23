@@ -1,3 +1,4 @@
+import styles from "./styles/session-actions-panel.module.css";
 import { Show, onCleanup, onMount, For } from "solid-js";
 
 type ActionId = "pin" | "snapshot" | "rollback" | "delete";
@@ -43,10 +44,7 @@ export function SessionActionsPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-session-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("session.title")}</span>
             <button
@@ -65,16 +63,16 @@ export function SessionActionsPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-session-current">
+          <div class={styles.current}>
             {t("session.current", { name: props.session })}
             <strong>{props.session}</strong>
           </div>
-          <div class="neu-session-actions">
+          <div class={styles.actions}>
             <For each={actions}>
               {(action) => (
                 <button
                   type="button"
-                  class="neu-session-action-row"
+                  class={styles.actionRow}
                   onClick={() => {
                     if (action.id === "pin") props.onPin?.();
                     else if (action.id === "snapshot") props.onSnapshot?.();
@@ -82,10 +80,8 @@ export function SessionActionsPanel(props: {
                     else if (action.id === "delete") props.onDelete?.();
                   }}
                 >
-                  <span class="neu-session-action-label">
-                    {t(action.labelKey)}
-                  </span>
-                  <span class="neu-session-action-description">
+                  <span class={styles.actionLabel}>{t(action.labelKey)}</span>
+                  <span class={styles.actionDescription}>
                     {t(action.descKey)}
                   </span>
                 </button>

@@ -1606,13 +1606,17 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
   box-shadow: var(--neu-elevation-5);
-  overflow: visible;
+  overflow: hidden;
 }
 .neu-workspace-body {
   padding: 14px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.neu-workspace-body .neu-select-menu {
+  position: static;
+  margin-top: 6px;
 }
 
 /* ===== Smooth transitions ===== */

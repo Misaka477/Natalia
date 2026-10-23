@@ -160,12 +160,9 @@ button.item.itemButton.itemDanger:active {
   padding: 10px 12px;
 }
 
-/* The editor window and body the settings panel opens its editors in.
-   overflow is visible so NeuSelect dropdown menus inside the dialog can
-   extend past the bottom edge instead of being clipped by the window. */
+/* The editor window and body the settings panel opens its editors in. */
 .editWindow {
   width: min(480px, 90vw);
-  overflow: visible;
 }
 
 .editBody {
@@ -173,7 +170,11 @@ button.item.itemButton.itemDanger:active {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  overflow: visible;
+}
+
+.editBody :global(.neu-select-menu) {
+  position: static;
+  margin-top: 6px;
 }
 
 /* The tool family picker and the permission rows. The family check

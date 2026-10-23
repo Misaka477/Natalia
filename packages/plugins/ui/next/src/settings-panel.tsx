@@ -531,10 +531,7 @@ export function SettingsPanel(props: {
       id: spec.id,
       label: spec.label,
       labelKey: spec.labelKey,
-      items: rowsForHost(
-        rowsForCategory(spec.id),
-        hostFromSegments(props.state?.statusSegments),
-      ),
+      items: rowsForHost(rowsForCategory(spec.id), hostPlatform()),
     };
   };
 
@@ -982,8 +979,19 @@ export function SettingsPanel(props: {
    * not Windows, so a Windows-only choice stays hidden rather than shown on a
    * guess.
    */
+  const [detectedHost, setDetectedHost] = createSignal<string | undefined>();
+  createEffect(() => {
+    if (!props.open || detectedHost()) return;
+    void props.runtime
+      ?.runtimeStatus?.()
+      .then((snap) => {
+        if (snap?.platform) setDetectedHost(snap.platform);
+      })
+      .catch(() => undefined);
+  });
+
   function hostPlatform(): string | undefined {
-    return hostFromSegments(props.state?.statusSegments);
+    return hostFromSegments(props.state?.statusSegments) ?? detectedHost();
   }
 
   /**

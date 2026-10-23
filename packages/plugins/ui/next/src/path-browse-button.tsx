@@ -44,7 +44,7 @@ export function PathBrowseButton(props: {
   return (
     <button
       type="button"
-      class={props.class ? `neu-form-btn ${props.class}` : "neu-form-btn"}
+      class={props.class || "neu-form-btn"}
       disabled={props.disabled || !props.runtime}
       onClick={() => {
         if (props.disabled || !props.runtime) return;

@@ -1,0 +1,41 @@
+/* The Nia panel: the flat pane it renders in, its header actions and its
+   transcript wrap. The pane itself, its header and the run bar stay global
+   — several surfaces use them — and the flat-pane rules reach them with
+   :global. Tokens only. */
+
+.flatPane {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.flatPane :global(.neu-pane-header) {
+  background: transparent;
+  box-shadow: none;
+  padding: 10px 14px 4px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flatPane :global(.neu-pane-content) {
+  background: transparent;
+  box-shadow: none;
+  padding: 0 12px 0;
+}
+
+.transcriptWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.transcriptWrap :global(.neu-jump-bottom) {
+  bottom: 16px;
+  right: 16px;
+}

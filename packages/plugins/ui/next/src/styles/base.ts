@@ -812,37 +812,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .review-title svg { color: var(--neu-accent); }
 .review-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--neu-muted); }
 .review-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-.nia-flat-pane {
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
-}
-.nia-flat-pane .neu-pane-header {
-  background: transparent;
-  box-shadow: none;
-  padding: 10px 14px 4px;
-}
-.nia-flat-pane .neu-pane-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.nia-flat-pane .neu-pane-content {
-  background: transparent;
-  box-shadow: none;
-  padding: 0 12px 0;
-}
-.nia-transcript-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.nia-transcript-wrap .neu-jump-bottom {
-  bottom: 16px;
-  right: 16px;
-}
 .main-transcript-wrap,
 
 .review-empty {

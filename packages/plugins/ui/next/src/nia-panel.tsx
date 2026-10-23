@@ -1,3 +1,4 @@
+import styles from "./styles/nia-panel.module.css";
 import {
   Show,
   createEffect,
@@ -327,7 +328,7 @@ export function NiaPanel(props: {
     <div class="neu-pane nia-flat-pane">
       <div class="neu-pane-header">
         <span class="neu-pane-title">Nia</span>
-        <span class="neu-pane-header-actions">
+        <span class={styles.headerActions}>
           <ContextMeter usage={props.state.nia.context} compact />
           <span class="neu-pane-status" data-running={Boolean(active())}>
             {active() ? "running" : "idle"}
@@ -335,7 +336,7 @@ export function NiaPanel(props: {
         </span>
       </div>
       <div class="neu-pane-content">
-        <div class="nia-transcript-wrap">
+        <div class={styles.transcriptWrap}>
           <Transcript
             messages={renderedMessages()}
             emptyTitle={t("nia.emptyTitle")}

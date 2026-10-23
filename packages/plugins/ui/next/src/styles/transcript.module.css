@@ -303,6 +303,29 @@
   min-width: 0;
 }
 
+.sidePaneToggleBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.sidePaneToggleBtn:hover {
+  background: var(--neu-hover);
+  color: var(--neu-text);
+}
+
 /* The goal pill: one pause/resume toggle, the inline editor and the clear
    action. Tokens only. */
 

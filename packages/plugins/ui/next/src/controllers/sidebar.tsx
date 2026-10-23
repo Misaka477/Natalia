@@ -12,10 +12,18 @@
  * Session, the workspace region's rail actions (Add Workspace and Search), and
  * the bottom-pinned Settings gear.
  */
-import { Show, type JSX } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  onCleanup,
+  Show,
+  type JSX,
+} from "solid-js";
 import { SlotMount } from "../slots/mount";
 import type { SlotsRegistry, SlotName } from "../slots/registry";
 import styles from "../styles/sidebar.module.css";
+
+const COLLAPSE_SETTLE_MS = 140;
 
 /** A hole with the shell's own fallback, so an unfilled slot is not a
  *  gap: the brand row and the settings seat are the shell's until a
@@ -48,15 +56,51 @@ export interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const t = props.t;
-  const wide = () => props.leftVisible();
+  const collapsed = () => !props.leftVisible();
+  const [settled, setSettled] = createSignal(collapsed());
+  let lastWideWidth = props.leftWidth();
+  let everWide = !collapsed();
+
+  createEffect(() => {
+    if (!collapsed()) {
+      lastWideWidth = props.leftWidth();
+      everWide = true;
+      setSettled(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSettled(true);
+    }, COLLAPSE_SETTLE_MS);
+    onCleanup(() => window.clearTimeout(timer));
+  });
+
+  // Wide content stays mounted while the collapse animates (fading via
+  // .fading), unmounts at settle, and remounts right away on expand.
+  const wide = () => !collapsed() || !settled();
   const toggleLabel = () =>
-    wide() ? t("sidebar.toggleCollapse") : t("sidebar.toggleOpen");
+    !collapsed() ? t("sidebar.toggleCollapse") : t("sidebar.toggleOpen");
 
   return (
     <>
       <aside
-        class={`${styles.sidebar} ${wide() ? "" : styles.collapsed}`}
-        style={wide() ? { width: `${props.leftWidth()}px` } : undefined}
+        class={[
+          styles.sidebar,
+          wide() ? styles.wide : styles.collapsed,
+          collapsed() && wide() ? styles.fading : "",
+          collapsed() && !wide() && everWide ? styles.railIn : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={
+          !collapsed()
+            ? { width: `${props.leftWidth()}px` }
+            : wide()
+              ? {
+                  width: "56px",
+                  "--sidebar-content-width": `${lastWideWidth - 24}px`,
+                }
+              : undefined
+        }
         data-wide={wide()}
       >
         <div class={styles.logoRow}>

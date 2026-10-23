@@ -118,6 +118,7 @@ export const zh = {
   "hero.placeholder": "描述你想要构建的内容... / 调用指令 @ 文件",
   // workbench
   "workbench.expandRight": "展开右侧栏（Ctrl+J）",
+  "workbench.collapseRight": "收起右侧栏（Ctrl+J）",
   "workbench.collapseLeft": "展开左侧栏（Ctrl+B）",
   // pending and queue
   "input.messagePlaceholder": "输入消息，使用 @ 提及文件…",

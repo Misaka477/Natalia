@@ -16,6 +16,51 @@
   position: relative;
   color: var(--neu-text);
   font-size: 14px;
+  transition:
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wide > * {
+  width: var(--sidebar-content-width, 100%);
+}
+
+.fading > * {
+  opacity: 0;
+  transition: opacity 0.14s ease-in-out;
+}
+
+.wide .brand,
+.wide .newSessionLabel,
+.wide .panellist,
+.wide .workspaces,
+.wide .footerActions,
+.wide .settingsLabel {
+  animation: sidebar-wide-in 0.2s ease-out;
+}
+
+@keyframes sidebar-wide-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.railIn .iconButton,
+.railIn .newSession,
+.railIn .panellist,
+.railIn .workspaces {
+  animation: sidebar-rail-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.railIn .foot {
+  animation: sidebar-wide-in 0.16s ease-out backwards;
+}
+
+@keyframes sidebar-rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(36px);
+  }
 }
 
 .collapsed {

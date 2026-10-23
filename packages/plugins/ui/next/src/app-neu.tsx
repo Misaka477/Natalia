@@ -3382,6 +3382,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           renderedChatMessages={renderedChatMessages}
           focusAgent={focusAgent}
           setFocusAgent={setFocusAgent}
+          rightVisible={rightVisible}
+          setRightVisible={setRightVisible}
           loadAttachmentUrl={loadAttachmentUrl}
           loadOlderHistory={loadOlderHistory}
           loadOlderNaviChat={loadOlderNaviChat}

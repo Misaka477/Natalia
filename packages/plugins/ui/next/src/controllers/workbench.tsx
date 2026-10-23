@@ -84,135 +84,170 @@ export function RightRail(props: RightRailProps) {
         */}
       <div
         style={{
-          display: rightVisible() ? "contents" : "none",
+          display: "contents",
         }}
       >
         <div
           class="neu-right-resizer"
           role="separator"
           aria-orientation="vertical"
+          style={rightVisible() ? undefined : { display: "none" }}
           onPointerDown={startRightResize}
         />
-        <aside class={styles.secondary} style={{ width: `${rightWidth()}px` }}>
-          <div class={styles.tabs}>
-            <For each={rightTabs()}>
-              {(tab) => (
-                <button
-                  type="button"
-                  class={styles.tab}
-                  data-active={rightTab() === tab.id}
-                  onClick={() => setRightTab(tab.id)}
+        <aside
+          class={`${styles.secondary} ${rightVisible() ? "" : styles.secondaryCollapsed}`}
+          aria-hidden={!rightVisible()}
+          style={{
+            width: rightVisible() ? `${rightWidth()}px` : "0px",
+            "--right-content-width": `${Math.max(240, rightWidth() - 32)}px`,
+          }}
+        >
+          <div class={styles.railInner}>
+            <div class={styles.tabs}>
+              <div class={styles.tabList}>
+                <For each={rightTabs()}>
+                  {(tab) => (
+                    <button
+                      type="button"
+                      class={styles.tab}
+                      data-active={rightTab() === tab.id}
+                      onClick={() => setRightTab(tab.id)}
+                    >
+                      {tab.label}
+                      <Show when={tab.id === "governance"}>
+                        <PendingBadge count={openDriftCount() ?? 0} />
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </div>
+              <button
+                type="button"
+                class={styles.collapseBtn}
+                aria-label={t("workbench.collapseRight")}
+                title={t("workbench.collapseRight")}
+                onClick={() => setRightVisible(false)}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
-                  {tab.label}
-                  <Show when={tab.id === "governance"}>
-                    <PendingBadge count={openDriftCount() ?? 0} />
-                  </Show>
-                </button>
-              )}
-            </For>
-          </div>
-          <div class={styles.content}>
-            <Show
-              keyed
-              when={rightTab() === "diff" ? rightPanelScopeKey() : undefined}
-            >
-              <ReviewPane
-                t={t}
-                runtime={props.ctx.runtime}
-                events={props.ctx.events}
-                requestedTab={reviewRequestedTab()}
-                requestedCheckpointID={reviewRequestedCheckpointID()}
-                sessionID={selectedSessionID() || state().sessionID}
-                workspaceID={workspaceIDForRightPanels()}
-              />
-            </Show>
-            <Show
-              keyed
-              when={rightTab() === "plan" ? rightPanelScopeKey() : undefined}
-            >
-              <PlanPanel
-                t={t}
-                state={state()}
-                sessionID={selectedSessionID() || state().sessionID}
-                runtime={props.ctx.runtime}
-                events={props.ctx.events}
-              />
-            </Show>
-            <Show
-              keyed
-              when={
-                rightTab() === "governance" ? rightPanelScopeKey() : undefined
-              }
-            >
-              <GovernancePane
-                t={t}
-                state={state()}
-                runtime={props.ctx.runtime}
-                sessionID={selectedSessionID() || state().sessionID}
-                initialTab={governanceInitialTab}
-              />
-            </Show>
-            <For each={sidePanels()}>
-              {(item) => {
-                // Mounted on FIRST activation, then kept: the panel is
-                // never rebuilt again, only shown or hidden.
-                //
-                // Why not eagerly: mounting the terminal panel runs its
-                // effect, and a terminal panel with no running pane creates
-                // one (`loadTabs`), so eager mounting would spawn a shell
-                // for a tab the user never opened. Why not on every
-                // activation (what the keyed <Show> did): everything these
-                // panels hold lives inside them — an xterm instance with its
-                // socket and scrollback, the file editor's open tabs and
-                // unsaved buffers — and a re-mount throws all of it away.
-                let container: HTMLDivElement | undefined;
-                let everShown = false;
-                let mounting = false;
-                let mounted = false;
-                createEffect(() => {
-                  const active = rightTab() === item.panel.id;
-                  if (active) everShown = true;
-                  // A panel whose plugin is still loading fails to mount;
-                  // the catalog revision is the retry signal (the keyed
-                  // re-render used to provide that by rebuilding the slot).
-                  panelRevision();
-                  if (!everShown || !container || mounted || mounting) return;
-                  mounting = true;
-                  void props.ctx.host
-                    ?.mountPanel(item.pluginId, item.panel.id, container)
-                    .then(() => {
-                      mounted = true;
-                    })
-                    .catch(() => {
-                      // Expected once while the plugin catalog races the
-                      // mount; the next revision retries. Reported by
-                      // nothing: the retry is the answer, and a warn per
-                      // panel per revision was a console full of lines
-                      // that all said "waiting".
-                    })
-                    .finally(() => {
-                      mounting = false;
-                    });
-                });
-                return (
-                  <div
-                    class={styles.panelHost}
-                    style={{
-                      height: "100%",
-                      ...(rightTab() === item.panel.id
-                        ? {}
-                        : { display: "none" }),
-                    }}
-                    ref={(element) => {
-                      container = element;
-                    }}
-                  />
-                );
-              }}
-            </For>
-            {/* A plugin entry inside the right rail, after the shell's own
+                  <rect x="1.5" y="2" width="13" height="12" rx="2" />
+                  <path d="M10.5 2V14" />
+                  <path d="M5.5 6.2L7.5 8L5.5 9.8" />
+                </svg>
+              </button>
+            </div>
+            <div class={styles.content}>
+              <Show
+                keyed
+                when={rightTab() === "diff" ? rightPanelScopeKey() : undefined}
+              >
+                <ReviewPane
+                  t={t}
+                  runtime={props.ctx.runtime}
+                  events={props.ctx.events}
+                  requestedTab={reviewRequestedTab()}
+                  requestedCheckpointID={reviewRequestedCheckpointID()}
+                  sessionID={selectedSessionID() || state().sessionID}
+                  workspaceID={workspaceIDForRightPanels()}
+                />
+              </Show>
+              <Show
+                keyed
+                when={rightTab() === "plan" ? rightPanelScopeKey() : undefined}
+              >
+                <PlanPanel
+                  t={t}
+                  state={state()}
+                  sessionID={selectedSessionID() || state().sessionID}
+                  runtime={props.ctx.runtime}
+                  events={props.ctx.events}
+                />
+              </Show>
+              <Show
+                keyed
+                when={
+                  rightTab() === "governance" ? rightPanelScopeKey() : undefined
+                }
+              >
+                <GovernancePane
+                  t={t}
+                  state={state()}
+                  runtime={props.ctx.runtime}
+                  sessionID={selectedSessionID() || state().sessionID}
+                  initialTab={governanceInitialTab}
+                />
+              </Show>
+              <For each={sidePanels()}>
+                {(item) => {
+                  // Mounted on FIRST activation, then kept: the panel is
+                  // never rebuilt again, only shown or hidden.
+                  //
+                  // Why not eagerly: mounting the terminal panel runs its
+                  // effect, and a terminal panel with no running pane creates
+                  // one (`loadTabs`), so eager mounting would spawn a shell
+                  // for a tab the user never opened. Why not on every
+                  // activation (what the keyed <Show> did): everything these
+                  // panels hold lives inside them — an xterm instance with its
+                  // socket and scrollback, the file editor's open tabs and
+                  // unsaved buffers — and a re-mount throws all of it away.
+                  let container: HTMLDivElement | undefined;
+                  let everShown = false;
+                  let mounting = false;
+                  let mounted = false;
+                  createEffect(() => {
+                    const active = rightTab() === item.panel.id;
+                    if (active) everShown = true;
+                    // A panel whose plugin is still loading fails to mount;
+                    // the catalog revision is the retry signal (the keyed
+                    // re-render used to provide that by rebuilding the slot).
+                    panelRevision();
+                    if (!everShown || !container || mounted || mounting) return;
+                    mounting = true;
+                    void props.ctx.host
+                      ?.mountPanel(item.pluginId, item.panel.id, container)
+                      .then(() => {
+                        mounted = true;
+                      })
+                      .catch(() => {
+                        // Expected once while the plugin catalog races the
+                        // mount; the next revision retries. Reported by
+                        // nothing: the retry is the answer, and a warn per
+                        // panel per revision was a console full of lines
+                        // that all said "waiting".
+                      })
+                      .finally(() => {
+                        mounting = false;
+                      });
+                  });
+                  return (
+                    <div
+                      class={styles.panelHost}
+                      style={{
+                        height: "100%",
+                        ...(rightTab() === item.panel.id
+                          ? {}
+                          : { display: "none" }),
+                      }}
+                      ref={(element) => {
+                        container = element;
+                      }}
+                    />
+                  );
+                }}
+              </For>
+              {/* A plugin entry inside the right rail, after the shell's own
                 tabs — the eighth of the architecture's nine slots. */}
-            <SlotMount slots={props.slots} name="workbench.end" t={props.t} />
+              <SlotMount slots={props.slots} name="workbench.end" t={props.t} />
+            </div>
           </div>
         </aside>
       </div>

@@ -109,6 +109,7 @@ export const en = {
   "hero.placeholder":
     "Describe what you want to build... / for commands @ for files",
   "workbench.expandRight": "Expand the right rail (Ctrl+J)",
+  "workbench.collapseRight": "Collapse the right rail (Ctrl+J)",
   "workbench.collapseLeft": "Expand the left rail (Ctrl+B)",
   "input.messagePlaceholder": "Type a message, use @ to mention files…",
   "input.chatPlaceholder": "Ask Navi…",

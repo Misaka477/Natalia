@@ -14,18 +14,73 @@
   padding: 16px 16px 14px;
   overflow: hidden;
   min-width: 0;
+  box-sizing: border-box;
+  transition:
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease,
+    box-shadow 0.28s ease;
+}
+
+.secondaryCollapsed {
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.railInner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--right-content-width, 100%);
 }
 
 .tabs {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
   padding: 4px 0 12px;
   margin-bottom: 8px;
   flex-shrink: 0;
   overflow: visible;
+}
+
+.tabList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.collapseBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.collapseBtn:hover {
+  background: var(--neu-hover);
+  color: var(--neu-text);
 }
 
 .tab {

@@ -985,7 +985,17 @@ export interface SessionSidebarProps {
 
 export function SessionTreeRegion(props: SessionSidebarProps) {
   const t = props.t;
-  const wide = () => (props.wide ? props.wide() : true);
+  const collapsed = () => (props.wide ? !props.wide() : false);
+  const [settled, setSettled] = createSignal(collapsed());
+  createEffect(() => {
+    if (!collapsed()) {
+      setSettled(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSettled(true), 140);
+    onCleanup(() => window.clearTimeout(timer));
+  });
+  const wide = () => !collapsed() || !settled();
   let searchInputRef: HTMLInputElement | undefined;
 
   const [groupBy, setGroupBy] = createSignal<SessionGroupBy>("workspace");

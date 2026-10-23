@@ -96,9 +96,11 @@ test("every shell-owned rail panel keeps the session-scoped key", () => {
 test("collapsing the rail hides it instead of unmounting it", () => {
   // The collapse toggle used to be `{rightVisible() ? (<aside…>) : (button)}`,
   // so collapsing destroyed every panel the rail hosts — including an editor's
-  // unsaved buffers. It is a CSS display toggle now.
+  // unsaved buffers. It is a CSS width/opacity toggle now while keeping the
+  // subtree mounted (`display: "contents"`).
   expect(rail).not.toContain("{rightVisible() ? (");
-  expect(rail).toContain('display: rightVisible() ? "contents" : "none"');
+  expect(rail).toContain('display: "contents"');
+  expect(rail).toContain('width: rightVisible() ? `${rightWidth()}px` : "0px"');
   // The way back is still offered while it is hidden.
   expect(app).toContain("{rightVisible() ? null : (");
   expect(app).toContain("neu-collapsed-rail neu-right-rail");

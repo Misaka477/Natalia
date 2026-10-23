@@ -90,6 +90,8 @@ export interface MainPanesProps {
   /** Which agent the one main pane shows. */
   focusAgent: () => PaneAgent;
   setFocusAgent: (value: PaneAgent) => void;
+  rightVisible?: () => boolean;
+  setRightVisible?: (value: boolean | ((prev: boolean) => boolean)) => void;
   showJumpToBottom: () => boolean;
   setShowJumpToBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   chatShowJumpToBottom: () => boolean;
@@ -484,6 +486,31 @@ export function MainPanes(props: MainPanesProps) {
                 >
                   {state().natalia.activeTurn ? "running" : "idle"}
                 </span>
+              </Show>
+              <Show when={props.rightVisible && !props.rightVisible()}>
+                <button
+                  type="button"
+                  class={styles.sidePaneToggleBtn}
+                  aria-label={t("workbench.expandRight")}
+                  title={t("workbench.expandRight")}
+                  onClick={() => props.setRightVisible?.(true)}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="1.5" y="2" width="13" height="12" rx="2" />
+                    <path d="M10.5 2V14" />
+                    <path d="M7.5 6.2L5.5 8L7.5 9.8" />
+                  </svg>
+                </button>
               </Show>
             </span>
           </div>

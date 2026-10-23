@@ -13,9 +13,15 @@ import wg from "../styles/work-graph.module.css";
 /** A section header row (fixed height, like every other row). */
 function SectionRow(props: {
   row: Extract<WorkGraphRow, { kind: "section" }>;
+  onToggleSection?: (sectionID: string) => void;
 }) {
   return (
-    <div class={`${wg.row} ${wg.rowSection}`} data-tone={props.row.tone}>
+    <div
+      class={`${wg.row} ${wg.rowSection}`}
+      data-tone={props.row.tone}
+      onClick={() => props.onToggleSection?.(props.row.id)}
+      style={props.onToggleSection ? { cursor: "pointer" } : undefined}
+    >
       <span class={wg.sectionTitle}>
         {props.row.title}
         <Show when={props.row.count !== undefined}> · {props.row.count}</Show>
@@ -30,8 +36,19 @@ function SectionRow(props: {
  */
 function NodeRow(props: {
   row: Extract<WorkGraphRow, { kind: "node" }>;
+  t?: (key: string, params?: Record<string, unknown>) => string;
   onToggleNode: (nodeID: string, expanded: boolean) => void;
+  onOpenFile?: (path: string) => void;
 }) {
+  const kindLabel = () => {
+    if (!props.t) return props.row.nodeKind;
+    const key = `gov.wgKind.${props.row.nodeKind}`;
+    const translated = props.t(key);
+    return translated !== key ? translated : props.row.nodeKind;
+  };
+  const isFileNode = () =>
+    props.row.nodeKind === "workspace_change" && Boolean(props.row.target);
+
   return (
     <button
       type="button"
@@ -41,11 +58,14 @@ function NodeRow(props: {
         "padding-left": `${4 + Math.min(props.row.depth, 12) * 14}px`,
       }}
       data-unattributed={props.row.unattributed ? "true" : undefined}
-      disabled={!props.row.expandable}
-      onClick={() =>
-        props.row.expandable &&
-        props.onToggleNode(props.row.nodeID, !props.row.expanded)
-      }
+      disabled={!props.row.expandable && !isFileNode()}
+      onClick={() => {
+        if (props.row.expandable) {
+          props.onToggleNode(props.row.nodeID, !props.row.expanded);
+        } else if (isFileNode() && props.row.target) {
+          props.onOpenFile?.(props.row.target);
+        }
+      }}
     >
       <span class={wg.twisty}>
         {props.row.expandable
@@ -53,15 +73,20 @@ function NodeRow(props: {
             ? "▾"
             : "▸"
           : props.row.unattributed
-            ? "⚠"
+            ? "·"
             : "•"}
       </span>
       <span class={wg.kind} data-kind={props.row.nodeKind}>
-        {props.row.nodeKind}
+        {kindLabel()}
       </span>
-      <span class={wg.summary}>{props.row.summary}</span>
-      <Show when={props.row.target}>
+      <span class={wg.summary}>
+        {isFileNode() ? props.row.target : props.row.summary}
+      </span>
+      <Show when={props.row.target && !isFileNode()}>
         <span class={wg.via}>{props.row.target}</span>
+      </Show>
+      <Show when={isFileNode()}>
+        <span class={wg.via}>{props.row.summary} ↗</span>
       </Show>
       <Show when={props.row.via}>
         <span class={wg.via}>← {props.row.via}</span>
@@ -72,7 +97,10 @@ function NodeRow(props: {
 
 function WorkGraphRowView(props: {
   row: WorkGraphRow;
+  t?: (key: string, params?: Record<string, unknown>) => string;
   onToggleNode: (nodeID: string, expanded: boolean) => void;
+  onToggleSection?: (sectionID: string) => void;
+  onOpenFile?: (path: string) => void;
 }) {
   return (
     <Show
@@ -80,10 +108,18 @@ function WorkGraphRowView(props: {
       fallback={
         <SectionRow
           row={props.row as Extract<WorkGraphRow, { kind: "section" }>}
+          onToggleSection={props.onToggleSection}
         />
       }
     >
-      {(node) => <NodeRow row={node()} onToggleNode={props.onToggleNode} />}
+      {(node) => (
+        <NodeRow
+          row={node()}
+          t={props.t}
+          onToggleNode={props.onToggleNode}
+          onOpenFile={props.onOpenFile}
+        />
+      )}
     </Show>
   );
 }
@@ -98,8 +134,11 @@ function WorkGraphRowView(props: {
  */
 export function WorkGraphWindow(props: {
   rows: WorkGraphRow[];
+  t?: (key: string, params?: Record<string, unknown>) => string;
   empty?: JSX.Element;
   onToggleNode: (nodeID: string, expanded: boolean) => void;
+  onToggleSection?: (sectionID: string) => void;
+  onOpenFile?: (path: string) => void;
   /**
    * Called when the window is scrolled near the end (or the page cannot fill
    * the scrollport): the owner appends the next page. No button is offered —
@@ -135,8 +174,6 @@ export function WorkGraphWindow(props: {
       pendingScrollEl = undefined;
       setScrollEl(el);
     };
-    // Solid's compiled ref callback can run before the node is inserted; the
-    // virtualizer needs a connected element to attach scroll observers.
     if (el.isConnected) {
       commit();
       return;
@@ -147,85 +184,93 @@ export function WorkGraphWindow(props: {
     });
   };
 
-  // Scroll-driven pagination: near the end (or on a page too short to scroll)
-  // the owner appends the next page; re-arming waits for the page to grow.
+  let armedRowCount = -1;
+  const fireNextPage = () => {
+    if (!props.onNearBottom) return;
+    const currentCount = props.rows.length;
+    if (currentCount === armedRowCount) return;
+    armedRowCount = currentCount;
+    props.onNearBottom();
+  };
   const autoAppend = createScrollAutoAppend({
     scrollEl,
-    moreAvailable: () => props.onNearBottom !== undefined,
+    moreAvailable: () => Boolean(props.onNearBottom),
     rowCount: () => props.rows.length,
-    append: () => props.onNearBottom?.(),
-  });
-  const onScroll = () => autoAppend.check();
-  // A newly replaced page (search cleared, session switched, collapsed) may be
-  // shorter than the scrollport: extend it instead of leaving a dead end.
-  createEffect(() => {
-    props.rows.length;
-    autoAppend.check();
+    append: fireNextPage,
   });
 
-  const liveItems = () => virtualizer.getVirtualItems();
-  const liveTotalSize = () => virtualizer.getTotalSize();
-  const useVirtual = () => {
-    if (props.rows.length <= WORK_GRAPH_VIRTUAL_THRESHOLD) return false;
-    const items = dedupeVirtualItems(liveItems());
-    if (items.length === 0) return false;
-    return items.every(
-      (item) => item !== undefined && props.rows[item.index] !== undefined,
-    );
+  createEffect(() => {
+    const count = props.rows.length;
+    const el = scrollEl();
+    if (!el || count === 0) return;
+    virtualizer.measure();
+    queueMicrotask(() => autoAppend.check());
+  });
+
+  const virtualReady = () => {
+    if (props.rows.length < WORK_GRAPH_VIRTUAL_THRESHOLD) return false;
+    if (!scrollEl()) return false;
+    return virtualizer.getVirtualItems().length > 0;
   };
-  const topSpacer = () => {
-    const first = liveItems()[0];
-    return first ? Math.max(0, first.start) : 0;
+  const virtualItems = () =>
+    virtualReady() ? dedupeVirtualItems(virtualizer.getVirtualItems()) : [];
+  const topPadding = () => virtualItems()[0]?.start ?? 0;
+  const bottomPadding = () => {
+    const items = virtualItems();
+    const last = items[items.length - 1];
+    if (!last) return 0;
+    return Math.max(0, virtualizer.getTotalSize() - last.end);
   };
-  const bottomSpacer = () => {
-    const items = liveItems();
-    const last = items.at(-1);
-    return last ? Math.max(0, liveTotalSize() - last.end) : 0;
-  };
-  const windowRows = () =>
-    useVirtual()
-      ? dedupeVirtualItems(liveItems())
-          .map((item) => props.rows[item.index])
-          .filter((row): row is WorkGraphRow => row !== undefined)
-      : [];
 
   return (
-    <div class={wg.scroll} ref={setScrollRef} onScroll={onScroll}>
-      <Show
-        when={props.rows.length > 0}
-        fallback={props.empty ?? <div class="neu-gov-empty" />}
+    <Show when={props.rows.length > 0} fallback={props.empty}>
+      <div
+        class={wg.scroll}
+        ref={setScrollRef}
+        onScroll={() => autoAppend.check()}
       >
         <Show
-          when={useVirtual()}
+          when={virtualReady()}
           fallback={
             <For each={props.rows}>
               {(row) => (
-                <WorkGraphRowView row={row} onToggleNode={props.onToggleNode} />
+                <WorkGraphRowView
+                  row={row}
+                  t={props.t}
+                  onToggleNode={props.onToggleNode}
+                  onToggleSection={props.onToggleSection}
+                  onOpenFile={props.onOpenFile}
+                />
               )}
             </For>
           }
         >
-          <Show when={topSpacer() > 0}>
-            <div
-              aria-hidden="true"
-              data-virtual-spacer="top"
-              style={{ height: `${topSpacer()}px` }}
-            />
+          <Show when={topPadding() > 0}>
+            <div style={{ height: `${topPadding()}px` }} />
           </Show>
-          <For each={windowRows()}>
-            {(row) => (
-              <WorkGraphRowView row={row} onToggleNode={props.onToggleNode} />
-            )}
+          <For each={virtualItems()}>
+            {(item) => {
+              const row = () => props.rows[item.index];
+              return (
+                <Show when={row()}>
+                  {(current) => (
+                    <WorkGraphRowView
+                      row={current()}
+                      t={props.t}
+                      onToggleNode={props.onToggleNode}
+                      onToggleSection={props.onToggleSection}
+                      onOpenFile={props.onOpenFile}
+                    />
+                  )}
+                </Show>
+              );
+            }}
           </For>
-          <Show when={bottomSpacer() > 0}>
-            <div
-              aria-hidden="true"
-              data-virtual-spacer="bottom"
-              style={{ height: `${bottomSpacer()}px` }}
-            />
+          <Show when={bottomPadding() > 0}>
+            <div style={{ height: `${bottomPadding()}px` }} />
           </Show>
         </Show>
-      </Show>
-    </div>
+      </div>
+    </Show>
   );
 }

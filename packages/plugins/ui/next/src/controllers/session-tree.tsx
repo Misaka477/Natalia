@@ -450,7 +450,10 @@ function SessionTree(props: {
         );
         return {
           workspaceID: workspace.workspaceID,
-          workspace: workspace.title,
+          workspace:
+            workspace.title === "default-workspace"
+              ? t("hero.defaultWorkspace")
+              : workspace.title,
           isRealWorkspace: true,
           containsCurrent: ordered.some((s) => s.id === props.selected),
           sessions: ordered.map((s) => toDerivedSession(s, t)),

@@ -580,8 +580,20 @@ export function ReviewPane(
   }
 
   function checkpointLabel(checkpoint: RuntimeCheckpoint) {
-    const title = checkpoint.name?.trim() || checkpoint.id;
-    return `${title} · ${checkpoint.changes} changes · step ${checkpoint.step}`;
+    const reasonKey = `review.cpReason.${checkpoint.reason}`;
+    const reasonLabel = t(reasonKey);
+    const title = checkpoint.name?.trim()
+      ? `⭐ ${checkpoint.name.trim()}`
+      : reasonLabel !== reasonKey
+        ? reasonLabel
+        : checkpoint.id;
+    const time = checkpoint.createdAt
+      ? new Date(checkpoint.createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+    return `#${checkpoint.sequence} ${title} · ${t("review.cpChangesCount", { count: checkpoint.changes })}${time ? ` · ${time}` : ""}`;
   }
 
   function beginRenameCheckpoint(checkpoint: RuntimeCheckpoint) {
@@ -1061,25 +1073,103 @@ export function ReviewPane(
     }));
   });
 
-  const auditCheckpoints = () =>
-    checkpoints().filter(
-      (checkpoint) =>
-        checkpoint.reason === "audit_round" || checkpoint.reason === "baseline",
+  const [checkpointMode, setCheckpointMode] = createSignal<
+    "keypoints" | "bookmarks" | "compare" | "all"
+  >("keypoints");
+  const [compareFromID, setCompareFromID] = createSignal<string>("");
+  const [compareToID, setCompareToID] = createSignal<string>("current");
+  const [rollbackBusy, setRollbackBusy] = createSignal(false);
+  const [rollbackToast, setRollbackToast] = createSignal<string | undefined>();
+
+  // Reverse chronological (newest first) for human-friendly Time Machine browsing
+  const sortedCheckpoints = createMemo(() =>
+    [...checkpoints()].sort((a, b) => b.sequence - a.sequence),
+  );
+
+  // Deduplicated Keypoints: checkpoints with actual changes, named bookmarks,
+  // audit rounds, or the session baseline (filtering out 0-change step/turn noise).
+  const keypointCheckpoints = createMemo(() => {
+    const list = sortedCheckpoints();
+    const filtered = list.filter(
+      (cp) =>
+        cp.changes > 0 ||
+        Boolean(cp.name?.trim()) ||
+        cp.reason === "manual" ||
+        cp.reason === "audit_round" ||
+        cp.reason === "rollback_safety" ||
+        cp.reason === "baseline",
     );
-  const userCheckpoints = () =>
-    checkpoints().filter((checkpoint) => checkpoint.reason === "manual");
-  const autoCheckpoints = () =>
-    checkpoints().filter(
-      (checkpoint) =>
-        checkpoint.reason !== "rollback_safety" &&
-        checkpoint.reason !== "manual" &&
-        checkpoint.reason !== "audit_round" &&
-        checkpoint.reason !== "baseline",
-    );
-  const safetyCheckpoints = () =>
-    checkpoints().filter(
-      (checkpoint) => checkpoint.reason === "rollback_safety",
-    );
+    return filtered.length ? filtered : list.slice(0, 15);
+  });
+
+  // Bookmarks & Rollback Safety Backups: manual checkpoints, named checkpoints, or rollback_safety
+  const bookmarkCheckpoints = createMemo(() =>
+    sortedCheckpoints().filter(
+      (cp) =>
+        cp.reason === "manual" ||
+        cp.reason === "rollback_safety" ||
+        Boolean(cp.name?.trim()),
+    ),
+  );
+
+  const visibleCheckpointsForMode = createMemo(() => {
+    const mode = checkpointMode();
+    if (mode === "bookmarks") return bookmarkCheckpoints();
+    if (mode === "all") return sortedCheckpoints();
+    return keypointCheckpoints();
+  });
+
+  const activeCheckpointObj = createMemo(() =>
+    checkpoints().find((cp) => cp.id === selectedCheckpoint()),
+  );
+
+  async function runCheckpointCompare(fromID: string, toID: string) {
+    if (!fromID || !props.runtime?.roundDiff) return;
+    const fromRef = { kind: "checkpoint" as const, id: fromID };
+    const toRef =
+      toID === "current"
+        ? { kind: "current" as const }
+        : { kind: "checkpoint" as const, id: toID };
+    try {
+      const changes =
+        (await props.runtime.roundDiff({
+          workspaceID: props.workspaceID,
+          from: fromRef,
+          to: toRef,
+          includePatch: true,
+          includeContent: false,
+        })) ?? [];
+      const mapped = changes.map(toDiffItem);
+      setCheckpointChanges(mapped);
+      setCheckpointSelected(mapped[0]?.path ?? null);
+    } catch {
+      setCheckpointChanges([]);
+      setCheckpointSelected(null);
+    }
+  }
+
+  async function handleRollbackToSelected() {
+    const target = activeCheckpointObj();
+    if (!target || rollbackBusy()) return;
+    const label = checkpointLabel(target);
+    if (!window.confirm(t("review.cpRollbackConfirm", { label }))) return;
+    setRollbackBusy(true);
+    setRollbackToast(undefined);
+    try {
+      await props.runtime?.checkpointRollback?.({
+        id: target.id,
+        dryRun: false,
+        sessionID: props.sessionID,
+      });
+      setRollbackToast(
+        t("review.cpRollbackDone", { id: target.name || target.id }),
+      );
+      await refreshCheckpoints();
+      await loadCheckpointPreview(target.id);
+    } finally {
+      setRollbackBusy(false);
+    }
+  }
 
   const selectedTeamPR = () =>
     teamPRs().find((pr) => pr.sandboxID === selectedSandbox());
@@ -1199,18 +1289,10 @@ export function ReviewPane(
         <button
           type="button"
           class="review-subtab"
-          data-active={tab() === "checkpoint"}
+          data-active={tab() === "checkpoint" || tab() === "rounds"}
           onClick={() => selectTab("checkpoint")}
         >
           {t("review.tabCheckpoint")}
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "rounds"}
-          onClick={() => selectTab("rounds")}
-        >
-          {t("review.tabRounds")}
         </button>
       </div>
       <Show when={tab() === "git" && diffScope() === "all"}>
@@ -1218,7 +1300,7 @@ export function ReviewPane(
           <NeuSelect
             value={gitFrom()}
             options={[
-              { value: "HEAD", label: "HEAD" },
+              { value: "HEAD", label: t("review.gitHeadLabel") },
               ...gitRefs().map((ref) => ({
                 value: ref.name,
                 label:
@@ -1236,7 +1318,7 @@ export function ReviewPane(
           <NeuSelect
             value={gitTo()}
             options={[
-              { value: "WORKTREE", label: "Working Tree" },
+              { value: "WORKTREE", label: t("review.gitWorktreeLabel") },
               ...gitRefs().map((ref) => ({
                 value: ref.name,
                 label:
@@ -1248,61 +1330,6 @@ export function ReviewPane(
             onChange={(value) => {
               setGitTo(value);
               void loadGit();
-            }}
-          />
-        </div>
-      </Show>
-      <Show when={tab() === "rounds"}>
-        <div class={styles.gitRanges}>
-          <NeuSelect
-            value={roundPlanID()}
-            options={[...new Set(auditRounds().map((item) => item.planID))].map(
-              (planID) => ({
-                value: planID,
-                label: planID,
-              }),
-            )}
-            onChange={(value) => {
-              setRoundPlanID(value);
-              const planRounds = auditRounds().filter(
-                (item) => item.planID === value,
-              );
-              if (planRounds.length >= 2) {
-                setRoundFrom(planRounds[planRounds.length - 2]!.round);
-                setRoundTo(planRounds.at(-1)!.round);
-              } else {
-                setRoundFrom(planRounds[0]?.round);
-                setRoundTo(planRounds[0]?.round);
-              }
-              void runRoundDiff();
-            }}
-          />
-          <span class={styles.gitArrow}>→</span>
-          <NeuSelect
-            value={roundFrom() === undefined ? "" : String(roundFrom()!)}
-            options={auditRounds()
-              .filter((item) => item.planID === roundPlanID())
-              .map((item) => ({
-                value: String(item.round),
-                label: `R${item.round} (${item.verdict})`,
-              }))}
-            onChange={(value) => {
-              setRoundFrom(Number(value));
-              void runRoundDiff();
-            }}
-          />
-          <span class={styles.gitArrow}>→</span>
-          <NeuSelect
-            value={roundTo() === undefined ? "" : String(roundTo()!)}
-            options={auditRounds()
-              .filter((item) => item.planID === roundPlanID())
-              .map((item) => ({
-                value: String(item.round),
-                label: `R${item.round} (${item.verdict})`,
-              }))}
-            onChange={(value) => {
-              setRoundTo(Number(value));
-              void runRoundDiff();
             }}
           />
         </div>
@@ -1375,126 +1402,166 @@ export function ReviewPane(
         </div>
       </Show>
       <Show when={tab() === "checkpoint" && checkpoints().length}>
-        <Show when={auditCheckpoints().length}>
-          <div class="review-section-label">{t("review.auditRounds")}</div>
-          <div class="review-entity-control">
-            <NeuSelect
-              value={
-                auditCheckpoints().some((c) => c.id === selectedCheckpoint())
-                  ? (selectedCheckpoint() ?? "")
-                  : ""
-              }
-              options={auditCheckpoints().map((checkpoint) => ({
-                value: checkpoint.id,
-                label: checkpointLabel(checkpoint),
-              }))}
-              onChange={(value) => void selectCheckpoint(value)}
-            />
+        <div class={styles.cpDeck}>
+          <div class={styles.cpCategoryBar}>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={checkpointMode() === "keypoints"}
+              onClick={() => {
+                setCheckpointMode("keypoints");
+                const first = keypointCheckpoints()[0];
+                if (first) void selectCheckpoint(first.id);
+              }}
+            >
+              {t("review.cpModeKeypoints")} ({keypointCheckpoints().length})
+            </button>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={checkpointMode() === "bookmarks"}
+              onClick={() => {
+                setCheckpointMode("bookmarks");
+                const first = bookmarkCheckpoints()[0];
+                if (first) void selectCheckpoint(first.id);
+              }}
+            >
+              {t("review.cpModeBookmarks")} ({bookmarkCheckpoints().length})
+            </button>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={checkpointMode() === "compare"}
+              onClick={() => {
+                setCheckpointMode("compare");
+                const list = sortedCheckpoints();
+                const from = compareFromID() || list[list.length - 1]?.id || "";
+                setCompareFromID(from);
+                void runCheckpointCompare(from, compareToID());
+              }}
+            >
+              {t("review.cpModeCompare")}
+            </button>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={checkpointMode() === "all"}
+              onClick={() => setCheckpointMode("all")}
+            >
+              {t("review.cpModeAll", { count: checkpoints().length })}
+            </button>
           </div>
-        </Show>
-        <Show when={userCheckpoints().length}>
-          <div class="review-section-label">{t("review.mySnapshots")}</div>
-          <div class="review-entity-control">
-            <NeuSelect
-              value={
-                userCheckpoints().some((c) => c.id === selectedCheckpoint())
-                  ? (selectedCheckpoint() ?? "")
-                  : ""
-              }
-              options={userCheckpoints().map((checkpoint) => ({
-                value: checkpoint.id,
-                label: checkpointLabel(checkpoint),
-              }))}
-              onChange={(value) => void selectCheckpoint(value)}
-            />
-          </div>
+
+          <Show when={rollbackToast()}>
+            <div class="neu-gov-action-note">{rollbackToast()}</div>
+          </Show>
+
           <Show
-            when={userCheckpoints().some(
-              (checkpoint) => checkpoint.id === selectedCheckpoint(),
-            )}
-          >
-            <div class="review-checkpoint-rename">
-              <Show
-                when={renamingCheckpointID() === selectedCheckpoint()}
-                fallback={
-                  <button
-                    type="button"
-                    class={styles.checkpointRenameBtn}
-                    onClick={() => {
-                      const selected = userCheckpoints().find(
-                        (checkpoint) => checkpoint.id === selectedCheckpoint(),
-                      );
-                      if (selected) beginRenameCheckpoint(selected);
-                    }}
-                  >
-                    {t("review.rename")}
-                  </button>
-                }
-              >
-                <input
-                  class="review-checkpoint-rename-input"
-                  value={checkpointNameDraft()}
-                  placeholder={t("review.snapshotNamePh")}
-                  onInput={(event) =>
-                    setCheckpointNameDraft(event.currentTarget.value)
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void commitRenameCheckpoint();
-                    if (event.key === "Escape") setRenamingCheckpointID(null);
+            when={checkpointMode() !== "compare"}
+            fallback={
+              <div class={styles.gitRanges}>
+                <NeuSelect
+                  value={compareFromID()}
+                  placeholder={t("review.cpSelectFrom")}
+                  options={sortedCheckpoints().map((cp) => ({
+                    value: cp.id,
+                    label: checkpointLabel(cp),
+                  }))}
+                  onChange={(value) => {
+                    setCompareFromID(value);
+                    void runCheckpointCompare(value, compareToID());
                   }}
                 />
-                <button
-                  type="button"
-                  class={styles.checkpointRenameBtn}
-                  onClick={() => void commitRenameCheckpoint()}
-                >
-                  {t("review.save")}
-                </button>
-              </Show>
-            </div>
-          </Show>
-        </Show>
-        <Show when={autoCheckpoints().length}>
-          <div class="review-section-label">{t("review.autoCheckpoints")}</div>
-          <div class="review-entity-control">
-            <details>
-              <summary>
-                {t("review.autoCheckpointCount", {
-                  count: autoCheckpoints().length,
-                })}
-              </summary>
-              <NeuSelect
-                value={
-                  autoCheckpoints().some((c) => c.id === selectedCheckpoint())
-                    ? (selectedCheckpoint() ?? "")
-                    : ""
-                }
-                options={autoCheckpoints().map((checkpoint) => ({
-                  value: checkpoint.id,
-                  label: checkpointLabel(checkpoint),
-                }))}
-                onChange={(value) => void selectCheckpoint(value)}
-              />
-            </details>
-          </div>
-        </Show>
-        <Show when={safetyCheckpoints().length}>
-          <div class="review-section-label">{t("review.safetyPoint")}</div>
-          <div class="review-entity-control">
-            <NeuSelect
-              value={
-                safetyCheckpoints().some((c) => c.id === selectedCheckpoint())
-                  ? (selectedCheckpoint() ?? "")
-                  : ""
+                <span class={styles.gitArrow}>→</span>
+                <NeuSelect
+                  value={compareToID()}
+                  placeholder={t("review.cpSelectTo")}
+                  options={[
+                    { value: "current", label: t("review.gitWorktreeLabel") },
+                    ...sortedCheckpoints().map((cp) => ({
+                      value: cp.id,
+                      label: checkpointLabel(cp),
+                    })),
+                  ]}
+                  onChange={(value) => {
+                    setCompareToID(value);
+                    void runCheckpointCompare(compareFromID(), value);
+                  }}
+                />
+              </div>
+            }
+          >
+            <Show
+              when={visibleCheckpointsForMode().length > 0}
+              fallback={
+                <div class={styles.cpEmptyHint}>
+                  {t("review.cpEmptyBookmarks")}
+                </div>
               }
-              options={safetyCheckpoints().map((checkpoint) => ({
-                value: checkpoint.id,
-                label: checkpointLabel(checkpoint),
-              }))}
-              onChange={(value) => void selectCheckpoint(value)}
-            />
-          </div>
-        </Show>
+            >
+              <div class={styles.cpActionBar}>
+                <div class={styles.cpSelectWrap}>
+                  <NeuSelect
+                    value={selectedCheckpoint() ?? ""}
+                    options={visibleCheckpointsForMode().map((checkpoint) => ({
+                      value: checkpoint.id,
+                      label: checkpointLabel(checkpoint),
+                    }))}
+                    onChange={(value) => void selectCheckpoint(value)}
+                  />
+                </div>
+                <Show when={activeCheckpointObj()}>
+                  {(activeCp) => (
+                    <div class={styles.cpButtons}>
+                      <Show
+                        when={renamingCheckpointID() === activeCp().id}
+                        fallback={
+                          <button
+                            type="button"
+                            class={styles.checkpointRenameBtn}
+                            onClick={() => beginRenameCheckpoint(activeCp())}
+                          >
+                            {t("review.rename")}
+                          </button>
+                        }
+                      >
+                        <input
+                          class="review-checkpoint-rename-input"
+                          value={checkpointNameDraft()}
+                          placeholder={t("review.snapshotNamePh")}
+                          onInput={(event) =>
+                            setCheckpointNameDraft(event.currentTarget.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter")
+                              void commitRenameCheckpoint();
+                            if (event.key === "Escape")
+                              setRenamingCheckpointID(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          class={styles.checkpointRenameBtn}
+                          onClick={() => void commitRenameCheckpoint()}
+                        >
+                          {t("review.save")}
+                        </button>
+                      </Show>
+                      <button
+                        type="button"
+                        class={styles.cpRollbackBtn}
+                        disabled={rollbackBusy()}
+                        onClick={() => void handleRollbackToSelected()}
+                      >
+                        {t("review.cpRollbackBtn")}
+                      </button>
+                    </div>
+                  )}
+                </Show>
+              </div>
+            </Show>
+          </Show>
+        </div>
       </Show>
       <div class="review-header">
         <div class="review-title">

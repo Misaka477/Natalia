@@ -17,27 +17,67 @@ import {
 import wg from "../styles/work-graph.module.css";
 import { WorkGraphWindow } from "./WorkGraphWindow";
 
+export type WorkGraphFilter = "all" | "plan" | "action" | "file" | "rule";
+
 /**
- * The Work Graph as a collapsible causal forest (EI Phase 3 / WG3): the whole
- * session graph as forward causal trees rooted at nodes with no inbound edge,
- * plus the unattributed workspace changes surfaced explicitly (never silently
- * attributed). Session-scoped: reads the active session's projection, so
- * switching sessions switches the graph.
- *
- * The forest is flattened into fixed-height rows and rendered through the
- * shared virtual window (`WorkGraphWindow`) — one implementation with the
- * transcript, no per-row DOM measurement. Paging is scroll-driven: reaching
- * the end of the window appends the next page (unified-scroll plan §9), so a
- * long session never mounts an unbounded list and the reader never clicks a
- * "load more" button.
+ * The Work Graph as a collapsible causal forest (WG 2.0):
+ * 1. The session's causal forest comes FIRST (never buried beneath external
+ *    unattributed file noise).
+ * 2. Category filter pills let the user focus on Goals/Plans, Tools/Actions,
+ *    File Changes, or Approvals/Rules, and hide routine checkpoint noise by
+ *    default unless toggled on.
+ * 3. External unattributed workspace changes are placed in a collapsed
+ *    bottom section that expands on click — never flooding the top or shifting
+ *    rows during scroll pagination.
  */
-export function WorkGraphTree(props: { state: WorkGraphState }) {
-  const forest = createMemo(() => buildWorkGraphForest(props.state));
+export function WorkGraphTree(props: {
+  state: WorkGraphState;
+  t?: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const tr = (
+    key: string,
+    fallback: string,
+    params?: Record<string, unknown>,
+  ) => (props.t ? props.t(key, params) : fallback);
+
+  const [filter, setFilter] = createSignal<WorkGraphFilter>("all");
+  const [showCheckpoints, setShowCheckpoints] = createSignal(false);
+  const [unattributedExpanded, setUnattributedExpanded] = createSignal(false);
+
+  const rawForest = createMemo(() => buildWorkGraphForest(props.state));
+  const forest = createMemo(() => {
+    const f = filter();
+    const keepCp = showCheckpoints();
+    const matchKind = (kind: string) => {
+      if (!keepCp && kind === "checkpoint") return false;
+      if (f === "all") return true;
+      if (f === "plan")
+        return kind === "goal" || kind === "plan" || kind === "decision";
+      if (f === "action")
+        return kind === "agent_action" || kind === "tool_call";
+      if (f === "file")
+        return kind === "workspace_change" || kind === "validation";
+      if (f === "rule") return kind === "approval" || kind === "constraint";
+      return true;
+    };
+    const filterTree = (
+      nodes: ReturnType<typeof rawForest>,
+    ): ReturnType<typeof rawForest> => {
+      const out: ReturnType<typeof rawForest> = [];
+      for (const item of nodes) {
+        const children = filterTree(item.children);
+        if (matchKind(item.node.kind) || children.length > 0) {
+          out.push({ ...item, children });
+        }
+      }
+      return out;
+    };
+    return filterTree(rawForest());
+  });
+
   const unattributed = createMemo(() =>
     selectUnattributedWorkGraphNodes(props.state),
   );
-  // Expand state is explicit: an override map the flattener re-derives rows
-  // from. A node with no override keeps the depth<2 default (unchanged UX).
   const [overrides, setOverrides] = createSignal<ReadonlyMap<string, boolean>>(
     new Map<string, boolean>(),
   );
@@ -46,6 +86,7 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
     createSignal(WORK_GRAPH_PAGE_SIZE);
   const [query, setQuery] = createSignal("");
   const [focusID, setFocusID] = createSignal<string | undefined>();
+
   const matches = createMemo(() => {
     const needle = query().trim().toLowerCase();
     if (!needle) return [];
@@ -57,36 +98,66 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
       )
       .slice(0, 8);
   });
+
   const navigation = createMemo(() => {
     const id = focusID();
     return id ? buildWorkGraphNavigation(props.state, id) : undefined;
   });
+
+  const forestPage = createMemo(() =>
+    paginateWorkGraphRows(forest(), visibleRoots()),
+  );
+  const forestRows = createMemo<WorkGraphRow[]>(() => {
+    const flattened = flattenWorkGraphTrees(forestPage().page, {
+      overrides: overrides(),
+      idPrefix: "forest",
+    });
+    if (!flattened.length) return [];
+    return [
+      workGraphSectionRow(
+        "section:causal",
+        tr("gov.wgCausalSection", "Session Causal Chain"),
+        forest().length,
+        "inbound",
+      ),
+      ...flattened,
+    ];
+  });
+
   const unattributedPage = createMemo(() =>
     paginateWorkGraphRows(unattributed(), visibleUnattributed()),
   );
-  const unattributedRows = createMemo<WorkGraphRow[]>(() =>
-    unattributed().length
-      ? [
-          workGraphSectionRow(
-            "section:unattributed",
-            "Unattributed changes (no causal edge — needs explanation)",
-            unattributed().length,
-            "unattributed",
-          ),
-          ...flattenWorkGraphNodes(unattributedPage().page, {
-            idPrefix: "unattributed",
-            unattributed: true,
-          }),
-        ]
-      : [],
-  );
+  const unattributedRows = createMemo<WorkGraphRow[]>(() => {
+    const total = unattributed().length;
+    if (!total) return [];
+    const arrow = unattributedExpanded() ? "▾" : "▸";
+    const header = workGraphSectionRow(
+      "section:unattributed",
+      `${arrow} ${tr("gov.wgUnattributedToggle", `External unattributed file changes (${total})`, { count: total })}`,
+      total,
+      "unattributed",
+    );
+    if (!unattributedExpanded()) return [header];
+    return [
+      header,
+      ...flattenWorkGraphNodes(unattributedPage().page, {
+        idPrefix: "unattributed",
+        unattributed: true,
+      }),
+    ];
+  });
+
   const navigationRows = createMemo<WorkGraphRow[]>(() => {
     const nav = navigation();
     if (!nav) return [];
     return [
       workGraphSectionRow(
         "section:why",
-        `Why changed (backward) · ${nav.focus?.summary ?? ""}`,
+        tr(
+          "gov.wgWhySection",
+          `Why changed (backward) · ${nav.focus?.summary ?? ""}`,
+          { summary: nav.focus?.summary ?? "" },
+        ),
         nav.backward.length,
         "inbound",
       ),
@@ -96,7 +167,7 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
       }),
       workGraphSectionRow(
         "section:what",
-        "What changed (forward)",
+        tr("gov.wgWhatSection", "What changed (forward)"),
         nav.forward.length,
         "outbound",
       ),
@@ -106,34 +177,41 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
       }),
     ];
   });
-  const forestPage = createMemo(() =>
-    paginateWorkGraphRows(forest(), visibleRoots()),
-  );
-  const forestRows = createMemo<WorkGraphRow[]>(() =>
-    flattenWorkGraphTrees(forestPage().page, {
-      overrides: overrides(),
-      idPrefix: "forest",
-    }),
-  );
+
+  // Causal forest FIRST, collapsed unattributed section at the bottom!
   const rows = createMemo<WorkGraphRow[]>(() =>
-    navigation() ? navigationRows() : [...unattributedRows(), ...forestRows()],
+    navigation() ? navigationRows() : [...forestRows(), ...unattributedRows()],
   );
+
   const toggleNode = (nodeID: string, expanded: boolean) => {
     setOverrides((current) =>
       toggleWorkGraphOverride(current, nodeID, expanded),
     );
   };
-  // Scroll-driven paging: one scroll gesture appends one page (unattributed
-  // rows first, then forest roots); the row-count guard in the window stops a
-  // page from re-firing before it actually grows.
+
+  const toggleSection = (sectionID: string) => {
+    if (sectionID === "section:unattributed") {
+      setUnattributedExpanded((v) => !v);
+    }
+  };
+
+  const openFile = (path: string) => {
+    window.dispatchEvent(
+      new CustomEvent("natalia:open-file", {
+        detail: { path, line: 1 },
+      }),
+    );
+  };
+
   const appendNextPage = () => {
     if (navigation()) return;
-    if (unattributedPage().remaining > 0) {
-      setVisibleUnattributed((count) => count + WORK_GRAPH_PAGE_SIZE);
+    if (forestPage().remaining > 0) {
+      setVisibleRoots((count) => count + WORK_GRAPH_PAGE_SIZE);
       return;
     }
-    if (forestPage().remaining > 0)
-      setVisibleRoots((count) => count + WORK_GRAPH_PAGE_SIZE);
+    if (unattributedExpanded() && unattributedPage().remaining > 0) {
+      setVisibleUnattributed((count) => count + WORK_GRAPH_PAGE_SIZE);
+    }
   };
 
   return (
@@ -142,7 +220,7 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
         <input
           class={wg.searchInput}
           type="search"
-          placeholder="Search path / node / summary…"
+          placeholder={tr("gov.wgSearchPh", "Search file, tool or action…")}
           value={query()}
           onInput={(event) => setQuery(event.currentTarget.value)}
         />
@@ -155,9 +233,59 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
               setQuery("");
             }}
           >
-            clear
+            {tr("common.close", "clear")}
           </button>
         </Show>
+      </div>
+      <div class={wg.filterBar}>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={filter() === "all"}
+          onClick={() => setFilter("all")}
+        >
+          {tr("gov.wgFilterAll", "All")}
+        </button>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={filter() === "plan"}
+          onClick={() => setFilter("plan")}
+        >
+          {tr("gov.wgFilterPlan", "Goals & Plans")}
+        </button>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={filter() === "action"}
+          onClick={() => setFilter("action")}
+        >
+          {tr("gov.wgFilterAction", "Tools & Actions")}
+        </button>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={filter() === "file"}
+          onClick={() => setFilter("file")}
+        >
+          {tr("gov.wgFilterFile", "File Changes")}
+        </button>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={filter() === "rule"}
+          onClick={() => setFilter("rule")}
+        >
+          {tr("gov.wgFilterRule", "Approvals & Rules")}
+        </button>
+        <button
+          type="button"
+          class={wg.filterPill}
+          data-active={showCheckpoints()}
+          onClick={() => setShowCheckpoints((v) => !v)}
+        >
+          {tr("gov.wgShowCheckpoints", "Checkpoints")}
+        </button>
       </div>
       <Show when={matches().length}>
         <div class={wg.searchResults}>
@@ -172,7 +300,7 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
                 }}
               >
                 <span class={wg.kind} data-kind={node.kind}>
-                  {node.kind}
+                  {tr(`gov.wgKind.${node.kind}`, node.kind)}
                 </span>
                 <span class={wg.summary}>{node.summary}</span>
                 <Show when={node.target}>
@@ -185,12 +313,17 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
       </Show>
       <WorkGraphWindow
         rows={rows()}
+        t={props.t}
         onToggleNode={toggleNode}
+        onToggleSection={toggleSection}
+        onOpenFile={openFile}
         onNearBottom={appendNextPage}
         empty={
           <div class="neu-gov-empty">
-            No work graph yet — tool calls and workspace changes record the
-            causal chain here.
+            {tr(
+              "gov.wgEmpty",
+              "No work graph yet — tool calls and workspace changes record the causal chain here.",
+            )}
           </div>
         }
       />

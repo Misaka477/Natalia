@@ -97,7 +97,6 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
-        let createdBySocket = false;
         if (!session) {
           // The pane's shell is the HOST's decision, not this route's. A pane
           // whose caller names no command is started WITHOUT one, and the
@@ -116,7 +115,6 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             id: terminalID,
             sessionID,
           });
-          createdBySocket = true;
         }
         if (!session) {
           failOpen(ws, "native terminal start returned no session");
@@ -129,17 +127,10 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
-        // Only a pane SPAWNED by this UI socket is claimed for the human on
-        // open (so typing in a freshly opened user tab does not wake the
-        // frame-settler). An existing model-started pane stays model-owned when
-        // the human opens the panel to watch it — claiming on attach hijacked
-        // the model's vim/claude-code session the moment the user looked at it.
-        if (
-          createdBySocket &&
-          typeof client.nativeTerminalClaimHumanInput === "function"
-        ) {
-          await client.nativeTerminalClaimHumanInput(session.id, sessionID);
-        }
+        // Terminals default to model control (`inputOwner: "model"`) on open.
+        // Never auto-claim human input when opening or attaching the WebSocket;
+        // human takeover happens only when the user explicitly clicks Take Over
+        // or types in the terminal.
         // Replay the pane's current screen before any live output. This is the
         // equivalent of VSCode's process reconnection: a reconnected terminal
         // gets the serialized buffer first, then the stream continues. Without

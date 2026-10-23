@@ -1025,6 +1025,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     });
   };
 
+  const [draftWorkspaceID, setDraftWorkspaceID] = createSignal<
+    string | undefined
+  >(undefined);
+
   function clearSelectedSession() {
     userSelectedSession = true;
     setSelectedSessionID("");
@@ -1035,26 +1039,47 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     setState(cloneState(props.ctx.projection.getState()));
   }
 
+  /**
+   * Enter the Hero blank-draft state for a target workspace WITHOUT creating
+   * an empty session on disk (lazy-creation parity). The real session is
+   * materialized by `ensureSession()` when the user submits the first message.
+   */
   async function createSession(workspaceID?: string) {
     const targetWorkspaceID = resolveTargetWorkspaceID(
       workspaceID,
       selectedSessionID(),
       sessionList(),
       workspaces(),
+      draftWorkspaceID() ?? state().activeWorkspaceID,
+    );
+    setDraftWorkspaceID(targetWorkspaceID);
+    clearSelectedSession();
+    if (targetWorkspaceID && props.ctx.runtime.workspaceActivate) {
+      await props.ctx.runtime
+        .workspaceActivate(targetWorkspaceID)
+        .catch(() => undefined);
+      await refreshWorkspaces();
+    }
+  }
+
+  /**
+   * Materialize or reuse a real session in the target workspace right before
+   * sending the first message from the Hero draft state.
+   */
+  async function materializeSession(
+    workspaceID?: string,
+  ): Promise<string | undefined> {
+    const targetWorkspaceID = resolveTargetWorkspaceID(
+      workspaceID ?? draftWorkspaceID(),
+      selectedSessionID(),
+      sessionList(),
+      workspaces(),
       state().activeWorkspaceID,
     );
     if (!targetWorkspaceID && workspaces().length === 0) {
-      clearSelectedSession();
-      return;
+      return undefined;
     }
-    if (targetWorkspaceID) {
-      if (!props.ctx.runtime.workspaceActivate) {
-        await alert({
-          title: t("shell.newSessionTitle"),
-          message: t("shell.switchWorkspaceUnsupported"),
-        });
-        return;
-      }
+    if (targetWorkspaceID && props.ctx.runtime.workspaceActivate) {
       await props.ctx.runtime.workspaceActivate(targetWorkspaceID);
     }
     const currentHasMessages =
@@ -1088,10 +1113,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
     }
     await refreshWorkspaces();
-    // A refresh requested before sessionNew may still be in flight. Drop it so
-    // the newly created session cannot be missed by a stale list response.
     sessionsRefreshInFlight = undefined;
     await refreshSessions();
+    return nextSessionID;
   }
 
   async function renameWorkspace(workspaceID: string, title: string) {
@@ -3436,7 +3460,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           onAddWorkspace={() => setWorkspaceOpen(true)}
           ensureSession={async () => {
             if (!selectedSessionID()) {
-              await createSession();
+              return (await materializeSession()) || state().sessionID;
             }
             return selectedSessionID() || state().sessionID;
           }}

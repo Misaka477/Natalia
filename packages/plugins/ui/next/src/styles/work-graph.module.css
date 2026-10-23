@@ -44,20 +44,25 @@
 .search {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 5px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .searchInput {
   flex: 1;
   min-width: 0;
-  padding: 4px 7px;
-  border: none;
-  border-radius: 6px;
-  background: var(--neu-surface-raised-strong);
-  color: inherit;
-  box-shadow: var(--neu-ring-raised);
-  font-size: 11px;
+  padding: 6px 10px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 8px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.searchInput:focus {
+  border-color: var(--neu-accent);
 }
 
 .searchClear {
@@ -65,7 +70,42 @@
   background: transparent;
   color: var(--neu-muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.filterPill {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 999px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.filterPill:hover {
+  color: var(--neu-text);
+}
+
+.filterPill[data-active="true"] {
+  background: var(--neu-accent-soft);
+  border-color: color-mix(in srgb, var(--neu-accent) 35%, transparent);
+  color: var(--neu-accent);
+  font-weight: 600;
 }
 
 .searchResults {
@@ -79,32 +119,32 @@
   display: flex;
   align-items: baseline;
   gap: 5px;
-  padding: 3px 5px;
-  border: none;
-  border-radius: 5px;
-  background: var(--neu-surface-raised);
+  padding: 4px 8px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 6px;
+  background: var(--neu-bg);
   color: inherit;
   cursor: pointer;
   text-align: left;
 }
 
 .searchResult:hover {
-  background: var(--neu-surface-raised-strong);
+  background: var(--neu-hover-overlay);
 }
 
 /* One row height for every section header and tree node (12px × 1.5 line +
    2×2px padding); the virtualizer's fixed-height estimate must match. */
 .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   box-sizing: border-box;
   width: 100%;
   height: 22px;
   flex: none;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -114,33 +154,37 @@
 
 .rowSection {
   align-items: center;
+  background: var(--neu-bg);
+  border-radius: 6px;
 }
 
 /* Flattened rows keep their causal depth as an indent (the tree hierarchy the
    recursive renderer used to express by nesting); the indent itself is set as
    an inline padding because it depends on the row's depth. */
 .nodeRow {
-  border-left: 1px solid var(--neu-surface-raised-strong);
+  border-left: 1px solid var(--neu-hairline);
 }
 
 .nodeRow[data-depth="0"] {
   border-left-color: transparent;
 }
 
+/* Subtle left indicator instead of flooding 800 rows with solid yellow! */
 .nodeRow[data-unattributed="true"] {
-  background: var(--neu-state-warn-bg);
+  border-left: 2px solid var(--neu-warning);
+  opacity: 0.85;
 }
 
 .rowSection[data-tone="inbound"] {
-  color: color-mix(in srgb, var(--neu-accent) 70%, var(--neu-text));
+  color: var(--neu-accent);
 }
 
 .rowSection[data-tone="outbound"] {
-  color: color-mix(in srgb, var(--neu-success) 70%, var(--neu-text));
+  color: var(--neu-success);
 }
 
 .rowSection[data-tone="unattributed"] {
-  color: color-mix(in srgb, var(--neu-state-warn-text) 80%, var(--neu-text));
+  color: var(--neu-warning);
 }
 
 /* Pagination is scroll-driven (no button, no status line): reaching the end of
@@ -153,25 +197,42 @@ button.nodeRow:disabled {
   cursor: default;
 }
 
-button.nodeRow:hover {
-  background: var(--neu-surface-raised);
+button.nodeRow:hover:not(:disabled) {
+  background: var(--neu-hover-overlay);
 }
 
 .twisty {
   flex: none;
   width: 12px;
-  opacity: 0.6;
+  opacity: 0.65;
   font-size: 10px;
 }
 
 .kind {
   flex: none;
-  padding: 0 5px;
+  padding: 1px 6px;
   border-radius: 4px;
-  background: var(--neu-surface-raised-strong);
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
   font-size: 10px;
-  letter-spacing: 0.03em;
-  opacity: 0.85;
+  font-weight: 600;
+  color: var(--neu-muted);
+}
+
+.kind[data-kind="goal"],
+.kind[data-kind="plan"] {
+  color: var(--neu-accent);
+  background: var(--neu-accent-soft);
+}
+
+.kind[data-kind="workspace_change"],
+.kind[data-kind="validation"] {
+  color: var(--neu-success);
+}
+
+.kind[data-kind="approval"],
+.kind[data-kind="constraint"] {
+  color: var(--neu-warning);
 }
 
 .summary {
@@ -184,14 +245,101 @@ button.nodeRow:hover {
 
 .via {
   flex: none;
-  opacity: 0.5;
+  color: var(--neu-muted);
   font-size: 10px;
+  font-family: var(--neu-font-mono);
 }
 
 .sectionTitle {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.7;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   margin-bottom: 0;
+}
+
+/* ===== Interactive SVG Visual Node Canvas (WG 2.0) ===== */
+.canvasHint {
+  font-size: 11px;
+  color: var(--neu-muted);
+  margin-bottom: 6px;
+}
+
+.canvasWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+  padding: 6px;
+}
+
+.canvasSvg {
+  display: block;
+  width: 100%;
+  min-width: 460px;
+}
+
+.canvasLaneTitle {
+  fill: var(--neu-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.canvasEdge {
+  fill: none;
+  stroke: var(--neu-hairline-strong);
+  stroke-width: 1.5;
+  opacity: 0.25;
+  transition:
+    stroke 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.canvasEdge[data-active="true"] {
+  stroke: var(--neu-accent);
+  opacity: 0.75;
+}
+
+.canvasNode {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.canvasNode[data-dim="true"] {
+  opacity: 0.25;
+}
+
+.canvasNodeRect {
+  fill: var(--neu-bg-light);
+  stroke: var(--neu-hairline-strong);
+  stroke-width: 1;
+  transition:
+    stroke 0.15s ease,
+    fill 0.15s ease;
+}
+
+.canvasNode:hover .canvasNodeRect,
+.canvasNode[data-selected="true"] .canvasNodeRect {
+  stroke: var(--neu-accent);
+  stroke-width: 1.6;
+}
+
+.canvasNodeKind {
+  fill: var(--neu-accent);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.canvasNode[data-kind="workspace_change"] .canvasNodeKind,
+.canvasNode[data-kind="validation"] .canvasNodeKind {
+  fill: var(--neu-success);
+}
+
+.canvasNodeLabel {
+  fill: var(--neu-text);
+  font-size: 10px;
+  font-family: var(--neu-font-mono);
 }

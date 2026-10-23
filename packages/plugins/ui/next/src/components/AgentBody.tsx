@@ -92,6 +92,11 @@ export function AgentBody(props: AgentBodyProps) {
     });
   });
 
+  const displayWorkspaceTitle = (title: string | undefined) => {
+    if (!title) return t("hero.chooseWorkspace");
+    return title === "default-workspace" ? t("hero.defaultWorkspace") : title;
+  };
+
   return (
     <div class={styles.agentWrap} data-hero={hero()}>
       {props.notices}
@@ -160,7 +165,16 @@ export function AgentBody(props: AgentBodyProps) {
                   aria-label={t("hero.chooseWorkspace")}
                   aria-haspopup="menu"
                   aria-expanded={pickerOpen()}
-                  onClick={() => setPickerOpen((v) => !v)}
+                  onClick={() => {
+                    if (
+                      (props.workspaces?.() ?? []).length === 0 &&
+                      props.onAddWorkspace
+                    ) {
+                      props.onAddWorkspace();
+                      return;
+                    }
+                    setPickerOpen((v) => !v);
+                  }}
                 >
                   <Show
                     when={currentWorkspace()}
@@ -195,7 +209,7 @@ export function AgentBody(props: AgentBodyProps) {
                     </svg>
                   </Show>
                   <span class={styles.workspaceChipLabel}>
-                    {currentWorkspace()?.title ?? t("hero.chooseWorkspace")}
+                    {displayWorkspaceTitle(currentWorkspace()?.title)}
                   </span>
                   <svg
                     width="12"
@@ -223,7 +237,7 @@ export function AgentBody(props: AgentBodyProps) {
                             props.onSelectWorkspace?.(ws.workspaceID);
                           }}
                         >
-                          <span>{ws.title}</span>
+                          <span>{displayWorkspaceTitle(ws.title)}</span>
                         </button>
                       )}
                     </For>

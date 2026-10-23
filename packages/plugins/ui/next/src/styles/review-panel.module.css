@@ -454,3 +454,71 @@
 .accordionBody :global(.review-diff-content) {
   max-height: 500px;
 }
+
+/* ===== Time-Machine Checkpoint Deck ===== */
+.cpDeck {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+}
+
+.cpCategoryBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cpActionBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cpSelectWrap {
+  flex: 1;
+  min-width: 160px;
+}
+
+.cpSelectWrap :global(.neu-select) {
+  width: 100%;
+}
+
+.cpButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cpRollbackBtn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--neu-accent) 40%, transparent);
+  border-radius: 8px;
+  background: var(--neu-accent-soft);
+  color: var(--neu-accent);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.cpRollbackBtn:hover:not(:disabled) {
+  background: var(--neu-accent);
+  color: #ffffff;
+}
+
+.cpEmptyHint {
+  padding: 8px 4px;
+  font-size: 11px;
+  color: var(--neu-muted);
+}

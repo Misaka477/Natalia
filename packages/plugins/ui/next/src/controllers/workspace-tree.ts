@@ -27,8 +27,14 @@ export type SessionOrderBy = "manual" | "updated";
  * no queued inputs, not running, and not archived).
  */
 export function isBlankSession(session: RuntimeSessionSummary): boolean {
+  const isUntouchedNew =
+    session.events <= 2 &&
+    !session.lastAccessedAt &&
+    (session.title === "New session" ||
+      session.title === "新会话" ||
+      !session.title);
   return (
-    session.events === 0 &&
+    (session.events === 0 || isUntouchedNew) &&
     (session.pendingInputs ?? 0) === 0 &&
     session.status !== "running" &&
     !session.archived

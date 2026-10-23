@@ -1809,11 +1809,10 @@ export function GovernancePane(props: {
             )}
           </Show>
           <For
-            each={
-              liveConstitution().length
-                ? liveConstitution()
-                : Object.values(props.state.constitutionRules ?? {})
-            }
+            each={(liveConstitution().length
+              ? liveConstitution()
+              : Object.values(props.state.constitutionRules ?? {})
+            ).filter((rule) => rule.ruleID !== "C-TERM-001")}
           >
             {(rule) => (
               <div class={constitution.row}>
@@ -2368,9 +2367,9 @@ export function GovernancePane(props: {
             </div>
             <Show
               when={workGraphView() === "tree"}
-              fallback={<WorkGraphGraph state={workGraphState()} />}
+              fallback={<WorkGraphGraph state={workGraphState()} t={t} />}
             >
-              <WorkGraphTree state={workGraphState()} />
+              <WorkGraphTree state={workGraphState()} t={t} />
             </Show>
           </div>
         </Show>

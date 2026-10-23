@@ -1016,6 +1016,7 @@ export function MainPanes(props: MainPanesProps) {
                 activeWorkspaceID={props.activeWorkspaceID}
                 onSelectWorkspace={props.onSelectWorkspace}
                 onAddWorkspace={props.onAddWorkspace}
+                ensureSession={props.ensureSession}
               />
             </Show>
 

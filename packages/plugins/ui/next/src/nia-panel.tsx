@@ -58,6 +58,7 @@ export function NiaPanel(props: {
   activeWorkspaceID?: () => string | undefined;
   onSelectWorkspace?: (workspaceID: string) => void;
   onAddWorkspace?: () => void;
+  ensureSession?: () => Promise<string | undefined>;
 }) {
   const t = props.t;
   const [draft, setDraft] = createSignal("");
@@ -271,12 +272,15 @@ export function NiaPanel(props: {
     setDraft("");
     setAttachments([]);
     try {
-      const profile = await props.runtime?.niaChat?.modelProfile?.(
-        props.sessionID,
-      );
+      let targetSessionID = props.sessionID;
+      if (!targetSessionID && props.ensureSession) {
+        targetSessionID = await props.ensureSession();
+      }
+      const profile =
+        await props.runtime?.niaChat?.modelProfile?.(targetSessionID);
       await props.runtime?.niaChat?.submit?.({
         text,
-        sessionID: props.sessionID,
+        sessionID: targetSessionID,
         ...(pendingAttachments.length
           ? { attachments: pendingAttachments.map((item) => item.path) }
           : {}),
@@ -299,7 +303,7 @@ export function NiaPanel(props: {
                 reasoning()) as "minimal" | "low" | "medium" | "high" | "xhigh",
             }
           : {}),
-        ...(props.sessionID ? { sessionID: props.sessionID } : {}),
+        ...(targetSessionID ? { sessionID: targetSessionID } : {}),
       });
     } catch (cause) {
       console.error("[nia-ui] submit failed", cause);

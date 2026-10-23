@@ -62,16 +62,15 @@ const npmCacheDir = join(tmpdir(), "natalia-npm-cache");
  * `npm.exe`, but a bun installed by its own installer may ship only
  * `bun.exe` — spawning `bun.cmd` then fails with ENOENT before the shell
  * ever sees it, which is how the runtime died with "'bun.cmd' is not
- * recognized". The `.cmd` shim is still what npm needs, so this checks
- * for it rather than assuming either way: POSIX keeps the bare name.
+ * recognized". The `.cmd` shim is still what npm needs, so this asks the
+ * shell whether the shim exists rather than assuming either way: POSIX
+ * keeps the bare name.
  */
 function windowsCommand(command: string): string {
   if (!isWindows) return command;
   const shim = `${command}.cmd`;
-  const sameDir = resolve(dirname(process.execPath), `${shim}`);
-  if (existsSync(sameDir)) return sameDir;
-  const onPath = spawnSync("where", [shim], { stdio: "ignore" });
-  if (onPath.status === 0) return shim;
+  const found = spawnSync("where", [shim], { stdio: "ignore" });
+  if (found.status === 0) return shim;
   return command;
 }
 

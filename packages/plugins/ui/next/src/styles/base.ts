@@ -2419,21 +2419,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .review-file-op { font-weight: 600; text-transform: uppercase; }
 .review-section-title { font-size: 12px; font-weight: 600; color: var(--neu-muted); margin: 10px 0 4px; }
 
-.review-drift-card {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--neu-bg-light);
-  margin-bottom: 6px;
-  font-size: 12px;
-}
-.review-drift-card[data-severity="high"] { border-left: 3px solid var(--neu-danger); }
-.review-drift-card[data-severity="warning"] { border-left: 3px solid var(--neu-warning); }
-.review-drift-card[data-severity="advisory"] { border-left: 3px solid var(--neu-accent); }
-.review-drift-header { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: var(--neu-muted); }
-.review-severity, .review-drift-status { text-transform: uppercase; font-weight: 600; }
-.review-drift-activity { color: var(--neu-text); font-weight: 500; margin-bottom: 6px; word-break: break-word; max-height: 72px; overflow: hidden; }
-.review-drift-evidence { margin: 0; padding-left: 18px; color: var(--neu-muted); font-size: 11px; }
-.review-drift-evidence li { margin-bottom: 2px; word-break: break-word; }
 
 `;
 

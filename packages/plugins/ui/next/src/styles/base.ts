@@ -2863,67 +2863,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 }
 
 /* ===== Flow / Task panel ===== */
-.neu-flow-window {
-  width: min(620px, 90vw);
-  max-height: 78vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--neu-bg-light);
-  border-radius: var(--neu-radius);
-  box-shadow: var(--neu-elevation-5);
-  overflow: hidden;
-}
-.neu-flow-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 14px 20px 0;
-}
-.neu-flow-tabs .neu-settings-category {
-  width: auto;
-  padding: 8px 16px;
-  background: var(--neu-bg);
-}
-.neu-flow-content {
-  flex: 1;
-  min-height: 0;
-  padding: 14px 20px 20px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.neu-flow-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-.neu-flow-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neu-text);
-  font-family: var(--neu-font-mono);
-}
-.neu-flow-detail {
-  font-size: 12px;
-  color: var(--neu-muted);
-}
-.neu-flow-status {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: var(--neu-bg-light);
-  color: var(--neu-muted);
-  white-space: nowrap;
-}
-.neu-flow-status[data-running="true"] {
-  color: var(--neu-success);
-}
 
 /* ===== Flow / Task detail ===== */
 .neu-flow-card {
@@ -2948,11 +2887,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-size: 13px;
   font-weight: 600;
 }
-.neu-flow-card-id {
-  font-size: 11px;
-  color: var(--neu-muted);
-  font-family: var(--neu-font-mono);
-}
 .neu-flow-card-meta {
   font-size: 11px;
   color: var(--neu-muted);
@@ -2973,59 +2907,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   font-weight: 600;
   color: var(--neu-text);
 }
-.neu-flow-detail-id {
-  font-size: 11px;
-  color: var(--neu-muted);
-  font-family: var(--neu-font-mono);
-}
 .neu-flow-detail-field {
   font-size: 12px;
   color: var(--neu-muted);
   margin-top: 2px;
-}
-.neu-flow-module {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-.neu-flow-module-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.neu-flow-module-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neu-text);
-}
-.neu-flow-module-type {
-  font-size: 11px;
-  color: var(--neu-accent);
-  font-family: var(--neu-font-mono);
-}
-.neu-flow-module-enabled {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--neu-muted);
-}
-.neu-flow-module-enabled[data-enabled="true"] {
-  color: var(--neu-success);
-}
-.neu-flow-module-instructions {
-  font-size: 12px;
-  color: var(--neu-muted);
-}
-.neu-flow-prompt {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  color: var(--neu-text);
-  font-size: 12px;
-  box-shadow: var(--neu-inset-2);
 }
 
 /* ===== Flow editor section title ===== */
@@ -3037,32 +2922,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 }
 
 /* ===== Flow preview & problems ===== */
-.neu-flow-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-.neu-flow-preview-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--neu-text);
-}
-.neu-flow-problems {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.neu-flow-problem {
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: var(--neu-bg);
-  color: var(--neu-warning);
-  font-size: 12px;
-}
 
 /* ===== Sandbox panel ===== */
 .neu-sandbox-window {
@@ -3277,93 +3136,8 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   flex-direction: column;
   gap: 12px;
 }
-.neu-workspace-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-.neu-workspace-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-.neu-workspace-item-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-.neu-workspace-item-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neu-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.neu-workspace-item-badge {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--neu-accent);
-  color: var(--neu-on-accent);
-  font-size: 11px;
-  font-weight: 600;
-}
-.neu-workspace-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.neu-workspace-item-actions .neu-workspace-switch {
-  padding: 6px 14px;
-  min-width: 58px;
-  background: var(--neu-bg);
-  color: var(--neu-text);
-  border: 1px solid var(--neu-hairline);
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: var(--neu-elevation-1);
-}
-.neu-workspace-item-actions .neu-workspace-switch:hover:not(:disabled) {
-  color: var(--neu-accent);
-  border-color: var(--neu-accent);
-}
-.neu-workspace-item-actions .neu-workspace-switch:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.neu-workspace-item-actions .neu-workspace-remove {
-  padding: 6px 14px;
-  min-width: 58px;
-  background: color-mix(in srgb, var(--neu-error) 10%, var(--neu-bg));
-  color: var(--neu-error);
-  border: 1px solid color-mix(in srgb, var(--neu-error) 35%, transparent);
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: var(--neu-elevation-1);
-}
-.neu-workspace-item-actions .neu-workspace-remove:hover {
-  background: color-mix(in srgb, var(--neu-error) 18%, var(--neu-bg));
-}
 
 /* ===== Workspace success ===== */
-.neu-workspace-success {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--neu-bg);
-  color: var(--neu-success);
-  font-size: 12px;
-}
 
 /* ===== Workspace error ===== */
 .neu-workspace-error {

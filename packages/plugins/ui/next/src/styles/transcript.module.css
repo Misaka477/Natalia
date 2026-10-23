@@ -19,6 +19,23 @@
   right: 16px;
 }
 
+/* THE DECISION SLOT — where the runtime asks the human something. It
+   belongs to the pane, not to an agent: a pending decision blocks the
+   run whoever is focused, which is why it used to be a bug that it lived
+   inside one agent's composer. Present only when something is waiting;
+   the accent edge is what makes an open decision impossible to scroll
+   past. */
+
+.decisionSlot {
+  flex-shrink: 0;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--neu-radius-sm);
+  border-left: 3px solid var(--neu-accent);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-elevation-2);
+}
+
 /* The one docked input, at the pane's bottom edge. Whichever agent the
    pane shows, this is the box the reader types into: the toolbar above
    it and the composer inside it belong to the focused agent, and the

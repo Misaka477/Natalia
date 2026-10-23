@@ -420,6 +420,27 @@ export function MainPanes(props: MainPanesProps) {
               </div>
             </Show>
 
+            {/* THE DECISION SLOT — where the runtime asks the human
+                something. A pending approval, question or interactive
+                blocks the run whoever is focused, so this band belongs to
+                the pane rather than to an agent: it used to live inside the
+                Natalia composer, which meant a waiting decision was
+                invisible the moment Navi was the focused agent. It sits
+                above the runbar, between the transcript and the input, and
+                it is only there when something is actually waiting. */}
+            <Show when={pendingTakeoverCount() > 0}>
+              <div class={styles.decisionSlot}>
+                <PendingTakeover
+                  t={t}
+                  ctx={props.ctx}
+                  minimized={pendingTakeoverMinimized}
+                  onMinimize={setPendingTakeoverMinimized}
+                  focusID={pendingTakeoverFocus}
+                  onFocusHandled={() => setPendingTakeoverFocus(undefined)}
+                />
+              </div>
+            </Show>
+
             {/* THE RUNBAR — the active run, in one band above the input.
                 What is running, how long it has been, the model, the
                 reasoning档 and the permission rung it is running under, and

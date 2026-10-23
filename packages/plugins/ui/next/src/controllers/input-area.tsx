@@ -103,119 +103,107 @@ export function MainInputArea(props: MainInputAreaProps) {
         }}
       />
       <SessionUsageBar t={t} usage={state().usageByChannel.main} />
-      <Show when={pendingTakeoverCount() > 0 && !pendingTakeoverMinimized()}>
-        <PendingTakeover
-          t={t}
-          ctx={props.ctx}
-          minimized={pendingTakeoverMinimized}
-          onMinimize={setPendingTakeoverMinimized}
-          focusID={pendingTakeoverFocus}
-          onFocusHandled={() => setPendingTakeoverFocus(undefined)}
-        />
-      </Show>
-      <Show when={pendingTakeoverCount() === 0 || pendingTakeoverMinimized()}>
-        <Composer
-          t={t}
-          value={mainDraft()}
-          placeholder={t("input.messagePlaceholder")}
-          busy={Boolean(state().natalia.activeTurn)}
-          onInput={setMainDraft}
-          attachments={mainAttachments()}
-          onRemoveAttachment={(path) =>
-            setMainAttachments(
-              mainAttachments().filter((item) => item.path !== path),
-            )
-          }
-          onPaste={(event) =>
-            handlePasteAttachments(event, mainAttachments(), setMainAttachments)
-          }
-          onSubmit={() => {
-            const text = mainDraft();
-            const paths = mainAttachments().map((item) => item.path);
-            if (text.trim() || paths.length) {
-              const rollback = pendingRollback();
-              const submit = async () => {
-                try {
-                  if (rollback) {
-                    const sessionID = selectedSessionID() || state().sessionID;
-                    const messageResult =
-                      rollback.turnID && sessionID
-                        ? await props.ctx.runtime.sessionRollbackMessages?.(
-                            sessionID,
-                            rollback.turnID,
-                          )
-                        : undefined;
-                    const preview = rollback.checkpointID
-                      ? await props.ctx.runtime.checkpointRollback?.({
-                          id: rollback.checkpointID,
-                          sessionID,
-                        })
-                      : undefined;
-                    await refreshTranscript();
-                    if (messageResult || preview) {
-                      // No count: the rollback contract
-                      // returns {id, rolledBackTo} and nothing
-                      // about how much was removed, so the
-                      // "1 条消息" this used to print was
-                      // invented — a number that was wrong
-                      // for every rollback that removed more
-                      // than one message and right only by
-                      // coincidence. Saying what happened is
-                      // honest; counting it needs the store
-                      // to return the number.
-                      setRollbackNotice({
-                        text:
-                          messageResult && preview
-                            ? t("input.rollback.noticeBoth")
-                            : preview
-                              ? t("input.rollback.noticeWorkspace")
-                              : messageResult?.safetyCheckpointID
-                                ? t("input.rollback.noticeSafety")
-                                : t("input.rollback.noticeMessages"),
-                        safetyCheckpointID:
-                          messageResult?.safetyCheckpointID ??
-                          preview?.safetyCheckpointID,
-                      });
-                    }
-                  } else {
-                    setRollbackNotice(undefined);
-                  }
-                  perfLog("[web-plugin] send", text);
-                  // The Composer opts into mid-turn injection by
-                  // default. The settings panel can switch a busy send
-                  // to `next-turn`, which queues a separate turn.
-                  const busy = Boolean(state().natalia.activeTurn);
-                  const busySendDelivery =
-                    props.ctx.preferences.get<"next-step" | "next-turn">(
-                      "busySendDelivery",
-                    ) ?? "next-step";
+      <Composer
+        t={t}
+        value={mainDraft()}
+        placeholder={t("input.messagePlaceholder")}
+        busy={Boolean(state().natalia.activeTurn)}
+        onInput={setMainDraft}
+        attachments={mainAttachments()}
+        onRemoveAttachment={(path) =>
+          setMainAttachments(
+            mainAttachments().filter((item) => item.path !== path),
+          )
+        }
+        onPaste={(event) =>
+          handlePasteAttachments(event, mainAttachments(), setMainAttachments)
+        }
+        onSubmit={() => {
+          const text = mainDraft();
+          const paths = mainAttachments().map((item) => item.path);
+          if (text.trim() || paths.length) {
+            const rollback = pendingRollback();
+            const submit = async () => {
+              try {
+                if (rollback) {
                   const sessionID = selectedSessionID() || state().sessionID;
-                  const outgoing = goalCommandInstruction(text) ?? text;
-                  if (props.ctx.runtime.submitInput) {
-                    props.ctx.runtime.submitInput({
-                      text: outgoing,
-                      ...(paths.length ? { attachments: paths } : {}),
-                      ...(busy ? { delivery: busySendDelivery } : {}),
-                      sessionID,
+                  const messageResult =
+                    rollback.turnID && sessionID
+                      ? await props.ctx.runtime.sessionRollbackMessages?.(
+                          sessionID,
+                          rollback.turnID,
+                        )
+                      : undefined;
+                  const preview = rollback.checkpointID
+                    ? await props.ctx.runtime.checkpointRollback?.({
+                        id: rollback.checkpointID,
+                        sessionID,
+                      })
+                    : undefined;
+                  await refreshTranscript();
+                  if (messageResult || preview) {
+                    // No count: the rollback contract
+                    // returns {id, rolledBackTo} and nothing
+                    // about how much was removed, so the
+                    // "1 条消息" this used to print was
+                    // invented — a number that was wrong
+                    // for every rollback that removed more
+                    // than one message and right only by
+                    // coincidence. Saying what happened is
+                    // honest; counting it needs the store
+                    // to return the number.
+                    setRollbackNotice({
+                      text:
+                        messageResult && preview
+                          ? t("input.rollback.noticeBoth")
+                          : preview
+                            ? t("input.rollback.noticeWorkspace")
+                            : messageResult?.safetyCheckpointID
+                              ? t("input.rollback.noticeSafety")
+                              : t("input.rollback.noticeMessages"),
+                      safetyCheckpointID:
+                        messageResult?.safetyCheckpointID ??
+                        preview?.safetyCheckpointID,
                     });
-                  } else {
-                    props.ctx.runtime.submit?.(text, sessionID);
                   }
-                } finally {
-                  setMainDraft("");
-                  setMainAttachments([]);
-                  setPendingRollback(undefined);
+                } else {
+                  setRollbackNotice(undefined);
                 }
-              };
-              void submit();
-            }
-            // No onStop: the run's stop lives in the runbar, above this
-            // dock. The composer keeps its send key and its busy state; the
-            // control that interrupts a run is the runbar's, because the
-            // runbar is the run's surface and this is the message's.
-          }}
-        />
-      </Show>
+                perfLog("[web-plugin] send", text);
+                // The Composer opts into mid-turn injection by
+                // default. The settings panel can switch a busy send
+                // to `next-turn`, which queues a separate turn.
+                const busy = Boolean(state().natalia.activeTurn);
+                const busySendDelivery =
+                  props.ctx.preferences.get<"next-step" | "next-turn">(
+                    "busySendDelivery",
+                  ) ?? "next-step";
+                const sessionID = selectedSessionID() || state().sessionID;
+                const outgoing = goalCommandInstruction(text) ?? text;
+                if (props.ctx.runtime.submitInput) {
+                  props.ctx.runtime.submitInput({
+                    text: outgoing,
+                    ...(paths.length ? { attachments: paths } : {}),
+                    ...(busy ? { delivery: busySendDelivery } : {}),
+                    sessionID,
+                  });
+                } else {
+                  props.ctx.runtime.submit?.(text, sessionID);
+                }
+              } finally {
+                setMainDraft("");
+                setMainAttachments([]);
+                setPendingRollback(undefined);
+              }
+            };
+            void submit();
+          }
+          // No onStop: the run's stop lives in the runbar, above this
+          // dock. The composer keeps its send key and its busy state; the
+          // control that interrupts a run is the runbar's, because the
+          // runbar is the run's surface and this is the message's.
+        }}
+      />
     </>
   );
 }

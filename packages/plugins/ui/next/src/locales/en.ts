@@ -287,7 +287,6 @@ export const en = {
   "settingsDlg.autoDetect": "Auto-detect",
   "settingsDlg.title": "Settings",
   "settingsDlg.closeAria": "Close settings",
-  "settingsDlg.fullscreen": "Fullscreen",
   "settingsDlg.themeDark": "Dark",
   "settingsDlg.themeLight": "Light",
   "settingsDlg.injectCurrent": "Inject current turn",

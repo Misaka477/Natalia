@@ -2269,16 +2269,18 @@ export const confirmDialogCss = `
 }
 `;
 
-/** The settings window's fullscreen presentation. Belongs to the settings
- *  region, which has not been modularized yet; it stays global until that
- *  region moves. */
+/** The settings window fills the viewport. The fullscreen presentation
+ *  was the only one after the toggle went away, so the rules moved into
+ *  the sheet as plain window chrome. Belongs to the settings region,
+ *  which has not been modularized yet. */
 export const settingsFullscreenCss = `
-  /* Settings, fullscreen presentation: the window fills the viewport and
-     drops its chrome. Tokens only, like the rest of the sheet. */
-  .neu-settings-backdrop[data-fullscreen="true"] {
+  /* Settings: the window fills the viewport and drops its chrome. A
+     settings surface is read, not glanced at. Tokens only, like the
+     rest of the sheet. */
+  .neu-settings-backdrop {
     padding: 0;
   }
-  .neu-settings-backdrop[data-fullscreen="true"] .neu-settings-window {
+  .neu-settings-backdrop .neu-settings-window {
     width: 100vw;
     height: 100vh;
     max-width: none;

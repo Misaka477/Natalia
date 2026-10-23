@@ -298,7 +298,6 @@ export const zh = {
   "settingsDlg.autoDetect": "自动探测",
   "settingsDlg.title": "设置",
   "settingsDlg.closeAria": "关闭设置",
-  "settingsDlg.fullscreen": "全屏",
   "settingsDlg.themeDark": "深色",
   "settingsDlg.themeLight": "浅色",
   "settingsDlg.injectCurrent": "注入当前轮",

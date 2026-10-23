@@ -1051,40 +1051,15 @@ export function SettingsPanel(props: {
 
   return (
     <Show when={props.open}>
-      {/* The fullscreen presentation fills the viewport instead of
-          floating a window: a settings surface is read, not glanced at,
-          and the window chrome is weight with nothing behind it. The
-          backdrop still closes on an outside click in window mode only —
-          in fullscreen there is no outside. */}
-      <div
-        class="neu-settings-backdrop"
-        data-fullscreen={props.fullscreen ? "true" : undefined}
-        onClick={() => {
-          if (!props.fullscreen) props.onClose();
-        }}
-      >
+      {/* The settings surface is read, not glanced at, so it fills the
+          viewport rather than floating a window over the shell. There is
+          no outside to click, and no fullscreen toggle: the presentation
+          is the only one, and a control that switches to the same thing
+          is a control that does nothing. */}
+      <div class="neu-settings-backdrop" data-fullscreen="true">
         <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("settingsDlg.title")}</span>
-            <Show when={props.onToggleFullscreen}>
-              <button
-                type="button"
-                class="neu-settings-close"
-                data-active={props.fullscreen ? "true" : undefined}
-                onClick={() => props.onToggleFullscreen?.()}
-                aria-label={t("settingsDlg.fullscreen")}
-                title={t("settingsDlg.fullscreen")}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path
-                    d="M2 6V2h4M14 10v4h-4M10 2h4v4M6 14H2v-4"
-                    stroke="currentColor"
-                    stroke-width="1.4"
-                    stroke-linecap="round"
-                  />
-                </svg>
-              </button>
-            </Show>
             <button
               type="button"
               class="neu-settings-close"

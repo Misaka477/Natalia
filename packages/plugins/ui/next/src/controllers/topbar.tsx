@@ -169,6 +169,9 @@ export function Topbar(props: TopbarProps) {
         >
           {t("topbar.more")}
         </button>
+        {/* A plugin entry in the topbar's trailing area, after the shell's
+            own controls — the second of the architecture's nine slots. */}
+        <SlotMount slots={slots} name="topbar.end" t={t} />
       </div>
       <Show when={topbarPanel()}>
         <div class={styles.panelDropdown}>

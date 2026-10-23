@@ -430,6 +430,9 @@ export function MainPanes(props: MainPanesProps) {
                 it is only there when something is actually waiting. */}
             <Show when={pendingTakeoverCount() > 0}>
               <div class={styles.decisionSlot}>
+                {/* A plugin entry in the decision slot, above the shell's
+                    own pending card — the fifth of the nine. */}
+                <SlotMount slots={slots} name="decision" t={t} />
                 <PendingTakeover
                   t={t}
                   ctx={props.ctx}
@@ -448,6 +451,9 @@ export function MainPanes(props: MainPanesProps) {
                 line above a toolbar of selects inside each agent's own
                 pane; now it is one bar whichever agent the pane shows. */}
             <div class={styles.runbar}>
+              {/* A plugin entry in the run bar, before the shell's own
+                  controls — the fourth of the architecture's nine slots. */}
+              <SlotMount slots={slots} name="runbar" t={t} />
               <Show when={focusAgent() === "natalia"}>
                 <div class="neu-activity-bar">
                   <span class="neu-activity-pulse" />

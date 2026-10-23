@@ -19,6 +19,7 @@ import { NiaPanel } from "../nia-panel";
 import { AgentPanel } from "../agent-panel";
 import { cloneState } from "@natalia/view-store";
 import { dockTargetFor } from "../terminal/dock-targets";
+import { SlotMount } from "../slots/mount";
 
 export interface RightRailProps {
   ctx: UiPluginContext;
@@ -330,6 +331,9 @@ export function RightRail(props: RightRailProps) {
                 );
               }}
             </For>
+            {/* A plugin entry inside the right rail, after the shell's own
+                tabs — the eighth of the architecture's nine slots. */}
+            <SlotMount slots={props.slots} name="workbench.end" t={props.t} />
           </div>
         </aside>
       </div>

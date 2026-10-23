@@ -781,6 +781,44 @@ export type ToolExecutionContext = {
    * capability; absent = images cannot be attached.
    */
   attachImage?: (path: string) => Promise<void>;
+  /**
+   * The self-iteration handoff, when the host owns a workspace manager.
+   * A runtime is bound to ONE workspace, so this is the only path from a
+   * tool to a session in another tree. Absent = the tool answers that
+   * self-iteration is unavailable here rather than reaching for it.
+   */
+  iterateBranch?: (
+    baseline: string | undefined,
+    request: {
+      path: string;
+      prompt: string;
+      resume?: boolean;
+      title?: string;
+      parentSessionID: string;
+      parentGoal?: {
+        goalID: string;
+        title: string;
+        phase: "active" | "paused" | "blocked" | "complete";
+        roundsStarted: number;
+        revision: number;
+      };
+      goalContinuation: boolean;
+      permissionMode?: "ask" | "auto" | "read_only";
+      permissionProfile?: string;
+    },
+  ) => Promise<{
+    sessionID: string;
+    workspaceID: string;
+    workspaceRoot: string;
+    registered: boolean;
+    copiedFrom?: string;
+    goal:
+      | { kind: "none"; reason: string }
+      | { kind: "move"; goal: unknown; parentReason: string }
+      | { kind: "supersede"; goal: unknown; parentReason: string };
+    goalArmed: boolean;
+    notice: string;
+  }>;
   sandboxMergeAuthorize?: (input: {
     id: string;
     paths: string[];

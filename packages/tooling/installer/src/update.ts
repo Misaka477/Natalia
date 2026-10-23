@@ -407,8 +407,13 @@ export type UpdateProgramInput = {
  * bounded so a hung daemon cannot hang the update: the runtime enforces
  * its own turn-wait semantics, this adds the client-side ceiling.
  * Returns how long the runtime waited.
+ *
+ * Exported because the generation switch's L3 lane needs the SAME
+ * daemon-wide drain: a staged build replaces the binary, so every
+ * workspace's runtime dies with the swap, and draining one workspace's
+ * turns would strand the others' live turns while believing it was quiet.
  */
-async function drainRuntime(runtime: {
+export async function drainRuntime(runtime: {
   url: string;
   token?: string;
   drainTimeoutMs?: number;
@@ -508,6 +513,17 @@ export type StagedBuildInstall = {
   exec?: (argv: string[]) => { code: number; output: string };
   /** How `--version` is run; injected for tests with a non-PE fixture. */
   probeRunner?: ProbeRunner;
+  /**
+   * Replace the running process with the new binary, AFTER a passed probe.
+   *
+   * Windows has no service manager to ask for a restart: the process that
+   * just landed the new code IS the process running the old code, so the
+   * only way it becomes the new code is by handing over. The injected
+   * function is expected to start the new binary and then exit this one;
+   * absent on POSIX, where `restartUnit` covers it and there is no
+   * self-replace to do.
+   */
+  relaunch?: () => { code: number; output: string };
 };
 
 export type StagedBuildOutcome =
@@ -550,6 +566,8 @@ export function installStagedBuild(
   }
   const probe = probeVersion(binLink, input.probeRunner);
   if (probe.code === 0 && probe.version === version) {
+    // POSIX: a service manager restarts the unit. The relaunch hook is
+    // POSIX's absence — there is nothing to hand over to there.
     if (input.restartUnit) {
       const argv = ["systemctl", "restart", input.restartUnit];
       const run = input.exec ?? defaultRestartExec;
@@ -566,6 +584,27 @@ export function installStagedBuild(
         return {
           outcome: "switched",
           warning: `restart not executed (${error instanceof Error ? error.message : String(error)})`,
+        };
+      }
+    }
+    // Windows: hand the process over. Without this the new binary is
+    // linked, verified and health-checked while the process that did all
+    // that keeps running the OLD code — the self-iteration that completes
+    // and changes nothing until somebody restarts by hand.
+    if (input.relaunch) {
+      try {
+        const outcome = input.relaunch();
+        if (outcome.code !== 0)
+          return {
+            outcome: "switched",
+            warning:
+              `relaunch not executed (exit ${outcome.code}: ${outcome.output}) — the new ` +
+              `binary is linked and verified; restart the app yourself`,
+          };
+      } catch (error) {
+        return {
+          outcome: "switched",
+          warning: `relaunch not executed (${error instanceof Error ? error.message : String(error)})`,
         };
       }
     }

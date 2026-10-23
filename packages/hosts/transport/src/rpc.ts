@@ -30,7 +30,11 @@ import {
   runtimeFailureData,
 } from "@anthelia/contracts";
 import { CONFINEMENT_MODES } from "@anthelia/contracts";
-import type { RuntimeClient, RuntimeFailureData } from "@anthelia/contracts";
+import type {
+  RuntimeClient,
+  RuntimeFailureData,
+  RuntimeEvent,
+} from "@anthelia/contracts";
 import type { RPCRequest, RPCResponse } from "./rpc-client";
 
 /**
@@ -245,6 +249,7 @@ export const RPC_ROUTE_MEMBERS = {
   "session.pin": "sessionPin",
   "session.duplicate": "sessionDuplicate",
   "session.fork": "sessionFork",
+  "session.seed": "sessionSeed",
   "session.rollback.messages": "sessionRollbackMessages",
   "session.delete": "sessionDelete",
   "session.new": "sessionNew",
@@ -1956,6 +1961,33 @@ export async function handleRPCMessage(
         ),
       };
     }
+    if (body.method === "session.seed") {
+      optionsGuard(client, "sessionSeed");
+      const params = body.params;
+      if (!params || typeof params !== "object")
+        throw invalidParams("session.seed.params must be an object");
+      const { id, title, events } = params as {
+        id?: unknown;
+        title?: unknown;
+        events?: unknown;
+      };
+      if (id !== undefined && typeof id !== "string")
+        throw invalidParams("session.seed.params.id must be a string");
+      if (title !== undefined && typeof title !== "string")
+        throw invalidParams("session.seed.params.title must be a string");
+      if (!Array.isArray(events))
+        throw invalidParams("session.seed.params.events must be an array");
+      return {
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: await client.sessionSeed!({
+          ...(typeof id === "string" ? { id } : {}),
+          ...(typeof title === "string" ? { title } : {}),
+          events: events as RuntimeEvent[],
+        }),
+      };
+    }
+
     if (body.method === "session.rollback.messages") {
       optionsGuard(client, "sessionRollbackMessages");
       return {

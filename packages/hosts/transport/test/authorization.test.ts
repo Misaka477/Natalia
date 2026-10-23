@@ -71,6 +71,7 @@ function controllableClient() {
     "sessionPin",
     "sessionDuplicate",
     "sessionFork",
+    "sessionSeed",
     "sessionDelete",
     "sessionNew",
     "sessionArchive",

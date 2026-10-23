@@ -152,6 +152,19 @@ export type GenerationSource =
        * stays self-contained and the build survives its sandbox.
        */
       artifact: string;
+
+      /**
+       * The object-store key of the SOURCE state this build was made
+       * from: `{files: [{path, next(hash)}]}`, over the same object
+       * store's content. The landing writes it to the baseline atomically
+       * with the swap, or the next iteration copies the PREVIOUS baseline
+       * and this generation's work does not exist for it — a one-way trip
+       * that reads as success.
+       *
+       * Optional for generations stored before it existed; a candidate
+       * without it lands the binary only, and the landing says so.
+       */
+      sourceArtifact?: string;
     };
 
 export type Generation = {

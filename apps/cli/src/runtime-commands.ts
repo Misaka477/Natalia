@@ -107,6 +107,13 @@ export async function handleRuntimeCommand(argv: string[]) {
       // by the uninstaller and invisible to every diagnostic that looks in
       // the home.
       contextWindowCachePath: nataliaCachePath("context-window.json"),
+      // The self-iteration handoff. Every workspace's runtime is created
+      // by the manager, so the closure below is the only way a session
+      // reaches a session in ANOTHER tree — and it has to be injected
+      // before the first client exists, which is why it reads the manager
+      // lazily rather than closing over it at construction time.
+      iterateBranch: (baseline, request) =>
+        manager.iterateBranch(baseline, request),
     });
     await manager.load();
     // A fresh install has no workspace registry, and every runtime face

@@ -4776,6 +4776,27 @@ export type RuntimeClient = {
     workspaceID?: string;
   }): Promise<{ sessionID: string; created: boolean }>;
   /**
+   * Creates a session record AND seeds its journal with events from
+   * elsewhere — the cross-store half of a handoff.
+   *
+   * `sessionNew` makes an EMPTY session and `sessionFork` cuts an existing
+   * one, and both operate inside one store. A session that continues
+   * another session's work in a DIFFERENT workspace needs the events
+   * themselves: the target store has no record of the parent, and without
+   * this the child arrives with no memory of what it was sent to do.
+   *
+   * The events are appended in order through the store's own writer, so
+   * they are re-sequenced into the target journal and projected exactly
+   * like events written live — the child's transcript, usage and recovery
+   * view read as one continuous history rather than as imported data. A
+   * write.
+   */
+  sessionSeed?(input: {
+    id?: string;
+    title?: string;
+    events: RuntimeEvent[];
+  }): Promise<{ sessionID: string; created: boolean; seeded: number }>;
+  /**
    * Archives a session record: it stays listable with `archived: true` and
    * can still be exported, but is no longer a candidate for new work. A
    * write; idempotent (archiving an archived session answers

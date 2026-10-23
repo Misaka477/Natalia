@@ -176,6 +176,18 @@ export type RuntimePorts = {
     profile?: import("@anthelia/contracts").PermissionProfile,
   ) => { allowed: boolean; diagnostics: string[] };
   getWorkspaceRoot: () => string;
+  /**
+   * The host-injected self-iteration handoff, or undefined where the host
+   * owns no workspace manager. The tool reads it and answers "unavailable
+   * here" when it is absent, rather than reaching for a path that only the
+   * manager has.
+   */
+  iterateBranch: () =>
+    | ((
+        baseline: string | undefined,
+        request: import("./iterate-branch").IterateBranchRequest,
+      ) => Promise<import("./iterate-branch").IterateBranchResult>)
+    | undefined;
   nextMailboxSequence: () => number;
   getWorkspaceWriteLock: () => WorkspaceWriteLock | undefined;
   getWorkspaceCapabilityView: () =>

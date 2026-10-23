@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "apiVersion": 2,
+  "id": "natalia-tool-iterate",
+  "version": "1.0.0",
+  "name": "Iterate Tools",
+  "description": "Self-iteration: copy the product's read-only source to a workspace the model chooses and continue the session's work there, and land a built copy as a new generation.",
+  "entry": "index.js",
+  "scope": "session",
+  "provides": [],
+  "requires": [],
+  "optionalRequires": [],
+  "conflicts": [],
+  "dependencies": [],
+  "hooks": {},
+  "integrationPoints": ["tools"]
+}

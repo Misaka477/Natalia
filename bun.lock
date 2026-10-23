@@ -623,6 +623,14 @@
         "@anthelia/tools": "workspace:*",
       },
     },
+    "packages/plugins/iterate": {
+      "name": "@natalia/plugin-iterate",
+      "version": "1.0.0",
+      "dependencies": {
+        "@anthelia/plugin": "workspace:*",
+        "@anthelia/tools": "workspace:*",
+      },
+    },
     "packages/plugins/local-tools": {
       "name": "@natalia/plugin-local-tools",
       "version": "1.0.0",
@@ -676,8 +684,10 @@
         "@xterm/addon-web-links": "0.11.0",
         "@xterm/addon-webgl": "^0.19.0",
         "@xterm/xterm": "5.5.0",
-        "node-pty": "1.0.0",
         "solid-js": "1.9.12",
+      },
+      "optionalDependencies": {
+        "node-pty": "1.0.0",
       },
     },
     "packages/plugins/skills": {
@@ -1209,6 +1219,8 @@
     "@natalia/plugin-browser": ["@natalia/plugin-browser@workspace:packages/plugins/browser"],
 
     "@natalia/plugin-file-editor": ["@natalia/plugin-file-editor@workspace:packages/plugins/ui/file-editor"],
+
+    "@natalia/plugin-iterate": ["@natalia/plugin-iterate@workspace:packages/plugins/iterate"],
 
     "@natalia/plugin-local-tools": ["@natalia/plugin-local-tools@workspace:packages/plugins/local-tools"],
 

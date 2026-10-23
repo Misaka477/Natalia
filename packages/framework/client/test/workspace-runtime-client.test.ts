@@ -35,6 +35,9 @@ function emptyManager(): WorkspaceManager {
       return undefined;
     },
     invalidateSessionCache() {},
+    async iterateBranch() {
+      throw new Error("unused");
+    },
     async add() {
       throw new Error("unused");
     },

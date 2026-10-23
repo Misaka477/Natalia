@@ -55,6 +55,7 @@ import {
   focusedElement,
   releaseElement,
   setElementValue,
+  uiaAvailable,
   walkWindowTree,
   type UiaElement,
   type UiaRect,
@@ -91,9 +92,33 @@ function computerOutput(callSummary: string) {
   };
 }
 
-/** The platform's answer when the desktop cannot be driven. */
+/**
+ * The platform's answer when the desktop cannot be driven.
+ *
+ * Every tool calls this first, so a platform without the Windows input and
+ * capture layer refuses here — with the reason — instead of failing deeper
+ * in, where the same condition reads as a crash in a specific tool.
+ */
 function requireDesktop() {
   ensureDpiAware();
+}
+
+/**
+ * The accessibility layer's answer when it cannot be read.
+ *
+ * `computer_state`, `computer_find` and `computer_fill` read the tree;
+ * `computer_screenshot` + coordinates remain for content the tree does not
+ * cover, so the refusal names that path rather than only what is missing.
+ */
+function requireAccessibility() {
+  if (!uiaAvailable())
+    throw new Error(
+      "the accessibility layer (UI Automation) is unavailable on this " +
+        "platform, so computer_state / computer_find / computer_fill cannot " +
+        "read the screen's controls. Use computer_windows for geometry and " +
+        "computer_screenshot + computer_click for content the tree does not " +
+        "cover.",
+    );
 }
 
 /** The window a query names, refusing an ambiguous one. */
@@ -453,6 +478,7 @@ function readState(
   record: WindowRecord,
   options: StateOptions & { maxNodes?: number; maxDepth?: number },
 ): DesktopState {
+  requireAccessibility();
   const nodes = walkWindowTree(handleValue(record.hwnd), {
     maxNodes: options.maxNodes ?? 2000,
     maxDepth: options.maxDepth ?? 32,
@@ -548,6 +574,7 @@ function computerFindTool(): RuntimeTool {
       const record = windowQuery
         ? resolveWindow(windowQuery)
         : requireForegroundRecord();
+      requireAccessibility();
       const matches = findElements(handleValue(record.hwnd), query, {
         maxNodes: 2000,
         maxDepth: 32,
@@ -657,6 +684,7 @@ function computerFillTool(): RuntimeTool {
     output: computerOutput("fill"),
     async execute(input) {
       requireDesktop();
+      requireAccessibility();
       const args = requireObject(input);
       const target = requireString(args.target, "target");
       const value = requireString(args.value, "value");

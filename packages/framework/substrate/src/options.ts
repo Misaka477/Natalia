@@ -47,4 +47,19 @@ export type RealRuntimeClientOptions = {
   capabilityRegistry?: CapabilityRegistry;
   /** Preferred host-owned capability lifetime; survives runtime config reloads. */
   capabilityHost?: CapabilityHost;
+  /**
+   * The self-iteration handoff, injected by the host that owns the
+   * workspace manager (the CLI's serve command).
+   *
+   * A runtime is bound to ONE workspace and cannot reach another
+   * workspace's runtime, so the handoff — which creates a session in a
+   * DIFFERENT tree — has to be handed down from the layer that holds them
+   * all. Absent in every other host (tests, workers, the TUI's own
+   * clients), where the tool answers that self-iteration is unavailable
+   * rather than reaching for something that is not there.
+   */
+  iterateBranch?: (
+    baseline: string | undefined,
+    request: import("./iterate-branch").IterateBranchRequest,
+  ) => Promise<import("./iterate-branch").IterateBranchResult>;
 };

@@ -183,13 +183,12 @@ export function RightRail(props: RightRailProps) {
                     .then(() => {
                       mounted = true;
                     })
-                    .catch((error: unknown) => {
+                    .catch(() => {
                       // Expected once while the plugin catalog races the
-                      // mount; the next revision retries.
-                      console.warn(
-                        `[panel] ${item.pluginId}:${item.panel.id} mount deferred:`,
-                        error instanceof Error ? error.message : String(error),
-                      );
+                      // mount; the next revision retries. Reported by
+                      // nothing: the retry is the answer, and a warn per
+                      // panel per revision was a console full of lines
+                      // that all said "waiting".
                     })
                     .finally(() => {
                       mounting = false;

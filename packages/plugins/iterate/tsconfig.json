@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../.."
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../core/plugin"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../core/capability"
+    },
+    {
+      "path": "../../core/composition"
+    },
+    {
+      "path": "../../framework/object-store"
+    },
+    {
+      "path": "../../framework/substrate"
+    }
+  ]
+}

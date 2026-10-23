@@ -38,6 +38,10 @@ export function createCompositionContext(
   const state = {
     runtimeDisposed: false,
     workspaceRoot: resolve(options.workspaceRoot ?? process.cwd()),
+    // The host-injected self-iteration handoff, carried untouched: it is a
+    // function that closes over the workspace manager, and copying or
+    // wrapping it here would lose the only path to another tree.
+    iterateBranch: options.iterateBranch,
     pluginStoreRoot: options.pluginStoreRoot
       ? resolve(options.pluginStoreRoot)
       : undefined,

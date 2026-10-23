@@ -1,5 +1,6 @@
 import styles from "./styles/governance-panel.module.css";
 import wg from "./styles/work-graph.module.css";
+import drift from "./styles/drift-cards.module.css";
 import { createSignal, createEffect, createMemo, Show, For } from "solid-js";
 import type {
   RuntimeClient,
@@ -677,55 +678,55 @@ function DriftCard(props: {
   const evidenceView = () => collapseList(evidenceItems(), evidenceExpanded());
 
   return (
-    <div class="drift-card">
-      <div class="drift-card-head">
+    <div class={drift.card}>
+      <div class={drift.head}>
         <span class={styles.title} data-priority={finding().severity}>
           {finding().severity} · {Math.round(finding().confidence * 100)}%
         </span>
-        <span class="drift-card-status" data-status={finding().status}>
+        <span class={drift.status} data-status={finding().status}>
           {finding().status}
         </span>
         <Show when={(finding().reopenedCount ?? 0) > 0}>
-          <span class="drift-card-reopened">
+          <span class={drift.reopened}>
             {t("gov.reopenedCount", { count: finding().reopenedCount })}
           </span>
         </Show>
       </div>
-      <div class="drift-card-goal">Goal: {finding().originalObjective}</div>
+      <div class={drift.goal}>Goal: {finding().originalObjective}</div>
       <Show when={finding().planID}>
-        <div class="drift-card-meta">Plan: {finding().planID}</div>
+        <div class={drift.meta}>Plan: {finding().planID}</div>
       </Show>
       <Show when={props.resolveContract(finding().planID)}>
         {(contract) => (
-          <div class="drift-card-section">
-            <div class="drift-card-section-title">Reference frame</div>
+          <div class={drift.section}>
+            <div class={drift.sectionTitle}>Reference frame</div>
             <Show when={contract().scope?.length}>
-              <div class="drift-card-evidence">
+              <div class={drift.evidence}>
                 scope: {contract().scope!.join(", ")}
               </div>
             </Show>
             <Show when={contract().verification?.length}>
-              <div class="drift-card-evidence">
+              <div class={drift.evidence}>
                 verification: {contract().verification!.join(", ")}
               </div>
             </Show>
             <Show when={contract().constraints?.length}>
-              <div class="drift-card-evidence">
+              <div class={drift.evidence}>
                 constraints: {contract().constraints!.join(", ")}
               </div>
             </Show>
-            <div class="drift-card-meta">
+            <div class={drift.meta}>
               contract {contract().status} v{contract().version}
             </div>
           </div>
         )}
       </Show>
-      <div class="drift-card-current">
+      <div class={drift.current}>
         Current: {activityView().shown.join(", ")}
         <Show when={activityView().hiddenCount > 0 || activityExpanded()}>
           <button
             type="button"
-            class="drift-card-expand"
+            class={drift.expand}
             onClick={() => setActivityExpanded(!activityExpanded())}
           >
             {activityExpanded()
@@ -740,16 +741,14 @@ function DriftCard(props: {
           finding().contractVersion !== undefined
         }
       >
-        <div class="drift-card-section">
-          <div class="drift-card-section-title">Why this fired</div>
+        <div class={drift.section}>
+          <div class={drift.sectionTitle}>Why this fired</div>
           <Show when={finding().contractVersion !== undefined}>
-            <div class="drift-card-meta">
-              contract v{finding().contractVersion}
-            </div>
+            <div class={drift.meta}>contract v{finding().contractVersion}</div>
           </Show>
           <For each={ruleHitsFor(finding())}>
             {(hit) => (
-              <div class="drift-card-rule">
+              <div class={drift.rule}>
                 {hit.rule} · {Math.round(hit.confidence * 100)}%
               </div>
             )}
@@ -757,15 +756,15 @@ function DriftCard(props: {
         </div>
       </Show>
       <Show when={evidenceItems().length}>
-        <div class="drift-card-section">
-          <div class="drift-card-section-title">Evidence</div>
+        <div class={drift.section}>
+          <div class={drift.sectionTitle}>Evidence</div>
           <For each={evidenceView().shown}>
-            {(item) => <div class="drift-card-evidence">{item}</div>}
+            {(item) => <div class={drift.evidence}>{item}</div>}
           </For>
           <Show when={evidenceView().hiddenCount > 0 || evidenceExpanded()}>
             <button
               type="button"
-              class="drift-card-expand"
+              class={drift.expand}
               onClick={() => setEvidenceExpanded(!evidenceExpanded())}
             >
               {evidenceExpanded()
@@ -778,21 +777,21 @@ function DriftCard(props: {
         </div>
       </Show>
       <Show when={finding().applicableConstraints?.length}>
-        <div class="drift-card-section">
-          <div class="drift-card-section-title">Constraints</div>
+        <div class={drift.section}>
+          <div class={drift.sectionTitle}>Constraints</div>
           <For each={finding().applicableConstraints}>
-            {(item) => <div class="drift-card-evidence">{item}</div>}
+            {(item) => <div class={drift.evidence}>{item}</div>}
           </For>
         </div>
       </Show>
       <Show when={finding().rationale}>
-        <div class="drift-card-rationale">{finding().rationale}</div>
+        <div class={drift.rationale}>{finding().rationale}</div>
       </Show>
       <Show when={finding().status === "open"}>
-        <div class="drift-card-actions">
+        <div class={drift.actions}>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             disabled={props.actionBusy()}
             onClick={() => {
               // An explanation is only auditable with a rationale; prompt for
@@ -810,7 +809,7 @@ function DriftCard(props: {
           </button>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             data-kind="dispute"
             disabled={props.actionBusy()}
             onClick={() => {
@@ -827,7 +826,7 @@ function DriftCard(props: {
           </button>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             data-kind="dismiss"
             disabled={props.actionBusy()}
             onClick={() =>
@@ -838,7 +837,7 @@ function DriftCard(props: {
           </button>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             data-kind="correct"
             disabled={props.actionBusy()}
             onClick={() => {
@@ -857,7 +856,7 @@ function DriftCard(props: {
           </button>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             data-kind="detour"
             disabled={props.actionBusy()}
             onClick={() => {
@@ -880,10 +879,10 @@ function DriftCard(props: {
           finding().status === "dismissed" || finding().status === "explained"
         }
       >
-        <div class="drift-card-actions">
+        <div class={drift.actions}>
           <button
             type="button"
-            class="drift-card-btn"
+            class={drift.btn}
             data-kind="reopen"
             disabled={props.actionBusy()}
             onClick={() => props.onReopen(finding().findingID)}

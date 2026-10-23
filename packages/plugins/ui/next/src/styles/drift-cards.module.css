@@ -1,0 +1,146 @@
+/* The drift cards: the finding rows with their status, the goal/current
+   pair, the evidence and rationale, and the action buttons. Tokens
+   only. */
+
+.card {
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  background: var(--neu-surface-raised);
+  box-shadow: var(--neu-ring-raised);
+  font-size: 12px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.status {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--neu-surface-raised-strong);
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.status[data-status="explained"] {
+  color: var(--neu-state-ok-text);
+}
+
+.status[data-status="disputed"] {
+  color: var(--neu-state-warn-text);
+}
+
+.goal,
+.current {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.meta {
+  margin-top: 2px;
+  opacity: 0.72;
+  font-size: 11px;
+}
+
+.section {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid var(--neu-surface-raised-strong);
+}
+
+.sectionTitle {
+  margin-bottom: 2px;
+  color: var(--neu-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rule,
+.evidence {
+  padding-left: 6px;
+  opacity: 0.85;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.evidence::before {
+  content: "· ";
+  opacity: 0.6;
+}
+
+.rationale {
+  margin-top: 3px;
+  padding-left: 8px;
+  border-left: 2px solid var(--neu-border-strong);
+  opacity: 0.75;
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.btn {
+  padding: 2px 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-border);
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.btn:hover {
+  background: var(--neu-surface-raised-strong);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn[data-kind="dispute"] {
+  background: var(--neu-state-warn-bg);
+}
+
+.btn[data-kind="dismiss"] {
+  background: var(--neu-surface-raised-strong);
+}
+
+.btn[data-kind="reopen"] {
+  background: var(--neu-state-ok-bg);
+}
+
+.reopened {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--neu-state-ok-bg);
+  color: var(--neu-state-ok-text);
+  font-size: 10px;
+}
+
+.expand {
+  margin-left: 6px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-surface-raised-strong);
+  color: var(--neu-accent);
+  cursor: pointer;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.expand:hover {
+  background: var(--neu-surface-raised-strong);
+  opacity: 1;
+}

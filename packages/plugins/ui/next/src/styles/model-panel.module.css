@@ -1,0 +1,265 @@
+/* The providers and models panel: its window and tabs, the model rows,
+   the provider tree and the model form. The modal chrome and the shared
+   form controls stay global; where this panel styles one of them under
+   its own class it reaches it with :global. Tokens only. */
+
+.window {
+  width: min(620px, 90vw);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+
+.tabs :global(.neu-settings-category) {
+  width: auto;
+  padding: 8px 16px;
+  background: var(--neu-bg);
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+}
+
+.kind {
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+
+.status {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+}
+
+.status[data-connected="true"] {
+  color: var(--neu-success);
+}
+
+.default {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+}
+
+.setDefault {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+
+.setDefault:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+.setDefault:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.add {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-accent);
+  color: var(--neu-on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-accent);
+}
+
+.add:active {
+  box-shadow: var(--neu-inset-accent);
+}
+
+.tree {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider {
+  border-radius: 14px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+  padding: 4px;
+}
+
+.providerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--neu-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.providerHeader:hover {
+  background: var(--neu-bg-light);
+}
+
+.chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--neu-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.providerName {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+
+.edit:hover {
+  box-shadow: var(--neu-inset-2);
+}
+
+.children {
+  padding: 2px 6px 6px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.addSecondary {
+  margin-left: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  box-shadow: var(--neu-elevation-2);
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editRow :global(.neu-form-input) {
+  flex: 1;
+  min-width: 120px;
+}
+
+.remove {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-error);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.remove:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+.addFull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+}
+
+/* The form section title and status line — verified model-panel-only. */
+.sectionTitle {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.sectionTitleActions {
+  display: flex;
+  gap: 6px;
+}
+
+.formStatus {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.formStatusError {
+  color: var(--neu-error);
+}

@@ -1,3 +1,4 @@
+import styles from "./styles/model-panel.module.css";
 import {
   createSignal,
   createEffect,
@@ -572,10 +573,7 @@ export function ModelPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={closePanel}>
-        <div
-          class="neu-model-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <style>{`
             .neu-form-section-title-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
             .neu-form-section-title-actions > span { min-width: 0; }
@@ -608,7 +606,7 @@ export function ModelPanel(props: {
           </div>
 
           <Show when={view() === "tree"}>
-            <div class="neu-model-tree">
+            <div class={styles.tree}>
               <Show when={providerAction()}>
                 <div
                   class="neu-form-status neu-form-status-error"
@@ -620,9 +618,9 @@ export function ModelPanel(props: {
               </Show>
               <For each={providers()}>
                 {(provider) => (
-                  <div class="neu-model-provider">
+                  <div class={styles.provider}>
                     <div
-                      class="neu-model-provider-header"
+                      class={styles.providerHeader}
                       role="button"
                       tabIndex="0"
                       onClick={() => toggle(provider.name)}
@@ -635,7 +633,7 @@ export function ModelPanel(props: {
                       }}
                     >
                       <svg
-                        class="neu-model-chevron"
+                        class={styles.chevron}
                         data-expanded={expanded().has(provider.name)}
                         viewBox="0 0 16 16"
                         fill="none"
@@ -648,11 +646,9 @@ export function ModelPanel(props: {
                           stroke-linejoin="round"
                         />
                       </svg>
-                      <span class="neu-model-provider-name">
-                        {provider.label}
-                      </span>
+                      <span class={styles.providerName}>{provider.label}</span>
                       <span
-                        class="neu-model-status"
+                        class={styles.status}
                         data-connected={
                           provider.status === t("model.connected")
                         }
@@ -661,7 +657,7 @@ export function ModelPanel(props: {
                       </span>
                       <button
                         type="button"
-                        class="neu-model-edit"
+                        class={styles.edit}
                         onClick={(event) => {
                           event.stopPropagation();
                           openEditProvider(provider.name);
@@ -671,7 +667,7 @@ export function ModelPanel(props: {
                       </button>
                       <button
                         type="button"
-                        class="neu-model-edit"
+                        class={styles.edit}
                         disabled={providerActionInProgress()}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -682,19 +678,19 @@ export function ModelPanel(props: {
                       </button>
                     </div>
                     <Show when={expanded().has(provider.name)}>
-                      <div class="neu-model-children">
+                      <div class={styles.children}>
                         <For each={provider.models}>
                           {(model) => (
-                            <div class="neu-model-row">
-                              <span class="neu-model-name">{model.name}</span>
+                            <div class={styles.row}>
+                              <span class={styles.name}>{model.name}</span>
                               <Show when={model.default}>
-                                <span class="neu-model-default">
+                                <span class={styles.default}>
                                   {t("model.default")}
                                 </span>
                               </Show>
                               <button
                                 type="button"
-                                class="neu-model-set-default"
+                                class={styles.setDefault}
                                 disabled={model.default}
                                 onClick={() => props.onSetDefault?.(model.name)}
                               >
@@ -708,10 +704,10 @@ export function ModelPanel(props: {
                   </div>
                 )}
               </For>
-              <div class="neu-model-actions">
+              <div class={styles.actions}>
                 <button
                   type="button"
-                  class="neu-model-add"
+                  class={styles.add}
                   onClick={openAddProvider}
                 >
                   {t("model.addProvider")}
@@ -816,7 +812,7 @@ export function ModelPanel(props: {
               </div>
               <Show when={discoveryStatus()}>
                 <div
-                  class="neu-form-status"
+                  class={styles.formStatus}
                   classList={{
                     "neu-form-status-error": discoveryStatusError(),
                   }}
@@ -830,7 +826,7 @@ export function ModelPanel(props: {
                   id or context window cannot re-create the row and drop focus. */}
               <Index each={models()}>
                 {(model, index) => (
-                  <div class="neu-model-edit-row">
+                  <div class={styles.editRow}>
                     <input
                       class="neu-form-input"
                       value={model().id}
@@ -900,7 +896,7 @@ export function ModelPanel(props: {
                     </label>
                     <button
                       type="button"
-                      class="neu-model-remove"
+                      class={styles.remove}
                       onClick={() => removeModel(index)}
                     >
                       {t("model.delete")}
@@ -916,10 +912,10 @@ export function ModelPanel(props: {
                 {t("model.addModel")}
               </button>
 
-              <div class="neu-form-section-title">{t("model.headers")}</div>
+              <div class={styles.sectionTitle}>{t("model.headers")}</div>
               <Index each={headers()}>
                 {(header, index) => (
-                  <div class="neu-model-edit-row">
+                  <div class={styles.editRow}>
                     <input
                       class="neu-form-input"
                       value={header().name}
@@ -942,7 +938,7 @@ export function ModelPanel(props: {
                     />
                     <button
                       type="button"
-                      class="neu-model-remove"
+                      class={styles.remove}
                       onClick={() => removeHeaderRow(index)}
                     >
                       {t("model.delete")}

@@ -65,7 +65,7 @@ function taskTextHtml(text: string): string {
 
 function MarkdownPreview(props: { content: string }) {
   const html = createMemo(() => marked.parse(props.content ?? "") as string);
-  return <div class="plan-panel-preview markdown-body" innerHTML={html()} />;
+  return <div class={`${styles.preview} markdown-body`} innerHTML={html()} />;
 }
 
 export function PlanPanel(props: {

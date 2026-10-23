@@ -224,7 +224,12 @@ export function buildToolExecutionContext(input: BuildContextInput) {
     // runtime is bound to ONE workspace, so this is the only way a tool
     // reaches a session in another tree; absent in hosts without a
     // workspace manager, where the tool says so rather than reaching.
-    ...(ctx.ports.iterateBranch()
+    // Read through the optional form: a context built by a test (or any
+    // host that wires a partial port set) has no such port, and calling it
+    // unconditionally would fail the whole tool context for a field the
+    // tool itself treats as optional.
+    ...(typeof ctx.ports.iterateBranch === "function" &&
+    ctx.ports.iterateBranch()
       ? { iterateBranch: ctx.ports.iterateBranch()! }
       : {}),
     workspaceReadAuthorize: (request: { toolName: string; paths: string[] }) =>

@@ -1,4 +1,5 @@
 import styles from "./styles/governance-panel.module.css";
+import wg from "./styles/work-graph.module.css";
 import { createSignal, createEffect, createMemo, Show, For } from "solid-js";
 import type {
   RuntimeClient,
@@ -2368,8 +2369,8 @@ export function GovernancePane(props: {
           </Show>
         </Show>
         <Show when={tab() === "workgraph"}>
-          <div class="wg-tab">
-            <div class="wg-view-toggle">
+          <div class={wg.tab}>
+            <div class={wg.viewToggle}>
               <button
                 type="button"
                 class="constitution-btn"

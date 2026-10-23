@@ -1,0 +1,197 @@
+/* The work graph: the tree and graph views, their search, the fixed-height
+   row model and the flattened node rows. Tokens only. */
+
+/* One fixed-height row model shared by the virtual window
+   (WORK_GRAPH_ROW_HEIGHT). Rows are positioned by the virtualizer, never
+   DOM-measured, so the height here is the estimate too. */
+.tree,
+.graph {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+  font-size: 12px;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.viewToggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.viewToggle :global(.constitution-btn[data-active="true"]) {
+  box-shadow:
+    inset 2px 2px 4px var(--neu-shadow-dark),
+    inset -2px -2px 4px var(--neu-shadow-light);
+  color: var(--neu-accent);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  border: none;
+  border-radius: 6px;
+  background: var(--neu-surface-raised-strong);
+  color: inherit;
+  box-shadow: var(--neu-ring-raised);
+  font-size: 11px;
+}
+
+.searchClear {
+  border: none;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.searchResult {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 5px;
+  border: none;
+  border-radius: 5px;
+  background: var(--neu-surface-raised);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.searchResult:hover {
+  background: var(--neu-surface-raised-strong);
+}
+
+/* One row height for every section header and tree node (12px × 1.5 line +
+   2×2px padding); the virtualizer's fixed-height estimate must match. */
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 22px;
+  flex: none;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  overflow: hidden;
+}
+
+.rowSection {
+  align-items: center;
+}
+
+/* Flattened rows keep their causal depth as an indent (the tree hierarchy the
+   recursive renderer used to express by nesting); the indent itself is set as
+   an inline padding because it depends on the row's depth. */
+.nodeRow {
+  border-left: 1px solid var(--neu-surface-raised-strong);
+}
+
+.nodeRow[data-depth="0"] {
+  border-left-color: transparent;
+}
+
+.nodeRow[data-unattributed="true"] {
+  background: var(--neu-state-warn-bg);
+}
+
+.rowSection[data-tone="inbound"] {
+  color: color-mix(in srgb, var(--neu-accent) 70%, var(--neu-text));
+}
+
+.rowSection[data-tone="outbound"] {
+  color: color-mix(in srgb, var(--neu-success) 70%, var(--neu-text));
+}
+
+.rowSection[data-tone="unattributed"] {
+  color: color-mix(in srgb, var(--neu-state-warn-text) 80%, var(--neu-text));
+}
+
+/* Pagination is scroll-driven (no button, no status line): reaching the end of
+   the window appends the next page. */
+button.nodeRow:not(:disabled) {
+  cursor: pointer;
+}
+
+button.nodeRow:disabled {
+  cursor: default;
+}
+
+button.nodeRow:hover {
+  background: var(--neu-surface-raised);
+}
+
+.twisty {
+  flex: none;
+  width: 12px;
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.kind {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--neu-surface-raised-strong);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.via {
+  flex: none;
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+.sectionTitle {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-bottom: 0;
+}

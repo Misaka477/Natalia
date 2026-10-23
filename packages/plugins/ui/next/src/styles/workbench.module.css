@@ -71,6 +71,13 @@
   min-width: 0;
 }
 
+.tabActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
 .collapseBtn {
   flex: none;
   display: inline-flex;

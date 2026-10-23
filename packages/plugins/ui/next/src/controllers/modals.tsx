@@ -16,13 +16,11 @@ import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import { ModelPanel } from "../model-panel";
 import { PluginManagerPanel } from "../plugin-manager-panel";
-import { SandboxPanel } from "../sandbox-panel";
 import { SearchPanel } from "../search-panel";
 import { SessionActionsPanel } from "../session-actions-panel";
 import { SettingsPanel } from "../settings-panel";
 import type { CategoryId, RegisteredToolView } from "../settings-panel";
 import type { LocaleRuntime } from "../locale/runtime";
-import { StashPanel } from "../stash-panel";
 import { StatusPanel } from "../status-panel";
 import { WorkspacePanel } from "../workspace-panel";
 import { WorkspaceSettingsPanel } from "../workspace-settings-panel";
@@ -73,12 +71,9 @@ export interface ModalLayerProps {
   setModelOpen: (open: boolean) => void;
   searchOpen: () => boolean;
   setSearchOpen: (open: boolean) => void;
+  onOpenFileFromSearch?: (path: string, line: number) => void;
   helpOpen: () => boolean;
   setHelpOpen: (open: boolean) => void;
-  stashOpen: () => boolean;
-  setStashOpen: (open: boolean) => void;
-  sandboxOpen: () => boolean;
-  setSandboxOpen: (open: boolean) => void;
   statusOpen: () => boolean;
   setStatusOpen: (open: boolean) => void;
   workspaceOpen: () => boolean;
@@ -170,19 +165,6 @@ export function ModalLayer(props: ModalLayerProps) {
         }
         onDelete={() => props.physicallyDeleteSelectedSession()}
       />
-      <SandboxPanel
-        t={t}
-        open={props.sandboxOpen()}
-        onClose={() => props.setSandboxOpen(false)}
-        sandboxes={props.state().sandboxes}
-        sessionID={props.selectedSessionID() || props.state().sessionID}
-        runtime={runtime()}
-      />
-      <StashPanel
-        t={t}
-        open={props.stashOpen()}
-        onClose={() => props.setStashOpen(false)}
-      />
       <HelpPanel
         t={t}
         open={props.helpOpen()}
@@ -199,12 +181,16 @@ export function ModalLayer(props: ModalLayerProps) {
             limit: 50,
           })
         }
+        onSearchFiles={(query) =>
+          runtime().workspaceFiles?.({
+            workspaceID: props.workspaceIDForSelectedSession(),
+            query,
+            type: "file",
+            limit: 30,
+          })
+        }
         onSelect={(result) => {
-          window.dispatchEvent(
-            new CustomEvent("natalia:open-file", {
-              detail: { path: result.path, line: result.line },
-            }),
-          );
+          props.onOpenFileFromSearch?.(result.path, result.line);
           props.setSearchOpen(false);
         }}
       />
@@ -266,6 +252,7 @@ export function ModalLayer(props: ModalLayerProps) {
         locale={props.locale}
         slots={props.slots}
         host={props.ctx.host}
+        ctx={props.ctx}
         open={props.settingsOpen()}
         category={props.settingsCategory()}
         onClose={() => {

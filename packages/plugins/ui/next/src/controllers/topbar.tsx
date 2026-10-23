@@ -103,38 +103,6 @@ export function Topbar(props: TopbarProps) {
         </Show>
       </div>
       <div class={styles.right}>
-        {/* The rail toggles are direct buttons in the actions segment — the
-          four-segment topbar keeps every action one click from the bar
-          instead of behind a dropdown. */}
-        <button
-          type="button"
-          class={styles.btn}
-          data-active={leftVisible()}
-          onClick={() => setLeftVisible((value) => !value)}
-        >
-          {t("topbar.left")}
-        </button>
-        <button
-          type="button"
-          class={styles.btn}
-          data-active={rightVisible()}
-          onClick={() => setRightVisible((value) => !value)}
-        >
-          {t("topbar.right")}
-        </button>
-        {/* The pane's agent switcher, remote-controlled from the bar. The
-            main pane is one pane now, so this is the same choice the
-            pane's own header makes. */}
-        <button
-          type="button"
-          class={styles.btn}
-          data-active={focusAgent() === "navi"}
-          onClick={() =>
-            setFocusAgent(focusAgent() === "navi" ? "natalia" : "navi")
-          }
-        >
-          {t("topbar.navi")}
-        </button>
         <button
           type="button"
           class={styles.btn}
@@ -149,14 +117,16 @@ export function Topbar(props: TopbarProps) {
         >
           {t("topbar.settings")}
         </button>
-        <button
-          type="button"
-          class={styles.btn}
-          data-active={moreOpen()}
-          onClick={() => setMoreOpen((value) => !value)}
-        >
-          {t("topbar.more")}
-        </button>
+        <Show when={groupedTopbarPanels().length > 0}>
+          <button
+            type="button"
+            class={styles.btn}
+            data-active={moreOpen()}
+            onClick={() => setMoreOpen((value) => !value)}
+          >
+            {t("topbar.more")}
+          </button>
+        </Show>
         {/* A plugin entry in the topbar's trailing area, after the shell's
             own controls — the second of the architecture's nine slots. */}
         <SlotMount slots={slots} name="topbar.end" t={t} />
@@ -173,59 +143,8 @@ export function Topbar(props: TopbarProps) {
           </button>
         </div>
       </Show>
-      <Show when={moreOpen()}>
+      <Show when={moreOpen() && groupedTopbarPanels().length > 0}>
         <div class={styles.moreDropdown}>
-          <button
-            type="button"
-            class={styles.moreItem}
-            onClick={() => {
-              setStatusOpen(true);
-              setMoreOpen(false);
-            }}
-          >
-            {t("common.status")}
-          </button>
-          <button
-            type="button"
-            class={styles.moreItem}
-            onClick={() => {
-              setHelpOpen(true);
-              setMoreOpen(false);
-            }}
-          >
-            {t("common.help")}
-          </button>
-          <button
-            type="button"
-            class={styles.moreItem}
-            onClick={() => {
-              setStashOpen(true);
-              setMoreOpen(false);
-            }}
-          >
-            {t("common.stash")}
-          </button>
-          <button
-            type="button"
-            class={styles.moreItem}
-            onClick={() => {
-              setSandboxOpen(true);
-              setMoreOpen(false);
-            }}
-          >
-            {t("common.sandbox")}
-          </button>
-          <button
-            type="button"
-            class={styles.moreItem}
-            onClick={() => {
-              setPluginManagerOpen(true);
-              setMoreOpen(false);
-            }}
-          >
-            {t("common.plugins")}
-          </button>
-          <div class={styles.moreSeparator} />
           <For each={groupedTopbarPanels()}>
             {([group, panels]) => (
               <div class={styles.moreGroup}>

@@ -75,12 +75,6 @@
   color: var(--neu-accent);
 }
 
-.moreSeparator {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--neu-hairline-accent);
-}
-
 .moreGroup {
   display: flex;
   flex-direction: column;

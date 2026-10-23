@@ -3449,6 +3449,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           rightTabs={rightTabs}
           rightTab={rightTab}
           setRightTab={setRightTab}
+          onOpenSearch={() => setSearchOpen(true)}
           openDriftCount={openDriftCount}
           rightPanelScopeKey={rightPanelScopeKey}
           reviewRequestedTab={reviewRequestedTab}
@@ -3503,12 +3504,21 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         setModelOpen={setModelOpen}
         searchOpen={searchOpen}
         setSearchOpen={setSearchOpen}
+        onOpenFileFromSearch={(path, line) => {
+          setRightVisible(true);
+          setRightTab("files");
+          const dispatch = () =>
+            window.dispatchEvent(
+              new CustomEvent("natalia:open-file", {
+                detail: { path, line },
+              }),
+            );
+          dispatch();
+          setTimeout(dispatch, 180);
+          setTimeout(dispatch, 450);
+        }}
         helpOpen={helpOpen}
         setHelpOpen={setHelpOpen}
-        stashOpen={stashOpen}
-        setStashOpen={setStashOpen}
-        sandboxOpen={sandboxOpen}
-        setSandboxOpen={setSandboxOpen}
         statusOpen={statusOpen}
         setStatusOpen={setStatusOpen}
         workspaceOpen={workspaceOpen}

@@ -30,6 +30,7 @@ export interface RightRailProps {
   rightTabs: () => { id: string; label: string }[];
   rightTab: () => string;
   setRightTab: (value: string) => void;
+  onOpenSearch?: () => void;
   openDriftCount: () => number | undefined;
   rightPanelScopeKey: () => string;
   reviewRequestedTab: () => "git" | "sandbox" | "checkpoint";
@@ -121,29 +122,54 @@ export function RightRail(props: RightRailProps) {
                   )}
                 </For>
               </div>
-              <button
-                type="button"
-                class={styles.collapseBtn}
-                aria-label={t("workbench.collapseRight")}
-                title={t("workbench.collapseRight")}
-                onClick={() => setRightVisible(false)}
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+              <div class={styles.tabActions}>
+                <Show when={props.onOpenSearch}>
+                  <button
+                    type="button"
+                    class={styles.collapseBtn}
+                    aria-label={t("search.title")}
+                    title={`${t("search.title")} (Ctrl+Shift+P)`}
+                    onClick={() => props.onOpenSearch?.()}
+                  >
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                      stroke="currentColor"
+                      stroke-width="1.3"
+                      stroke-linecap="round"
+                    >
+                      <circle cx="6.8" cy="6.8" r="5" />
+                      <path d="M10.5 10.5L14.2 14.2" />
+                    </svg>
+                  </button>
+                </Show>
+                <button
+                  type="button"
+                  class={styles.collapseBtn}
+                  aria-label={t("workbench.collapseRight")}
+                  title={t("workbench.collapseRight")}
+                  onClick={() => setRightVisible(false)}
                 >
-                  <rect x="1.5" y="2" width="13" height="12" rx="2" />
-                  <path d="M10.5 2V14" />
-                  <path d="M5.5 6.2L7.5 8L5.5 9.8" />
-                </svg>
-              </button>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="1.5" y="2" width="13" height="12" rx="2" />
+                    <path d="M10.5 2V14" />
+                    <path d="M5.5 6.2L7.5 8L5.5 9.8" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class={styles.content}>
               <Show

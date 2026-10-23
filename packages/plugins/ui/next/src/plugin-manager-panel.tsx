@@ -16,14 +16,12 @@ type UiRegistryEntry = {
   create: () => UiPlugin;
 };
 
-export function PluginManagerPanel(props: {
+export function PluginManagerSectionContent(props: {
   t: (key: string, params?: Record<string, unknown>) => string;
-  open: boolean;
-  onClose: () => void;
   ctx: UiPluginContext;
 }) {
   const t = props.t;
-  const [runtimePlugins, setRuntimePlugins] = createSignal<PluginStatus[]>([]);
+  const [, setRuntimePlugins] = createSignal<PluginStatus[]>([]);
   const [runtimeCatalog, setRuntimeCatalog] = createSignal<
     Array<{
       id: string;
@@ -139,16 +137,6 @@ export function PluginManagerPanel(props: {
     }
   }
 
-  async function unloadRuntime(id: string) {
-    try {
-      await props.ctx.runtime.pluginUnload?.(id);
-      await refresh();
-      await syncPluginUis();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
   async function reloadRuntime(id: string) {
     try {
       await props.ctx.runtime.pluginReload?.(id);
@@ -158,17 +146,8 @@ export function PluginManagerPanel(props: {
     }
   }
 
-  async function unloadUi(pluginId: string) {
-    try {
-      await props.ctx.host?.unload?.(pluginId);
-      await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
   return (
-    <Show when={props.open}>
+    <>
       <Show when={confirmUninstall()}>
         <div
           class="neu-confirm-backdrop"
@@ -201,6 +180,129 @@ export function PluginManagerPanel(props: {
           </div>
         </div>
       </Show>
+      <div class={styles.body}>
+        <Show when={error()}>
+          <div class={styles.error}>{error()}</div>
+        </Show>
+        <div class={styles.install}>
+          <input
+            class={styles.input}
+            placeholder="npm package spec, e.g. @natalia/plugin-xxx"
+            value={installSpec()}
+            onInput={(event) => setInstallSpec(event.currentTarget.value)}
+          />
+          <button
+            type="button"
+            class={styles.btn}
+            onClick={() => void installRuntime()}
+          >
+            {t("pluginMgr.install")}
+          </button>
+        </div>
+        <div class={styles.sectionTitle}>{t("pluginMgr.uiPlugins")}</div>
+        <Show
+          when={uiRegistry().length || uiPlugins().length}
+          fallback={
+            <div class={styles.empty}>{t("pluginMgr.noUiPlugins")}</div>
+          }
+        >
+          <For each={uiRegistry()}>
+            {(entry) => {
+              const loaded = uiPlugins().some(
+                (plugin) => plugin.pluginId === entry.id,
+              );
+              return (
+                <div class={styles.row}>
+                  <div class={styles.main}>
+                    <span class={styles.name}>{entry.name}</span>
+                    <span class={styles.meta}>
+                      {entry.id} · {entry.version}
+                    </span>
+                  </div>
+                  <label class={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={loaded}
+                      onChange={(event) => {
+                        if (event.currentTarget.checked) void enableUi(entry);
+                        else void disableUi(entry.id);
+                      }}
+                    />
+                    <span class={styles.switchTrack}>
+                      <span class={styles.switchThumb} />
+                    </span>
+                  </label>
+                </div>
+              );
+            }}
+          </For>
+        </Show>
+        <div class={styles.sectionTitle}>{t("pluginMgr.runtimePlugins")}</div>
+        <Show
+          when={runtimeCatalog().length}
+          fallback={
+            <div class={styles.empty}>{t("pluginMgr.noRuntimePlugins")}</div>
+          }
+        >
+          <For each={runtimeCatalog()}>
+            {(plugin) => (
+              <div class={styles.row}>
+                <div class={styles.main}>
+                  <span class={styles.name}>{plugin.name}</span>
+                  <span class={styles.meta}>
+                    {plugin.id}
+                    {plugin.version ? ` · ${plugin.version}` : ""}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class={styles.btn}
+                  onClick={() => requestUninstall(plugin.id, plugin.name)}
+                >
+                  {t("pluginMgr.uninstall")}
+                </button>
+                <label class={styles.switch}>
+                  <input
+                    type="checkbox"
+                    checked={enabledMap()[plugin.id] ?? true}
+                    onChange={(event) => {
+                      const next = event.currentTarget.checked;
+                      setEnabledMap((prev) => ({
+                        ...prev,
+                        [plugin.id]: next,
+                      }));
+                      void setEnabled(plugin.id, next);
+                    }}
+                  />
+                  <span class={styles.switchTrack}>
+                    <span class={styles.switchThumb} />
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  class={styles.btn}
+                  onClick={() => void reloadRuntime(plugin.id)}
+                >
+                  {t("pluginMgr.reload")}
+                </button>
+              </div>
+            )}
+          </For>
+        </Show>
+      </div>
+    </>
+  );
+}
+
+export function PluginManagerPanel(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
+  open: boolean;
+  onClose: () => void;
+  ctx: UiPluginContext;
+}) {
+  const t = props.t;
+  return (
+    <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
         <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
@@ -221,121 +323,7 @@ export function PluginManagerPanel(props: {
               </svg>
             </button>
           </div>
-          <div class={styles.body}>
-            <Show when={error()}>
-              <div class={styles.error}>{error()}</div>
-            </Show>
-            <div class={styles.install}>
-              <input
-                class={styles.input}
-                placeholder="npm package spec, e.g. @natalia/plugin-xxx"
-                value={installSpec()}
-                onInput={(event) => setInstallSpec(event.currentTarget.value)}
-              />
-              <button
-                type="button"
-                class={styles.btn}
-                onClick={() => void installRuntime()}
-              >
-                {t("pluginMgr.install")}
-              </button>
-            </div>
-            <div class={styles.sectionTitle}>{t("pluginMgr.uiPlugins")}</div>
-            <Show
-              when={uiRegistry().length || uiPlugins().length}
-              fallback={
-                <div class={styles.empty}>{t("pluginMgr.noUiPlugins")}</div>
-              }
-            >
-              <For each={uiRegistry()}>
-                {(entry) => {
-                  const loaded = uiPlugins().some(
-                    (plugin) => plugin.pluginId === entry.id,
-                  );
-                  return (
-                    <div class={styles.row}>
-                      <div class={styles.main}>
-                        <span class={styles.name}>{entry.name}</span>
-                        <span class={styles.meta}>
-                          {entry.id} · {entry.version}
-                        </span>
-                      </div>
-                      <label class={styles.switch}>
-                        <input
-                          type="checkbox"
-                          checked={loaded}
-                          onChange={(event) => {
-                            if (event.currentTarget.checked)
-                              void enableUi(entry);
-                            else void disableUi(entry.id);
-                          }}
-                        />
-                        <span class={styles.switchTrack}>
-                          <span class={styles.switchThumb} />
-                        </span>
-                      </label>
-                    </div>
-                  );
-                }}
-              </For>
-            </Show>
-            <div class={styles.sectionTitle}>
-              {t("pluginMgr.runtimePlugins")}
-            </div>
-            <Show
-              when={runtimeCatalog().length}
-              fallback={
-                <div class={styles.empty}>
-                  {t("pluginMgr.noRuntimePlugins")}
-                </div>
-              }
-            >
-              <For each={runtimeCatalog()}>
-                {(plugin) => (
-                  <div class={styles.row}>
-                    <div class={styles.main}>
-                      <span class={styles.name}>{plugin.name}</span>
-                      <span class={styles.meta}>
-                        {plugin.id}
-                        {plugin.version ? ` · ${plugin.version}` : ""}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      class={styles.btn}
-                      onClick={() => requestUninstall(plugin.id, plugin.name)}
-                    >
-                      {t("pluginMgr.uninstall")}
-                    </button>
-                    <label class={styles.switch}>
-                      <input
-                        type="checkbox"
-                        checked={enabledMap()[plugin.id] ?? true}
-                        onChange={(event) => {
-                          const next = event.currentTarget.checked;
-                          setEnabledMap((prev) => ({
-                            ...prev,
-                            [plugin.id]: next,
-                          }));
-                          void setEnabled(plugin.id, next);
-                        }}
-                      />
-                      <span class={styles.switchTrack}>
-                        <span class={styles.switchThumb} />
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      class={styles.btn}
-                      onClick={() => void reloadRuntime(plugin.id)}
-                    >
-                      {t("pluginMgr.reload")}
-                    </button>
-                  </div>
-                )}
-              </For>
-            </Show>
-          </div>
+          <PluginManagerSectionContent t={t} ctx={props.ctx} />
         </div>
       </div>
     </Show>

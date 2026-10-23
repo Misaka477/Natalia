@@ -28,6 +28,9 @@ import {
 } from "./settings-rows";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import type { LocaleRuntime } from "./locale/runtime";
+import { PluginManagerSectionContent } from "./plugin-manager-panel";
+import { StatusSectionContent } from "./status-panel";
+import { HelpSectionContent } from "./help-panel";
 
 const BUILTIN_PERMISSION_PROFILES = ["ask", "auto", "read_only"];
 
@@ -185,7 +188,10 @@ export type CategoryId =
   // window may hide on close while the runtime keeps running, so a visible way
   // OUT has to exist.
   | "system"
-  | "plugin";
+  | "plugin"
+  | "pluginMgr"
+  | "status"
+  | "help";
 
 /**
  * The product's academic name, shown under the wordmark in the settings
@@ -299,6 +305,7 @@ export function SettingsPanel(props: {
   onConfig?: (config: Record<string, unknown>) => void;
   runtime?: RuntimeClient;
   host?: import("@natalia/ui-host").UiPluginContext["host"];
+  ctx?: import("@natalia/ui-host").UiPluginContext;
   locale?: LocaleRuntime;
 }) {
   const t = props.t;
@@ -484,17 +491,33 @@ export function SettingsPanel(props: {
   // `value` field that was fabricated ("Opus 4", "3", "2 个"). Deriving the
   // list leaves one source of truth, and no place for an invented value to
   // live.
-  const categoriesWithPlugins = (): CategoryNavItem[] =>
-    settingsPanels().length
+  const categoriesWithPlugins = (): CategoryNavItem[] => [
+    ...SETTINGS_CATEGORIES,
+    ...(settingsPanels().length
       ? [
-          ...SETTINGS_CATEGORIES,
           {
-            id: "plugin",
+            id: "plugin" as const,
             label: "插件配置",
             labelKey: "settings.pluginCategory",
           },
         ]
-      : [...SETTINGS_CATEGORIES];
+      : []),
+    {
+      id: "pluginMgr",
+      label: "插件管理",
+      labelKey: "settings.cat.pluginMgr",
+    },
+    {
+      id: "status",
+      label: "状态与诊断",
+      labelKey: "settings.cat.status",
+    },
+    {
+      id: "help",
+      label: "帮助与快捷键",
+      labelKey: "settings.cat.help",
+    },
+  ];
 
   const [runtimeWriteScope, setRuntimeWriteScope] = createSignal(
     props.preferences?.get<string>("runtimeWriteScope") ?? "global",
@@ -516,6 +539,30 @@ export function SettingsPanel(props: {
         id: "plugin",
         label: "插件配置",
         labelKey: "settings.pluginCategory",
+        items: [],
+      };
+    }
+    if (active === "pluginMgr") {
+      return {
+        id: "pluginMgr",
+        label: "插件管理",
+        labelKey: "settings.cat.pluginMgr",
+        items: [],
+      };
+    }
+    if (active === "status") {
+      return {
+        id: "status",
+        label: "状态与诊断",
+        labelKey: "settings.cat.status",
+        items: [],
+      };
+    }
+    if (active === "help") {
+      return {
+        id: "help",
+        label: "帮助与快捷键",
+        labelKey: "settings.cat.help",
         items: [],
       };
     }
@@ -1196,7 +1243,34 @@ export function SettingsPanel(props: {
                   )}
                 </For>
               </Show>
-              <Show when={current().id !== "plugin"}>
+              <Show when={current().id === "pluginMgr" && props.ctx}>
+                <div class={styles.contentTitle}>
+                  {t("settings.cat.pluginMgr")}
+                </div>
+                <PluginManagerSectionContent t={t} ctx={props.ctx!} />
+              </Show>
+              <Show when={current().id === "status" && props.state}>
+                <div class={styles.contentTitle}>
+                  {t("settings.cat.status")}
+                </div>
+                <StatusSectionContent
+                  t={t}
+                  state={props.state!}
+                  runtime={props.runtime}
+                />
+              </Show>
+              <Show when={current().id === "help"}>
+                <div class={styles.contentTitle}>{t("settings.cat.help")}</div>
+                <HelpSectionContent t={t} />
+              </Show>
+              <Show
+                when={
+                  current().id !== "plugin" &&
+                  current().id !== "pluginMgr" &&
+                  current().id !== "status" &&
+                  current().id !== "help"
+                }
+              >
                 <>
                   <div class={styles.contentTitle}>{t(current().labelKey)}</div>
                   <For each={current().items}>

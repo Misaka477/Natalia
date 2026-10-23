@@ -141,26 +141,16 @@ const neuLightTheme = EditorView.theme(
       border: "none",
     },
     ".cm-activeLine": {
-      // THE LINE THE CURSOR IS ON, marked without costing the text its colour.
-      //
-      // A filled wash under the row is what made it unreadable: the accent at
-      // the alpha this theme resolves to is a strong purple, and the syntax
-      // colours on top of it lose their separation — the row reads as "the
-      // selected one" and its code does not read at all (reported from use,
-      // with a screenshot of a JSON line). The colour is kept, moved to where
-      // it does not sit under glyphs: a tinted GUTTER cell plus a left edge on
-      // the line itself, so the row is unmistakably marked and every token on
-      // it keeps the contrast it has on an unmarked line.
-      backgroundColor: "transparent",
-      boxShadow: "inset 2px 0 0 0 var(--neu-accent)",
+      backgroundColor: "color-mix(in srgb, var(--neu-accent) 8%, transparent)",
     },
     ".cm-activeLineGutter": {
-      backgroundColor: cssVar("--neu-accent-soft", "rgba(143,183,176,0.08)"),
-      color: "var(--neu-text)",
+      backgroundColor: "color-mix(in srgb, var(--neu-accent) 12%, transparent)",
+      color: "var(--neu-accent)",
+      fontWeight: "600",
     },
     ".cm-selectionBackground": {
       backgroundColor:
-        cssVar("--neu-accent-soft", "rgba(143,183,176,0.22)") + " !important",
+        "color-mix(in srgb, var(--neu-accent) 24%, transparent) !important",
     },
     ".cm-cursor": {
       borderLeftColor: "var(--neu-accent)",
@@ -356,12 +346,18 @@ export function FileEditor(props: {
   });
 
   function openPathAt(path: string, line?: number) {
+    pendingJump = line ? { path, line } : undefined;
     selectFile(path);
     setPreview(false);
-    pendingJump = line ? { path, line } : undefined;
-    if (line && cmView) {
+    if (
+      pendingJump &&
+      pendingJump.path === path &&
+      contents()[path] !== undefined &&
+      cmView
+    ) {
+      const targetLine = pendingJump.line;
       pendingJump = undefined;
-      jumpToLine(line);
+      jumpToLine(targetLine);
     }
   }
 
@@ -619,6 +615,11 @@ export function FileEditor(props: {
         insert: text,
       },
     });
+    if (pendingJump && pendingJump.path === path) {
+      const targetLine = pendingJump.line;
+      pendingJump = undefined;
+      jumpToLine(targetLine);
+    }
   }
 
   async function saveCurrentFile() {

@@ -108,11 +108,14 @@ export const fileEditorStyles =
   padding: 6px;
   min-width: 120px;
 }
+.neu-file-tree::-webkit-scrollbar-corner {
+  background: transparent;
+}
 .file-pane-resizer { width: 6px; flex: 0 0 6px; cursor: col-resize; background: transparent; touch-action: none; }
 .file-pane-resizer:hover { background: var(--neu-resizer-hover); border-radius: 4px; }
-.file-tree-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; width: max-content; min-width: 100%; background: transparent; border: none; border-radius: 10px; color: var(--neu-text); font-family: var(--neu-font-mono); font-size: 12px; text-align: left; cursor: pointer; transition: all 100ms ease; }
-.file-tree-item:hover { background: var(--neu-bg-light); }
-.file-tree-item[data-active="true"] { background: var(--neu-bg-light); box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light); }
+.file-tree-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; width: max-content; min-width: 100%; background: transparent; border: none; border-radius: 8px; color: var(--neu-text); font-family: var(--neu-font-mono); font-size: 12px; text-align: left; cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.file-tree-item:hover { background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.08)); }
+.file-tree-item[data-active="true"] { background: transparent; box-shadow: none; }
 .file-tree-chevron { width: 12px; height: 12px; transition: transform 100ms ease; flex-shrink: 0; color: var(--neu-muted); }
 .file-tree-chevron[data-expanded="true"] { transform: rotate(90deg); }
 .file-tree-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--neu-muted); }
@@ -368,16 +371,16 @@ export const fileEditorStyles =
   display: block;
   width: 100%;
   min-width: max-content;
-  border-radius: 10px;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+.file-tree-row:hover {
+  background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.08));
 }
 /* The selected row reads as selected WITHOUT costing the text its contrast.
-   It used to paint --neu-bg-light — a LIGHT surface — under --neu-text,
-   which in the dark skin is light text on a light ground: the row was clearly
-   "the selected one" and its name was not readable (reported from use, with a
-   screenshot). The accent tint is the theme's own answer to "sit under text":
    --neu-accent-soft is a low-alpha wash of --neu-accent, so the label keeps
    its full contrast in both skins, and the 2px bar on the left carries the
-   "this one" signal that the background used to carry alone. */
+   "this one" signal inside the row's rounded edge. */
 .file-tree-row[data-active="true"] {
   background: var(--neu-accent-soft, rgba(143, 183, 176, 0.16));
   box-shadow: none;
@@ -385,12 +388,16 @@ export const fileEditorStyles =
 .file-tree-row[data-active="true"]::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 5px;
-  bottom: 5px;
+  left: 2px;
+  top: 6px;
+  bottom: 6px;
   width: 2px;
   border-radius: 2px;
   background: var(--neu-accent, #7fb3aa);
+}
+.file-tree-row[data-active="true"] .file-tree-name {
+  color: var(--neu-accent, inherit);
+  font-weight: 500;
 }
 .file-tree-row .file-tree-item {
   display: flex;

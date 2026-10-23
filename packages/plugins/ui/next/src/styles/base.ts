@@ -1004,6 +1004,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
 *::-webkit-scrollbar-thumb {
   background: var(--neu-scrollbar);
   border-radius: 999px;

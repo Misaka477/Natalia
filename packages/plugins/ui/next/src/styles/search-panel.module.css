@@ -35,6 +35,15 @@
   gap: 8px;
 }
 
+.sectionLabel {
+  padding: 4px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neu-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .result {
   display: flex;
   flex-direction: column;

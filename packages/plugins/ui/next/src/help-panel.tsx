@@ -25,6 +25,36 @@ const sections = [
   },
 ];
 
+export function HelpSectionContent(props: {
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const t = props.t;
+  return (
+    <div class={styles.body}>
+      <div class={styles.sectionTitle}>{t("help.quickstart")}</div>
+      <For each={sections}>
+        {(section) => (
+          <div class={styles.item}>
+            <span class={styles.itemTitle}>{t(section.titleKey)}</span>
+            <span class={styles.itemText}>{t(section.textKey)}</span>
+          </div>
+        )}
+      </For>
+      <div class={styles.sectionTitle}>{t("help.shortcuts")}</div>
+      <For each={shortcuts}>
+        {(shortcut) => (
+          <div class={styles.shortcut}>
+            <span class={styles.shortcutKeys}>{shortcut.keys.join(" + ")}</span>
+            <span class={styles.shortcutDesc}>
+              {t(shortcut.descriptionKey)}
+            </span>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
 export function HelpPanel(props: {
   t: (key: string, params?: Record<string, unknown>) => string;
   open: boolean;
@@ -61,30 +91,7 @@ export function HelpPanel(props: {
               </svg>
             </button>
           </div>
-          <div class={styles.body}>
-            <div class={styles.sectionTitle}>{t("help.quickstart")}</div>
-            <For each={sections}>
-              {(section) => (
-                <div class={styles.item}>
-                  <span class={styles.itemTitle}>{t(section.titleKey)}</span>
-                  <span class={styles.itemText}>{t(section.textKey)}</span>
-                </div>
-              )}
-            </For>
-            <div class={styles.sectionTitle}>{t("help.shortcuts")}</div>
-            <For each={shortcuts}>
-              {(shortcut) => (
-                <div class={styles.shortcut}>
-                  <span class={styles.shortcutKeys}>
-                    {shortcut.keys.join(" + ")}
-                  </span>
-                  <span class={styles.shortcutDesc}>
-                    {t(shortcut.descriptionKey)}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
+          <HelpSectionContent t={t} />
         </div>
       </div>
     </Show>

@@ -29,7 +29,7 @@ export const lightPalette = {
   "--neu-muted": "#7d8885",
   // accent and semantic states
   "--neu-accent": "#8fb7b0",
-  "--neu-accent-soft": "#b9d5cf",
+  "--neu-accent-soft": "rgba(143, 183, 176, 0.2)",
   // The accent's own shadow color: the neumorphic pair for an
   // accent-raised control, mixed from the accent so a palette swap
   // re-colors it. The shipped sheet defines it beside the accent.
@@ -108,7 +108,7 @@ export const darkPalette = {
   "--neu-text-dim": "#a6a6b0",
   "--neu-muted": "#8c8c96",
   "--neu-accent": "#6cb6ff",
-  "--neu-accent-soft": "#d2a8ff",
+  "--neu-accent-soft": "rgba(108, 182, 255, 0.16)",
   // The accent's own shadow color, mixed from the accent so a palette
   // swap re-colors it. Present in both palettes: the shape tokens
   // reference it from the neumorphic pair.

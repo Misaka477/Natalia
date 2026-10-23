@@ -316,7 +316,7 @@
    its cancel and its redo. The pane is shared vocabulary and stays the
    global ancestor; these rules style this region's own classes under
    it, so the prefix stays and the names are local. */
-.neu-pane .banner {
+:global(.neu-pane) .banner {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -329,11 +329,11 @@
   box-shadow: var(--neu-inset-2);
 }
 
-.neu-pane .hint {
+:global(.neu-pane) .hint {
   color: var(--neu-muted);
 }
 
-.neu-pane .cancel {
+:global(.neu-pane) .cancel {
   margin-left: auto;
   padding: 3px 8px;
   border: none;
@@ -345,11 +345,11 @@
   cursor: pointer;
 }
 
-.neu-pane .cancel:hover {
+:global(.neu-pane) .cancel:hover {
   color: var(--neu-accent);
 }
 
-.neu-pane .redo {
+:global(.neu-pane) .redo {
   padding: 3px 8px;
   border: none;
   border-radius: 8px;

@@ -58,14 +58,6 @@ import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
 import { ToolCardRegistry } from "./tool-cards/registry";
 import { createSlotsRegistry } from "./slots/registry";
 import { CommandRegistry } from "./commands/registry";
-import { registerDockTarget } from "./terminal/dock-targets";
-import dockStyles from "./styles/dock.module.css";
-import {
-  DOCK_MODE_PREFERENCE_KEY,
-  isDockMode,
-  nextDockMode,
-  type DockMode,
-} from "./terminal/dock";
 import { CommandPalette } from "./controllers/command-palette";
 import { SlotMount } from "./slots/mount";
 import { transcriptRefs } from "./transcript-refs";
@@ -269,32 +261,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     keywords: ["language", "locale", "语言"],
     run: () =>
       locale.setLocale(locale.getLocale().active === "zh-CN" ? "en" : "zh-CN"),
-  });
-  // The terminal dock mode is a preference, not a layout the shell
-  // hard-codes: the terminal is an independent frame and where it lives
-  // is the reader choice.
-  const [dockMode, setDockMode] = createSignal<DockMode>(
-    isDockMode(props.ctx.preferences?.get(DOCK_MODE_PREFERENCE_KEY))
-      ? (props.ctx.preferences?.get<DockMode>(DOCK_MODE_PREFERENCE_KEY) ??
-          "tab")
-      : "tab",
-  );
-  const chooseDockMode = (mode: DockMode) => {
-    setDockMode(mode);
-    props.ctx.preferences?.set(DOCK_MODE_PREFERENCE_KEY, mode);
-  };
-  const cycleDockMode = () =>
-    setDockMode((current) => {
-      const next = nextDockMode(current);
-      props.ctx.preferences?.set(DOCK_MODE_PREFERENCE_KEY, next);
-      return next;
-    });
-  (props.ctx.extra as { dockMode?: () => DockMode }).dockMode = dockMode;
-  commands.register({
-    id: "shell.cycleDock",
-    title: t("palette.cmd.cycleDock"),
-    keywords: ["terminal", "dock", "终端"],
-    run: cycleDockMode,
   });
   const slots = createSlotsRegistry();
   (
@@ -3266,9 +3232,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     leftSidebarWasVisible = visible;
   });
 
-  // Where the terminal's independent frame currently lives. The three dock
-  // modes re-parent one host div rather than re-mounting it, and this
-  // attribute is the seam the modes and their styles read.
   return (
     <div
       class="neu-shell"
@@ -3276,7 +3239,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       data-tiny={layoutMode() === "tiny"}
       data-left-open={leftVisible()}
       data-left-wide={leftWidth() >= 230}
-      data-terminal-dock={dockMode()}
       data-right-open={rightVisible()}
       data-resizing={resizing()}
     >
@@ -3334,38 +3296,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         t={t}
       />
       <SlotMount slots={slots} name="statusbar" t={t} />
-      {/* The terminal split column: an empty frame the terminal's host div
-          is APPENDED into when the dock mode says split — one container,
-          re-parented, never re-mounted. */}
-      <div
-        class={dockStyles.split}
-        data-open={dockMode() === "split"}
-        ref={(element) => registerDockTarget("split", element)}
-      />
-      {/* The terminal floating frame: the same re-parenting mechanism as
-          the split column — the panel host div is appended into the
-          frame body, never re-mounted. Closing the frame returns the
-          terminal to its rail tab. */}
-      <Show when={dockMode() === "float"}>
-        <div class={dockStyles.float}>
-          <div class={dockStyles.floatBar}>
-            <span class={dockStyles.floatTitle}>{t("dock.mode.float")}</span>
-            <button
-              type="button"
-              class={dockStyles.floatClose}
-              onClick={() => chooseDockMode("tab")}
-              aria-label={t("common.close")}
-              title={t("common.close")}
-            >
-              ×
-            </button>
-          </div>
-          <div
-            class={dockStyles.floatBody}
-            ref={(element) => registerDockTarget("float", element)}
-          />
-        </div>
-      </Show>
       <div class="neu-app">
         {/* Left session tree */}
         <SessionSidebar
@@ -3513,7 +3443,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         <RightRail
           t={t}
           slots={slots}
-          dockMode={dockMode}
           ctx={props.ctx}
           state={state}
           setState={setState}
@@ -3524,7 +3453,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           rightTabs={rightTabs}
           rightTab={rightTab}
           setRightTab={setRightTab}
-          onCycleDockMode={cycleDockMode}
           openDriftCount={openDriftCount}
           rightPanelScopeKey={rightPanelScopeKey}
           reviewRequestedTab={reviewRequestedTab}

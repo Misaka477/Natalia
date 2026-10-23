@@ -3,7 +3,7 @@
    vocabulary and stays the global ancestor; these rules style this
    component's own classes under it. Tokens only. */
 
-.neu-pane .composer {
+:global(.neu-pane) .composer {
   flex-shrink: 0;
   background: var(--neu-bg);
   border-radius: 16px;
@@ -12,7 +12,7 @@
   margin-top: 6px;
 }
 
-.neu-pane .textarea {
+:global(.neu-pane) .textarea {
   width: 100%;
   min-height: 46px;
   max-height: 160px;
@@ -27,18 +27,18 @@
   line-height: 1.5;
 }
 
-.neu-pane .toolbar {
+:global(.neu-pane) .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.neu-pane .controls {
+:global(.neu-pane) .controls {
   display: flex;
   gap: 4px;
 }
 
-.neu-pane .iconBtn {
+:global(.neu-pane) .iconBtn {
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -52,12 +52,12 @@
   cursor: pointer;
 }
 
-.neu-pane .iconBtn:hover {
+:global(.neu-pane) .iconBtn:hover {
   background: var(--neu-hover-overlay);
   color: var(--neu-text);
 }
 
-.neu-pane .submit {
+:global(.neu-pane) .submit {
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -71,23 +71,23 @@
   cursor: pointer;
 }
 
-.neu-pane .submit:hover {
+:global(.neu-pane) .submit:hover {
   box-shadow: var(--neu-elevation-1);
   color: var(--neu-accent-soft);
 }
 
-.neu-pane .submit:active {
+:global(.neu-pane) .submit:active {
   box-shadow: var(--neu-inset-3);
   color: var(--neu-accent);
 }
 
-.neu-pane .submit svg {
+:global(.neu-pane) .submit svg {
   transition:
     transform 0.15s ease,
     color 0.15s ease;
 }
 
-.neu-pane .submit:active svg {
+:global(.neu-pane) .submit:active svg {
   transform: scale(0.82);
   opacity: 0.85;
 }
@@ -103,7 +103,7 @@
    delivery mode is what the tooltip says, and the color stays the
    accent's. Stop keeps the red — it is the control that actually
    interrupts the turn. */
-.neu-pane .submit[data-busy="true"] {
+:global(.neu-pane) .submit[data-busy="true"] {
   color: var(--neu-accent);
   background: var(--neu-bg-light);
   box-shadow:
@@ -111,7 +111,7 @@
     -3px -3px 6px var(--neu-shadow-light);
 }
 
-.neu-pane .stop {
+:global(.neu-pane) .stop {
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -126,15 +126,15 @@
   cursor: pointer;
 }
 
-.neu-pane .stop:hover {
+:global(.neu-pane) .stop:hover {
   box-shadow: var(--neu-elevation-1);
 }
 
-.neu-pane .stop:active {
+:global(.neu-pane) .stop:active {
   box-shadow: var(--neu-inset-3);
 }
 
-.neu-pane .attachmentChip {
+:global(.neu-pane) .attachmentChip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -146,11 +146,11 @@
   box-shadow: var(--neu-elevation-1);
 }
 
-.neu-pane .attachmentChip[data-image="true"] {
+:global(.neu-pane) .attachmentChip[data-image="true"] {
   padding-right: 6px;
 }
 
-.neu-pane .attachmentThumb {
+:global(.neu-pane) .attachmentThumb {
   width: 36px;
   height: 36px;
   object-fit: cover;
@@ -158,7 +158,7 @@
   background: var(--neu-bg-light);
 }
 
-.neu-pane .attachmentRemove {
+:global(.neu-pane) .attachmentRemove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,15 +172,15 @@
   cursor: pointer;
 }
 
-.neu-pane .attachmentRemove:hover {
+:global(.neu-pane) .attachmentRemove:hover {
   background: var(--neu-bg);
   color: var(--neu-error);
 }
 
 /* The smooth-transition pass the global sheet applied to these two
    keys; it travels with them. */
-.neu-pane .iconBtn,
-.neu-pane .submit {
+:global(.neu-pane) .iconBtn,
+:global(.neu-pane) .submit {
   transition:
     box-shadow 0.25s ease,
     background-color 0.25s ease,

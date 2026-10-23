@@ -77,9 +77,13 @@ test("the delivery mode rides the tooltip, and Stop keeps the red", async () => 
   expect(zh).toContain('"composer.sendTitle": "发送"');
   // The interrupt control is the red one, and it is a separate control.
   expect(composer).toContain("styles.stop");
+  // The rule is pane-scoped, so the global ancestor is written :global() —
+  // the exact word whose absence once made all of these rules dead.
+  const stopAt = composerStyles.indexOf(":global(.neu-pane) .stop {");
+  expect(stopAt).toBeGreaterThan(0);
   const stopRule = composerStyles.slice(
-    composerStyles.indexOf(".neu-pane .stop {"),
-    composerStyles.indexOf("}", composerStyles.indexOf(".neu-pane .stop {")),
+    stopAt,
+    composerStyles.indexOf("}", stopAt),
   );
   expect(stopRule).toContain("var(--neu-error)");
   expect(stopRule).not.toContain("inset");

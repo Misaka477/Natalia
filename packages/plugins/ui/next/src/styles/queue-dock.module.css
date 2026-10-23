@@ -3,7 +3,7 @@
    ancestor; these rules style this component's own classes under it.
    Tokens only. */
 
-.neu-pane .dock {
+:global(.neu-pane) .dock {
   margin-bottom: 6px;
   padding: 6px 8px;
   display: flex;
@@ -14,7 +14,7 @@
   box-shadow: var(--neu-inset-2);
 }
 
-.neu-pane .head {
+:global(.neu-pane) .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -22,11 +22,11 @@
   color: var(--neu-muted);
 }
 
-.neu-pane .title {
+:global(.neu-pane) .title {
   font-weight: 600;
 }
 
-.neu-pane .toggle {
+:global(.neu-pane) .toggle {
   border: none;
   background: transparent;
   color: var(--neu-accent);
@@ -34,13 +34,13 @@
   font-size: 12px;
 }
 
-.neu-pane .row {
+:global(.neu-pane) .row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.neu-pane .chip {
+:global(.neu-pane) .chip {
   flex: none;
   padding: 1px 6px;
   border-radius: 8px;
@@ -49,11 +49,11 @@
   color: var(--neu-muted);
 }
 
-.neu-pane .row[data-status="steering"] .chip {
+:global(.neu-pane) .row[data-status="steering"] .chip {
   color: var(--neu-accent);
 }
 
-.neu-pane .text {
+:global(.neu-pane) .text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -63,7 +63,7 @@
   color: var(--neu-text);
 }
 
-.neu-pane .edit {
+:global(.neu-pane) .edit {
   flex: 1;
   min-width: 0;
   padding: 2px 6px;
@@ -76,13 +76,13 @@
   font-size: 13px;
 }
 
-.neu-pane .actions {
+:global(.neu-pane) .actions {
   flex: none;
   display: flex;
   gap: 2px;
 }
 
-.neu-pane .action {
+:global(.neu-pane) .action {
   border: none;
   background: transparent;
   color: var(--neu-muted);
@@ -92,11 +92,11 @@
   font-size: 12px;
 }
 
-.neu-pane .action:hover {
+:global(.neu-pane) .action:hover {
   background: var(--neu-hover-overlay);
   color: var(--neu-text);
 }
 
-.neu-pane .action[data-danger="true"]:hover {
+:global(.neu-pane) .action[data-danger="true"]:hover {
   color: var(--neu-error);
 }

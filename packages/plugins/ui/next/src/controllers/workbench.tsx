@@ -18,14 +18,12 @@ import { GovernancePane } from "../governance-panel";
 import { NiaPanel } from "../nia-panel";
 import { AgentPanel } from "../agent-panel";
 import { cloneState } from "@natalia/view-store";
-import { dockTargetFor } from "../terminal/dock-targets";
 import { SlotMount } from "../slots/mount";
 
 export interface RightRailProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
   slots: any;
-  dockMode: () => any;
   state: () => AppState;
   setState: (value: AppState | ((prev: AppState) => AppState)) => void;
   rightVisible: () => boolean;
@@ -35,8 +33,6 @@ export interface RightRailProps {
   rightTabs: () => { id: string; label: string }[];
   rightTab: () => string;
   setRightTab: (value: string) => void;
-  /** Walks the terminal's dock mode: rail tab → side split → float. */
-  onCycleDockMode: () => void;
   openDriftCount: () => number | undefined;
   rightPanelScopeKey: () => string;
   reviewRequestedTab: () => "git" | "sandbox" | "checkpoint";
@@ -129,25 +125,6 @@ export function RightRail(props: RightRailProps) {
                 </button>
               )}
             </For>
-            {/* THE TERMINAL'S OWN FRAME CONTROL. The terminal is not a
-                right-rail tab that happens to be able to move: where it
-                lives is the reader's choice, and this is that choice, one
-                click from the rail it starts in. The panel host re-parents
-                rather than re-mounts, so the xterm, its socket and its
-                scrollback survive every mode change. Only shown when a
-                side panel is actually hosted — otherwise the control would
-                offer a frame with nothing in it. */}
-            <Show when={props.sidePanels().length > 0}>
-              <button
-                type="button"
-                class={styles.dockBtn}
-                data-mode={props.dockMode()}
-                onClick={() => props.onCycleDockMode()}
-                title={t(`dock.hint.${props.dockMode()}`)}
-              >
-                {t(`dock.mode.${props.dockMode()}`)}
-              </button>
-            </Show>
           </div>
           <div class={styles.content}>
             <Show
@@ -240,7 +217,6 @@ export function RightRail(props: RightRailProps) {
                 // socket and scrollback, the file editor's open tabs and
                 // unsaved buffers — and a re-mount throws all of it away.
                 let container: HTMLDivElement | undefined;
-                let home: HTMLElement | undefined;
                 let everShown = false;
                 let mounting = false;
                 let mounted = false;
@@ -270,44 +246,6 @@ export function RightRail(props: RightRailProps) {
                       mounting = false;
                     });
                 });
-                // The dock mode re-parents this ONE host div — it appends
-                // the element the panel already lives in to the container
-                // the current mode names. Appending re-parents; it never
-                // re-mounts, so the panel xterm, socket and scrollback
-                // survive every mode change.
-                createEffect(() => {
-                  const mode = props.dockMode();
-                  if (!container) return;
-                  const target = dockTargetFor(mode);
-                  if (!target) {
-                    // tab: back to the rail slot that owns it.
-                    home?.appendChild(container);
-                    return;
-                  }
-                  target.appendChild(container);
-                });
-                // THE DOCK MODES AND THIS MOUNT (terminal independent frame).
-                //
-                // `tab` is what this code does today: the panel's host lives
-                // in the rail and is shown or hidden. `split` and `float`
-                // must NOT re-mount the panel into a second container —
-                // everything these panels hold lives inside them (an xterm
-                // instance with its socket and scrollback, the editor's open
-                // tabs and unsaved buffers), and a second mount throws all of
-                // it away, which is exactly the defect the never-keyed rule
-                // above was written to kill.
-                //
-                // The shape that keeps the invariant: the host div MOVES.
-                // One container, created once on first activation and never
-                // rebuilt, is appended to whichever parent the current dock
-                // mode names — the rail for `tab`, the shell's split column
-                // for `split`, the floating frame's body for `float`. The
-                // panel's own DOM (and therefore its xterm, its socket and
-                // its scrollback) survives the move untouched, because
-                // appending an element re-parents it rather than recreating
-                // it. The mode change is therefore an appendChild, not a
-                // mount — and the guard test's "never keyed and never
-                // rebuilt" property stays true under all three modes.
                 return (
                   <div
                     class={styles.panelHost}
@@ -319,13 +257,6 @@ export function RightRail(props: RightRailProps) {
                     }}
                     ref={(element) => {
                       container = element;
-                      // The rail slot is the host's HOME: the one parent
-                      // the dock mode returns it to for `tab`. Captured
-                      // once, because a moved element's parent is wherever
-                      // the last mode put it.
-                      if (!home && element?.parentElement) {
-                        home = element.parentElement;
-                      }
                     }}
                   />
                 );

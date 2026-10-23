@@ -171,3 +171,108 @@ button.item.itemButton.itemDanger:active {
   gap: 12px;
   padding: 16px;
 }
+
+/* The tool family picker and the permission rows. The family check
+   styles the shared settings item under its own class with :global. */
+.familyList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.family {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.familyCheck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+.familyName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.familyCount {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.62;
+}
+
+.familyTitle {
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.68;
+}
+
+.familyEmpty {
+  padding: 10px 12px;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.selectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px;
+  padding: 0;
+}
+
+.check {
+  width: auto;
+  min-height: 32px;
+  margin-bottom: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  gap: 8px;
+  border-radius: 10px;
+}
+
+.check span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.permissionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.permissionRow :global(.neu-settings-item) {
+  flex: 1;
+  min-width: 0;
+}
+
+.permissionEdit {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+
+.permissionEdit:hover {
+  box-shadow: var(--neu-inset-2);
+}

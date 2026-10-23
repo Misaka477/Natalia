@@ -97,18 +97,16 @@ function ToolFamilyChecklist(props: {
     <Show
       when={groups().length}
       fallback={
-        <div class="neu-tool-family-empty">
-          {props.t("settingsDlg.noTools")}
-        </div>
+        <div class={styles.familyEmpty}>{props.t("settingsDlg.noTools")}</div>
       }
     >
-      <div class="neu-tool-family-list">
+      <div class={styles.familyList}>
         <For each={groups()}>
           {(group) =>
             group.id === "__configured__" ? (
-              <div class="neu-tool-family">
-                <div class="neu-tool-family-title">{group.label}</div>
-                <div class="neu-tool-select-grid">
+              <div class={styles.family}>
+                <div class={styles.familyTitle}>{group.label}</div>
+                <div class={styles.selectGrid}>
                   <For each={group.tools}>
                     {(tool) => (
                       <label class="neu-form-checkbox neu-tool-check">
@@ -168,8 +166,8 @@ function ToolFamilyRow(props: {
         checked={allSelected()}
         onChange={() => props.onToggle(props.group.tools, !allSelected())}
       />
-      <span class="neu-tool-family-name">{props.group.label}</span>
-      <span class="neu-tool-family-count">
+      <span class={styles.familyName}>{props.group.label}</span>
+      <span class={styles.familyCount}>
         {selectedCount()}/{props.group.tools.length}
       </span>
     </label>
@@ -1448,7 +1446,7 @@ export function SettingsPanel(props: {
                   )}
                 >
                   {([name, profile]) => (
-                    <div class="neu-permission-row">
+                    <div class={styles.permissionRow}>
                       <button
                         type="button"
                         class={`${styles.item} ${styles.itemButton}`}
@@ -1474,7 +1472,7 @@ export function SettingsPanel(props: {
                       </button>
                       <button
                         type="button"
-                        class="neu-permission-edit"
+                        class={styles.permissionEdit}
                         onClick={() => {
                           setPermissionListOpen(false);
                           openPermissionEditorFor(name);

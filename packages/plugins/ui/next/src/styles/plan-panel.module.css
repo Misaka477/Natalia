@@ -1,0 +1,320 @@
+/* The plan panel: its editor and preview, the document meta and buttons,
+   the notices, the plan buttons, the applicable constraints, the contract
+   bar and the task states. The review surface it reuses (pane, section
+   labels, checkpoint rename, empty states) stays global. Tokens only. */
+
+.editor {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  resize: none;
+  outline: none;
+  box-shadow: var(--neu-inset-3);
+}
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+
+.preview.markdown-body h1,
+.preview.markdown-body h2,
+.preview.markdown-body h3,
+.preview.markdown-body h4 {
+  margin: 0.8em 0 0.4em;
+  line-height: 1.3;
+}
+
+.preview.markdown-body h1 {
+  font-size: 1.4em;
+}
+.preview.markdown-body h2 {
+  font-size: 1.25em;
+}
+.preview.markdown-body h3 {
+  font-size: 1.1em;
+}
+.preview.markdown-body p {
+  margin: 0.5em 0;
+}
+.preview.markdown-body ul,
+.preview.markdown-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.preview.markdown-body li {
+  margin: 0.15em 0;
+}
+.preview.markdown-body code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--neu-bg);
+  font-family: var(--neu-font-mono);
+  font-size: 0.9em;
+  overflow-wrap: break-word;
+}
+.preview.markdown-body pre {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--neu-bg);
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.preview.markdown-body blockquote {
+  margin: 0.6em 0;
+  padding: 0.2em 1em;
+  border-left: 3px solid var(--neu-accent);
+  color: var(--neu-muted);
+}
+.preview.markdown-body table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.6em 0;
+}
+.preview.markdown-body th,
+.preview.markdown-body td {
+  padding: 4px 8px;
+  border: 1px solid var(--neu-divider);
+  overflow-wrap: break-word;
+}
+
+.docMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--neu-muted);
+  padding: 2px 0 6px;
+}
+
+.docButtons {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.notice {
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--neu-success);
+}
+
+.error {
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--neu-error);
+}
+
+.btn {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.btn:hover {
+  color: var(--neu-accent);
+}
+
+.btn:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+/* The active plan's applicable constitution constraints (ledger plan §5):
+   the plan is judged against these, so the header names them. */
+.constraints {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--neu-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.constraintsTitle {
+  font-weight: 600;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
+.constraintRow {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.constraintRow[data-priority="critical"] .constraintId {
+  color: var(--neu-danger);
+  font-weight: 700;
+}
+
+.constraintRow[data-priority="high"] .constraintId {
+  color: var(--neu-warning);
+  font-weight: 600;
+}
+
+.constraintId {
+  flex: none;
+  font-family: var(--neu-font-mono, monospace);
+}
+
+.constraintText {
+  opacity: 0.85;
+}
+
+.contractBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 3px 8px;
+  margin: 0 0 6px;
+  border-radius: 6px;
+  background: var(--neu-state-info-bg);
+  box-shadow: var(--neu-ring-info);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.contractSeg {
+  white-space: nowrap;
+}
+
+.contractSeg[data-status="current"] {
+  color: var(--neu-state-ok-text);
+}
+
+.contractSeg[data-status="draft"] {
+  opacity: 0.75;
+}
+
+.contractSeg[data-status="stale"] {
+  color: var(--neu-state-warn-text);
+}
+
+.taskStates {
+  flex: 0 0 auto;
+  max-height: min(45%, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 8px;
+  margin: 0 0 6px;
+  border-radius: 6px;
+  background: var(--neu-surface-sunken);
+  box-shadow: var(--neu-ring-raised);
+}
+
+.taskSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.taskCounts {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--neu-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskToggle {
+  flex: 0 0 auto;
+  color: var(--neu-accent);
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.taskRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 0;
+  font-size: 11px;
+}
+
+.taskBadge {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--neu-surface-raised-strong);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.taskBadge[data-state="verified"] {
+  background: var(--neu-state-ok-bg);
+  color: var(--neu-state-ok-text);
+}
+
+.taskBadge[data-state="gap"] {
+  background: var(--neu-state-danger-bg);
+  color: var(--neu-state-danger-text);
+}
+
+.taskBadge[data-state="in_progress"] {
+  background: var(--neu-state-info-bg);
+  color: var(--neu-state-info-text);
+}
+
+.taskBadge[data-state="skipped"] {
+  opacity: 0.6;
+}
+
+.taskText {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.taskText strong {
+  font-weight: 600;
+}
+
+.taskText code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--neu-surface-raised-strong);
+  font-family: var(--neu-font-mono);
+  font-size: 10px;
+}
+
+.taskText a {
+  color: var(--neu-accent);
+}

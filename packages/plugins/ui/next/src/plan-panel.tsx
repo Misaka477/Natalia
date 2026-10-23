@@ -1,3 +1,4 @@
+import styles from "./styles/plan-panel.module.css";
 import {
   For,
   Show,
@@ -370,16 +371,12 @@ t("plan.summarySection")
         />
         <button
           type="button"
-          class="plan-panel-btn"
+          class={styles.btn}
           onClick={() => void markPlan()}
         >
           {t("plan.markButton")}
         </button>
-        <button
-          type="button"
-          class="plan-panel-btn"
-          onClick={() => void newPlan()}
-        >
+        <button type="button" class={styles.btn} onClick={() => void newPlan()}>
           {t("plan.create")}
         </button>
       </div>
@@ -424,7 +421,7 @@ t("plan.summarySection")
                 <div class="agent-stream-meta">
                   {selected()!.planID} · {selected()!.documentPath}
                   <Show when={activePlan()?.planID === selected()!.planID}>
-                    <span class="plan-panel-active-badge">
+                    <span class={styles.activeBadge}>
                       {t("plan.activeBadge")}
                     </span>
                   </Show>
@@ -436,12 +433,12 @@ t("plan.summarySection")
                 }
               >
                 {(contract) => (
-                  <div class="plan-contract-bar">
-                    <span class="plan-contract-seg">
+                  <div class={styles.contractBar}>
+                    <span class={styles.contractSeg}>
                       WorkContract v{contract().version}
                     </span>
                     <span
-                      class="plan-contract-seg"
+                      class={styles.contractSeg}
                       data-status={contract().status}
                     >
                       {contract().status === "current"
@@ -449,24 +446,24 @@ t("plan.summarySection")
                         : t("plan.draft")}
                     </span>
                     <Show when={contract().scope?.length}>
-                      <span class="plan-contract-seg">
+                      <span class={styles.contractSeg}>
                         scope ×{contract().scope!.length}
                       </span>
                     </Show>
                     <Show when={contract().verification?.length}>
-                      <span class="plan-contract-seg">
+                      <span class={styles.contractSeg}>
                         {t("plan.verification", {
                           count: contract().verification!.length,
                         })}
                       </span>
                     </Show>
                     <Show when={contract().stale}>
-                      <span class="plan-contract-seg" data-status="stale">
+                      <span class={styles.contractSeg} data-status="stale">
                         {t("plan.stale")}
                       </span>
                     </Show>
                     <Show when={contract().unverifiable}>
-                      <span class="plan-contract-seg" data-status="stale">
+                      <span class={styles.contractSeg} data-status="stale">
                         unverifiable
                       </span>
                     </Show>
@@ -496,20 +493,20 @@ t("plan.summarySection")
                     );
                   return (
                     <Show when={rules().length > 0}>
-                      <div class="plan-constraints">
-                        <div class="plan-constraints-title">
+                      <div class={styles.constraints}>
+                        <div class={styles.constraintsTitle}>
                           {t("plan.constraints", { count: rules().length })}
                         </div>
                         <For each={rules()}>
                           {(rule) => (
                             <div
-                              class="plan-constraint-row"
+                              class={styles.constraintRow}
                               data-priority={rule.priority}
                             >
-                              <span class="plan-constraint-id">
+                              <span class={styles.constraintId}>
                                 {rule.ruleID}
                               </span>
-                              <span class="plan-constraint-text">
+                              <span class={styles.constraintText}>
                                 {rule.statement}
                               </span>
                             </div>
@@ -520,10 +517,10 @@ t("plan.summarySection")
                   );
                 })()}
               </Show>
-              <div class="plan-panel-doc-buttons">
+              <div class={styles.docButtons}>
                 <button
                   type="button"
-                  class="plan-panel-btn"
+                  class={styles.btn}
                   onClick={() => void saveSelected()}
                   disabled={saving()}
                 >
@@ -531,14 +528,14 @@ t("plan.summarySection")
                 </button>
                 <button
                   type="button"
-                  class="plan-panel-btn"
+                  class={styles.btn}
                   onClick={() => setPreview(!preview())}
                 >
                   {preview() ? t("plan.edit") : t("plan.preview")}
                 </button>
                 <button
                   type="button"
-                  class="plan-panel-btn"
+                  class={styles.btn}
                   disabled={activePlan()?.planID === selected()!.planID}
                   onClick={() => void setActivePlan()}
                 >
@@ -548,7 +545,7 @@ t("plan.summarySection")
                 </button>
                 <button
                   type="button"
-                  class="plan-panel-btn"
+                  class={styles.btn}
                   onClick={() =>
                     void (async () => {
                       await props.runtime?.planDocDelete?.(
@@ -564,17 +561,17 @@ t("plan.summarySection")
                 </button>
               </div>
               <Show when={taskStates().length}>
-                <div class="plan-task-states">
+                <div class={styles.taskStates}>
                   <button
                     type="button"
-                    class="plan-task-summary"
+                    class={styles.taskSummary}
                     onClick={() => setTasksExpanded(!tasksExpanded())}
                   >
                     <span class="review-section-label">
                       {t("plan.tasksSection")}
                     </span>
-                    <span class="plan-task-counts">{taskStateSummary()}</span>
-                    <span class="plan-task-toggle">
+                    <span class={styles.taskCounts}>{taskStateSummary()}</span>
+                    <span class={styles.taskToggle}>
                       {tasksExpanded()
                         ? t("common.collapse")
                         : t("plan.tasksExpand", { count: taskStates().length })}
@@ -583,12 +580,15 @@ t("plan.summarySection")
                   <Show when={tasksExpanded()}>
                     <For each={taskStates()}>
                       {(task) => (
-                        <div class="plan-task-row" data-state={task.state}>
-                          <span class="plan-task-badge" data-state={task.state}>
+                        <div class={styles.taskRow} data-state={task.state}>
+                          <span
+                            class={styles.taskBadge}
+                            data-state={task.state}
+                          >
                             {taskStateLabel(task.state, t)}
                           </span>
                           <span
-                            class="plan-task-text"
+                            class={styles.taskText}
                             style={{ "padding-left": `${task.depth * 14}px` }}
                             innerHTML={taskTextHtml(task.text)}
                           />
@@ -602,7 +602,7 @@ t("plan.summarySection")
                 when={preview()}
                 fallback={
                   <textarea
-                    class="plan-panel-editor"
+                    class={styles.editor}
                     value={draft()}
                     onInput={(event) => setDraft(event.currentTarget.value)}
                   />
@@ -615,10 +615,10 @@ t("plan.summarySection")
         </div>
       </Show>
       <Show when={notice()}>
-        <div class="plan-panel-notice">{notice()}</div>
+        <div class={styles.notice}>{notice()}</div>
       </Show>
       <Show when={error()}>
-        <div class="plan-panel-error">{error()}</div>
+        <div class={styles.error}>{error()}</div>
       </Show>
     </div>
   );

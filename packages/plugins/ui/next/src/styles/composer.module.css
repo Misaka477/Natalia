@@ -72,6 +72,27 @@
   gap: 8px;
 }
 
+:global(.neu-pane) .controls :global(.neu-select),
+:global(.neu-pane) .trailing :global(.neu-select) {
+  width: auto;
+  flex: none;
+}
+
+:global(.neu-pane) .controls :global(.neu-select-trigger),
+:global(.neu-pane) .trailing :global(.neu-select-trigger) {
+  width: auto;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
+:global(.neu-pane) .controls :global(.neu-select-menu),
+:global(.neu-pane) .trailing :global(.neu-select-menu) {
+  min-width: 180px;
+  right: auto;
+}
+
 :global(.neu-pane) .iconBtn {
   width: 28px;
   height: 28px;

@@ -216,16 +216,6 @@ export function RightRail(props: RightRailProps) {
           </div>
         </aside>
       </div>
-      {rightVisible() ? null : (
-        <button
-          type="button"
-          class="neu-collapsed-rail neu-right-rail"
-          onClick={() => setRightVisible(true)}
-          title={t("workbench.expandRight")}
-        >
-          <span class="neu-rail-dots" />
-        </button>
-      )}
     </>
   );
 }

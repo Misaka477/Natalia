@@ -28,7 +28,7 @@ export type SessionOrderBy = "manual" | "updated";
  */
 export function isBlankSession(session: RuntimeSessionSummary): boolean {
   return (
-    session.events === 0 &&
+    (session.events === 0 || session.title === "New session") &&
     (session.pendingInputs ?? 0) === 0 &&
     session.status !== "running" &&
     !session.archived

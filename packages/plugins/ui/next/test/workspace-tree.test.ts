@@ -17,13 +17,16 @@ import {
 function makeSession(
   overrides: Partial<RuntimeSessionSummary> & { id: string },
 ): RuntimeSessionSummary {
+  const events = overrides.events ?? 0;
   return {
     id: overrides.id,
-    title: overrides.title ?? "New session",
+    title:
+      overrides.title ??
+      (events > 0 ? `Session ${overrides.id}` : "New session"),
     createdAt: overrides.createdAt ?? "2026-10-20T00:00:00.000Z",
     pinned: overrides.pinned ?? false,
     archived: overrides.archived ?? false,
-    events: overrides.events ?? 0,
+    events,
     pendingInputs: overrides.pendingInputs ?? 0,
     cancelled: overrides.cancelled ?? false,
     resumable: overrides.resumable ?? true,
@@ -37,7 +40,11 @@ function makeSession(
 
 test("unselected blank sessions are hidden while the selected blank session is visible", () => {
   const blankA = makeSession({ id: "ses_blank_a", events: 0 });
-  const blankB = makeSession({ id: "ses_blank_b", events: 0 });
+  const blankB = makeSession({
+    id: "ses_blank_b",
+    events: 3,
+    title: "New session",
+  });
   const engaged = makeSession({
     id: "ses_engaged",
     events: 4,
@@ -45,6 +52,7 @@ test("unselected blank sessions are hidden while the selected blank session is v
   });
 
   expect(isBlankSession(blankA)).toBe(true);
+  expect(isBlankSession(blankB)).toBe(true);
   expect(isBlankSession(engaged)).toBe(false);
 
   // When nothing is selected, no blank session appears in the tree.

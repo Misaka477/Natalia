@@ -1430,50 +1430,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 /* ===== Settings panel ===== */
-.neu-plugin-window {
-  width: min(520px, 90vw);
-  max-height: 80vh;
-  overflow-y: auto;
-  border-radius: 18px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-elevation-6);
-  padding: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--neu-scrollbar) transparent;
-}
-.neu-plugin-window::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.neu-plugin-window::-webkit-scrollbar-track {
-  background: transparent;
-}
-.neu-plugin-window::-webkit-scrollbar-thumb {
-  background: var(--neu-scrollbar);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.neu-plugin-window::-webkit-scrollbar-thumb:hover {
-  background: var(--neu-scrollbar-hover);
-  background-clip: padding-box;
-}
-.neu-plugin-body { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-.neu-plugin-section-title { font-size: 12px; font-weight: 700; color: var(--neu-muted); text-transform: uppercase; }
-.neu-plugin-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--neu-bg-light); }
-.neu-plugin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.neu-plugin-name { color: var(--neu-text); font-size: 12px; font-weight: 600; }
-.neu-plugin-meta { color: var(--neu-muted); font-size: 10px; font-family: var(--neu-font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.neu-plugin-btn {
-  padding: 5px 10px;
-  border: 1px solid var(--neu-hairline);
-  border-radius: 10px;
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  font-size: 11px;
-  cursor: pointer;
-  box-shadow: var(--neu-elevation-1);
-}
 .neu-confirm-backdrop {
   position: fixed;
   inset: 0;
@@ -1483,87 +1439,16 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   align-items: center;
   justify-content: center;
 }
-.neu-confirm-box {
-  width: min(360px, 84vw);
-  padding: 16px;
-  border-radius: 16px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-elevation-6);
-}
 .neu-confirm-title {
   font-size: 14px;
   font-weight: 700;
   color: var(--neu-text);
   margin-bottom: 8px;
 }
-.neu-confirm-text {
-  font-size: 12px;
-  color: var(--neu-muted);
-  margin-bottom: 14px;
-}
 .neu-confirm-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-}
-.neu-confirm-danger {
-  color: var(--neu-on-error);
-  background: var(--neu-error);
-  border-color: transparent;
-}
-.neu-plugin-btn:active {
-  box-shadow: var(--neu-inset-2);
-  transform: translateY(1px);
-}
-.neu-plugin-switch {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-.neu-plugin-switch input {
-  display: none;
-}
-.neu-plugin-switch-track {
-  width: 38px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--neu-muted);
-  opacity: 0.5;
-  position: relative;
-  transition: background 0.2s ease, opacity 0.2s ease;
-}
-.neu-plugin-switch-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--neu-thumb);
-  box-shadow: var(--neu-thumb-shadow);
-  transition: left 0.2s ease;
-}
-.neu-plugin-switch input:checked + .neu-plugin-switch-track {
-  background: var(--neu-success);
-  opacity: 1;
-}
-.neu-plugin-switch input:checked + .neu-plugin-switch-track .neu-plugin-switch-thumb {
-  left: 18px;
-}
-.neu-plugin-empty { color: var(--neu-muted); font-size: 12px; }
-.neu-plugin-error { color: var(--neu-error); font-size: 12px; }
-.neu-plugin-install { display: flex; gap: 8px; }
-.neu-plugin-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 10px;
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  font-size: 12px;
-  outline: none;
-  box-shadow: var(--neu-inset-2);
 }
 /* ===== Modal window chrome (SHARED VOCABULARY) =====
    The backdrop, the window, the header with its title and close button,

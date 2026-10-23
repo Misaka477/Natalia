@@ -1,0 +1,193 @@
+/* The plugin manager: its window, the plugin rows, the enable switches,
+   the install form and its inline confirm. The modal chrome, the confirm
+   backdrop/title/actions (shared with the shell's confirm dialog) and the
+   form controls stay global. Tokens only. */
+
+.window {
+  width: min(520px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-elevation-6);
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--neu-scrollbar) transparent;
+}
+
+.window::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.window::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.window::-webkit-scrollbar-thumb {
+  background: var(--neu-scrollbar);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.window::-webkit-scrollbar-thumb:hover {
+  background: var(--neu-scrollbar-hover);
+  background-clip: padding-box;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--neu-muted);
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--neu-bg-light);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  color: var(--neu-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--neu-muted);
+  font-size: 10px;
+  font-family: var(--neu-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn {
+  padding: 5px 10px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.btn:active {
+  box-shadow: var(--neu-inset-2);
+  transform: translateY(1px);
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.switch input {
+  display: none;
+}
+
+.switchTrack {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--neu-muted);
+  opacity: 0.5;
+  position: relative;
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--neu-thumb);
+  box-shadow: var(--neu-thumb-shadow);
+  transition: left 0.2s ease;
+}
+
+.switch input:checked + .switchTrack {
+  background: var(--neu-success);
+  opacity: 1;
+}
+
+.switch input:checked + .switchTrack .switchThumb {
+  left: 18px;
+}
+
+.empty {
+  color: var(--neu-muted);
+  font-size: 12px;
+}
+
+.error {
+  color: var(--neu-error);
+  font-size: 12px;
+}
+
+.install {
+  display: flex;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  outline: none;
+  box-shadow: var(--neu-inset-2);
+}
+
+/* The inline confirm's own box, text and danger button — the backdrop,
+   title and actions it shares with the shell's confirm dialog stay
+   global. */
+.confirmBox {
+  width: min(360px, 84vw);
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-elevation-6);
+}
+
+.confirmText {
+  font-size: 12px;
+  color: var(--neu-muted);
+  margin-bottom: 14px;
+}
+
+.confirmDanger {
+  color: var(--neu-on-error);
+  background: var(--neu-error);
+  border-color: transparent;
+}

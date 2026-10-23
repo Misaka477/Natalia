@@ -1,3 +1,4 @@
+import styles from "./styles/plugin-manager-panel.module.css";
 import { createSignal, For, Show, onMount } from "solid-js";
 import type { PluginStatus } from "@anthelia/contracts";
 import type { UiPlugin, UiPluginContext } from "@natalia/ui-host";
@@ -174,24 +175,24 @@ export function PluginManagerPanel(props: {
           onClick={() => setConfirmUninstall(null)}
         >
           <div
-            class="neu-confirm-box"
+            class={styles.confirmBox}
             onClick={(event) => event.stopPropagation()}
           >
             <div class="neu-confirm-title">{t("pluginMgr.confirmTitle")}</div>
-            <div class="neu-confirm-text">
+            <div class={styles.confirmText}>
               {t("pluginMgr.confirmBody", { name: confirmUninstall()!.name })}
             </div>
             <div class="neu-confirm-actions">
               <button
                 type="button"
-                class="neu-plugin-btn"
+                class={styles.btn}
                 onClick={() => setConfirmUninstall(null)}
               >
                 {t("pluginMgr.cancel")}
               </button>
               <button
                 type="button"
-                class="neu-plugin-btn neu-confirm-danger"
+                class={`${styles.btn} ${styles.confirmDanger}`}
                 onClick={() => void uninstallRuntime(confirmUninstall()!.id)}
               >
                 {t("pluginMgr.confirm")}
@@ -201,10 +202,7 @@ export function PluginManagerPanel(props: {
         </div>
       </Show>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-plugin-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("pluginMgr.title")}</span>
             <button
@@ -223,32 +221,30 @@ export function PluginManagerPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-plugin-body">
+          <div class={styles.body}>
             <Show when={error()}>
-              <div class="neu-plugin-error">{error()}</div>
+              <div class={styles.error}>{error()}</div>
             </Show>
-            <div class="neu-plugin-install">
+            <div class={styles.install}>
               <input
-                class="neu-plugin-input"
+                class={styles.input}
                 placeholder="npm package spec, e.g. @natalia/plugin-xxx"
                 value={installSpec()}
                 onInput={(event) => setInstallSpec(event.currentTarget.value)}
               />
               <button
                 type="button"
-                class="neu-plugin-btn"
+                class={styles.btn}
                 onClick={() => void installRuntime()}
               >
                 {t("pluginMgr.install")}
               </button>
             </div>
-            <div class="neu-plugin-section-title">
-              {t("pluginMgr.uiPlugins")}
-            </div>
+            <div class={styles.sectionTitle}>{t("pluginMgr.uiPlugins")}</div>
             <Show
               when={uiRegistry().length || uiPlugins().length}
               fallback={
-                <div class="neu-plugin-empty">{t("pluginMgr.noUiPlugins")}</div>
+                <div class={styles.empty}>{t("pluginMgr.noUiPlugins")}</div>
               }
             >
               <For each={uiRegistry()}>
@@ -257,14 +253,14 @@ export function PluginManagerPanel(props: {
                     (plugin) => plugin.pluginId === entry.id,
                   );
                   return (
-                    <div class="neu-plugin-row">
-                      <div class="neu-plugin-main">
-                        <span class="neu-plugin-name">{entry.name}</span>
-                        <span class="neu-plugin-meta">
+                    <div class={styles.row}>
+                      <div class={styles.main}>
+                        <span class={styles.name}>{entry.name}</span>
+                        <span class={styles.meta}>
                           {entry.id} · {entry.version}
                         </span>
                       </div>
-                      <label class="neu-plugin-switch">
+                      <label class={styles.switch}>
                         <input
                           type="checkbox"
                           checked={loaded}
@@ -274,8 +270,8 @@ export function PluginManagerPanel(props: {
                             else void disableUi(entry.id);
                           }}
                         />
-                        <span class="neu-plugin-switch-track">
-                          <span class="neu-plugin-switch-thumb" />
+                        <span class={styles.switchTrack}>
+                          <span class={styles.switchThumb} />
                         </span>
                       </label>
                     </div>
@@ -283,35 +279,35 @@ export function PluginManagerPanel(props: {
                 }}
               </For>
             </Show>
-            <div class="neu-plugin-section-title">
+            <div class={styles.sectionTitle}>
               {t("pluginMgr.runtimePlugins")}
             </div>
             <Show
               when={runtimeCatalog().length}
               fallback={
-                <div class="neu-plugin-empty">
+                <div class={styles.empty}>
                   {t("pluginMgr.noRuntimePlugins")}
                 </div>
               }
             >
               <For each={runtimeCatalog()}>
                 {(plugin) => (
-                  <div class="neu-plugin-row">
-                    <div class="neu-plugin-main">
-                      <span class="neu-plugin-name">{plugin.name}</span>
-                      <span class="neu-plugin-meta">
+                  <div class={styles.row}>
+                    <div class={styles.main}>
+                      <span class={styles.name}>{plugin.name}</span>
+                      <span class={styles.meta}>
                         {plugin.id}
                         {plugin.version ? ` · ${plugin.version}` : ""}
                       </span>
                     </div>
                     <button
                       type="button"
-                      class="neu-plugin-btn"
+                      class={styles.btn}
                       onClick={() => requestUninstall(plugin.id, plugin.name)}
                     >
                       {t("pluginMgr.uninstall")}
                     </button>
-                    <label class="neu-plugin-switch">
+                    <label class={styles.switch}>
                       <input
                         type="checkbox"
                         checked={enabledMap()[plugin.id] ?? true}
@@ -324,13 +320,13 @@ export function PluginManagerPanel(props: {
                           void setEnabled(plugin.id, next);
                         }}
                       />
-                      <span class="neu-plugin-switch-track">
-                        <span class="neu-plugin-switch-thumb" />
+                      <span class={styles.switchTrack}>
+                        <span class={styles.switchThumb} />
                       </span>
                     </label>
                     <button
                       type="button"
-                      class="neu-plugin-btn"
+                      class={styles.btn}
                       onClick={() => void reloadRuntime(plugin.id)}
                     >
                       {t("pluginMgr.reload")}

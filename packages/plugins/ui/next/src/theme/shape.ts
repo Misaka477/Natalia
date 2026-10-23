@@ -36,29 +36,47 @@ export const shapeTokens = {
   "--neu-motion-base": "0.25s ease",
   // elevation: outer (raised)
   //
-  // The neumorphic language was a DUAL shadow — dark from one corner,
-  // light from the opposite — which is what made every surface read as
-  // pressed rubber. The theme's language now takes its depth from
-  // surface color and hairlines, so a raised surface carries ONE very
-  // soft shadow and nothing else: the ramp below still orders six
-  // levels, but no level plays a light-direction trick.
-  "--neu-elevation-1": "0 1px 1px var(--neu-float-scrim)",
-  "--neu-elevation-2": "0 1px 2px var(--neu-float-scrim)",
-  "--neu-elevation-3": "0 2px 4px var(--neu-float-scrim)",
-  "--neu-elevation-4": "0 2px 6px var(--neu-float-scrim)",
-  "--neu-elevation-5": "0 4px 10px var(--neu-float-scrim)",
-  "--neu-elevation-6": "0 6px 16px var(--neu-float-scrim)",
-  "--neu-elevation-accent": "0 1px 2px var(--neu-float-scrim)",
+  // The neumorphic language is a DUAL shadow — dark from one corner,
+  // light from the opposite — and that is what makes every surface read
+  // as pressed rubber. It is the product's visual identity, not a
+  // decoration: the shipped sheet spends 66 rules on the inset pair and
+  // 60 on the raised pairs, and a reader recognizes the shell by it.
+  //
+  // These values are the shipped sheet's own expressions, restored. An
+  // earlier pass of this file replaced every one of them with a single
+  // soft shadow or a hairline ring and wrote a comment claiming the
+  // language had been improved; it had been deleted, and every surface
+  // in the shell went flat. Do not do that again.
+  "--neu-elevation-1":
+    "2px 2px 4px var(--neu-shadow-dark), -2px -2px 4px var(--neu-shadow-light)",
+  "--neu-elevation-2":
+    "3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light)",
+  "--neu-elevation-3":
+    "3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light)",
+  "--neu-elevation-4":
+    "4px 4px 8px var(--neu-shadow-dark), -4px -4px 8px var(--neu-shadow-light)",
+  "--neu-elevation-5":
+    "6px 6px 16px var(--neu-shadow-dark), -6px -6px 16px var(--neu-shadow-light)",
+  "--neu-elevation-6":
+    "8px 8px 16px var(--neu-shadow-dark), -8px -8px 16px var(--neu-shadow-light)",
+  "--neu-elevation-accent":
+    "3px 3px 6px var(--neu-accent-shadow), -3px -3px 6px var(--neu-shadow-light)",
   // elevation: inner (inset / pressed)
   //
-  // A pressed field reads as a hairline, not as a dent carved by two
-  // opposing lights.
-  "--neu-inset-1": "inset 0 0 0 1px var(--neu-border)",
-  "--neu-inset-2": "inset 0 0 0 1px var(--neu-border)",
-  "--neu-inset-3": "inset 0 0 0 1px var(--neu-border)",
-  "--neu-inset-accent": "inset 0 0 0 1px var(--neu-border)",
-  // elevation: flat drop shadow and hairline ring (non-neumorphic surfaces)
-  "--neu-elevation-flat": "0 4px 12px var(--neu-float-scrim)",
+  // The dent. Three depths, from the shallowest press to the deepest
+  // field, each a dark light and a light dark from opposite corners.
+  // The 2px pair is the one the shipped sheet uses 66 times — it is
+  // what an input, a pressed row and an inset card look like.
+  "--neu-inset-1":
+    "inset 1px 1px 2px var(--neu-shadow-dark), inset -1px -1px 2px var(--neu-shadow-light)",
+  "--neu-inset-2":
+    "inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light)",
+  "--neu-inset-3":
+    "inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light)",
+  "--neu-inset-accent":
+    "inset 3px 3px 6px var(--neu-inset-pressed-dark), inset -3px -3px 6px var(--neu-inset-pressed-light)",
+  // elevation: flat drop shadow and float (non-neumorphic surfaces)
+  "--neu-elevation-flat": "0 4px 12px var(--neu-overlay)",
   "--neu-elevation-float": "0 18px 48px var(--neu-float-scrim)",
   "--neu-elevation-float-sm": "0 12px 32px var(--neu-float-scrim)",
   "--neu-ring": "inset 0 0 0 1px var(--neu-border)",

@@ -4,8 +4,16 @@
    only POSITION it inside this region's wrap, so they travel with the
    wrap. Tokens only. */
 
-.mainWrap,
-.chatWrap {
+/* The agent body's wrap: the relative flex column the transcript and its
+   jump-to-bottom button live in. ONE class for every agent — Natalia,
+   Navi, Nia and the team all render through AgentBody, and the wrap is
+   the part of that surface that must never differ between them. It used
+   to be two classes (mainWrap, chatWrap) with identical rules, which is
+   how the two copies drifted apart in the first place. The button itself
+   is shared vocabulary and stays global; this rule only POSITIONS it
+   inside the wrap, so it travels with the wrap. Tokens only. */
+
+.agentWrap {
   position: relative;
   flex: 1;
   min-height: 0;
@@ -13,8 +21,7 @@
   flex-direction: column;
 }
 
-.mainWrap :global(.neu-jump-bottom),
-.chatWrap :global(.neu-jump-bottom) {
+.agentWrap :global(.neu-jump-bottom) {
   bottom: 16px;
   right: 16px;
 }

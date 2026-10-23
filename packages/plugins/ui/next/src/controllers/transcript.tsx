@@ -16,6 +16,7 @@ import { NeuSelect } from "../components/NeuSelect";
 import { QueueDock } from "../components/QueueDock";
 import { SlotMount } from "../slots/mount";
 import { MainInputArea, ChatInputArea } from "./input-area";
+import { AgentBody } from "../components/AgentBody";
 import { SessionUsageBar } from "../components/SessionUsageBar";
 import { NiaPanel } from "../nia-panel";
 import { AgentPanel } from "../agent-panel";
@@ -406,69 +407,57 @@ export function MainPanes(props: MainPanesProps) {
           </div>
           <div class="neu-pane-content">
             <Show when={focusAgent() === "natalia"}>
-              <div class={styles.mainWrap}>
-                <Show
-                  when={selectedSessionID() || state().sessionID || "none"}
-                  keyed
-                >
-                  <Show when={feedbackNotice()}>
-                    <div class="neu-gov-action-note">{feedbackNotice()}</div>
-                  </Show>
-                  {/* The startup data failed after every retry. The shell says
-                      so once, at the top of the transcript, with the retry that
-                      re-runs the fetch — an empty session list or an empty
-                      permission menu must not read as "no data exists". */}
-                  <Show when={startupDataDegraded()}>
-                    <PanelState
-                      state="error"
-                      title={t("transcript.startupDataFailed")}
-                      description={t("transcript.startupDataFailedHint")}
-                      actionLabel={t("state.retry")}
-                      onAction={() => void loadSecondaryStartupData()}
-                    />
-                  </Show>
-                  <div class={styles.mainWrap}>
-                    <Transcript
-                      messages={renderedMainMessages()}
-                      emptyTitle={t("transcript.emptyMainTitle")}
-                      emptyHint={t("transcript.emptyMainHint")}
-                      assistantName="Natalia"
-                      assistantInitial="N"
-                      toolCards={toolCards}
-                      apiRef={(api) => {
-                        transcriptRefs.main = api;
-                      }}
-                      onFollowChange={(following) => {
-                        mainFollowing = following;
-                        setShowJumpToBottom(!following);
-                      }}
-                      onScroll={saveMainScrollAnchor}
-                      onNearTop={() => void loadOlderHistory()}
-                      hasOlder={mainPaging().hasOlder}
-                      historyLoading={transcriptHistoryLoading()}
-                      olderHistoryLoading={transcriptOlderLoading()}
-                      loadAttachmentUrl={loadAttachmentUrl}
-                      onFork={forkSessionAtTurn}
-                      onRollback={rollbackDraftFromMessage}
-                      checkpointIDForMessage={checkpointIDForMessage}
-                      suspendVirtualization={resizing()}
-                    />
-                    <Show when={showJumpToBottom()}>
-                      <button
-                        type="button"
-                        class="neu-jump-bottom"
-                        onClick={jumpToBottom}
-                        title={t("transcript.jumpToBottom")}
-                      >
-                        ↓
-                      </button>
+              <AgentBody
+                sessionKey={selectedSessionID() || state().sessionID || "none"}
+                messages={renderedMainMessages}
+                emptyTitle={t("transcript.emptyMainTitle")}
+                emptyHint={t("transcript.emptyMainHint")}
+                assistantName="Natalia"
+                assistantInitial="N"
+                toolCards={toolCards}
+                onApi={(api) => {
+                  transcriptRefs.main = api;
+                }}
+                onFollowChange={(following) => {
+                  mainFollowing = following;
+                  setShowJumpToBottom(!following);
+                }}
+                onScroll={saveMainScrollAnchor}
+                onNearTop={() => void loadOlderHistory()}
+                hasOlder={mainPaging().hasOlder}
+                historyLoading={transcriptHistoryLoading()}
+                olderHistoryLoading={transcriptOlderLoading()}
+                loadAttachmentUrl={loadAttachmentUrl}
+                onFork={forkSessionAtTurn}
+                onRollback={rollbackDraftFromMessage}
+                checkpointIDForMessage={checkpointIDForMessage}
+                suspendVirtualization={resizing()}
+                jumpVisible={showJumpToBottom}
+                onJump={jumpToBottom}
+                slots={slots}
+                t={t}
+                notices={
+                  <>
+                    <Show when={feedbackNotice()}>
+                      <div class="neu-gov-action-note">{feedbackNotice()}</div>
                     </Show>
-                    {/* A plugin's own entry beside an empty transcript, under
-                        the shell's empty state. */}
-                    <SlotMount slots={slots} name="transcript.empty" t={t} />
-                  </div>
-                </Show>
-              </div>
+                    {/* The startup data failed after every retry. The shell
+                        says so once, at the top of the transcript, with the
+                        retry that re-runs the fetch — an empty session list
+                        or an empty permission menu must not read as "no data
+                        exists". */}
+                    <Show when={startupDataDegraded()}>
+                      <PanelState
+                        state="error"
+                        title={t("transcript.startupDataFailed")}
+                        description={t("transcript.startupDataFailedHint")}
+                        actionLabel={t("state.retry")}
+                        onAction={() => void loadSecondaryStartupData()}
+                      />
+                    </Show>
+                  </>
+                }
+              />
             </Show>
 
             {/* THE DECISION SLOT — where the runtime asks the human
@@ -754,43 +743,33 @@ export function MainPanes(props: MainPanesProps) {
               </Show>
 
               <Show when={focusAgent() === "navi"}>
-                <Show
-                  when={selectedSessionID() || state().sessionID || "none"}
-                  keyed
-                >
-                  <div class={styles.chatWrap}>
-                    <Transcript
-                      messages={renderedChatMessages()}
-                      emptyTitle={t("transcript.emptyChatTitle")}
-                      emptyHint={t("transcript.emptyChatHint")}
-                      assistantName="Navi"
-                      assistantInitial="V"
-                      toolCards={toolCards}
-                      apiRef={(api) => {
-                        transcriptRefs.chat = api;
-                      }}
-                      onFollowChange={(following) =>
-                        setChatShowJumpToBottom(!following)
-                      }
-                      onNearTop={() => void loadOlderNaviChat()}
-                      hasOlder={naviPaging().hasOlder}
-                      historyLoading={!naviPaging().initialized}
-                      olderHistoryLoading={naviPaging().loadingOlder}
-                      loadAttachmentUrl={loadAttachmentUrl}
-                      suspendVirtualization={resizing()}
-                    />
-                    <Show when={chatShowJumpToBottom()}>
-                      <button
-                        type="button"
-                        class="neu-jump-bottom"
-                        onClick={jumpChatToBottom}
-                        title={t("transcript.jumpToBottom")}
-                      >
-                        ↓
-                      </button>
-                    </Show>
-                  </div>
-                </Show>
+                <AgentBody
+                  sessionKey={
+                    selectedSessionID() || state().sessionID || "none"
+                  }
+                  messages={renderedChatMessages}
+                  emptyTitle={t("transcript.emptyChatTitle")}
+                  emptyHint={t("transcript.emptyChatHint")}
+                  assistantName="Navi"
+                  assistantInitial="V"
+                  toolCards={toolCards}
+                  onApi={(api) => {
+                    transcriptRefs.chat = api;
+                  }}
+                  onFollowChange={(following) =>
+                    setChatShowJumpToBottom(!following)
+                  }
+                  onNearTop={() => void loadOlderNaviChat()}
+                  hasOlder={naviPaging().hasOlder}
+                  historyLoading={!naviPaging().initialized}
+                  olderHistoryLoading={naviPaging().loadingOlder}
+                  loadAttachmentUrl={loadAttachmentUrl}
+                  suspendVirtualization={resizing()}
+                  jumpVisible={chatShowJumpToBottom}
+                  onJump={jumpChatToBottom}
+                  slots={slots}
+                  t={t}
+                />
               </Show>
 
               <Show when={focusAgent() === "navi"}>

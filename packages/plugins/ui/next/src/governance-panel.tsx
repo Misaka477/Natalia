@@ -2265,7 +2265,7 @@ export function GovernancePane(props: {
             }
           >
             {(record) => (
-              <div class="gov-card gov-completion-card">
+              <div class={`${styles.card} ${styles.completionCard}`}>
                 <div class={styles.cardHead}>
                   <span class={styles.title} data-priority="validated">
                     {record.taskID}

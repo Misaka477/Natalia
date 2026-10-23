@@ -45,9 +45,22 @@ test("every agent has a body in the pane", async () => {
   // The two that moved out of the rail are rendered here, by name.
   expect(pane).toContain("<NiaPanel");
   expect(pane).toContain("<AgentPanel");
-  // Nia drops her own header: the pane's header carries the switcher
-  // and the running state, and a second one would stack under it.
-  expect(pane).toContain("embedded");
+});
+
+test("Nia renders through the same body as every other agent", async () => {
+  const nia = await read("nia-panel.tsx");
+  // No wrapper of its own: a second neu-pane inside the pane is what put
+  // her run bar and composer outside the card.
+  expect(nia).not.toContain("neu-pane");
+  expect(nia).not.toContain("neu-pane-header");
+  expect(nia).not.toContain("neu-pane-content");
+  // The body is the shared one, and her run bar and composer are its
+  // children — the same position Natalia's and Navi's occupy.
+  expect(nia).toContain("<AgentBody");
+  expect(nia).toContain("</AgentBody>");
+  expect(nia).toContain("<Composer");
+  // Her transcript's jump button comes from the body, not from her.
+  expect(nia).not.toContain("neu-jump-bottom");
 });
 
 test("the right rail no longer hosts the two agent tabs", async () => {

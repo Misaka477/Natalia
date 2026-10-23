@@ -11,6 +11,33 @@
   overflow: hidden;
 }
 
+/* The small action button in a section header — the Team overview's
+   refresh. It used to borrow the terminal plugin's class name, which
+   only rendered when that plugin's stylesheet happened to be in the
+   document: the shell was styling its own button with another
+   plugin's CSS. The rule is the terminal plugin's own, moved here so
+   the shell owns its control. Tokens only. */
+
+.actionBtn {
+  border: none;
+  border-radius: 10px;
+  padding: 4px 10px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+
+.actionBtn:hover {
+  color: var(--neu-text);
+}
+
+.actionBtn:active {
+  box-shadow: var(--neu-inset-2);
+}
+
 .subtabs {
   display: flex;
   gap: 6px;

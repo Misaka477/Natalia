@@ -22,6 +22,7 @@ import {
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 import { NeuSelect } from "./components/NeuSelect";
+import { AgentBody } from "./components/AgentBody";
 import type { Attachment, Message } from "./types";
 import { stableRows, type RowSignature } from "./stable-rows";
 
@@ -43,14 +44,14 @@ export function NiaPanel(props: {
    * opening its own menu.
    */
   onOpenSettings?: () => void;
-  /**
-   * Rendered inside the main pane rather than as a rail tab.
-   *
-   * The main pane's header already carries the agent switcher and the
-   * running state, so the panel drops its own header instead of stacking
-   * a second one under it. Everything else — the transcript, the run
-   * bar, the toolbar, the usage bar and the composer — is unchanged.
-   */
+  /** The shell's tool-card registry, so the transcript renders the same
+   *  cards every other agent's does. */
+  toolCards?: unknown;
+  /** The shell's slot registry, for the transcript's plugin entry. */
+  slots?: any;
+  /** Rendered inside the main pane rather than as a rail tab. Kept for
+   *  the call sites that still pass it; the body no longer has a header
+   *  to suppress. */
   embedded?: boolean;
 }) {
   const t = props.t;
@@ -334,110 +335,90 @@ export function NiaPanel(props: {
   };
 
   return (
-    <div class={`neu-pane ${styles.flatPane}`}>
-      <Show when={!props.embedded}>
-        <div class="neu-pane-header">
-          <span class="neu-pane-title">Nia</span>
-          <span class={styles.headerActions}>
-            <ContextMeter usage={props.state.nia.context} compact />
-            <span class="neu-pane-status" data-running={Boolean(active())}>
-              {active() ? "running" : "idle"}
-            </span>
-          </span>
-        </div>
-      </Show>
-      <div class="neu-pane-content">
-        <div class={styles.transcriptWrap}>
-          <Transcript
-            messages={renderedMessages()}
-            emptyTitle={t("nia.emptyTitle")}
-            emptyHint={t("nia.emptyHint")}
-            assistantName="Nia"
-            assistantInitial="N"
-            apiRef={(api) => {
-              niaApi = api;
-            }}
-            onFollowChange={(following) => setNiaShowJumpToBottom(!following)}
-            onNearTop={() => props.onLoadOlder?.()}
-            hasOlder={props.paging?.hasOlder ?? false}
-            historyLoading={!props.paging?.initialized}
-            olderHistoryLoading={props.paging?.loadingOlder}
-            loadAttachmentUrl={props.loadAttachmentUrl}
-            suspendVirtualization={props.suspendVirtualization}
-          />
-          <Show when={niaShowJumpToBottom()}>
-            <button
-              type="button"
-              class="neu-jump-bottom"
-              onClick={() => niaApi?.scrollToBottom()}
-              title={t("nia.jumpToBottom")}
-            >
-              ↓
-            </button>
-          </Show>
-        </div>
-        <div class="neu-activity-bar" data-running={Boolean(active())}>
-          <span class="neu-activity-pulse" />
-          <span class="neu-activity-label">{activityLabel()}</span>
-        </div>
-        <div class="neu-main-toolbar">
-          <NeuSelect
-            value={modelID()}
-            options={modelOptions()}
-            // No model configured: this click opens the model settings
-            // instead of an empty menu. The control is unchanged either way.
-            onActivate={
-              modelOptions().length > 0
-                ? undefined
-                : () => props.onOpenSettings?.()
-            }
-            placeholder={t("nia.model")}
-            onChange={(next) => {
-              setModelID(next);
-              void saveProfile({ modelID: next });
-            }}
-            menuPosition="top"
-          />
-          <NeuSelect
-            value={reasoning()}
-            options={[
-              { value: "minimal", label: "minimal" },
-              { value: "low", label: "low" },
-              { value: "medium", label: "medium" },
-              { value: "high", label: "high" },
-              { value: "xhigh", label: "xhigh" },
-            ]}
-            onChange={(next) => {
-              setReasoning(next);
-              void saveProfile({
-                reasoningEffort: next as
-                  | "minimal"
-                  | "low"
-                  | "medium"
-                  | "high"
-                  | "xhigh",
-              });
-            }}
-            placeholder={t("nia.reasoning")}
-            menuPosition="top"
-          />
-        </div>
-        <SessionUsageBar t={props.t} usage={props.state.usageByChannel.nia} />
-        <Composer
-          t={props.t}
-          value={draft()}
-          placeholder={t("nia.chatPlaceholder")}
-          busy={Boolean(active()) || busy()}
-          onInput={setDraft}
-          onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}
-          attachments={attachments()}
-          onRemoveAttachment={(path) =>
-            setAttachments(attachments().filter((item) => item.path !== path))
+    <AgentBody
+      sessionKey={props.sessionID ?? "none"}
+      messages={renderedMessages}
+      emptyTitle={t("nia.emptyTitle")}
+      emptyHint={t("nia.emptyHint")}
+      assistantName="Nia"
+      assistantInitial="N"
+      toolCards={props.toolCards}
+      onApi={(api) => {
+        niaApi = api;
+      }}
+      onFollowChange={(following) => setNiaShowJumpToBottom(!following)}
+      onNearTop={() => props.onLoadOlder?.()}
+      hasOlder={props.paging?.hasOlder ?? false}
+      historyLoading={!props.paging?.initialized}
+      olderHistoryLoading={props.paging?.loadingOlder}
+      loadAttachmentUrl={props.loadAttachmentUrl}
+      suspendVirtualization={props.suspendVirtualization}
+      jumpVisible={niaShowJumpToBottom}
+      onJump={() => niaApi?.scrollToBottom()}
+      slots={props.slots}
+      t={t}
+    >
+      <div class="neu-activity-bar" data-running={Boolean(active())}>
+        <span class="neu-activity-pulse" />
+        <span class="neu-activity-label">{activityLabel()}</span>
+      </div>
+      <div class="neu-main-toolbar">
+        <NeuSelect
+          value={modelID()}
+          options={modelOptions()}
+          // No model configured: this click opens the model settings
+          // instead of an empty menu. The control is unchanged either way.
+          onActivate={
+            modelOptions().length > 0
+              ? undefined
+              : () => props.onOpenSettings?.()
           }
-          onPaste={handlePaste}
-          onSubmit={() => void submit()}
+          placeholder={t("nia.model")}
+          onChange={(next) => {
+            setModelID(next);
+            void saveProfile({ modelID: next });
+          }}
+          menuPosition="top"
+        />
+        <NeuSelect
+          value={reasoning()}
+          options={[
+            { value: "minimal", label: "minimal" },
+            { value: "low", label: "low" },
+            { value: "medium", label: "medium" },
+            { value: "high", label: "high" },
+            { value: "xhigh", label: "xhigh" },
+          ]}
+          onChange={(next) => {
+            setReasoning(next);
+            void saveProfile({
+              reasoningEffort: next as
+                | "minimal"
+                | "low"
+                | "medium"
+                | "high"
+                | "xhigh",
+            });
+          }}
+          placeholder={t("nia.reasoning")}
+          menuPosition="top"
         />
       </div>
-    </div>
+      <SessionUsageBar t={props.t} usage={props.state.usageByChannel.nia} />
+      <Composer
+        t={props.t}
+        value={draft()}
+        placeholder={t("nia.chatPlaceholder")}
+        busy={Boolean(active()) || busy()}
+        onInput={setDraft}
+        onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}
+        attachments={attachments()}
+        onRemoveAttachment={(path) =>
+          setAttachments(attachments().filter((item) => item.path !== path))
+        }
+        onPaste={handlePaste}
+        onSubmit={() => void submit()}
+      />
+    </AgentBody>
   );
 }

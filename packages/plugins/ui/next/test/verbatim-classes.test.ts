@@ -134,7 +134,6 @@ const DOCUMENTED_HOOKS = new Map<string, string>([
   ["neu-activity-label", "an unstyled hook inside the activity bar"],
   ["neu-gov-section-label", "an unstyled hook above a governance section"],
   ["review-count", "an unstyled hook beside a review count"],
-  ["terminal-toolbar-btn", "an unstyled hook on the terminal toolbar button"],
   ["neu-topbar-btn-primary", "an unstyled hook on the topbar's primary button"],
   [
     "neu-topbar-panel-close",

@@ -508,7 +508,7 @@ export function AgentPanel(props: {
                         .join(", ")}
                       <button
                         type="button"
-                        class="terminal-toolbar-btn"
+                        class={styles.actionBtn}
                         onClick={() =>
                           props.onOpenTerminal?.(selectedTerminals()[0]!.id)
                         }
@@ -586,7 +586,7 @@ export function AgentPanel(props: {
             <span>{t("agent.teamOverview")}</span>
             <button
               type="button"
-              class="terminal-toolbar-btn"
+              class={styles.actionBtn}
               onClick={() => void refreshData()}
             >
               {t("agent.refresh")}

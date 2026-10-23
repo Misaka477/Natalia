@@ -925,7 +925,8 @@ export function MainPanes(props: MainPanesProps) {
                 paging={niaPaging()}
                 onLoadOlder={() => void loadOlderNiaChat()}
                 onOpenSettings={openModelSettings}
-                embedded
+                toolCards={toolCards}
+                slots={slots}
               />
             </Show>
 

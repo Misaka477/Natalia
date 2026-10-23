@@ -307,6 +307,29 @@ windowsOnly(
 );
 
 windowsOnly(
+  "the accessibility layer opens lazily, never at import",
+  async () => {
+    // A module-level dlopen is a load-time crash on every platform without
+    // these libraries. Measured: the Linux artifacts job died bundling this
+    // file on `Failed to open library "ole32.dll"`, which took the whole
+    // distribution build — and the runtime's tool set — with it. The module
+    // must import cleanly and answer at call time instead.
+    const mod = await import("../src/win32/uia");
+    expect(mod.uiaAvailable()).toBe(true);
+    // And a real walk still works through the lazy open: the refactor must
+    // not have cost the capability.
+    const readable = readableWindows(enumerateWindows());
+    const target = readable[0]!;
+    const tree = mod.walkWindowTree(Number(target.hwnd), {
+      maxNodes: 64,
+      maxDepth: 8,
+    });
+    expect(Array.isArray(tree)).toBe(true);
+  },
+  60_000,
+);
+
+windowsOnly(
   "a screenshot with no path lands in the OS temporary directory",
   async () => {
     // The default used to be "write into the workspace", which litters the

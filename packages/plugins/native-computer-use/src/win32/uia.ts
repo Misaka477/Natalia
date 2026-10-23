@@ -54,10 +54,18 @@
 import { CFunction, dlopen, FFIType, ptr } from "bun:ffi";
 
 /* ------------------------------------------------------------------ *
- * The libraries
+ * The libraries — opened LAZILY, never at import.
+ *
+ * A module-level dlopen is a load-time crash on every platform without
+ * these libraries, which takes the whole plugin (and the runtime's tool
+ * set, and the distribution build that bundles it) down with it. Measured:
+ * the Linux artifacts job died on `Failed to open library "ole32.dll"`
+ * while bundling this file. The guard below turns that into the honest
+ * answer — unavailable, with the reason — at the moment a tool actually
+ * needs to read the tree.
  * ------------------------------------------------------------------ */
 
-const ole32 = dlopen("ole32.dll", {
+const OLE32_SYMBOLS = {
   CoInitializeEx: {
     args: [FFIType.ptr, FFIType.u32],
     returns: FFIType.i32,
@@ -66,22 +74,90 @@ const ole32 = dlopen("ole32.dll", {
     args: [FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr],
     returns: FFIType.i32,
   },
-});
+};
 
-const oleaut32 = dlopen("oleaut32.dll", {
+const OLEAUT32_SYMBOLS = {
   SysFreeString: { args: [FFIType.u64], returns: FFIType.void },
   SysStringLen: { args: [FFIType.u64], returns: FFIType.u32 },
-});
+};
 
 /** memcpy is how a vtable slot is read out of an interface. */
-const msvcrt = dlopen("msvcrt.dll", {
+const MSVCRT_SYMBOLS = {
   // size_t is u64 on Windows x64; bun 1.4 types have no usize alias, and the
   // ABI width is what matters.
   memcpy: {
     args: [FFIType.u64, FFIType.u64, FFIType.u64],
     returns: FFIType.u64,
   },
-});
+};
+
+/**
+ * The three libraries' symbol tables, hand-written the way
+ * object-store/native-index.ts does it: bun's `dlopen` generic infers a
+ * callable's argument list from the symbol map, and a map used as a TYPE
+ * rather than as a value does not survive that trip.
+ */
+type ComLibraries = {
+  ole32: {
+    CoInitializeEx: (reserved: unknown, coinit: number) => unknown;
+    CoCreateInstance: (
+      rclsid: unknown,
+      punkOuter: unknown,
+      clsctx: number,
+      riid: unknown,
+      ppv: unknown,
+    ) => unknown;
+  };
+  oleaut32: {
+    SysFreeString: (bstr: number) => unknown;
+    SysStringLen: (bstr: number) => unknown;
+  };
+  msvcrt: {
+    memcpy: (dest: number, src: number, count: number) => unknown;
+  };
+};
+
+let com: ComLibraries | undefined;
+let comFailure: string | undefined;
+
+/**
+ * The COM libraries, opened once on first use.
+ *
+ * Throws on a platform that has none of them (Linux, macOS): the tools
+ * answer that the accessibility layer is unavailable there, and the
+ * screenshot-plus-coordinates path remains for canvas content.
+ */
+function comLibraries(): ComLibraries {
+  if (com) return com;
+  if (comFailure) throw new Error(comFailure);
+  if (process.platform !== "win32") {
+    comFailure =
+      `the accessibility layer needs Windows COM (ole32/oleaut32/msvcrt) and ` +
+      `this platform is ${process.platform}`;
+    throw new Error(comFailure);
+  }
+  try {
+    com = {
+      ole32: dlopen("ole32.dll", OLE32_SYMBOLS).symbols,
+      oleaut32: dlopen("oleaut32.dll", OLEAUT32_SYMBOLS).symbols,
+      msvcrt: dlopen("msvcrt.dll", MSVCRT_SYMBOLS).symbols,
+    };
+    return com;
+  } catch (error) {
+    comFailure = error instanceof Error ? error.message : String(error);
+    throw new Error(`the COM libraries could not be opened: ${comFailure}`);
+  }
+}
+
+/** Whether the accessibility layer is usable here (a probe, not a promise). */
+export function uiaAvailable(): boolean {
+  try {
+    comLibraries();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const COINIT_APARTMENTTHREADED = 0x2;
 const CLSCTX_INPROC_SERVER = 0x1;
@@ -116,10 +192,10 @@ function guidBuffer(text: string): Buffer {
 /** The method in interface slot `slot` — two dereferences (rule 1). */
 function slotAddress(iface: number, slot: number): number {
   const vtableBuffer = Buffer.alloc(8);
-  msvcrt.symbols.memcpy(Number(ptr(vtableBuffer)), iface, 8);
+  comLibraries().msvcrt.memcpy(Number(ptr(vtableBuffer)), iface, 8);
   const vtable = Number(vtableBuffer.readBigUInt64LE(0));
   const methodBuffer = Buffer.alloc(8);
-  msvcrt.symbols.memcpy(Number(ptr(methodBuffer)), vtable + slot * 8, 8);
+  comLibraries().msvcrt.memcpy(Number(ptr(methodBuffer)), vtable + slot * 8, 8);
   return Number(methodBuffer.readBigUInt64LE(0));
 }
 
@@ -167,18 +243,18 @@ function release(iface: number | undefined): void {
 /** Read a BSTR out-parameter and free the allocation (rule 4). */
 function readBString(read: (holder: Buffer) => number): string {
   const holder = Buffer.alloc(8);
-  const status = read(holder);
+  const status = Number(read(holder));
   if (status !== S_OK) return "";
   const address = Number(holder.readBigUInt64LE(0));
   if (!address) return "";
   try {
-    const length = oleaut32.symbols.SysStringLen(address);
+    const length = Number(comLibraries().oleaut32.SysStringLen(address));
     if (!length) return "";
     const bytes = Buffer.alloc(length * 2);
-    msvcrt.symbols.memcpy(Number(ptr(bytes)), address, length * 2);
+    comLibraries().msvcrt.memcpy(Number(ptr(bytes)), address, length * 2);
     return bytes.toString("utf16le");
   } finally {
-    oleaut32.symbols.SysFreeString(address);
+    comLibraries().oleaut32.SysFreeString(address);
   }
 }
 
@@ -225,7 +301,7 @@ let comInitialized = false;
 function ensureCom(): void {
   if (comInitialized) return;
   // S_FALSE (already initialized on this thread) is as good as S_OK here.
-  ole32.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+  comLibraries().ole32.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
   comInitialized = true;
 }
 
@@ -233,12 +309,14 @@ function ensureAutomation(): Automation {
   ensureCom();
   if (automation) return automation;
   const out = Buffer.alloc(8);
-  const status = ole32.symbols.CoCreateInstance(
-    ptr(CLSID_CUIAUTOMATION),
-    null,
-    CLSCTX_INPROC_SERVER,
-    ptr(IID_IUIAUTOMATION),
-    ptr(out),
+  const status = Number(
+    comLibraries().ole32.CoCreateInstance(
+      ptr(CLSID_CUIAUTOMATION),
+      null,
+      CLSCTX_INPROC_SERVER,
+      ptr(IID_IUIAUTOMATION),
+      ptr(out),
+    ),
   );
   if (status !== S_OK)
     throw new Error(
@@ -674,15 +752,5 @@ export function setElementValue(element: UiaElement, text: string): void {
       );
   } finally {
     release(pattern);
-  }
-}
-
-/** Whether the UIA layer is usable at all (a probe, not a promise). */
-export function uiaAvailable(): boolean {
-  try {
-    ensureAutomation();
-    return true;
-  } catch {
-    return false;
   }
 }

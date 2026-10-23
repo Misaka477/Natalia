@@ -8,14 +8,15 @@ import {
   WORK_GRAPH_VIRTUAL_THRESHOLD,
   type WorkGraphRow,
 } from "./work-graph-rows";
+import wg from "../styles/work-graph.module.css";
 
 /** A section header row (fixed height, like every other row). */
 function SectionRow(props: {
   row: Extract<WorkGraphRow, { kind: "section" }>;
 }) {
   return (
-    <div class="wg-row wg-row-section" data-tone={props.row.tone}>
-      <span class="wg-section-title">
+    <div class={`${wg.row} ${wg.rowSection}`} data-tone={props.row.tone}>
+      <span class={wg.sectionTitle}>
         {props.row.title}
         <Show when={props.row.count !== undefined}> · {props.row.count}</Show>
       </span>
@@ -34,7 +35,7 @@ function NodeRow(props: {
   return (
     <button
       type="button"
-      class="wg-row wg-node-row"
+      class={`${wg.row} ${wg.nodeRow}`}
       data-depth={props.row.depth}
       style={{
         "padding-left": `${4 + Math.min(props.row.depth, 12) * 14}px`,
@@ -46,7 +47,7 @@ function NodeRow(props: {
         props.onToggleNode(props.row.nodeID, !props.row.expanded)
       }
     >
-      <span class="wg-twisty">
+      <span class={wg.twisty}>
         {props.row.expandable
           ? props.row.expanded
             ? "▾"
@@ -55,15 +56,15 @@ function NodeRow(props: {
             ? "⚠"
             : "•"}
       </span>
-      <span class="wg-kind" data-kind={props.row.nodeKind}>
+      <span class={wg.kind} data-kind={props.row.nodeKind}>
         {props.row.nodeKind}
       </span>
-      <span class="wg-summary">{props.row.summary}</span>
+      <span class={wg.summary}>{props.row.summary}</span>
       <Show when={props.row.target}>
-        <span class="wg-via">{props.row.target}</span>
+        <span class={wg.via}>{props.row.target}</span>
       </Show>
       <Show when={props.row.via}>
-        <span class="wg-via">← {props.row.via}</span>
+        <span class={wg.via}>← {props.row.via}</span>
       </Show>
     </button>
   );
@@ -189,7 +190,7 @@ export function WorkGraphWindow(props: {
       : [];
 
   return (
-    <div class="wg-scroll" ref={setScrollRef} onScroll={onScroll}>
+    <div class={wg.scroll} ref={setScrollRef} onScroll={onScroll}>
       <Show
         when={props.rows.length > 0}
         fallback={props.empty ?? <div class="neu-gov-empty" />}

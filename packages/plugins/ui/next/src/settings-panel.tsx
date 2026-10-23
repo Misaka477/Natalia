@@ -109,7 +109,7 @@ function ToolFamilyChecklist(props: {
                 <div class={styles.selectGrid}>
                   <For each={group.tools}>
                     {(tool) => (
-                      <label class="neu-form-checkbox neu-tool-check">
+                      <label class={`neu-form-checkbox ${styles.check}`}>
                         <input
                           type="checkbox"
                           checked={selectedSet().has(tool)}
@@ -159,7 +159,7 @@ function ToolFamilyRow(props: {
     if (checkbox) checkbox.indeterminate = partiallySelected();
   });
   return (
-    <label class="neu-form-checkbox neu-tool-family-check">
+    <label class={`neu-form-checkbox ${styles.familyCheck}`}>
       <input
         ref={checkbox}
         type="checkbox"

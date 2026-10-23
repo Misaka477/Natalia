@@ -96,7 +96,7 @@ export function SearchPanel(props: {
           <div class={styles.body}>
             <input
               ref={(element) => queueMicrotask(() => element.focus())}
-              class="neu-form-input neu-search-input"
+              class={`neu-form-input ${styles.input}`}
               value={query()}
               placeholder={t("search.placeholder")}
               onInput={(event) => runSearch(event.currentTarget.value)}

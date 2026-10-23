@@ -1912,6 +1912,28 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   box-shadow: var(--neu-inset-2);
 }
 
+/* ===== Shared hooks and small shared controls =====
+   neu-stash-textarea is shared by the stash panel and the
+   workspace-settings panel, so it stays global. neu-gov-empty is the
+   governance and work-graph empty state, used by four surfaces. Both
+   were dropped in the token rewrite; restored here, with the empty
+   state's background on the semantic slot the rewrite had already
+   tokenized it to. */
+.neu-stash-textarea {
+  min-height: 72px;
+  resize: none;
+}
+.neu-gov-empty {
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--neu-surface-sunken);
+  color: var(--neu-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .neu-main-toolbar {
   display: flex;
   gap: 8px;

@@ -1,5 +1,6 @@
 import { PanelState } from "./components/PanelState";
 import styles from "./styles/agent-panel.module.css";
+import nia from "./styles/nia-panel.module.css";
 import {
   For,
   Show,
@@ -518,7 +519,7 @@ export function AgentPanel(props: {
                   </span>
                 </Show>
               </div>
-              <div class="review-diff-content neu-pane nia-flat-pane">
+              <div class={`review-diff-content neu-pane ${nia.flatPane}`}>
                 <Show
                   when={selectedSubagent()}
                   fallback={

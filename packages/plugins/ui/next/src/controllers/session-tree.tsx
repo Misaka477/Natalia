@@ -779,7 +779,7 @@ export function SessionSidebar(props: SessionSidebarProps) {
                 </button>
                 <button
                   type="button"
-                  class="neu-icon-btn neu-new-workspace-btn"
+                  class={`${styles.iconBtn} ${styles.newWorkspaceBtn}`}
                   data-tooltip={t("sidebar.addWorkspace")}
                   aria-label={t("sidebar.addWorkspace")}
                   onClick={() => {

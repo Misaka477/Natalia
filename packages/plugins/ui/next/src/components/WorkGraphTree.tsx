@@ -14,6 +14,7 @@ import {
   workGraphSectionRow,
   type WorkGraphRow,
 } from "./work-graph-rows";
+import wg from "../styles/work-graph.module.css";
 import { WorkGraphWindow } from "./WorkGraphWindow";
 
 /**
@@ -136,10 +137,10 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
   };
 
   return (
-    <div class="wg-tree">
-      <div class="wg-search">
+    <div class={wg.tree}>
+      <div class={wg.search}>
         <input
-          class="wg-search-input"
+          class={wg.searchInput}
           type="search"
           placeholder="Search path / node / summary…"
           value={query()}
@@ -148,7 +149,7 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
         <Show when={focusID()}>
           <button
             type="button"
-            class="wg-search-clear"
+            class={wg.searchClear}
             onClick={() => {
               setFocusID(undefined);
               setQuery("");
@@ -159,23 +160,23 @@ export function WorkGraphTree(props: { state: WorkGraphState }) {
         </Show>
       </div>
       <Show when={matches().length}>
-        <div class="wg-search-results">
+        <div class={wg.searchResults}>
           <For each={matches()}>
             {(node) => (
               <button
                 type="button"
-                class="wg-search-result"
+                class={wg.searchResult}
                 onClick={() => {
                   setFocusID(node.nodeID);
                   setQuery(node.target ?? node.summary);
                 }}
               >
-                <span class="wg-kind" data-kind={node.kind}>
+                <span class={wg.kind} data-kind={node.kind}>
                   {node.kind}
                 </span>
-                <span class="wg-summary">{node.summary}</span>
+                <span class={wg.summary}>{node.summary}</span>
                 <Show when={node.target}>
-                  <span class="wg-via">{node.target}</span>
+                  <span class={wg.via}>{node.target}</span>
                 </Show>
               </button>
             )}

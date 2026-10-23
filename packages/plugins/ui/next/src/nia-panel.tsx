@@ -325,7 +325,7 @@ export function NiaPanel(props: {
   };
 
   return (
-    <div class="neu-pane nia-flat-pane">
+    <div class={`neu-pane ${styles.flatPane}`}>
       <div class="neu-pane-header">
         <span class="neu-pane-title">Nia</span>
         <span class={styles.headerActions}>

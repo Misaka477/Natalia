@@ -1,4 +1,5 @@
 import { PanelState } from "./components/PanelState";
+import agent from "./styles/agent-panel.module.css";
 import styles from "./styles/plan-panel.module.css";
 import {
   For,
@@ -389,39 +390,39 @@ t("plan.summarySection")
         />
       </Show>
       <Show when={plans().length}>
-        <div class="agent-layout">
-          <div class="agent-sidebar">
+        <div class={agent.layout}>
+          <div class={agent.sidebar}>
             <div class="review-section-label">{t("plan.markedSection")}</div>
             <For each={plans()}>
               {(plan) => (
                 <button
                   type="button"
-                  class="agent-card"
+                  class={agent.card}
                   data-active={selected()?.planID === plan.planID}
                   onClick={() => selectPlan(plan.planID)}
                 >
-                  <div class="agent-card-title">{plan.title}</div>
+                  <div class={agent.cardTitle}>{plan.title}</div>
                   <div
-                    class="agent-card-status"
+                    class={agent.cardStatus}
                     data-active={activePlanID() === plan.planID}
                   >
                     {planStatusLabel(plan.status, t)}
                   </div>
-                  <div class="agent-card-detail">{plan.documentPath}</div>
+                  <div class={agent.cardDetail}>{plan.documentPath}</div>
                 </button>
               )}
             </For>
           </div>
-          <div class="agent-stream">
+          <div class={agent.stream}>
             <Show
               when={selected()}
               fallback={
                 <PanelState state="empty" title={t("plan.selectFirst")} />
               }
             >
-              <div class="agent-stream-header">
-                <div class="agent-stream-title">{selected()!.title}</div>
-                <div class="agent-stream-meta">
+              <div class={agent.streamHeader}>
+                <div class={agent.streamTitle}>{selected()!.title}</div>
+                <div class={agent.streamMeta}>
                   {selected()!.planID} · {selected()!.documentPath}
                   <Show when={activePlan()?.planID === selected()!.planID}>
                     <span class={styles.activeBadge}>

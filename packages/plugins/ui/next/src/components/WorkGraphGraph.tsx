@@ -10,6 +10,7 @@ import {
   workGraphSectionRow,
   type WorkGraphRow,
 } from "./work-graph-rows";
+import wg from "../styles/work-graph.module.css";
 import { WorkGraphWindow } from "./WorkGraphWindow";
 
 /**
@@ -71,10 +72,10 @@ export function WorkGraphGraph(props: { state: WorkGraphState }) {
     );
   };
   return (
-    <div class="wg-graph">
-      <div class="wg-search">
+    <div class={wg.graph}>
+      <div class={wg.search}>
         <input
-          class="wg-search-input"
+          class={wg.searchInput}
           type="search"
           placeholder="Navigate from a file path…"
           value={filePath()}

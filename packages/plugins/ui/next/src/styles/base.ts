@@ -1874,6 +1874,44 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-text);
 }
 
+/* ===== Modal window chrome (SHARED VOCABULARY) =====
+   The header, title and close button every modal window carries —
+   settings, model, status, workspace, sandbox, stash, help, search,
+   session actions and the plugin manager all render these three names
+   verbatim, so they are global. They were dropped in the same rewrite
+   as the select and form families, which left every dialog's title bar
+   and close button unstyled. The backdrop and window are already
+   defined below; these three complete the chrome. */
+.neu-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--neu-hairline);
+  flex-shrink: 0;
+}
+.neu-settings-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+.neu-settings-close {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+.neu-settings-close:active {
+  box-shadow: var(--neu-inset-2);
+}
+
 .neu-main-toolbar {
   display: flex;
   gap: 8px;

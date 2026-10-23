@@ -1,4 +1,5 @@
 import styles from "../styles/review-panel.module.css";
+import { PanelState } from "./PanelState";
 import {
   createSignal,
   createEffect,
@@ -1794,11 +1795,10 @@ export function ReviewPane(
                             </button>
                           </div>
                           <Show when={astSearchLoading()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.astSearching")}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="loading"
+                              title={t("review.astSearching")}
+                            />
                           </Show>
                           <Show when={astSearchError()}>
                             <div class="review-empty">
@@ -1891,11 +1891,10 @@ export function ReviewPane(
                             </button>
                           </div>
                           <Show when={astPlanLoading()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.planGenerating")}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="loading"
+                              title={t("review.planGenerating")}
+                            />
                           </Show>
                           <Show when={astPlanError()}>
                             <div class="review-empty">
@@ -1938,11 +1937,10 @@ export function ReviewPane(
                             </div>
                           </Show>
                           <Show when={astApplyLoading()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.autoApplying")}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="loading"
+                              title={t("review.autoApplying")}
+                            />
                           </Show>
                           <Show when={astApplyError()}>
                             <div class="review-empty">
@@ -2049,11 +2047,10 @@ export function ReviewPane(
                             <Show
                               when={astDiffResult()}
                               fallback={
-                                <div class="review-empty">
-                                  <div class="review-empty-title">
-                                    {t("review.loadingAst")}
-                                  </div>
-                                </div>
+                                <PanelState
+                                  state="loading"
+                                  title={t("review.loadingAst")}
+                                />
                               }
                             >
                               <div class={styles.astDiffList}>
@@ -2269,9 +2266,7 @@ export function ReviewPane(
             </Show>
           }
         >
-          <div class="review-empty">
-            <div class="review-empty-title">{t("review.readingChanges")}</div>
-          </div>
+          <PanelState state="loading" title={t("review.readingChanges")} />
         </Show>
       </div>
     </div>

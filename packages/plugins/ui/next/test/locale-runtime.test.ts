@@ -180,3 +180,22 @@ test("one throwing subscriber does not strand the rest", () => {
   }
   expect(second).toBe(1);
 });
+
+test("dynamic language pack registration discovers new locales and ensureRegistered is idempotent", () => {
+  const runtime = new LocaleRuntime();
+  runtime.defineLocale({ id: "ja", label: "日本語" });
+  runtime.ensureRegistered("terminal", {
+    "zh-CN": { title: "终端" },
+    en: { title: "Terminal" },
+    ja: { title: "ターミナル" },
+  });
+  // Calling ensureRegistered again on plugin remount does not throw.
+  runtime.ensureRegistered("terminal", {
+    "zh-CN": { title: "终端" },
+    en: { title: "Terminal" },
+    ja: { title: "ターミナル" },
+  });
+  expect(runtime.getLocale().locales.map((l) => l.id)).toContain("ja");
+  runtime.setLocale("ja");
+  expect(runtime.bind("terminal")("title")).toBe("ターミナル");
+});

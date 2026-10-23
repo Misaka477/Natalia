@@ -191,6 +191,13 @@ export const SETTINGS_ROWS: readonly SettingsRowSpec[] = [
     category: "interface",
   },
   {
+    label: "Language",
+    labelKey: "settings.row.language",
+    description: "切换界面与插件语言（自动探测已注册语言包）",
+    descKey: "settings.rowDesc.language",
+    category: "interface",
+  },
+  {
     label: "运行中发送",
     labelKey: "settings.row.busySend",
     description:

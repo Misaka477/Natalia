@@ -732,6 +732,7 @@ export const zh = {
   "settings.row.gitBashPath": "Git Bash 路径",
   "settings.row.psPath": "PowerShell 路径",
   "settings.row.themeMode": "Theme Mode",
+  "settings.row.language": "语言",
   "settings.row.busySend": "运行中发送",
   "settings.row.uiPrefScope": "界面偏好保存范围",
   "settings.row.runtimePrefScope": "运行时配置保存范围",
@@ -753,10 +754,18 @@ export const zh = {
   "settings.rowDesc.psPath":
     "pwsh.exe 的全路径（仅 Windows 需要）。留空 = 依次搜索 Program Files、当前用户安装目录、PATH，最后退回系统自带的 Windows PowerShell 5.1",
   "settings.rowDesc.themeMode": "切换浅色 / 深色",
+  "settings.rowDesc.language": "切换界面与插件语言（自动探测已注册语言包）",
   "settings.rowDesc.busySend":
     "busy 时发送默认注入当前轮（next-step），或排到下一轮（next-turn）",
   "settings.rowDesc.uiPrefScope": "主题 / 密度 / 快捷键保存位置",
   "settings.rowDesc.runtimePrefScope": "模型 / 权限 / 运行时设置保存位置",
+  // plugin panel titles and groups
+  "panel.terminal": "终端",
+  "panel.files": "文件",
+  "panel.mcp-settings": "MCP",
+  "panel.skills-settings": "Skills",
+  "panelGroup.扩展": "扩展",
+  "panelGroup.Extensions": "扩展",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

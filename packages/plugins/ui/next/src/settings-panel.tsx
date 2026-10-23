@@ -27,6 +27,7 @@ import {
   type SettingsRowSpec,
 } from "./settings-rows";
 import { useConfirmDialog } from "./components/ConfirmDialog";
+import type { LocaleRuntime } from "./locale/runtime";
 
 const BUILTIN_PERMISSION_PROFILES = ["ask", "auto", "read_only"];
 
@@ -298,6 +299,7 @@ export function SettingsPanel(props: {
   onConfig?: (config: Record<string, unknown>) => void;
   runtime?: RuntimeClient;
   host?: import("@natalia/ui-host").UiPluginContext["host"];
+  locale?: LocaleRuntime;
 }) {
   const t = props.t;
   const slots = props.slots;
@@ -453,10 +455,23 @@ export function SettingsPanel(props: {
         ) ?? []
     );
   };
+  function localizePanelTitle(panel: { id: string; title?: string }): string {
+    const key = `panel.${panel.id}`;
+    const translated = t(key);
+    return translated !== key ? translated : (panel.title ?? panel.id);
+  }
+
+  function localizePanelGroup(group?: string): string {
+    if (!group) return t("settingsDlg.pluginGroup");
+    const key = `panelGroup.${group}`;
+    const translated = t(key);
+    return translated !== key ? translated : group;
+  }
+
   const groupedSettingsPanels = () => {
     const groups = new Map<string, ReturnType<typeof settingsPanels>>();
     for (const item of settingsPanels()) {
-      const group = item.panel.group ?? t("settingsDlg.pluginGroup");
+      const group = localizePanelGroup(item.panel.group);
       const list = groups.get(group) ?? [];
       list.push(item);
       groups.set(group, list);
@@ -1148,11 +1163,10 @@ export function SettingsPanel(props: {
                             >
                               <div class={styles.itemMain}>
                                 <span class={styles.itemLabel}>
-                                  {panel.panel.title}
+                                  {localizePanelTitle(panel.panel)}
                                 </span>
                                 <span class={styles.itemDescription}>
-                                  {panel.panel.group ??
-                                    t("settingsDlg.pluginGroup")}
+                                  {localizePanelGroup(panel.panel.group)}
                                 </span>
                               </div>
                             </button>
@@ -1247,6 +1261,48 @@ export function SettingsPanel(props: {
                               {props.themeMode === "dark"
                                 ? t("settingsDlg.themeDark")
                                 : t("settingsDlg.themeLight")}
+                            </span>
+                          </button>
+                        );
+                      }
+                      if (item.label === "Language" && props.locale) {
+                        const localeSnapshot = () => props.locale!.getLocale();
+                        const activeLabel = () => {
+                          const snap = localeSnapshot();
+                          return (
+                            snap.locales.find((l) => l.id === snap.active)
+                              ?.label ?? snap.active
+                          );
+                        };
+                        return (
+                          <button
+                            type="button"
+                            class={`${styles.item} ${styles.itemButton}`}
+                            onClick={() => {
+                              const snap = localeSnapshot();
+                              openSelect(
+                                t(item.labelKey),
+                                snap.locales.map((entry) => ({
+                                  value: entry.id,
+                                  label: entry.label,
+                                })),
+                                snap.active,
+                                (next) => {
+                                  props.locale?.setLocale(next);
+                                },
+                              );
+                            }}
+                          >
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
+                                {t(item.labelKey)}
+                              </span>
+                              <span class={styles.itemDescription}>
+                                {t(item.descKey)}
+                              </span>
+                            </div>
+                            <span class={styles.itemValue}>
+                              {activeLabel()}
                             </span>
                           </button>
                         );

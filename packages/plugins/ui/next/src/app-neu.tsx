@@ -3071,10 +3071,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       { id: "diff", label: t("tab.diff") },
       { id: "plan", label: t("tab.plan") },
       { id: "governance", label: t("tab.governance") },
-      ...sidePanels().map((item) => ({
-        id: item.panel.id,
-        label: item.panel.title,
-      })),
+      ...sidePanels().map((item) => {
+        const key = `panel.${item.panel.id}`;
+        const translated = t(key);
+        return {
+          id: item.panel.id,
+          label: translated !== key ? translated : item.panel.title,
+        };
+      }),
     ];
     const seen = new Set<string>();
     const unique = tabs.filter((tab) =>
@@ -3474,6 +3478,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       </div>
       <ModalLayer
         t={t}
+        locale={locale}
         slots={slots}
         ctx={props.ctx}
         state={state}

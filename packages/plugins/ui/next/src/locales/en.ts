@@ -737,6 +737,7 @@ export const en = {
   "settings.row.gitBashPath": "Git Bash path",
   "settings.row.psPath": "PowerShell path",
   "settings.row.themeMode": "Theme Mode",
+  "settings.row.language": "Language",
   "settings.row.busySend": "Send while running",
   "settings.row.uiPrefScope": "Interface prefs scope",
   "settings.row.runtimePrefScope": "Runtime config scope",
@@ -758,9 +759,17 @@ export const en = {
   "settings.rowDesc.psPath":
     "Full path to pwsh.exe (Windows only). Empty = search Program Files, the per-user install dir, then PATH, and finally fall back to Windows PowerShell 5.1",
   "settings.rowDesc.themeMode": "Switch light / dark",
+  "settings.rowDesc.language":
+    "Switch shell and plugin language (auto-detected from registered language packs)",
   "settings.rowDesc.busySend":
     "A busy send injects the current turn (next-step) or queues the next turn (next-turn)",
   "settings.rowDesc.uiPrefScope": "Where theme / density / shortcuts are saved",
   "settings.rowDesc.runtimePrefScope":
     "Where model / permission / runtime settings are saved",
+  "panel.terminal": "Terminal",
+  "panel.files": "Files",
+  "panel.mcp-settings": "MCP",
+  "panel.skills-settings": "Skills",
+  "panelGroup.扩展": "Extensions",
+  "panelGroup.Extensions": "Extensions",
 } satisfies Record<CommonKey, string>;

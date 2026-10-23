@@ -2,22 +2,22 @@
  * Locale runtime: the shell's single source of truth for product copy.
  *
  * Every UI plugin package registers its own dictionaries under its own
- * namespace (`register("mcp", { "zh-CN": zh, en })`); the shell owns the
- * shared `common` namespace. A lookup walks the active language's
+ * namespace (`ensureRegistered("mcp", { "zh-CN": zh, en })`); the shell owns
+ * the shared `common` namespace. A lookup walks the active language's
  * fallback chain inside the entry namespace, then repeats it in the
  * common namespace, and finally shows the key itself — a missing key is
  * visible in development rather than silently wrong.
  *
- * Reactivity is one signal: every bound translate function reads the
- * revision, so a language switch re-renders every consumer in one step
- * (the shell and all loaded plugins switch together).
+ * Reactivity is one signal: every bound translate function and `getLocale()`
+ * read the revision, so a language switch re-renders every consumer in one
+ * step (the shell and all loaded plugins switch together).
  */
 
 import { createSignal } from "solid-js";
-import { en as commonEn, zh as commonZh } from "../locales";
+import { SHIPPED_LANGUAGE_PACKS } from "../locales";
 
 export const LOCALE_IDS = ["zh-CN", "en"] as const;
-export type LocaleId = (typeof LOCALE_IDS)[number];
+export type LocaleId = string;
 
 /** zh-CN is the dictionary source of truth, so it terminates every chain. */
 export const FALLBACK_LOCALE: LocaleId = "zh-CN";
@@ -50,20 +50,21 @@ export interface LocalePreferenceStore {
   subscribe(listener: (key: string, value: unknown) => void): () => void;
 }
 
-const BUILT_IN_LOCALES: readonly LocaleDefinition[] = Object.freeze([
-  Object.freeze({ id: "zh-CN", label: "中文" }),
-  Object.freeze({ id: "en", label: "English" }),
-]);
+const BUILT_IN_LOCALES: readonly LocaleDefinition[] = Object.freeze(
+  SHIPPED_LANGUAGE_PACKS.map((pack) =>
+    Object.freeze({ id: pack.id, label: pack.label }),
+  ),
+);
 
 function localeKey(value: string): string {
   return value.toLowerCase();
 }
 
-/** Validate a locale id at the registration boundary. */
+/** Validate a built-in locale id at the static boundary. */
 export function isLocaleId(value: unknown): value is LocaleId {
   return (
     typeof value === "string" &&
-    (LOCALE_IDS as readonly string[]).includes(value)
+    BUILT_IN_LOCALES.some((locale) => locale.id === value)
   );
 }
 
@@ -86,16 +87,17 @@ function browserLanguageTags(): string[] {
  */
 export function detectBrowserLocale(
   languages: readonly string[] | undefined,
+  available: readonly LocaleDefinition[] = BUILT_IN_LOCALES,
 ): LocaleId | undefined {
   for (const tag of languages ?? []) {
     if (typeof tag !== "string") continue;
     const requested = localeKey(tag);
-    const exact = BUILT_IN_LOCALES.find(
+    const exact = available.find(
       (locale) => localeKey(locale.id) === requested,
     );
     if (exact) return exact.id;
     const primary = requested.split("-")[0];
-    const match = BUILT_IN_LOCALES.find(
+    const match = available.find(
       (locale) => localeKey(locale.id).split("-")[0] === primary,
     );
     if (match) return match.id;
@@ -108,32 +110,66 @@ export class LocaleRuntime {
   private readonly bound = new Map<string, LocaleTranslate>();
   private readonly chains = new Map<string, readonly LocaleId[]>();
   private readonly listeners = new Set<() => void>();
+  private readonly localeDefs = new Map<string, LocaleDefinition>();
   /** The reactivity seat: bound translate functions read it, so one
    *  switch re-renders every consumer. */
   private readonly revision = createSignal(0);
   private snapshot: LocaleSnapshot;
 
   constructor(private readonly host?: LocalePreferenceStore) {
+    for (const def of BUILT_IN_LOCALES) {
+      this.localeDefs.set(localeKey(def.id), def);
+    }
     const stored = host?.get<unknown>(LOCALE_PREFERENCE_KEY);
     const browser =
       typeof navigator === "undefined"
         ? undefined
-        : detectBrowserLocale(browserLanguageTags());
-    const active = isLocaleId(stored) ? stored : (browser ?? FALLBACK_LOCALE);
+        : detectBrowserLocale(browserLanguageTags(), this.listLocaleDefs());
+    const active =
+      typeof stored === "string" && this.hasLocale(stored)
+        ? stored
+        : (browser ?? FALLBACK_LOCALE);
     this.snapshot = Object.freeze({
       active,
-      locales: BUILT_IN_LOCALES,
+      locales: this.listLocaleDefs(),
       revision: 0,
     });
     host?.subscribe((key, value) => {
-      if (key === LOCALE_PREFERENCE_KEY && isLocaleId(value)) {
+      if (
+        key === LOCALE_PREFERENCE_KEY &&
+        typeof value === "string" &&
+        this.hasLocale(value)
+      ) {
         this.adopt(value);
       }
     });
   }
 
-  /** The current immutable snapshot. */
+  private listLocaleDefs(): readonly LocaleDefinition[] {
+    return Object.freeze([...this.localeDefs.values()]);
+  }
+
+  private hasLocale(id: string): boolean {
+    return this.localeDefs.has(localeKey(id));
+  }
+
+  /**
+   * Register a discoverable language pack definition (id + native label).
+   */
+  defineLocale(definition: LocaleDefinition): void {
+    const id = definition.id.trim();
+    if (!id) throw new Error("locale definition requires a non-empty id");
+    const frozen = Object.freeze({
+      id,
+      label: definition.label.trim() || id,
+    });
+    this.localeDefs.set(localeKey(id), frozen);
+    this.publish(this.snapshot.active, false);
+  }
+
+  /** The current immutable snapshot (reactive in Solid render tracking). */
   getLocale(): LocaleSnapshot {
+    this.revision[0]();
     return this.snapshot;
   }
 
@@ -153,7 +189,7 @@ export class LocaleRuntime {
    */
   register(
     ns: string,
-    dicts: Partial<Record<LocaleId, LocaleDict>>,
+    dicts: Record<string, LocaleDict | undefined>,
   ): () => void {
     let locales = this.dicts.get(ns);
     if (!locales) {
@@ -194,6 +230,31 @@ export class LocaleRuntime {
   }
 
   /**
+   * Idempotent dictionary registration for dynamically mounted plugin UIs:
+   * merges or replaces the namespace's dictionaries without throwing on
+   * remount.
+   */
+  ensureRegistered(
+    ns: string,
+    dicts: Record<string, LocaleDict | undefined>,
+  ): void {
+    let locales = this.dicts.get(ns);
+    if (!locales) {
+      locales = new Map();
+      this.dicts.set(ns, locales);
+    }
+    let changed = false;
+    for (const [locale, dict] of Object.entries(dicts)) {
+      if (!dict || typeof dict !== "object") continue;
+      if (locales.get(localeKey(locale)) !== dict) {
+        locales.set(localeKey(locale), dict);
+        changed = true;
+      }
+    }
+    if (changed) this.publish(this.snapshot.active, false);
+  }
+
+  /**
    * Bind a namespace to a translate function. The returned reference is
    * stable per namespace and reads the revision at call time, so any
    * component that translates during render re-renders on a switch.
@@ -221,9 +282,10 @@ export class LocaleRuntime {
    * active value may be a browser-derived resolution nothing has stored.
    */
   setLocale(id: string): void {
-    if (!isLocaleId(id)) throw new Error(`locale "${id}" is not registered`);
-    this.host?.set(LOCALE_PREFERENCE_KEY, id);
-    this.adopt(id);
+    const def = this.localeDefs.get(localeKey(id));
+    if (!def) throw new Error(`locale "${id}" is not registered`);
+    this.host?.set(LOCALE_PREFERENCE_KEY, def.id);
+    this.adopt(def.id);
   }
 
   /** Adopt a selection without writing it back (a preference change). */
@@ -275,7 +337,7 @@ export class LocaleRuntime {
   private publish(active: LocaleId, changed: boolean): void {
     this.snapshot = Object.freeze({
       active,
-      locales: this.snapshot.locales,
+      locales: this.listLocaleDefs(),
       revision: this.snapshot.revision + 1,
     });
     this.revision[1](this.snapshot.revision);
@@ -315,11 +377,16 @@ export type LocaleTranslate = (
   params?: Record<string, unknown>,
 ) => string;
 
-/** Create the shell's runtime: common dictionaries registered, preference wired. */
+/** Create the shell's runtime: shipped language packs registered, preference wired. */
 export function createLocaleRuntime(
   host?: LocalePreferenceStore,
 ): LocaleRuntime {
   const runtime = new LocaleRuntime(host);
-  runtime.register(COMMON_NS, { "zh-CN": commonZh, en: commonEn });
+  const dicts: Record<string, LocaleDict> = {};
+  for (const pack of SHIPPED_LANGUAGE_PACKS) {
+    runtime.defineLocale({ id: pack.id, label: pack.label });
+    dicts[pack.id] = pack.dictionary;
+  }
+  runtime.register(COMMON_NS, dicts);
   return runtime;
 }

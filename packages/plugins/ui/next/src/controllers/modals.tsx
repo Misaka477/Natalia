@@ -21,6 +21,7 @@ import { SearchPanel } from "../search-panel";
 import { SessionActionsPanel } from "../session-actions-panel";
 import { SettingsPanel } from "../settings-panel";
 import type { CategoryId, RegisteredToolView } from "../settings-panel";
+import type { LocaleRuntime } from "../locale/runtime";
 import { StashPanel } from "../stash-panel";
 import { StatusPanel } from "../status-panel";
 import { WorkspacePanel } from "../workspace-panel";
@@ -40,6 +41,7 @@ const perfLog = (...args: unknown[]) => {
 export interface ModalLayerProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
+  locale?: LocaleRuntime;
   slots: any;
   state: () => AppState;
   config: () => ConfigV4 | undefined;
@@ -261,6 +263,7 @@ export function ModalLayer(props: ModalLayerProps) {
       />
       <SettingsPanel
         t={t}
+        locale={props.locale}
         slots={props.slots}
         host={props.ctx.host}
         open={props.settingsOpen()}

@@ -209,8 +209,11 @@ export function MainInputArea(props: MainInputAreaProps) {
               };
               void submit();
             }
+            // No onStop: the run's stop lives in the runbar, above this
+            // dock. The composer keeps its send key and its busy state; the
+            // control that interrupts a run is the runbar's, because the
+            // runbar is the run's surface and this is the message's.
           }}
-          onStop={() => props.ctx.runtime.cancel?.()}
         />
       </Show>
     </>
@@ -267,11 +270,7 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         placeholder={t("input.chatPlaceholder")}
         busy={Boolean(naviChatActivity())}
         onInput={setChatDraft}
-        onStop={() =>
-          void props.ctx.runtime.naviChat?.abort?.(
-            selectedSessionID() || state().sessionID,
-          )
-        }
+        // No onStop: the runbar carries the stop for both agents.
         attachments={chatAttachments()}
         onRemoveAttachment={(path) =>
           setChatAttachments(

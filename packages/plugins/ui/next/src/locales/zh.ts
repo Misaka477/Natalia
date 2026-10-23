@@ -157,6 +157,7 @@ export const zh = {
   "composer.placeholder": "输入消息...",
   "composer.attachTitle": "添加附件",
   "composer.stopTitle": "停止",
+  "composer.stop": "停止",
   "composer.sendInjectTitle": "发送并注入当前轮",
   "composer.sendTitle": "发送",
   // settings: categories (labels stay the stable row identity)

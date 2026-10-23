@@ -147,6 +147,7 @@ export const en = {
   "composer.placeholder": "Type a message...",
   "composer.attachTitle": "Add an attachment",
   "composer.stopTitle": "Stop",
+  "composer.stop": "Stop",
   "composer.sendInjectTitle": "Send and inject into the current turn",
   "composer.sendTitle": "Send",
   "settings.cat.model": "Model & Agent",

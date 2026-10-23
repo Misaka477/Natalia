@@ -417,10 +417,18 @@ export function MainPanes(props: MainPanesProps) {
                     <SlotMount slots={slots} name="transcript.empty" t={t} />
                   </div>
                 </Show>
-                <div
-                  class="neu-activity-bar"
-                  data-running={Boolean(state().natalia.activeTurn)}
-                >
+              </div>
+            </Show>
+
+            {/* THE RUNBAR — the active run, in one band above the input.
+                What is running, how long it has been, the model, the
+                reasoning档 and the permission rung it is running under, and
+                the one control that stops it. It used to be an activity
+                line above a toolbar of selects inside each agent's own
+                pane; now it is one bar whichever agent the pane shows. */}
+            <div class={styles.runbar}>
+              <Show when={focusAgent() === "natalia"}>
+                <div class="neu-activity-bar">
                   <span class="neu-activity-pulse" />
                   <Show when={state().goal}>
                     {(goal) => (
@@ -441,128 +449,33 @@ export function MainPanes(props: MainPanesProps) {
                                 : goal()!.objective}
                             </span>
                             <span class={styles.chipRound}>
-                              {`Round ${goal()!.roundsStarted}${
-                                goal()!.maxGoalRounds === 0
-                                  ? ""
-                                  : `/${goal()!.maxGoalRounds}`
-                              }`}
+                              R{goal()!.roundsStarted}
                             </span>
-                            {/* A completed goal SAYS so. The chip used to
-                                  keep showing the round count with the
-                                  pause/resume button simply gone — neither
-                                  disappearing (the reference harness's
-                                  GoalBar drops a complete goal) nor stating
-                                  the completion, so a finished goal read as
-                                  a stalled one until the human cleared it
-                                  by hand. */}
                             <Show when={goal()!.phase === "complete"}>
-                              <span
-                                class={styles.chipDone}
-                                title={t("transcript.goalDoneTitle")}
-                              >
-                                {t("transcript.goalDone")}
-                              </span>
+                              <span class={styles.chipDone}>done</span>
                             </Show>
                           </span>
-                          <Show when={goal()!.phase !== "complete"}>
-                            <button
-                              class={`${styles.action} ${styles.toggle}`}
-                              data-phase={goal()!.phase}
-                              disabled={goalBusy()}
-                              title={
-                                goal()!.phase === "active"
-                                  ? t("transcript.goalPause")
-                                  : t("transcript.goalResume")
-                              }
-                              onClick={() =>
-                                void runGoalControl(
-                                  goal()!.phase === "active"
-                                    ? "pause"
-                                    : "resume",
-                                )
-                              }
-                            >
-                              {goal()!.phase === "active" ? "❚❚" : "▶"}
-                            </button>
-                          </Show>
                           <button
-                            class={styles.action}
+                            type="button"
+                            class={`${styles.action} ${styles.toggle}`}
                             disabled={goalBusy()}
-                            title={t("transcript.goalEditTitle")}
-                            onClick={() => openGoalEditor(goal()!)}
+                            onClick={() =>
+                              void runGoalControl(
+                                goal()!.phase === "paused" ? "resume" : "pause",
+                              )
+                            }
                           >
-                            ✎
+                            {goal()!.phase === "paused" ? "▶" : "⏸"}
                           </button>
                           <button
+                            type="button"
                             class={`${styles.action} ${styles.clear}`}
                             disabled={goalBusy()}
-                            title={t("transcript.goalClearTitle")}
                             onClick={() => void runGoalControl("clear")}
                           >
                             ✕
                           </button>
                         </span>
-                        <Show when={goalEditOpen()}>
-                          <div class={styles.editor}>
-                            <label class={styles.editorField}>
-                              <span>{t("transcript.goalLabel")}</span>
-                              <textarea
-                                rows={2}
-                                value={goalEditObjective()}
-                                onInput={(event) =>
-                                  setGoalEditObjective(
-                                    event.currentTarget.value,
-                                  )
-                                }
-                                onKeyDown={(event) => {
-                                  if (
-                                    event.key === "Enter" &&
-                                    !event.shiftKey
-                                  ) {
-                                    event.preventDefault();
-                                    void saveGoalEditor(goal()!);
-                                  } else if (event.key === "Escape")
-                                    setGoalEditOpen(false);
-                                }}
-                              />
-                            </label>
-                            <label
-                              class={`${styles.editorField} ${styles.editorCap}`}
-                            >
-                              <span>{t("transcript.goalCapLabel")}</span>
-                              <input
-                                type="number"
-                                min="0"
-                                placeholder={t("transcript.goalCapHint")}
-                                value={goalEditCap()}
-                                onInput={(event) =>
-                                  setGoalEditCap(event.currentTarget.value)
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter")
-                                    void saveGoalEditor(goal()!);
-                                  else if (event.key === "Escape")
-                                    setGoalEditOpen(false);
-                                }}
-                              />
-                            </label>
-                            <div class={styles.editorActions}>
-                              <button
-                                class={styles.editorSave}
-                                disabled={goalBusy()}
-                                onClick={() => void saveGoalEditor(goal()!)}
-                              >
-                                {t("common.save")}
-                              </button>
-                              <button
-                                class={styles.editorCancel}
-                                onClick={() => setGoalEditOpen(false)}
-                              >
-                                {t("common.cancel")}
-                              </button>
-                            </div>
-                          </div>
-                        </Show>
                       </span>
                     )}
                   </Show>
@@ -579,15 +492,6 @@ export function MainPanes(props: MainPanesProps) {
                       : "idle"}
                   </span>
                 </div>
-              </div>
-            </Show>
-
-            {/* The ONE docked input, at the pane's bottom edge. Whichever
-                agent the pane is showing, this is the box the reader types
-                into — the shell used to give each agent its own composer
-                inside its own pane. */}
-            <div class={styles.inputDock}>
-              <Show when={focusAgent() === "natalia"}>
                 <div class="neu-main-toolbar">
                   <NeuSelect
                     value={modelSelectionSignal()?.modelID ?? ""}
@@ -682,6 +586,19 @@ export function MainPanes(props: MainPanesProps) {
                     menuPosition="top"
                   />
                 </div>
+                {/* The run's one control: stop it. It lives here, in the
+                    runbar, rather than beside the send key — the runbar is
+                    the run's surface and the dock is the message's. */}
+                <Show when={state().natalia.activeTurn}>
+                  <button
+                    type="button"
+                    class={styles.runbarStop}
+                    onClick={() => props.ctx.runtime.cancel?.()}
+                    title={t("composer.stopTitle")}
+                  >
+                    {t("composer.stop")}
+                  </button>
+                </Show>
                 {/* A switch that did not take says so. A control that looks
                       alive while writing nothing is the exact failure this path
                       had before the runtime face was wired. */}
@@ -796,6 +713,9 @@ export function MainPanes(props: MainPanesProps) {
                     </Show>
                   </div>
                 </Show>
+              </Show>
+
+              <Show when={focusAgent() === "navi"}>
                 <div
                   class="neu-activity-bar"
                   data-running={Boolean(naviChatActivity())}
@@ -807,9 +727,6 @@ export function MainPanes(props: MainPanesProps) {
                       : "idle"}
                   </span>
                 </div>
-              </Show>
-
-              <Show when={focusAgent() === "navi"}>
                 <div class="neu-main-toolbar">
                   <NeuSelect
                     value={chatProfile().normal?.modelID ?? ""}
@@ -896,6 +813,20 @@ export function MainPanes(props: MainPanesProps) {
                     menuPosition="top"
                   />
                 </div>
+                <Show when={naviChatActivity()}>
+                  <button
+                    type="button"
+                    class={styles.runbarStop}
+                    onClick={() =>
+                      void props.ctx.runtime.naviChat?.abort?.(
+                        selectedSessionID() || state().sessionID,
+                      )
+                    }
+                    title={t("composer.stopTitle")}
+                  >
+                    {t("composer.stop")}
+                  </button>
+                </Show>
                 <ChatInputArea
                   slots={slots}
                   t={t}

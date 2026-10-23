@@ -3035,6 +3035,9 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 }
 
 /* ===== Workspace add panel ===== */
+/* SHARED VOCABULARY — the workspace modal window and body are used by
+   both the add-workspace panel and the workspace-settings panel; they
+   stay global under the cross-region rule. */
 .neu-workspace-window {
   width: min(480px, 90vw);
   background: var(--neu-bg-light);
@@ -3047,17 +3050,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-/* ===== Workspace success ===== */
-
-/* ===== Workspace error ===== */
-.neu-workspace-error {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--neu-bg);
-  color: var(--neu-error);
-  font-size: 12px;
 }
 
 /* ===== Smooth transitions ===== */

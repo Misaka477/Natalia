@@ -1,3 +1,4 @@
+import styles from "./styles/workspace-panel.module.css";
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { RuntimeClient } from "@anthelia/contracts";
 import { PathBrowseButton } from "./path-browse-button";
@@ -59,9 +60,7 @@ export function WorkspacePanel(props: {
           </div>
           <div class="neu-workspace-body">
             <Show when={props.error || localError()}>
-              <div class="neu-workspace-error">
-                {props.error || localError()}
-              </div>
+              <div class={styles.error}>{props.error || localError()}</div>
             </Show>
             <input
               class="neu-form-input"
@@ -70,7 +69,7 @@ export function WorkspacePanel(props: {
               onInput={(event) => setPath(event.currentTarget.value)}
             />
             <Show when={busy()}>
-              <div class="neu-workspace-error">{t("workspace.adding")}</div>
+              <div class={styles.error}>{t("workspace.adding")}</div>
             </Show>
             <div class="neu-form-actions">
               {/* The chooser rides the SAME action row as 取消/添加, not a row of

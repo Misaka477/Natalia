@@ -1,0 +1,11 @@
+/* The workspace add panel: its error row. The window and body are shared
+   with the workspace-settings panel and stay global as the workspace
+   modal's chrome. Tokens only. */
+
+.error {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-error);
+  font-size: 12px;
+}

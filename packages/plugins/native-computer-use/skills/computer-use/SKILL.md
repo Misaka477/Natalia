@@ -60,18 +60,17 @@ reports the verdict:
   wrong point twice is how a dialog gets dismissed by accident.
 - A tiny change (a caret, a hover tint) is noise, not a response.
 
-`computer_fill` reports each phase (locate → focus → clear → type →
-submit → confirm) and names the one that failed, with what it saw: a field
-that did not accept the text and a target that was busy are different
-problems, and `ok: false` alone is not a report.
+`computer_fill` reports each phase (locate → focus → clear → type → submit
+→ confirm) and names the one that failed, with what it saw: a field that
+did not accept the text and a target that was busy are different problems,
+and `ok: false` alone is not a report.
 
 ## Waiting instead of guessing
 
-`computer_wait` polls a condition until a deadline — a control enabled or
-named, a window title, a window in front, a pixel region stable for a
-while. Use it instead of a sleep: a delay is a guess, a wait is a fact.
-When it times out it says so and tells you to re-read rather than wait
-longer.
+`computer_wait` polls a condition until a deadline — a control enabled, a
+window title, a window in front, a pixel region stable. Use it instead of a
+sleep: a delay is a guess, a wait is a fact. When it times out it says so
+and tells you to re-read rather than wait longer.
 
 ## Scope and honesty
 

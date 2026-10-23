@@ -1,453 +1,534 @@
-/* The left column itself: the workspace column the session tree lives
-   in, its title and its scrolling body.
-
-   These three rules were dropped when the shell's stylesheet was
-   rewritten for the token layer. The markup kept the class names, so
-   the column lost its surface, the title lost its type and the body
-   lost its scroll — and nothing in the suite noticed, because a class
-   with no rule is not an error anywhere in the toolchain. They are
-   restored here, in the module that owns the column, with the values
-   the shipped web package's sheet carries (verified by reading
-   packages/plugins/ui/web/src/styles/base.ts).
-
-   The shell owns the geometry AROUND the column — the app row, the
-   resizer, the responsive passes. This module owns the column's own
-   surface. Tokens only. */
+/* Left column shell and workspace/session browser styles.
+   Tokens only. */
 
 .sidebar {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
   box-shadow: var(--neu-elevation-3);
-  padding: 18px;
+  padding: 6px 12px;
+  box-sizing: border-box;
   overflow: hidden;
   min-width: 0;
   position: relative;
+  color: var(--neu-text);
+  font-size: 14px;
 }
 
-.title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neu-muted);
-  letter-spacing: 0.04em;
-  margin-bottom: 14px;
+.collapsed {
+  width: 56px;
+  padding: 18px 10px 6px;
+  align-items: center;
+  overflow: visible;
 }
 
-/* Inside the compact header the row supplies the spacing. */
-.header .title {
-  margin-bottom: 0;
-}
-
-.content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-}
-
-/* The shell's resize pass named these two classes from the global
-   sheet; they are local now, so the pass travels with them. */
 :global(.neu-shell[data-resizing="true"]) .sidebar {
   transition: none;
   contain: layout;
   overflow-anchor: none;
 }
 
-:global(.neu-shell[data-resizing="true"]) .content {
+:global(.neu-shell[data-resizing="true"]) .list {
   pointer-events: none;
 }
 
 @media (max-width: 1200px) {
-  .sidebar {
+  .sidebar:not(.collapsed) {
     max-width: 240px;
   }
 }
 
-/* The left column's own chrome, which the shell owns: the brand row,
-   New Session, the global panel rows and the foot. The browsing region
-   below them is the session tree's. Tokens only. */
-
-.brand {
+/* Top logo row: brand on the left, collapse/expand toggle on the right. */
+.logoRow {
+  flex: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
+  height: 52px;
+  padding: 6px 0 6px 4px;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.collapsed .logoRow {
+  height: 36px;
+  width: 36px;
+  padding: 0;
   margin-bottom: 12px;
+  justify-content: center;
+}
+
+.brand {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.brandIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
 }
 
 .brandMark {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  background: var(--neu-accent);
-  color: var(--neu-on-accent);
-  font-size: 13px;
-  font-weight: 700;
+}
+
+.brandLogoImg {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
 }
 
 .brandName {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 24px;
   color: var(--neu-text);
+}
+
+.brandTitle {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* New Session: the column's one action, and the shell's. */
-.newSession {
-  flex-shrink: 0;
-  width: 100%;
-  padding: 8px 12px;
-  margin-bottom: 12px;
+.brandBadge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--neu-text);
+  color: var(--neu-bg-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+}
+
+.iconButton {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: var(--neu-radius-3);
-  background: var(--neu-bg-light);
-  color: var(--neu-accent);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
   cursor: pointer;
+  color: var(--neu-muted);
+}
+
+.iconButton:hover {
+  background: var(--neu-hover-overlay);
+  color: var(--neu-text);
+}
+
+.collapsed .iconButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--neu-text);
+}
+
+.toggle {
+  flex-shrink: 0;
+}
+
+/* Collapsed rail logo swap: rests as the brand mark, hovers to panel icon. */
+.collapsed .toggle .panelIcon {
+  display: none;
+}
+
+.collapsed .toggle:hover .panelIcon {
+  display: inline-flex;
+}
+
+.collapsed .toggle:hover .railMark {
+  display: none;
+}
+
+.railMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panelIcon {
+  display: inline-flex;
+}
+
+/* Tooltips on rail and header controls. */
+.iconButton[data-tooltip],
+.newSession[data-tooltip],
+.settingsSeat[data-tooltip],
+.railIconBtn[data-tooltip] {
+  position: relative;
+}
+
+.iconButton[data-tooltip]::after,
+.newSession[data-tooltip]::after,
+.settingsSeat[data-tooltip]::after,
+.railIconBtn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
   box-shadow: var(--neu-elevation-2);
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    visibility 0s linear 0.12s;
+}
+
+.iconButton[data-tooltip]:hover::after,
+.newSession[data-tooltip]:hover::after,
+.settingsSeat[data-tooltip]:hover::after,
+.railIconBtn[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* New Session: 38px bar when wide, 36x36 icon control in the rail. */
+.newSession {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% - 4px);
+  height: 38px;
+  padding: 8px 12px;
+  margin: 0 2px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--neu-hairline-strong);
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  cursor: pointer;
+  overflow: visible;
 }
 
 .newSession:hover {
-  color: var(--neu-accent-soft);
-  box-shadow: var(--neu-elevation-1);
+  background: var(--neu-hover-overlay);
 }
 
-.newSession:active {
-  box-shadow: var(--neu-inset-2);
+.collapsed .newSession {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0 0 12px;
+  border-color: transparent;
+  background: transparent;
 }
 
-/* The global panel rows. Empty until a deployment fills the hole. */
+.collapsed .newSession:hover {
+  background: var(--neu-hover-overlay);
+}
+
+.newSessionLabelMask {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newSessionContent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.newSessionLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .panellist {
-  flex-shrink: 0;
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
-/* The browsing region: everything between the panel rows and the foot. */
 .workspaces {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  width: 100%;
+  overflow: visible;
 }
 
-/* The foot: an action beside the settings seat, then the seat. */
+/* Foot area: footer actions above settings trigger seat. */
 .foot {
-  flex-shrink: 0;
+  flex: none;
   display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: auto;
+}
+
+.collapsed .foot {
   align-items: center;
-  gap: 8px;
-  padding-top: 10px;
-  margin-top: 8px;
-  border-top: 1px solid var(--neu-hairline);
+}
+
+.footerActions,
+.settingsArea {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+}
+
+.collapsed .footerActions,
+.collapsed .settingsArea {
+  width: auto;
+  justify-content: center;
 }
 
 .settingsSeat {
   flex: 1;
-  padding: 7px 12px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px 0 8px;
   border: none;
-  border-radius: var(--neu-radius-3);
+  border-radius: 12px;
   background: transparent;
-  color: var(--neu-muted);
+  color: var(--neu-text);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 22px;
   text-align: left;
   cursor: pointer;
 }
 
 .settingsSeat:hover {
   background: var(--neu-hover-overlay);
-  color: var(--neu-text);
 }
 
-/* The sidebar's compact header: the actions cluster, the icon buttons
-   with their tooltips, the session search field and the overflow menu.
-   Every rule in this cluster is session-tree-only, verified before the
-   cut. Tokens only. */
+.collapsed .settingsSeat {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
 
-.header {
+.settingsLabel {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Browser root inside `sidebar.workspaces`. */
+.browserRoot {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
 }
 
-.actions {
+.rail {
+  align-items: center;
+}
+
+.railControls {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
 }
 
-.iconBtn {
+.railIconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--neu-muted);
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
-}
-
-.iconBtn:hover {
-  background: var(--neu-bg);
-  color: var(--neu-accent);
-}
-
-.iconBtn[data-active="true"] {
-  background: var(--neu-bg);
-  color: var(--neu-accent);
-  box-shadow: var(--neu-inset-2);
-}
-
-.newWorkspaceBtn:hover {
-  color: var(--neu-accent);
-}
-
-.iconBtn[data-tooltip] {
-  position: relative;
-}
-
-.iconBtn[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-2px);
-  box-shadow: var(--neu-elevation-1);
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease,
-    visibility 0s linear 0.12s;
-  pointer-events: none;
-}
-
-.iconBtn[data-tooltip]:hover::after {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  transition-delay: 0s;
-}
-
-.search {
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 10px;
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  font-family: inherit;
-  font-size: 12px;
-  outline: none;
-  box-shadow: var(--neu-inset-2);
-}
-
-.menu {
-  position: absolute;
-  top: 56px;
-  right: 18px;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 148px;
-  padding: 6px;
-  background: var(--neu-bg-light);
   border-radius: 12px;
-  box-shadow: var(--neu-elevation-4);
-}
-
-.menuItem {
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
   background: transparent;
   color: var(--neu-text);
-  font-family: inherit;
-  font-size: 12px;
-  text-align: left;
   cursor: pointer;
 }
 
-.menuItem:hover {
-  background: var(--neu-bg);
-  color: var(--neu-accent);
+.railIconBtn:hover {
+  background: var(--neu-hover-overlay);
 }
 
-.menuToggle[data-active="true"] {
-  background: var(--neu-bg);
-  color: var(--neu-accent);
-  box-shadow: var(--neu-inset-2);
-}
-
-/* The tree's group titles and the workspace rows. */
-
-.treeTitle {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--neu-muted);
-  padding: 4px 6px 10px;
-}
-
-.workspaceRow {
+/* Section header: title, inline expanding search, view options and add workspace. */
+.sectionHeader {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  margin: 1px 0;
-  color: var(--neu-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.workspaceRow .workspaceName {
-  font-size: 11px;
-  font-weight: 600;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 36px;
+  padding-left: 4px;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+  border-radius: 10px;
   color: var(--neu-muted);
 }
 
-.workspaceName {
-  flex: 1;
+.sectionLabel {
+  flex: none;
+  max-width: 45%;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
-  color: var(--neu-text);
+  line-height: 20px;
+  opacity: 1;
+  transition:
+    max-width 0.18s ease,
+    opacity 0.12s ease;
 }
 
-/* The workspace row sub-region: the folder, its chevron and icon, the
-   hover actions, the rename input, the menu button and its popups. */
-
-.workspaceGroup {
-  display: flex;
-  flex-direction: column;
+.sectionLabelHidden {
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
 }
 
-.folder {
+.searchSlot {
+  flex: 1;
+  max-width: 28px;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  margin: 1px 0;
-  border-radius: var(--neu-radius-sm);
-  cursor: pointer;
-  position: relative;
-  user-select: none;
-  color: var(--neu-text);
-  font-size: 13px;
-  font-weight: 500;
+  margin-left: auto;
+  transition: max-width 0.18s ease;
 }
 
-.folder:hover,
-.folder[data-menu-open="true"] {
+.searchSlotExpanded {
+  max-width: 100%;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neu-muted);
+  overflow: hidden;
+}
+
+.searchBoxExpanded {
+  height: 30px;
+  padding-right: 4px;
+  border: 1px solid var(--neu-hairline-strong);
+  border-radius: 10px;
   background: var(--neu-bg);
 }
 
-.chevron {
-  display: none;
+.searchButton {
+  flex: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--neu-muted);
+  color: inherit;
   cursor: pointer;
-  transition: transform 0.15s ease;
 }
 
-.folder:hover .chevron,
-.folder:focus-within .chevron,
-.folder[data-menu-open="true"] .chevron {
-  display: inline-flex;
-}
-
-.chevron[data-open="true"] {
-  transform: rotate(90deg);
-}
-
-.folderIcon {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--neu-accent);
-  opacity: 0.65;
-}
-
-.folder:hover .folderIcon,
-.folder:focus-within .folderIcon,
-.folder[data-menu-open="true"] .folderIcon {
-  display: none;
-}
-
-.folder:hover .workspaceActions,
-.folder:focus-within .workspaceActions,
-.folder[data-menu-open="true"] .workspaceActions,
-.workspaceActions:hover {
-  display: inline-flex;
-}
-
-.workspaceActions {
-  display: none;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.renameInput {
-  flex: 1;
-  min-width: 0;
-  height: 22px;
-  padding: 0 6px;
-  border: none;
-  border-radius: 6px;
-  background: var(--neu-bg-light);
+.searchButton:hover {
+  background: var(--neu-hover-overlay);
   color: var(--neu-text);
-  font-family: inherit;
-  font-size: 12px;
-  outline: none;
-  box-shadow: var(--neu-inset-1);
 }
 
-.menuBtn {
+.searchBoxExpanded .searchButton:hover {
+  background: transparent;
+}
+
+.searchInput {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--neu-text);
+}
+
+.searchBoxExpanded .searchInput {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.clearButton {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -461,22 +542,346 @@
   cursor: pointer;
 }
 
-.menuBtn:hover {
-  background: var(--neu-bg-light);
+.clearButton:hover {
+  background: var(--neu-hover-overlay);
   color: var(--neu-text);
+}
+
+.headerActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 64px;
+  opacity: 1;
+  transition:
+    max-width 0.18s ease,
+    opacity 0.12s ease;
+}
+
+.headerActionsHidden {
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+}
+
+.iconBtn:hover,
+.iconBtn[data-active="true"] {
+  background: var(--neu-hover-overlay);
+  color: var(--neu-text);
+}
+
+.newWorkspaceBtn:hover {
+  color: var(--neu-text);
+}
+
+/* View options dropdown menu. */
+.viewOptionsMenu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline);
+  border-radius: 12px;
+  box-shadow: var(--neu-elevation-4);
+}
+
+.menuSectionLabel {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neu-muted);
+}
+
+.menuSeparator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--neu-hairline);
+}
+
+.menuItem {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--neu-hover-overlay);
+}
+
+.menuToggle[data-active="true"] {
+  background: var(--neu-hover-overlay);
+  color: var(--neu-accent);
+  font-weight: 600;
+}
+
+/* Scrolling tree area and bottom fade. */
+.listArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.treeBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 16px;
+}
+
+.fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, var(--neu-bg-light));
+  pointer-events: none;
+}
+
+.groupSection {
+  position: relative;
+}
+
+.groupSection + .groupSection {
+  margin-top: 4px;
+}
+
+.groupSection > * + * {
+  margin-top: 2px;
+}
+
+/* Workspace header row (34px) and Session row (32px). */
+.projectRow,
+.sessionRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  padding: 0 8px;
+  padding-inline-start: calc(8px + var(--workspace-indent, 0px));
+  cursor: pointer;
+  user-select: none;
+  color: var(--neu-text);
+  box-sizing: border-box;
+}
+
+.projectRow {
+  height: 34px;
+  gap: 6px;
+}
+
+.sessionRow {
+  height: 32px;
+  gap: 0;
+}
+
+.projectRow:hover,
+.sessionRow:hover,
+.projectRow[data-menu-open="true"],
+.sessionRow[data-menu-open="true"],
+.sessionRow[data-selected="true"] {
+  background: var(--neu-hover-overlay);
+}
+
+.slot {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neu-muted);
+}
+
+/* Workspace leading slot: folder by default, chevron on hover. */
+.folderIcon {
+  color: var(--neu-muted);
+}
+
+.folderIcon[data-active="true"] {
+  color: var(--neu-accent);
+}
+
+.chevron {
+  display: none;
+  color: var(--neu-muted);
+  transition: transform 0.15s ease;
+}
+
+.chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+.projectRow:hover .chevron,
+.projectRow[data-menu-open="true"] .chevron {
+  display: inline-flex;
+}
+
+.projectRow:hover .folderIcon,
+.projectRow[data-menu-open="true"] .folderIcon {
+  display: none;
+}
+
+.projectText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.workspaceName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--neu-text);
+}
+
+.sessionTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0 6px 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.sessionRow[data-archived="true"] .sessionTitle {
+  color: var(--neu-muted);
+}
+
+.sessionTime {
+  flex: none;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--neu-muted);
+}
+
+.pinIndicator {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  color: var(--neu-muted);
+}
+
+/* Hover swaps trailing time/pin for rowActions. */
+.rowActions {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.projectRow:hover .rowActions,
+.sessionRow:hover .rowActions,
+.projectRow[data-menu-open="true"] .rowActions,
+.sessionRow[data-menu-open="true"] .rowActions {
+  display: inline-flex;
+}
+
+.sessionRow:hover .sessionTime,
+.sessionRow[data-menu-open="true"] .sessionTime,
+.sessionRow:hover .pinIndicator,
+.sessionRow[data-menu-open="true"] .pinIndicator {
+  display: none;
+}
+
+.rowIconBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+}
+
+.rowIconBtn:hover {
+  color: var(--neu-text);
+  background: var(--neu-bg);
+}
+
+.renameInput,
+.editInput {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--neu-hairline-strong);
+  border-radius: 6px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
 }
 
 .popup {
   position: absolute;
   top: calc(100% + 2px);
   right: 0;
-  z-index: 20;
+  z-index: 30;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 130px;
+  min-width: 140px;
   padding: 4px;
   background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline);
   border-radius: 10px;
   box-shadow: var(--neu-elevation-4);
 }
@@ -485,7 +890,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -498,8 +903,7 @@
 }
 
 .popup button:hover {
-  background: var(--neu-bg);
-  color: var(--neu-accent);
+  background: var(--neu-hover-overlay);
 }
 
 .popupDanger {
@@ -511,133 +915,40 @@
   color: var(--neu-error);
 }
 
-.count {
-  font-size: 11px;
-  color: var(--neu-muted);
-  flex-shrink: 0;
-  min-width: 16px;
-  text-align: right;
-}
-
-.remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+.sessionOverflowButton {
+  width: 100%;
+  height: 28px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
+  padding: 0 12px 0 calc(28px + var(--workspace-indent, 0px));
   background: transparent;
-  color: var(--neu-muted);
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--neu-muted);
 }
 
-.remove:hover {
-  background: var(--neu-bg);
+.sessionOverflowButton:hover {
   color: var(--neu-text);
 }
 
-/* The tree's rows: the row itself with its states, the hover actions, the
-   rename control and the label. */
-
-.row {
+.emptyState {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 12px;
-  margin: 4px 0;
-  border: none;
-  border-radius: var(--neu-radius-sm);
-  background: transparent;
-  color: var(--neu-text);
-  font-family: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.row:active {
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-
-.row:focus-visible {
-  outline: 2px solid var(--neu-accent);
-  outline-offset: 2px;
-}
-
-.row:hover {
-  background: var(--neu-bg);
-  color: var(--neu-text);
-}
-
-.row[data-selected="true"] {
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-  color: var(--neu-text);
-}
-
-.actions {
-  display: none;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.row:hover .actions,
-.row:focus-within .actions {
-  display: inline-flex;
-}
-
-.edit {
-  padding: 2px 4px;
-  border: none;
-  background: transparent;
+  margin-top: 64px;
+  padding: 0 12px;
   color: var(--neu-muted);
-  cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
-.edit:hover {
-  color: var(--neu-accent);
-}
-
-.editInput {
-  flex: 1;
-  min-width: 0;
-  padding: 3px 6px;
+.emptyAction {
+  padding: 0;
   border: none;
-  border-radius: 6px;
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  font-size: 12px;
-  outline: none;
-  box-shadow: var(--neu-inset-1);
-}
-
-.label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The smooth-transition pass the global sheet applies across regions;
-   these two rows were in that list, so the module carries it for them. */
-.row,
-.workspaceRow {
-  transition:
-    box-shadow 0.25s ease,
-    background-color 0.25s ease,
-    color 0.25s ease,
-    transform 0.25s ease;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--neu-accent);
 }

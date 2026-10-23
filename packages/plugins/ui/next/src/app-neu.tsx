@@ -3180,6 +3180,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     <SessionTreeRegion
       t={t}
       ctx={props.ctx}
+      wide={leftVisible}
+      expandSidebar={() => setLeftVisible(true)}
       sessionSearchOpen={sessionSearchOpen}
       setSessionSearchOpen={setSessionSearchOpen}
       sessionQuery={sessionQuery}
@@ -3198,6 +3200,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       setSelectedSession={setSelectedSession}
       workspaces={workspaces}
       visibleSessions={visibleSessions}
+      allSessions={sessionList}
       setSettingsWorkspaceID={setSettingsWorkspaceID}
       setWorkspaceSettingsOpen={setWorkspaceSettingsOpen}
       setSessionMenuOpen={setSessionMenuOpen}
@@ -3210,6 +3213,27 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       renameWorkspace={renameWorkspace}
       restoreSession={restoreSession}
       archiveSession={archiveSession}
+      deleteSessionByID={async (id) => {
+        const target = sessionList().find((s) => s.id === id);
+        if (
+          !(await confirm({
+            title: t("shell.deleteSessionTitle"),
+            message: t("shell.deleteSessionBody", {
+              name: target?.title ?? id,
+            }),
+            confirmLabel: t("settingsDlg.confirm"),
+            cancelLabel: t("common.cancel"),
+            danger: true,
+          }))
+        )
+          return;
+        await props.ctx.runtime.sessionDelete?.(id);
+        if (id === selectedSessionID()) {
+          clearSelectedSession();
+        }
+        sessionsRefreshInFlight = undefined;
+        await refreshSessions();
+      }}
       toggleSelectAllVisible={toggleSelectAllVisible}
       toggleBulkSelected={toggleBulkSelected}
       bulkArchiveSelected={bulkArchiveSelected}

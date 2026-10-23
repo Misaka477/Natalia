@@ -1,3 +1,4 @@
+import styles from "./styles/settings-panel.module.css";
 import {
   createSignal,
   createEffect,
@@ -1064,10 +1065,7 @@ export function SettingsPanel(props: {
           if (!props.fullscreen) props.onClose();
         }}
       >
-        <div
-          class="neu-settings-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("settingsDlg.title")}</span>
             <Show when={props.onToggleFullscreen}>
@@ -1105,13 +1103,13 @@ export function SettingsPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-settings-body">
-            <nav class="neu-settings-categories">
+          <div class={styles.body}>
+            <nav class={styles.categories}>
               <For each={categoriesWithPlugins()}>
                 {(category) => (
                   <button
                     type="button"
-                    class="neu-settings-category"
+                    class={styles.category}
                     data-active={activeCategory() === category.id}
                     onClick={() => {
                       setActiveCategory(category.id);
@@ -1138,23 +1136,23 @@ export function SettingsPanel(props: {
                 )}
               </For>
             </nav>
-            <section class="neu-settings-content">
+            <section class={styles.content}>
               <Show when={current().id === "plugin"}>
-                <div class="neu-settings-content-title">
+                <div class={styles.contentTitle}>
                   {t("settings.pluginCategory")}
                 </div>
                 <For each={groupedSettingsPanels()}>
                   {([group, panels]) => (
                     <>
                       <Show when={group}>
-                        <div class="neu-settings-content-title">{group}</div>
+                        <div class={styles.contentTitle}>{group}</div>
                       </Show>
                       <For each={panels}>
                         {(panel) => (
-                          <div class="neu-settings-plugin-panel">
+                          <div class={styles.pluginPanel}>
                             <button
                               type="button"
-                              class="neu-settings-item neu-settings-item-button"
+                              class={`${styles.item} ${styles.itemButton}`}
                               data-active={
                                 settingsPanel()?.pluginId === panel.pluginId &&
                                 settingsPanel()?.panelId === panel.panel.id
@@ -1175,11 +1173,11 @@ export function SettingsPanel(props: {
                                 });
                               }}
                             >
-                              <div class="neu-settings-item-main">
-                                <span class="neu-settings-item-label">
+                              <div class={styles.itemMain}>
+                                <span class={styles.itemLabel}>
                                   {panel.panel.title}
                                 </span>
-                                <span class="neu-settings-item-description">
+                                <span class={styles.itemDescription}>
                                   {panel.panel.group ??
                                     t("settingsDlg.pluginGroup")}
                                 </span>
@@ -1193,7 +1191,7 @@ export function SettingsPanel(props: {
                             >
                               <div
                                 ref={settingsPanelRef}
-                                class="neu-settings-item neu-plugin-panel-body"
+                                class={`${styles.item} ${styles.panelBody}`}
                               />
                             </Show>
                           </div>
@@ -1205,9 +1203,7 @@ export function SettingsPanel(props: {
               </Show>
               <Show when={current().id !== "plugin"}>
                 <>
-                  <div class="neu-settings-content-title">
-                    {t(current().labelKey)}
-                  </div>
+                  <div class={styles.contentTitle}>{t(current().labelKey)}</div>
                   <For each={current().items}>
                     {(item) => {
                       // A GETTER, not a const: `{value()}` in JSX is static
@@ -1234,14 +1230,14 @@ export function SettingsPanel(props: {
                         return (
                           <button
                             type="button"
-                            class="neu-settings-item neu-settings-item-button"
+                            class={`${styles.item} ${styles.itemButton}`}
                             onClick={() => props.onOpenModels?.()}
                           >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
                               </span>
-                              <span class="neu-settings-item-description">
+                              <span class={styles.itemDescription}>
                                 {t(item.descKey)}
                               </span>
                             </div>
@@ -1263,18 +1259,18 @@ export function SettingsPanel(props: {
                         return (
                           <button
                             type="button"
-                            class="neu-settings-item neu-settings-item-button"
+                            class={`${styles.item} ${styles.itemButton}`}
                             onClick={() => props.onCycleThemeMode?.()}
                           >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
                               </span>
-                              <span class="neu-settings-item-description">
+                              <span class={styles.itemDescription}>
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">
+                            <span class={styles.itemValue}>
                               {props.themeMode === "dark"
                                 ? t("settingsDlg.themeDark")
                                 : t("settingsDlg.themeLight")}
@@ -1286,7 +1282,7 @@ export function SettingsPanel(props: {
                         return (
                           <button
                             type="button"
-                            class="neu-settings-item neu-settings-item-button"
+                            class={`${styles.item} ${styles.itemButton}`}
                             onClick={() => {
                               const value =
                                 busySendDelivery() === "next-step"
@@ -1296,15 +1292,15 @@ export function SettingsPanel(props: {
                               props.preferences?.set("busySendDelivery", value);
                             }}
                           >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
                               </span>
-                              <span class="neu-settings-item-description">
+                              <span class={styles.itemDescription}>
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">
+                            <span class={styles.itemValue}>
                               {busySendDelivery() === "next-step"
                                 ? t("settingsDlg.injectCurrent")
                                 : t("settingsDlg.queueNext")}
@@ -1320,7 +1316,7 @@ export function SettingsPanel(props: {
                         return (
                           <button
                             type="button"
-                            class="neu-settings-item neu-settings-item-button"
+                            class={`${styles.item} ${styles.itemButton}`}
                             onClick={() => {
                               const next =
                                 !effectiveConfig()?.context?.compactionEnabled;
@@ -1333,17 +1329,15 @@ export function SettingsPanel(props: {
                               });
                             }}
                           >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
                               </span>
-                              <span class="neu-settings-item-description">
+                              <span class={styles.itemDescription}>
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">
-                              {value()}
-                            </span>
+                            <span class={styles.itemValue}>{value()}</span>
                           </button>
                         );
                       }
@@ -1351,34 +1345,32 @@ export function SettingsPanel(props: {
                         return (
                           <button
                             type="button"
-                            class="neu-settings-item neu-settings-item-button"
+                            class={`${styles.item} ${styles.itemButton}`}
                             onClick={editableActions[item.label]}
                           >
-                            <div class="neu-settings-item-main">
-                              <span class="neu-settings-item-label">
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
                               </span>
-                              <span class="neu-settings-item-description">
+                              <span class={styles.itemDescription}>
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class="neu-settings-item-value">
-                              {value()}
-                            </span>
+                            <span class={styles.itemValue}>{value()}</span>
                           </button>
                         );
                       }
                       return (
-                        <div class="neu-settings-item">
-                          <div class="neu-settings-item-main">
-                            <span class="neu-settings-item-label">
+                        <div class={styles.item}>
+                          <div class={styles.itemMain}>
+                            <span class={styles.itemLabel}>
                               {t(item.labelKey)}
                             </span>
-                            <span class="neu-settings-item-description">
+                            <span class={styles.itemDescription}>
                               {t(item.descKey)}
                             </span>
                           </div>
-                          <span class="neu-settings-item-value">{value()}</span>
+                          <span class={styles.itemValue}>{value()}</span>
                         </div>
                       );
                     }}
@@ -1389,10 +1381,10 @@ export function SettingsPanel(props: {
             {/* A plugin's own settings section, after the shell's. */}
             <SlotMount slots={slots} name="settings.end" t={t} />
           </div>
-          <div class="neu-settings-footer">
-            <span class="neu-settings-footer-title">Natalia</span>
-            <span class="neu-settings-footer-sub">{ACADEMIC_NAME}</span>
-            <span class="neu-settings-footer-quote">
+          <div class={styles.footer}>
+            <span class={styles.footerTitle}>Natalia</span>
+            <span class={styles.footerSub}>{ACADEMIC_NAME}</span>
+            <span class={styles.footerQuote}>
               “Computation can carry what time cannot. Not metaphor.
               Mathematics.”
             </span>
@@ -1405,7 +1397,7 @@ export function SettingsPanel(props: {
           onClick={() => setPermissionListOpen(false)}
         >
           <div
-            class="neu-settings-window neu-edit-window"
+            class={`${styles.window} ${styles.editWindow}`}
             onClick={(event) => event.stopPropagation()}
           >
             <div class="neu-settings-header">
@@ -1428,7 +1420,7 @@ export function SettingsPanel(props: {
                 </svg>
               </button>
             </div>
-            <div class="neu-settings-body neu-edit-body">
+            <div class={`${styles.body} ${styles.editBody}`}>
               <Show
                 when={
                   Object.entries(effectiveConfig()?.agentModes ?? {}).filter(
@@ -1436,12 +1428,12 @@ export function SettingsPanel(props: {
                   ).length
                 }
                 fallback={
-                  <div class="neu-settings-item">
-                    <div class="neu-settings-item-main">
-                      <span class="neu-settings-item-label">
+                  <div class={styles.item}>
+                    <div class={styles.itemMain}>
+                      <span class={styles.itemLabel}>
                         {t("settingsDlg.noCustomProfiles")}
                       </span>
-                      <span class="neu-settings-item-description">
+                      <span class={styles.itemDescription}>
                         {t("settingsDlg.noCustomProfilesHint")}
                       </span>
                     </div>
@@ -1459,7 +1451,7 @@ export function SettingsPanel(props: {
                     <div class="neu-permission-row">
                       <button
                         type="button"
-                        class="neu-settings-item neu-settings-item-button"
+                        class={`${styles.item} ${styles.itemButton}`}
                         onClick={() => {
                           updateConfig?.({
                             defaultAgentMode: name,
@@ -1467,20 +1459,18 @@ export function SettingsPanel(props: {
                           });
                         }}
                       >
-                        <div class="neu-settings-item-main">
-                          <span class="neu-settings-item-label">
+                        <div class={styles.itemMain}>
+                          <span class={styles.itemLabel}>
                             {name}
                             {effectiveConfig()?.defaultAgentMode === name
                               ? t("settingsDlg.defaultSuffix")
                               : ""}
                           </span>
-                          <span class="neu-settings-item-description">
+                          <span class={styles.itemDescription}>
                             {profile.description || profile.approval}
                           </span>
                         </div>
-                        <span class="neu-settings-item-value">
-                          {profile.approval}
-                        </span>
+                        <span class={styles.itemValue}>{profile.approval}</span>
                       </button>
                       <button
                         type="button"
@@ -1518,7 +1508,7 @@ export function SettingsPanel(props: {
           onClick={() => setPermissionEditorOpen(false)}
         >
           <div
-            class="neu-settings-window neu-edit-window"
+            class={`${styles.window} ${styles.editWindow}`}
             onClick={(event) => event.stopPropagation()}
           >
             <div class="neu-settings-header">
@@ -1541,7 +1531,7 @@ export function SettingsPanel(props: {
                 </svg>
               </button>
             </div>
-            <div class="neu-settings-body neu-edit-body">
+            <div class={`${styles.body} ${styles.editBody}`}>
               <div class="neu-form-field">
                 <label class="neu-form-label">
                   {t("settingsDlg.profileName")}
@@ -1708,7 +1698,7 @@ export function SettingsPanel(props: {
           onClick={() => setEditFieldLabel(undefined)}
         >
           <div
-            class="neu-settings-window neu-edit-window"
+            class={`${styles.window} ${styles.editWindow}`}
             onClick={(event) => event.stopPropagation()}
           >
             <div class="neu-settings-header">
@@ -1729,7 +1719,7 @@ export function SettingsPanel(props: {
                 </svg>
               </button>
             </div>
-            <div class="neu-settings-body neu-edit-body">
+            <div class={`${styles.body} ${styles.editBody}`}>
               <Show
                 when={editFieldOptions()}
                 fallback={

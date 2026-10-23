@@ -1,0 +1,173 @@
+/* The settings panel: its window, the content column,
+   the settings rows and the plugin panel rows. The modal chrome
+   (backdrop, header, title, close) and the form controls stay global as
+   the shared vocabulary they are. Tokens only. */
+
+.window {
+  width: min(920px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.categories {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 14px;
+  border-right: 1px solid var(--neu-hairline);
+  overflow-y: auto;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.contentTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neu-text);
+  margin-bottom: 14px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--neu-hairline);
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.footerTitle {
+  font-weight: 700;
+  color: var(--neu-text);
+  white-space: nowrap;
+}
+
+.footerSub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footerQuote {
+  margin-left: auto;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: var(--neu-bg);
+  border-radius: 12px;
+  box-shadow: var(--neu-inset-2);
+}
+
+.itemMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.itemDescription {
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+
+.itemValue {
+  font-size: 12px;
+  color: var(--neu-accent);
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  box-shadow: var(--neu-inset-2);
+}
+
+button.item.itemButton {
+  width: 100%;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.item.itemButton:active {
+  box-shadow: var(--neu-inset-3);
+}
+
+/* The exit. It reads as an action among settings, not as one more toggle —
+   the one row whose default press is destructive. */
+button.item.itemButton.itemDanger .itemLabel {
+  color: var(--neu-danger);
+  font-weight: 600;
+}
+
+button.item.itemButton.itemDanger:active {
+  box-shadow: var(--neu-inset-3);
+}
+
+.pluginPanel {
+  margin-bottom: 8px;
+}
+
+.pluginPanel .item {
+  margin-bottom: 0;
+}
+
+.pluginPanel button.item[data-active="true"] {
+  box-shadow: var(--neu-inset-3);
+}
+
+.pluginPanel button.item[data-active="true"] .itemLabel {
+  color: var(--neu-accent);
+}
+
+.panelBody {
+  display: block;
+  margin-top: 8px;
+  margin-left: 14px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+
+/* The editor window and body the settings panel opens its editors in. */
+.editWindow {
+  width: min(480px, 90vw);
+}
+
+.editBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}

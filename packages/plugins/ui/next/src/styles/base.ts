@@ -1781,6 +1781,28 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   font-size: 12px;
   color: var(--neu-muted);
 }
+/* The text input and textarea themselves. This rule was the one member
+   of the family the restoration missed: the select and the checkbox
+   came back, the input did not, and twenty-three elements across seven
+   files write the name verbatim — the search field, the model and
+   settings editors, the stash and workspace forms. Every one of them
+   rendered as a raw browser input. Restored from the shipped sheet
+   with the values tokenized. */
+.neu-form-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  outline: none;
+  border-radius: var(--neu-radius-3);
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  box-shadow: var(--neu-inset-2);
+}
+.neu-form-input::placeholder {
+  color: var(--neu-muted);
+}
 .neu-form-select {
   appearance: none;
   -webkit-appearance: none;

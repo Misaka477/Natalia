@@ -35,6 +35,10 @@ test("the pane switches between all four agents", async () => {
   // entry rather than another copy of the button.
   expect(pane).toContain("<For each={PANE_AGENTS}>");
   expect(pane).toContain("{t(`transcript.agent.${agent}`)}");
+  // A sliding thumb indicator glides across the groove to the active tab.
+  expect(pane).toContain("styles.agentSwitchThumb");
+  const css = await read("styles/transcript.module.css");
+  expect(css).toContain(".agentSwitchThumb {");
 });
 
 test("every agent has a body in the pane", async () => {

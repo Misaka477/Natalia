@@ -245,7 +245,9 @@
    of the screen. Tokens only. */
 
 .agentSwitch {
+  position: relative;
   display: inline-flex;
+  align-items: center;
   gap: 2px;
   padding: 2px;
   border-radius: 999px;
@@ -253,7 +255,24 @@
   box-shadow: var(--neu-inset-2);
 }
 
+.agentSwitchThumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  box-shadow: var(--neu-elevation-1);
+  pointer-events: none;
+  transition:
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .agentSwitchBtn {
+  position: relative;
+  z-index: 1;
   padding: 5px 14px;
   border: none;
   border-radius: 999px;
@@ -263,10 +282,7 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .agentSwitchBtn:hover {
@@ -274,9 +290,7 @@
 }
 
 .agentSwitchBtn[data-active="true"] {
-  background: var(--neu-bg-light);
   color: var(--neu-accent);
-  box-shadow: var(--neu-elevation-1);
 }
 
 /* The pane header's trailing cluster: the model and permission selectors.

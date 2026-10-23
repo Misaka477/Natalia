@@ -7,7 +7,15 @@
  * jump-to-bottom helpers keep working.
  */
 
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import type { Attachment, Message, ToolCall } from "@natalia/ui-kit";
 import { ContextMeter, Transcript } from "@natalia/ui-kit";
 import styles from "../styles/transcript.module.css";
@@ -350,6 +358,38 @@ export function MainPanes(props: MainPanesProps) {
     if (anchor) transcriptScrollMemory.remember(sessionID, anchor);
   }
 
+  const switchBtnRefs = new Map<PaneAgent, HTMLButtonElement>();
+  const [thumbLeft, setThumbLeft] = createSignal(2);
+  const [thumbWidth, setThumbWidth] = createSignal(0);
+
+  function syncSwitchThumb() {
+    const activeBtn = switchBtnRefs.get(focusAgent());
+    if (!activeBtn) return;
+    setThumbLeft(activeBtn.offsetLeft);
+    setThumbWidth(activeBtn.offsetWidth);
+  }
+
+  createEffect(() => {
+    focusAgent();
+    // Subscribe to localized label changes (e.g. 协同 <-> Team) so the thumb
+    // re-measures when the language switches.
+    for (const agent of PANE_AGENTS) t(`transcript.agent.${agent}`);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => syncSwitchThumb());
+    } else {
+      syncSwitchThumb();
+    }
+  });
+
+  onMount(() => {
+    syncSwitchThumb();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => syncSwitchThumb());
+      for (const btn of switchBtnRefs.values()) observer.observe(btn);
+      onCleanup(() => observer.disconnect());
+    }
+  });
+
   return (
     <>
       {/* The one main pane. The shell used to render two panes side by
@@ -368,9 +408,20 @@ export function MainPanes(props: MainPanesProps) {
               role="tablist"
               aria-label={t("transcript.agentSwitchLabel")}
             >
+              <span
+                class={styles.agentSwitchThumb}
+                aria-hidden="true"
+                style={{
+                  width: `${thumbWidth()}px`,
+                  transform: `translateX(${thumbLeft()}px)`,
+                }}
+              />
               <For each={PANE_AGENTS}>
                 {(agent) => (
                   <button
+                    ref={(el) => {
+                      switchBtnRefs.set(agent, el);
+                    }}
                     type="button"
                     role="tab"
                     class={styles.agentSwitchBtn}

@@ -97,6 +97,7 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
+        let createdBySocket = false;
         if (!session) {
           // The pane's shell is the HOST's decision, not this route's. A pane
           // whose caller names no command is started WITHOUT one, and the
@@ -115,6 +116,7 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             id: terminalID,
             sessionID,
           });
+          createdBySocket = true;
         }
         if (!session) {
           failOpen(ws, "native terminal start returned no session");
@@ -127,12 +129,15 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
-        // A pane opened from the UI is the human's: claim input ownership so the
-        // frame-settler does not wake the model on every prompt the shell prints
-        // (the model's settle is for terminals IT started, where the output is
-        // the answer to what it asked). A terminal the model already handed to
-        // the human is already claimed, and this is a no-op for it.
-        if (typeof client.nativeTerminalClaimHumanInput === "function") {
+        // Only a pane SPAWNED by this UI socket is claimed for the human on
+        // open (so typing in a freshly opened user tab does not wake the
+        // frame-settler). An existing model-started pane stays model-owned when
+        // the human opens the panel to watch it — claiming on attach hijacked
+        // the model's vim/claude-code session the moment the user looked at it.
+        if (
+          createdBySocket &&
+          typeof client.nativeTerminalClaimHumanInput === "function"
+        ) {
           await client.nativeTerminalClaimHumanInput(session.id, sessionID);
         }
         // Replay the pane's current screen before any live output. This is the

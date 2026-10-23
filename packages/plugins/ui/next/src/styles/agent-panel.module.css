@@ -203,7 +203,7 @@
   margin-top: 4px;
 }
 
-/* The select the agent panel reuses from the review surface. */
+/* Theselect the agent panel reuses from the review surface. */
 .select {
   width: 100%;
   padding: 6px 8px;
@@ -214,4 +214,293 @@
   font-size: 11px;
   outline: none;
   box-shadow: var(--neu-inset-2);
+}
+
+/* ===== Unified Collaboration Deck (Subagent + Team Sandbox PRs) ===== */
+.summaryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+  flex-shrink: 0;
+}
+
+.summaryStats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.statChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.statChip[data-tone="running"] {
+  color: var(--neu-success);
+}
+
+.statChip[data-tone="accent"] {
+  background: var(--neu-accent-soft);
+  color: var(--neu-accent);
+}
+
+.deckBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.roster {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+}
+
+.rosterSection {
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neu-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rosterCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.rosterCard:hover {
+  background: var(--neu-hover-overlay);
+}
+
+.rosterCard[data-active="true"] {
+  background: var(--neu-accent-soft);
+  border-color: color-mix(in srgb, var(--neu-accent) 40%, transparent);
+}
+
+.rosterCardTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--neu-muted);
+}
+
+.statusDot[data-status="running"] {
+  background: var(--neu-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neu-success) 25%, transparent);
+}
+
+.statusDot[data-status="completed"] {
+  background: var(--neu-accent);
+}
+
+.statusDot[data-status="failed"] {
+  background: var(--neu-error);
+}
+
+.rosterTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statusBadge {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--neu-muted);
+}
+
+.statusBadge[data-status="running"] {
+  color: var(--neu-success);
+}
+
+.statusBadge[data-status="failed"] {
+  color: var(--neu-error);
+}
+
+.rosterMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
+}
+
+.rosterId {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 110px;
+}
+
+.prPill {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.prPill[data-ok="true"] {
+  color: var(--neu-success);
+}
+
+.prPill[data-ok="false"] {
+  color: var(--neu-error);
+}
+
+.inspector {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+  flex-shrink: 0;
+}
+
+.inspectorTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inspectorTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspectorSub {
+  font-size: 11px;
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
+}
+
+.inspectorActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.inspectorModeSwitch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+}
+
+.modeBtn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modeBtn[data-active="true"] {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+}
+
+.prInspector {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.buildOk {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--neu-state-ok-bg);
+  color: var(--neu-success);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.buildOutput {
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow: auto;
 }

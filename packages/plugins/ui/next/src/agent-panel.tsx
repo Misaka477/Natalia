@@ -66,9 +66,11 @@ export function AgentPanel(props: {
   ) => void;
 }) {
   const t = props.t;
-  const [subTab, setSubTab] = createSignal<"subagent" | "team">("subagent");
   const [selectedID, setSelectedID] = createSignal<string | undefined>(
     undefined,
+  );
+  const [inspectorTab, setInspectorTab] = createSignal<"transcript" | "pr">(
+    "transcript",
   );
   const subagentPager = new PagedTranscriptController<RuntimeSubagentView>({
     pageSize: 100,
@@ -120,7 +122,6 @@ export function AgentPanel(props: {
     void subagentPager.loadInitial();
   });
 
-  const [teamAvailable, setTeamAvailable] = createSignal(false);
   const [teamPRs, setTeamPRs] = createSignal<RuntimeTeamPR[]>([]);
   const [teamConcurrency, setTeamConcurrency] = createSignal<
     number | undefined
@@ -128,42 +129,15 @@ export function AgentPanel(props: {
   const [terminals, setTerminals] = createSignal<
     RuntimeNativeTerminalSession[]
   >([]);
-  const teamStatusTally = createMemo(() => {
-    const tally: Record<string, number> = {
-      completed: 0,
-      failed: 0,
-      stopped: 0,
-    };
-    for (const pr of teamPRs()) {
-      const status = pr.status || "pending";
-      tally[status] = (tally[status] ?? 0) + 1;
-    }
-    return tally;
-  });
 
   async function refreshData() {
-    let teamSeen = false;
     try {
       const prs =
         (await props.runtime?.teamPRList?.(props.state.sessionID)) ?? [];
       setTeamPRs(prs);
-      teamSeen = true;
     } catch {
       setTeamPRs([]);
     }
-    try {
-      const plugins = (await props.runtime?.plugins?.()) ?? [];
-      if (
-        plugins.some(
-          (plugin) =>
-            plugin.id?.includes("team") || plugin.name?.includes("Team"),
-        )
-      )
-        teamSeen = true;
-    } catch {
-      // plugin list may be unavailable; teamPRList already tried
-    }
-    setTeamAvailable(teamSeen);
     try {
       const list =
         (await props.runtime?.nativeTerminalList?.(props.state.sessionID)) ??
@@ -192,8 +166,26 @@ export function AgentPanel(props: {
     }),
   );
 
+  // Auto-select the first subagent or PR sandbox when none is selected.
+  createEffect(() => {
+    if (selectedID()) return;
+    const firstAgent = subagents()[0];
+    if (firstAgent) {
+      setSelectedID(firstAgent.id);
+      return;
+    }
+    const firstPR = teamPRs()[0];
+    if (firstPR?.sandboxID) {
+      setSelectedID(firstPR.sandboxID);
+      setInspectorTab("pr");
+    }
+  });
+
   const runningSubagents = createMemo(() =>
     subagents().filter((agent) => agent.status === "running"),
+  );
+  const completedSubagents = createMemo(() =>
+    subagents().filter((agent) => agent.status === "completed"),
   );
 
   const subagentTree = createMemo(() => {
@@ -212,9 +204,29 @@ export function AgentPanel(props: {
     return { roots, children };
   });
 
+  const prByAgentID = createMemo(() => {
+    const map = new Map<string, RuntimeTeamPR>();
+    for (const pr of teamPRs()) {
+      if (pr.sandboxID) map.set(pr.sandboxID, pr);
+      map.set(pr.id, pr);
+    }
+    return map;
+  });
+
+  // PRs whose sandboxID does not appear in active subagents
+  const orphanPRs = createMemo(() => {
+    const ids = new Set(subagents().map((a) => a.id));
+    return teamPRs().filter((pr) => !ids.has(pr.sandboxID) && !ids.has(pr.id));
+  });
+
   const selectedSubagent = createMemo(() =>
     subagents().find((item) => item.id === selectedID()),
   );
+  const selectedPR = createMemo(() => {
+    const id = selectedID();
+    if (!id) return undefined;
+    return prByAgentID().get(id);
+  });
 
   const [subagentElapsedMs, setSubagentElapsedMs] = createSignal(0);
   const subagentElapsedTimer = setInterval(() => {
@@ -263,13 +275,7 @@ export function AgentPanel(props: {
                 tool.result,
                 tool.summary,
                 status,
-                // The arguments stream in fragments; a row cached mid-stream
-                // would pin a ToolCall without parsed arguments forever.
                 tool.argumentsRaw,
-                // The card and its structured facts are what the row RENDERS
-                // (R0), and the legacy metadata blob is the replay fallback
-                // the decode reads: every field the derivation depends on
-                // belongs in the row's identity.
                 tool.card,
                 tool.meta,
                 tool.metadata,
@@ -342,7 +348,6 @@ export function AgentPanel(props: {
         return {
           id: rowID,
           signature: [id, rowID, text, status, event.event, timestamp],
-          // Parse the tool-call shape only when the row is actually rebuilt.
           create: () => {
             const toolCalls = subagentToolCallsFromText(text);
             if (toolCalls)
@@ -382,272 +387,347 @@ export function AgentPanel(props: {
     });
   });
 
-  function agentStatusLabel(agent: SubagentView) {
-    return agent.status === "running"
+  function agentStatusLabel(status: string) {
+    return status === "running"
       ? t("agent.statusRunning")
-      : agent.status === "completed"
+      : status === "completed"
         ? t("agent.statusCompleted")
-        : agent.status === "failed"
+        : status === "failed"
           ? t("agent.statusFailed")
-          : agent.status;
+          : status;
+  }
+
+  function renderAgentCard(agent: SubagentView, isChild = false) {
+    const pr = () => prByAgentID().get(agent.id);
+    const title = () => pr()?.task || agent.task || agent.id;
+    return (
+      <button
+        type="button"
+        class={`${styles.rosterCard} ${isChild ? styles.treeChild : ""}`}
+        data-active={selectedID() === agent.id}
+        data-status={agent.status}
+        onClick={() => {
+          setSelectedID(agent.id);
+          setInspectorTab("transcript");
+        }}
+      >
+        <div class={styles.rosterCardTop}>
+          <span class={styles.statusDot} data-status={agent.status} />
+          <span class={styles.rosterTitle}>{title()}</span>
+          <span class={styles.statusBadge} data-status={agent.status}>
+            {agentStatusLabel(agent.status)}
+          </span>
+        </div>
+        <div class={styles.rosterMeta}>
+          <span class={styles.rosterId}>{agent.id}</span>
+          <Show when={agent.phase}>
+            <span>· {agent.phase}</span>
+          </Show>
+          <Show when={pr()}>
+            {(matchedPR) => (
+              <span
+                class={styles.prPill}
+                data-ok={
+                  matchedPR().buildEvidence
+                    ? matchedPR().buildEvidence!.ok
+                    : undefined
+                }
+              >
+                PR · {matchedPR().status}
+                <Show when={matchedPR().buildEvidence}>
+                  {matchedPR().buildEvidence!.ok ? " ✓" : " ✗"}
+                </Show>
+              </span>
+            )}
+          </Show>
+        </div>
+      </button>
+    );
   }
 
   return (
     <div class="review-pane">
-      <div class="review-subtabs">
+      {/* Unified Squad Summary Bar */}
+      <div class={styles.summaryBar}>
+        <div class={styles.summaryStats}>
+          <span class={styles.statChip} data-tone="running">
+            <span class={styles.statusDot} data-status="running" />
+            {t("agent.runningSubagents")}: {runningSubagents().length}
+          </span>
+          <span class={styles.statChip}>
+            {t("agent.statusCompleted")}: {completedSubagents().length}
+          </span>
+          <Show when={teamPRs().length > 0}>
+            <span class={styles.statChip} data-tone="accent">
+              Team PR: {teamPRs().length}
+            </span>
+          </Show>
+          <Show when={teamConcurrency() !== undefined}>
+            <span class={styles.statChip}>
+              {t("agent.concurrencyLimit")}: {teamConcurrency()}
+            </span>
+          </Show>
+        </div>
         <button
           type="button"
-          class="review-subtab"
-          data-active={subTab() === "subagent"}
-          onClick={() => setSubTab("subagent")}
+          class={styles.actionBtn}
+          onClick={() => void refreshData()}
         >
-          {t("agent.subagent")}
+          {t("agent.refresh")}
         </button>
-        <Show when={teamAvailable()}>
-          <button
-            type="button"
-            class="review-subtab"
-            data-active={subTab() === "team"}
-            onClick={() => setSubTab("team")}
-          >
-            Team
-          </button>
-        </Show>
       </div>
 
-      <Show when={subTab() === "subagent"}>
-        <div class="review-header">
-          <div class="review-title">
-            <span>{t("agent.subagent")}</span>
-          </div>
-          <div class="review-meta">
-            <ContextMeter
-              usage={props.state.subagentStates[selectedID() ?? ""]?.context}
-              compact
-            />
-            <span class="review-count">{subagents().length} agents</span>
-          </div>
-        </div>
-        <Show
-          when={subagents().length}
-          fallback={
-            <PanelState
-              state="empty"
-              title={t("agent.emptyTitle")}
-              description={t("agent.emptyHint")}
-            />
-          }
-        >
-          <div class="review-body">
-            <div class="review-files" style="width: 220px">
-              <div class="review-files-heading">Agents</div>
+      <Show
+        when={subagents().length > 0 || teamPRs().length > 0}
+        fallback={
+          <PanelState
+            state="empty"
+            title={t("agent.emptyTitle")}
+            description={t("agent.emptyHint")}
+          />
+        }
+      >
+        <div class={styles.deckBody}>
+          {/* Left column: Agent & Sandbox Task Roster */}
+          <div class={styles.roster}>
+            <Show when={subagentTree().roots.length > 0}>
+              <div class={styles.rosterSection}>{t("agent.subagent")}</div>
               <For each={subagentTree().roots}>
                 {(agent) => (
                   <div>
-                    <button
-                      type="button"
-                      class="review-file-row"
-                      data-active={selectedID() === agent.id}
-                      onClick={() => setSelectedID(agent.id)}
-                    >
-                      <span class="review-file-status">
-                        {agentStatusLabel(agent)}
-                      </span>
-                      <span class="review-file-name">{agent.id}</span>
-                    </button>
+                    {renderAgentCard(agent, false)}
                     <For each={subagentTree().children.get(agent.id) ?? []}>
-                      {(child) => (
-                        <div class={styles.treeChild}>
-                          <button
-                            type="button"
-                            class="review-file-row"
-                            data-active={selectedID() === child.id}
-                            onClick={() => setSelectedID(child.id)}
-                          >
-                            <span class="review-file-status">
-                              {agentStatusLabel(child)}
-                            </span>
-                            <span class="review-file-name">└ {child.id}</span>
-                          </button>
-                        </div>
-                      )}
+                      {(child) => renderAgentCard(child, true)}
                     </For>
                   </div>
                 )}
               </For>
-              <Show when={!subagents().length}>
-                <div class="review-empty">
-                  <div class="review-empty-title">{t("agent.emptyTitle")}</div>
-                </div>
-              </Show>
-            </div>
-            <div
-              class="review-resizer"
-              role="separator"
-              aria-orientation="vertical"
-            />
-            <div class="review-diff">
-              <div class="review-diff-header">
-                <span class="review-diff-path">
-                  {selectedSubagent()?.id ?? t("agent.selectOne")}
+            </Show>
+
+            <Show when={orphanPRs().length > 0}>
+              <div class={styles.rosterSection}>{t("agent.taskQueue")}</div>
+              <For each={orphanPRs()}>
+                {(pr) => {
+                  const key = pr.sandboxID || pr.id;
+                  return (
+                    <button
+                      type="button"
+                      class={styles.rosterCard}
+                      data-active={selectedID() === key}
+                      data-status={pr.status}
+                      onClick={() => {
+                        setSelectedID(key);
+                        setInspectorTab("pr");
+                      }}
+                    >
+                      <div class={styles.rosterCardTop}>
+                        <span
+                          class={styles.statusDot}
+                          data-status={pr.status}
+                        />
+                        <span class={styles.rosterTitle}>
+                          {pr.task || pr.id}
+                        </span>
+                        <span
+                          class={styles.prPill}
+                          data-ok={
+                            pr.buildEvidence ? pr.buildEvidence.ok : undefined
+                          }
+                        >
+                          PR · {pr.status}
+                        </span>
+                      </div>
+                      <div class={styles.rosterMeta}>
+                        <span class={styles.rosterId}>{pr.sandboxID}</span>
+                      </div>
+                    </button>
+                  );
+                }}
+              </For>
+            </Show>
+          </div>
+
+          {/* Right column: Selected Agent & Sandbox PR Inspector */}
+          <div class={styles.inspector}>
+            <div class={styles.inspectorHeader}>
+              <div class={styles.inspectorTitleWrap}>
+                <span class={styles.inspectorTitle}>
+                  {selectedPR()?.task ||
+                    selectedSubagent()?.task ||
+                    selectedSubagent()?.id ||
+                    selectedID() ||
+                    t("agent.selectOne")}
                 </span>
                 <Show when={selectedSubagent()}>
-                  <span class="review-meta">
-                    {selectedSubagent()?.status} ·{" "}
+                  <span class={styles.inspectorSub}>
+                    {selectedSubagent()?.id} · {selectedSubagent()?.status} ·{" "}
                     {selectedSubagent()?.phase ?? "idle"}
                     {selectedSubagent()?.parentAgentID
                       ? t("agent.parent", {
                           id: selectedSubagent()?.parentAgentID,
                         })
                       : ""}
-                    <Show when={selectedTerminals().length}>
-                      {" · "}
-                      {t("agent.terminal")}
-                      {selectedTerminals()
-                        .map((terminal) => terminal.id)
-                        .join(", ")}
-                      <button
-                        type="button"
-                        class={styles.actionBtn}
-                        onClick={() =>
-                          props.onOpenTerminal?.(selectedTerminals()[0]!.id)
-                        }
-                      >
-                        {t("agent.openTerminal")}
-                      </button>
-                    </Show>
                   </span>
                 </Show>
               </div>
-              <div class={`review-diff-content neu-pane ${nia.flatPane}`}>
-                <Show
-                  when={selectedSubagent()}
-                  fallback={
-                    <div class="review-empty">
-                      <div class="review-empty-title">
-                        {t("agent.selectToView")}
-                      </div>
-                    </div>
-                  }
-                >
-                  <Transcript
-                    messages={renderedSubagentMessages()}
-                    emptyTitle={t("agent.emptyMsgTitle")}
-                    emptyHint={t("agent.emptyMsgHint")}
-                    assistantName={selectedSubagent()?.id ?? "Subagent"}
-                    assistantInitial="A"
-                    apiRef={(api) => {
-                      subTranscriptApi = api;
-                    }}
-                    onFollowChange={(following) =>
-                      setSubShowJumpToBottom(!following)
-                    }
-                    onNearTop={() => void loadOlderSubagentHistory()}
-                    hasOlder={subagentPaging().hasOlder}
-                    historyLoading={!subagentPaging().initialized}
-                    olderHistoryLoading={subagentPaging().loadingOlder}
-                  />
-                  <SessionUsageBar
-                    t={props.t}
+
+              <div class={styles.inspectorActions}>
+                <Show when={selectedID()}>
+                  <ContextMeter
                     usage={
-                      props.state.subagentStates[selectedID() ?? ""]
-                        ?.sessionUsage
+                      props.state.subagentStates[selectedID() ?? ""]?.context
                     }
+                    compact
                   />
-                  <Show when={selectedSubagent()?.status === "running"}>
-                    <div class="neu-activity-bar" data-running={true}>
-                      <span class="neu-activity-pulse" />
-                      <span class="neu-activity-label">
-                        {selectedSubagent()?.status} ·{" "}
-                        {formatSubagentDuration(subagentElapsedMs())}
-                      </span>
-                    </div>
-                  </Show>
-                  <Show when={subShowJumpToBottom()}>
+                </Show>
+                <Show when={selectedTerminals().length}>
+                  <button
+                    type="button"
+                    class={styles.actionBtn}
+                    onClick={() =>
+                      props.onOpenTerminal?.(selectedTerminals()[0]!.id)
+                    }
+                  >
+                    {t("agent.openTerminal")} (
+                    {selectedTerminals()
+                      .map((term) => term.id)
+                      .join(", ")}
+                    )
+                  </button>
+                </Show>
+                <Show when={selectedPR()}>
+                  <div class={styles.inspectorModeSwitch}>
                     <button
                       type="button"
-                      class="neu-jump-bottom"
-                      onClick={() => subTranscriptApi?.scrollToBottom()}
-                      title={t("agent.jumpToBottom")}
+                      class={styles.modeBtn}
+                      data-active={inspectorTab() === "transcript"}
+                      onClick={() => setInspectorTab("transcript")}
                     >
-                      ↓
+                      {t("agent.subagent")}
                     </button>
-                  </Show>
+                    <button
+                      type="button"
+                      class={styles.modeBtn}
+                      data-active={inspectorTab() === "pr"}
+                      onClick={() => setInspectorTab("pr")}
+                    >
+                      PR / Sandbox
+                    </button>
+                  </div>
                 </Show>
               </div>
             </div>
-          </div>
-        </Show>
-      </Show>
 
-      <Show when={subTab() === "team"}>
-        <div class="review-header">
-          <div class="review-title">
-            <span>{t("agent.teamOverview")}</span>
-            <button
-              type="button"
-              class={styles.actionBtn}
-              onClick={() => void refreshData()}
-            >
-              {t("agent.refresh")}
-            </button>
-          </div>
-          <div class="review-meta">
-            <span class="review-count">{teamPRs().length} PR</span>
-          </div>
-        </div>
-        <div class="review-section-label">{t("agent.concurrencyLimit")}</div>
-        <div class="review-entity-control">
-          <div class={styles.select}>
-            {teamConcurrency() ?? t("agent.unset")}
-          </div>
-        </div>
-        <div class="review-section-label">{t("agent.runningSubagents")}</div>
-        <div class="review-entity-control">
-          <div class={styles.select}>{runningSubagents().length}</div>
-        </div>
-        <div class="review-section-label">{t("agent.statusTally")}</div>
-        <div class="review-entity-control">
-          <div class={styles.select}>
-            {t("agent.completedFailed", {
-              completed: teamStatusTally().completed ?? 0,
-              failed: teamStatusTally().failed ?? 0,
-              stopped: teamStatusTally().stopped ?? 0,
-            })}
-          </div>
-        </div>
-        <Show when={teamPRs().length}>
-          <div class="review-section-label">{t("agent.taskQueue")}</div>
-          <div class="review-entity-list">
-            <For each={teamPRs()}>
-              {(pr) => (
-                <div class={styles.queueCard}>
-                  <div class={styles.queueTitle}>{pr.task || pr.id}</div>
-                  <div class={styles.queueMeta}>
-                    <span>{t("agent.prStatus", { status: pr.status })}</span>
-                    <span>{t("agent.prSubagent", { id: pr.sandboxID })}</span>
-                    <span>
-                      phase:{" "}
-                      {subagents().find((item) => item.id === pr.sandboxID)
-                        ?.phase ?? t("agent.phaseUnknown")}
-                    </span>
-                  </div>
-                  <Show when={pr.result}>
-                    <div class={styles.queueResult}>{pr.result}</div>
-                  </Show>
-                  <Show when={pr.buildEvidence && !pr.buildEvidence.ok}>
-                    <div class={styles.cardError}>
-                      build exit {pr.buildEvidence?.exitCode}
+            <div class={`review-diff-content neu-pane ${nia.flatPane}`}>
+              <Show
+                when={selectedID()}
+                fallback={
+                  <div class="review-empty">
+                    <div class="review-empty-title">
+                      {t("agent.selectToView")}
                     </div>
-                  </Show>
-                </div>
-              )}
-            </For>
+                  </div>
+                }
+              >
+                <Show
+                  when={inspectorTab() === "pr" && selectedPR()}
+                  fallback={
+                    <>
+                      <Transcript
+                        messages={renderedSubagentMessages()}
+                        emptyTitle={t("agent.emptyMsgTitle")}
+                        emptyHint={t("agent.emptyMsgHint")}
+                        assistantName={selectedSubagent()?.id ?? "Subagent"}
+                        assistantInitial="A"
+                        apiRef={(api) => {
+                          subTranscriptApi = api;
+                        }}
+                        onFollowChange={(following) =>
+                          setSubShowJumpToBottom(!following)
+                        }
+                        onNearTop={() => void loadOlderSubagentHistory()}
+                        hasOlder={subagentPaging().hasOlder}
+                        historyLoading={!subagentPaging().initialized}
+                        olderHistoryLoading={subagentPaging().loadingOlder}
+                      />
+                      <SessionUsageBar
+                        t={props.t}
+                        usage={
+                          props.state.subagentStates[selectedID() ?? ""]
+                            ?.sessionUsage
+                        }
+                      />
+                      <Show when={selectedSubagent()?.status === "running"}>
+                        <div class="neu-activity-bar" data-running={true}>
+                          <span class="neu-activity-pulse" />
+                          <span class="neu-activity-label">
+                            {selectedSubagent()?.status} ·{" "}
+                            {formatSubagentDuration(subagentElapsedMs())}
+                          </span>
+                        </div>
+                      </Show>
+                      <Show when={subShowJumpToBottom()}>
+                        <button
+                          type="button"
+                          class="neu-jump-bottom"
+                          onClick={() => subTranscriptApi?.scrollToBottom()}
+                          title={t("agent.jumpToBottom")}
+                        >
+                          ↓
+                        </button>
+                      </Show>
+                    </>
+                  }
+                >
+                  {(pr) => (
+                    <div class={styles.prInspector}>
+                      <div class={styles.queueCard}>
+                        <div class={styles.queueTitle}>
+                          {pr().task || pr().id}
+                        </div>
+                        <div class={styles.queueMeta}>
+                          <span>
+                            {t("agent.prStatus", { status: pr().status })}
+                          </span>
+                          <span>
+                            {t("agent.prSubagent", { id: pr().sandboxID })}
+                          </span>
+                          <span>
+                            phase:{" "}
+                            {subagents().find(
+                              (item) => item.id === pr().sandboxID,
+                            )?.phase ?? t("agent.phaseUnknown")}
+                          </span>
+                        </div>
+                        <Show when={pr().result}>
+                          <div class={styles.queueResult}>{pr().result}</div>
+                        </Show>
+                        <Show when={pr().buildEvidence}>
+                          <div
+                            class={
+                              pr().buildEvidence!.ok
+                                ? styles.buildOk
+                                : styles.cardError
+                            }
+                          >
+                            Build{" "}
+                            {pr().buildEvidence!.ok ? "passed ✓" : "failed ✗"} ·
+                            exit {pr().buildEvidence?.exitCode}
+                            <Show when={pr().buildEvidence?.output}>
+                              <pre class={styles.buildOutput}>
+                                {pr().buildEvidence?.output}
+                              </pre>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  )}
+                </Show>
+              </Show>
+            </div>
           </div>
-        </Show>
-        <Show when={!teamPRs().length}>
-          <PanelState state="empty" title={t("agent.noTeamTasks")} />
-        </Show>
+        </div>
       </Show>
     </div>
   );

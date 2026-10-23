@@ -1719,8 +1719,12 @@ export function createPtyTerminalController(
     assertSessionOwner(session, options?.sessionID);
     assertRunning(session);
     if (options?.actor === "human") {
-      if (session.secureInput)
-        throw new Error("terminal is accepting secure human input");
+      // If the human types directly into the embedded terminal while it is
+      // still model-owned, claim human ownership automatically so their
+      // keystrokes do not race the model or trigger model frame-settle notices.
+      if (session.inputOwner !== "human") {
+        setInputOwner(session, "human", "human", "claim");
+      }
     } else if (session.inputOwner !== "model") {
       // T-06: the refusal names the CURRENT owner state — the model needs
       // to know a human holds the pane right now, not that "a human"
@@ -1743,7 +1747,7 @@ export function createPtyTerminalController(
           `this write is refused until then.${transition}`,
       );
     }
-    if (session.secureInput)
+    if (session.secureInput && options?.actor !== "human")
       throw new Error("terminal is accepting secure human input");
     const writtenBytes = new TextEncoder().encode(value).byteLength;
     if (options?.idempotencyKey) {

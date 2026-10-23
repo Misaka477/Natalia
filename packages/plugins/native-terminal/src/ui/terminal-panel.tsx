@@ -11,17 +11,6 @@ import "./styles.css";
 
 const MAX_TERMINALS_PER_SESSION = 8;
 
-/**
- * The session the panes on screen belong to.
- *
- * A pane is attached to a session, not to whatever the projection says this
- * instant. The projection is briefly empty at several ordinary moments (a UI
- * host reload, a session-list refresh, the app finishing its boot), and the
- * panel used to answer that gap by clearing every tab: the xterm, its socket
- * and its scrollback die with the component, and the reload that follows is
- * what the user sees as "the terminal reloaded". Only a DIFFERENT session moves
- * the panes.
- */
 type TerminalAttachment = { sessionID: string; runtimeURL: string };
 
 function newTerminalID() {
@@ -51,24 +40,16 @@ export function TerminalPane(
   );
   const [attachment, setAttachment] = createSignal<TerminalAttachment>();
   const sessionID = () => attachment()?.sessionID;
-  // The pane's shell is NOT this panel's decision, and there is deliberately no
-  // control for it. A pane is started without naming a shell, and the host
-  // picks the one it always has (PowerShell on Windows, bash on Linux, zsh on
-  // macOS) through the platform's discovery — one place, platform-aware.
-  //
-  // The select that used to live here is why: its options were a POSIX-first
-  // list (bash, zsh, sh, pwsh, powershell) and its value started empty, so the
-  // DOM normalised the empty value to the FIRST option and the panel then sent
-  // `command=bash` for every pane — on Windows, where the host had correctly
-  // resolved pwsh. A control that both lies about the host and overrides the
-  // discovery is worse than no control.
+  const [searchOpen, setSearchOpen] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal("");
   const terminalApis = new Map<string, WebTerminalApi>();
   const activeApi = () => terminalApis.get(activeID() ?? "");
   let loadToken = 0;
-  // The session the tabs on screen were loaded for. Switching sessions rebuilds
-  // them from that session's own pane list; staying on one keeps them.
   const [tabsSessionID, setTabsSessionID] = createSignal<string>();
+
+  const activeSession = () => sessions().find((item) => item.id === activeID());
+  const activeOwner = () => activeSession()?.inputOwner ?? "model";
+  const isSecure = () => Boolean(activeSession()?.secureInput);
 
   function ensureActive(next: TerminalTab[]) {
     const current = activeID();
@@ -76,22 +57,11 @@ export function TerminalPane(
     setActiveID(next[0]?.cells[0]);
   }
 
-  /**
-   * Reconciles the tabs against the backend's pane list BY PANE ID (the rules
-   * live in terminal-tabs.ts), and writes the signal only when the list
-   * actually moved: a tab whose panes are all still running is handed on as the
-   * SAME object, so the xterm host is neither rebuilt nor reconnected.
-   */
   async function loadTabs(forSessionID: string, restoreSaved = false) {
     const token = ++loadToken;
     const listed =
       (await props.runtime?.nativeTerminalList?.(
         forSessionID,
-        // The FIRST load of a session is the one that may rebuild what the
-        // runtime before this one left behind: `restoreSaved` starts the panes
-        // that session had, with their ids and directories, so the tabs come
-        // back instead of the panel inventing one empty terminal. Every later
-        // load (an event, a reconcile) must never start anything.
         restoreSaved ? { restoreSaved: true } : undefined,
       )) ?? [];
     if (token !== loadToken) return;
@@ -127,9 +97,6 @@ export function TerminalPane(
     )
       return;
     setAttachment({ sessionID: nextSessionID, runtimeURL });
-    // The first load of a session is also the only one that asks the runtime to
-    // restore that session's saved panes: a runtime that restarted has none, and
-    // a runtime that still has them ignores the request (it is idempotent).
     void loadTabs(nextSessionID, tabsSessionID() !== nextSessionID);
   });
 
@@ -141,7 +108,11 @@ export function TerminalPane(
       const relevant =
         event.type === "terminal.update" ||
         (event.type === "terminal.action" &&
-          (event.action === "started" || event.action === "exit")) ||
+          (event.action === "started" ||
+            event.action === "exit" ||
+            event.action === "write" ||
+            event.action === "detach" ||
+            event.action === "secure_input")) ||
         (event.type === "terminal.timeline" &&
           (event.action === "started" || event.action === "exit"));
       if (!relevant) return;
@@ -218,7 +189,7 @@ export function TerminalPane(
   }
 
   function splitActiveTab(direction: "vertical" | "horizontal") {
-    const tab = tabs().find((item) => item.id === activeID());
+    const tab = tabs().find((item) => item.cells.includes(activeID() ?? ""));
     if (!tab) return;
     const id = newTerminalID();
     const next = tabs().map((item) =>
@@ -291,195 +262,284 @@ export function TerminalPane(
           </div>
         }
       >
-        <div class="terminal-toolbar">
-          <span
-            class="terminal-owner-badge"
-            data-owner={
-              sessions().find((item) => item.id === activeID())?.inputOwner ??
-              "model"
-            }
-          >
-            {sessions().find((item) => item.id === activeID())?.inputOwner ===
-            "human"
-              ? t("terminal.ownerHuman")
-              : t("terminal.ownerModel")}
-          </span>
-          <Show
-            when={
-              sessions().find((item) => item.id === activeID())?.inputOwner ===
-              "model"
-            }
-          >
+        {/* Row 1: Unified Tab strip + compact icon actions */}
+        <div class="terminal-top-bar">
+          <div class="terminal-tabs">
+            <For each={tabs()}>
+              {(tab, index) => {
+                const isTabActive = () =>
+                  activeID() === tab.id || tab.cells.includes(activeID() ?? "");
+                const tabSession = () =>
+                  sessions().find((s) => s.id === tab.cells[0]);
+                return (
+                  <button
+                    type="button"
+                    class="terminal-tab"
+                    data-active={isTabActive()}
+                    onClick={() => setActiveID(tab.cells[0])}
+                  >
+                    <span
+                      class="terminal-tab-dot"
+                      data-owner={tabSession()?.inputOwner ?? "model"}
+                    />
+                    <span class="terminal-tab-label">{tabTitle(index())}</span>
+                    <Show when={tab.cells.length > 1}>
+                      <span class="terminal-tab-split-count">
+                        ×{tab.cells.length}
+                      </span>
+                    </Show>
+                    <span
+                      class="terminal-tab-close"
+                      role="button"
+                      aria-label={t("terminal.closeTab", {
+                        title: tabTitle(index()),
+                      })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void closeTab(tab.id);
+                      }}
+                    >
+                      ×
+                    </span>
+                  </button>
+                );
+              }}
+            </For>
             <button
               type="button"
-              class="terminal-toolbar-btn"
-              onClick={() => void claimActiveTerminal()}
-              title={t("terminal.takeoverTitle")}
+              class="terminal-tab-add"
+              title={t("terminal.newTab")}
+              disabled={tabs().length >= MAX_TERMINALS_PER_SESSION}
+              onClick={() => void addTab()}
             >
-              {t("terminal.takeover")}
+              +
             </button>
-          </Show>
-          <Show
-            when={
-              sessions().find((item) => item.id === activeID())?.inputOwner ===
-              "human"
-            }
-          >
+          </div>
+
+          <div class="terminal-quick-actions">
             <button
               type="button"
-              class="terminal-toolbar-btn"
-              onClick={() => void releaseActiveTerminal()}
-              title={t("terminal.releaseTitle")}
+              class="terminal-icon-btn"
+              data-active={searchOpen()}
+              onClick={() => setSearchOpen((v) => !v)}
+              title={t("terminal.searchToggle")}
             >
-              {t("terminal.release")}
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              >
+                <circle cx="6.8" cy="6.8" r="4.8" />
+                <path d="M10.4 10.4L14 14" />
+              </svg>
             </button>
             <button
               type="button"
-              class="terminal-toolbar-btn"
-              onClick={() => void toggleSecureInput()}
-              title={
-                sessions().find((item) => item.id === activeID())?.secureInput
-                  ? t("terminal.secureEndTitle")
-                  : t("terminal.secureStartTitle")
-              }
+              class="terminal-icon-btn"
+              onClick={() => splitActiveTab("vertical")}
+              title={t("terminal.splitHorizontalTitle")}
             >
-              {sessions().find((item) => item.id === activeID())?.secureInput
-                ? t("terminal.secureEnd")
-                : t("terminal.secureStart")}
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+              >
+                <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+                <path d="M8 2.5V13.5" />
+              </svg>
             </button>
-          </Show>
-          <input
-            class="terminal-search-input"
-            value={searchQuery()}
-            placeholder={t("terminal.searchPlaceholder")}
-            onInput={(event) => setSearchQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") activeApi()?.findNext(searchQuery());
-              if (event.key === "Escape") {
-                setSearchQuery("");
-                activeApi()?.findNext("");
-              }
-            }}
-          />
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.findNext(searchQuery())}
-            title={t("terminal.nextMatch")}
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.findPrevious(searchQuery())}
-            title={t("terminal.prevMatch")}
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.reset()}
-            title={t("terminal.refreshTitle")}
-          >
-            {t("terminal.refresh")}
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.clear()}
-            title={t("terminal.clear")}
-          >
-            {t("terminal.clear")}
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => void activeApi()?.copy()}
-            title={t("terminal.copy")}
-          >
-            {t("terminal.copy")}
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => void activeApi()?.paste()}
-            title={t("terminal.paste")}
-          >
-            {t("terminal.paste")}
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.zoomOut()}
-            title={t("terminal.zoomOut")}
-          >
-            A-
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => activeApi()?.zoomIn()}
-            title={t("terminal.zoomIn")}
-          >
-            A+
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => splitActiveTab("horizontal")}
-            title={t("terminal.splitVerticalTitle")}
-          >
-            {t("terminal.splitVertical")}
-          </button>
-          <button
-            type="button"
-            class="terminal-toolbar-btn"
-            onClick={() => splitActiveTab("vertical")}
-            title={t("terminal.splitHorizontalTitle")}
-          >
-            {t("terminal.splitHorizontal")}
-          </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => splitActiveTab("horizontal")}
+              title={t("terminal.splitVerticalTitle")}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+              >
+                <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+                <path d="M1.5 8H14.5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.zoomOut()}
+              title={t("terminal.zoomOut")}
+            >
+              A-
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.zoomIn()}
+              title={t("terminal.zoomIn")}
+            >
+              A+
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => void activeApi()?.copy()}
+              title={t("terminal.copy")}
+            >
+              {t("terminal.copy")}
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => void activeApi()?.paste()}
+              title={t("terminal.paste")}
+            >
+              {t("terminal.paste")}
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.clear()}
+              title={t("terminal.clear")}
+            >
+              {t("terminal.clear")}
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.reset()}
+              title={t("terminal.refreshTitle")}
+            >
+              ↻
+            </button>
+          </div>
         </div>
-        <div class="terminal-tabs">
-          <For each={tabs()}>
-            {(tab, index) => (
+
+        {/* Collapsible search bar */}
+        <Show when={searchOpen()}>
+          <div class="terminal-search-bar">
+            <input
+              class="terminal-search-input"
+              value={searchQuery()}
+              placeholder={t("terminal.searchPlaceholder")}
+              autofocus
+              onInput={(event) => {
+                setSearchQuery(event.currentTarget.value);
+                activeApi()?.findNext(event.currentTarget.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  if (event.shiftKey) activeApi()?.findPrevious(searchQuery());
+                  else activeApi()?.findNext(searchQuery());
+                }
+                if (event.key === "Escape") {
+                  setSearchQuery("");
+                  setSearchOpen(false);
+                }
+              }}
+            />
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.findPrevious(searchQuery())}
+              title={t("terminal.prevMatch")}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => activeApi()?.findNext(searchQuery())}
+              title={t("terminal.nextMatch")}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              class="terminal-icon-btn"
+              onClick={() => {
+                setSearchQuery("");
+                setSearchOpen(false);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </Show>
+
+        {/* Row 2: Human-AI Collaboration Status & Control Banner */}
+        <div
+          class="terminal-collab-bar"
+          data-owner={activeOwner()}
+          data-secure={isSecure()}
+        >
+          <div class="terminal-collab-info">
+            <span
+              class="terminal-owner-badge"
+              data-owner={activeOwner()}
+              data-secure={isSecure()}
+            >
+              {activeOwner() === "human"
+                ? t("terminal.ownerHuman")
+                : t("terminal.ownerModel")}
+            </span>
+            <span class="terminal-collab-hint">
+              {isSecure()
+                ? t("terminal.bannerSecure")
+                : activeOwner() === "human"
+                  ? t("terminal.bannerHuman")
+                  : t("terminal.bannerModel")}
+            </span>
+          </div>
+          <div class="terminal-collab-actions">
+            <Show when={activeOwner() === "model"}>
               <button
                 type="button"
-                class="terminal-tab"
-                data-active={
-                  activeID() === tab.id || tab.cells.includes(activeID() ?? "")
-                }
-                onClick={() => setActiveID(tab.cells[0])}
+                class="terminal-collab-btn terminal-collab-primary"
+                onClick={() => void claimActiveTerminal()}
+                title={t("terminal.takeoverTitle")}
               >
-                <span class="terminal-tab-label">{tabTitle(index())}</span>
-                <span
-                  class="terminal-tab-close"
-                  role="button"
-                  aria-label={t("terminal.closeTab", {
-                    title: tabTitle(index()),
-                  })}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void closeTab(tab.id);
-                  }}
-                >
-                  ×
-                </span>
+                {t("terminal.takeover")}
               </button>
-            )}
-          </For>
-          <button
-            type="button"
-            class="terminal-tab-add"
-            title={t("terminal.newTab")}
-            disabled={tabs().length >= MAX_TERMINALS_PER_SESSION}
-            onClick={() => void addTab()}
-          >
-            +
-          </button>
+            </Show>
+            <Show when={activeOwner() === "human"}>
+              <button
+                type="button"
+                class="terminal-collab-btn"
+                data-active={isSecure()}
+                onClick={() => void toggleSecureInput()}
+                title={
+                  isSecure()
+                    ? t("terminal.secureEndTitle")
+                    : t("terminal.secureStartTitle")
+                }
+              >
+                {isSecure()
+                  ? t("terminal.secureEnd")
+                  : t("terminal.secureStart")}
+              </button>
+              <button
+                type="button"
+                class="terminal-collab-btn terminal-collab-primary"
+                disabled={isSecure()}
+                onClick={() => void releaseActiveTerminal()}
+                title={t("terminal.releaseTitle")}
+              >
+                {t("terminal.release")}
+              </button>
+            </Show>
+          </div>
         </div>
+
         <Show when={limitError()}>
           <div class="terminal-limit-error">{limitError()}</div>
         </Show>
@@ -507,8 +567,23 @@ export function TerminalPane(
                       <div
                         class="terminal-split-cell"
                         data-active={activeID() === cellID}
+                        data-multi={tab.cells.length > 1}
                         onClick={() => setActiveID(cellID)}
                       >
+                        <Show when={tab.cells.length > 1}>
+                          <button
+                            type="button"
+                            class="terminal-split-close"
+                            title={t("terminal.closeSplit")}
+                            aria-label={t("terminal.closeSplit")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              closeCell(tab, cellID);
+                            }}
+                          >
+                            ×
+                          </button>
+                        </Show>
                         <WebTerminal
                           sessionID={sessionID()!}
                           terminalID={cellID}

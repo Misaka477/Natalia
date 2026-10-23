@@ -3151,6 +3151,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     updateLayout();
     window.addEventListener("resize", updateLayout);
     onCleanup(() => window.removeEventListener("resize", updateLayout));
+
+    const handleGlobalOpenFile = () => {
+      setRightVisible(true);
+      setRightTab("files");
+    };
+    window.addEventListener("natalia:open-file", handleGlobalOpenFile);
+    onCleanup(() =>
+      window.removeEventListener("natalia:open-file", handleGlobalOpenFile),
+    );
   });
 
   // Which agent the ONE main pane shows. The pane used to be two panes

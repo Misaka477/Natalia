@@ -1,139 +1,82 @@
 .terminal-pane {
   display: flex;
   flex-direction: column;
-  /* Stretch, do not resolve a percentage: the mount slot is a flex column, and
-     `flex: 1` gives this root the slot's height. `height: 100%` resolved to
-     auto when the slot was a plain block, which made the pane's height depend
-     on the terminal's content — the terminal then sized itself to its own
-     rows and the pane stopped there, empty sidebar below. */
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   background: var(--neu-bg-light);
   border-radius: 12px;
-  box-shadow:
-    inset 3px 3px 6px var(--neu-shadow-dark),
-    inset -3px -3px 6px var(--neu-shadow-light);
+  border: 1px solid var(--neu-hairline);
 }
-.terminal-toolbar {
+.terminal-top-bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 10px 0;
-  flex-shrink: 0;
-}
-.terminal-search-input {
-  border: none;
-  border-radius: 8px;
-  padding: 4px 8px;
-  width: 90px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--neu-hairline);
   background: var(--neu-bg);
-  color: var(--neu-text);
-  font-size: 11px;
-  box-shadow:
-    inset 2px 2px 4px var(--neu-shadow-dark),
-    inset -2px -2px 4px var(--neu-shadow-light);
-  outline: none;
-}
-.terminal-toolbar-btn {
-  border: none;
-  border-radius: 10px;
-  padding: 4px 10px;
-  background: var(--neu-bg);
-  color: var(--neu-muted);
-  font-size: 11px;
-  cursor: pointer;
-  box-shadow:
-    3px 3px 6px var(--neu-shadow-dark),
-    -3px -3px 6px var(--neu-shadow-light);
-}
-.terminal-toolbar-btn:hover {
-  color: var(--neu-text);
-}
-.terminal-toolbar-btn:active {
-  box-shadow:
-    inset 2px 2px 4px var(--neu-shadow-dark),
-    inset -2px -2px 4px var(--neu-shadow-light);
-}
-.terminal-owner-badge {
-  padding: 3px 8px;
-  border-radius: 8px;
-  font-size: 11px;
-  background: var(--neu-bg-light);
-  color: var(--neu-muted);
-}
-.terminal-owner-badge[data-owner="human"] {
-  color: var(--neu-accent);
-}
-.terminal-profile-select {
-  width: 92px;
   flex-shrink: 0;
-}
-.terminal-profile-select .neu-select-trigger {
-  padding: 5px 8px;
-  font-size: 11px;
-}
-.terminal-profile-select .neu-select-option {
-  font-size: 11px;
-}
-.terminal-split-stack {
-  display: flex;
-  flex: 1;
-  /* Same loop-breaker as the xterm host: a flex item refuses to shrink below
-     its min-content, and the min-content here is the sum of the terminals'
-     rendered widths, so a widened pane could never narrow back. */
-  min-width: 0;
-  min-height: 0;
-  gap: 4px;
-  padding: 4px;
-}
-.terminal-split-cell {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid transparent;
-  display: flex;
-}
-.terminal-split-cell[data-active="true"] {
-  border-color: var(--neu-accent);
 }
 .terminal-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px 0;
-  flex-shrink: 0;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
 }
 .terminal-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 10px;
-  background: var(--neu-bg);
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
   color: var(--neu-muted);
+  font-family: inherit;
   font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow:
-    3px 3px 6px var(--neu-shadow-dark),
-    -3px -3px 6px var(--neu-shadow-light);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.terminal-tab:hover {
+  background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.08));
+  color: var(--neu-text);
 }
 .terminal-tab[data-active="true"] {
   background: var(--neu-bg-light);
-  color: var(--neu-accent);
-  box-shadow:
-    inset 2px 2px 4px var(--neu-shadow-dark),
-    inset -2px -2px 4px var(--neu-shadow-light);
+  border-color: var(--neu-hairline);
+  color: var(--neu-text);
+  font-weight: 600;
+}
+.terminal-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--neu-accent);
+  flex-shrink: 0;
+}
+.terminal-tab-dot[data-owner="human"] {
+  background: var(--neu-success);
 }
 .terminal-tab-label {
   white-space: nowrap;
+}
+.terminal-tab-split-count {
+  font-size: 10px;
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
 }
 .terminal-tab-close {
   display: inline-flex;
@@ -141,32 +84,224 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: var(--neu-muted);
   font-size: 12px;
   line-height: 1;
 }
 .terminal-tab-close:hover {
+  background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.14));
   color: var(--neu-error);
 }
 .terminal-tab-add {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   border: none;
-  border-radius: 10px;
-  background: var(--neu-bg);
+  border-radius: 6px;
+  background: transparent;
   color: var(--neu-muted);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
   cursor: pointer;
-  box-shadow:
-    3px 3px 6px var(--neu-shadow-dark),
-    -3px -3px 6px var(--neu-shadow-light);
+}
+.terminal-tab-add:hover:not(:disabled) {
+  background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.1));
+  color: var(--neu-text);
 }
 .terminal-tab-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.terminal-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.terminal-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.terminal-icon-btn:hover,
+.terminal-icon-btn[data-active="true"] {
+  background: var(--neu-hover-overlay, rgba(127, 127, 127, 0.1));
+  color: var(--neu-text);
+}
+.terminal-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
+  flex-shrink: 0;
+}
+.terminal-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+.terminal-search-input:focus {
+  border-color: var(--neu-accent);
+}
+.terminal-collab-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--neu-hairline);
+  background: color-mix(in srgb, var(--neu-accent) 7%, var(--neu-bg));
+  flex-shrink: 0;
+}
+.terminal-collab-bar[data-owner="human"] {
+  background: color-mix(in srgb, var(--neu-success) 7%, var(--neu-bg));
+}
+.terminal-collab-bar[data-secure="true"] {
+  background: color-mix(in srgb, var(--neu-warning) 12%, var(--neu-bg));
+}
+.terminal-collab-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.terminal-owner-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--neu-accent) 18%, transparent);
+  color: var(--neu-accent);
+}
+.terminal-owner-badge[data-owner="human"] {
+  background: color-mix(in srgb, var(--neu-success) 18%, transparent);
+  color: var(--neu-success);
+}
+.terminal-owner-badge[data-secure="true"] {
+  background: color-mix(in srgb, var(--neu-warning) 22%, transparent);
+  color: var(--neu-warning);
+}
+.terminal-collab-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+.terminal-collab-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.terminal-collab-btn {
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 6px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.terminal-collab-btn:hover:not(:disabled) {
+  border-color: var(--neu-accent);
+  color: var(--neu-accent);
+}
+.terminal-collab-btn[data-active="true"] {
+  border-color: var(--neu-warning);
+  color: var(--neu-warning);
+}
+.terminal-collab-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.terminal-collab-primary {
+  background: color-mix(in srgb, var(--neu-accent) 16%, var(--neu-bg-light));
+  border-color: color-mix(in srgb, var(--neu-accent) 35%, transparent);
+  color: var(--neu-accent);
+}
+.terminal-split-stack {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 4px;
+  padding: 4px;
+  background: #18181a;
+}
+.terminal-split-cell {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  display: flex;
+}
+.terminal-split-cell[data-multi="true"][data-active="true"] {
+  border-color: color-mix(in srgb, var(--neu-accent) 55%, transparent);
+}
+.terminal-split-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(30, 30, 32, 0.78);
+  color: #a6a6b0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+.terminal-split-cell:hover .terminal-split-close {
+  opacity: 1;
+}
+.terminal-split-close:hover {
+  color: var(--neu-error);
 }
 .terminal-limit-error {
   padding: 4px 12px 0;
@@ -182,44 +317,27 @@
   position: absolute;
   inset: 0;
   display: none;
-  border-radius: 12px;
   overflow: hidden;
 }
 .terminal-xterm-host[data-active="true"] {
   display: flex;
 }
-/*
- * The xterm host's box must be layout-driven, never content-driven.
- *
- * `min-width: auto` (the flex default) makes a flex item refuse to shrink below
- * its min-content width — and xterm's min-content width IS its rendered width
- * (columns * cell). So the moment the pane widened and xterm refitted, the
- * host's own floor rose with it and the pane could never narrow back: the
- * split cell could not shrink below the host, and the host could not shrink
- * below the terminal it contained. `min-width: 0` breaks that loop, and the
- * explicit `width/height: 100%` makes the host's box equal the cell's box, so
- * the ResizeObserver that refits the terminal sees the pane's geometry rather
- * than the terminal's own feedback.
- */
 .web-terminal {
   flex: 1;
   min-width: 0;
   min-height: 0;
   width: 100%;
   height: 100%;
-  padding: 8px;
-  border-radius: 10px;
+  padding: 8px 10px;
   overflow: hidden;
-  background: #1e1e20;
+  background: #18181a;
 }
 .web-terminal .xterm {
   height: 100%;
-  border-radius: 10px;
   overflow: hidden;
 }
 .web-terminal .xterm-viewport {
   overflow-y: auto !important;
-  border-radius: 10px;
 }
 .terminal-output {
   flex: 1;
@@ -234,27 +352,4 @@
   color: var(--neu-muted);
   white-space: pre-wrap;
   word-break: break-all;
-}
-.terminal-line-terminal {
-  color: var(--neu-text);
-}
-.terminal-line-success {
-  color: var(--neu-success);
-}
-.terminal-input-line {
-  display: flex;
-  align-items: center;
-  color: var(--neu-muted);
-  font-family: var(--neu-font-mono);
-  font-size: 12px;
-}
-.terminal-prompt {
-  color: var(--neu-accent);
-}
-.terminal-cursor {
-  width: 7px;
-  height: 14px;
-  background: var(--neu-muted);
-  animation: neu-blink 1s step-end infinite;
-  margin-left: 2px;
 }

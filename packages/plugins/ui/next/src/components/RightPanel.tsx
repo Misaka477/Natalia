@@ -1105,6 +1105,20 @@ export function ReviewPane(
     target.addEventListener("pointercancel", finish);
   }
 
+  function toggleFileCard(path: string) {
+    if (selectedForTab() === path) {
+      if (tab() === "git") setGitSelected(null);
+      else if (tab() === "sandbox") setSandboxSelected(null);
+      else if (tab() === "rounds") setRoundSelected(null);
+      else setCheckpointSelected(null);
+      return;
+    }
+    if (tab() === "git") void selectGitFile(path);
+    else if (tab() === "sandbox") setSandboxSelected(path);
+    else if (tab() === "rounds") setRoundSelected(path);
+    else setCheckpointSelected(path);
+  }
+
   function selectTab(next: ReviewSubTab) {
     setTab(next);
     if (next === "sandbox") void loadSandboxTab();
@@ -1501,11 +1515,158 @@ export function ReviewPane(
                   ? "Round Changes"
                   : "Checkpoint Changes"}
           </span>
-        </div>
-        <div class="review-meta">
           <span class="review-count">{changesForTab().length} files</span>
           <span class={styles.additions}>+{totalAdditions()}</span>
           <span class={styles.deletions}>-{totalDeletions()}</span>
+        </div>
+        <div class={styles.diffActions}>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={diffScope() === "session"}
+            title={t("review.tooltipSession")}
+            onClick={() => {
+              setDiffScope("session");
+              void loadGit();
+            }}
+          >
+            S
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={diffScope() === "all"}
+            title={t("review.tooltipGlobal")}
+            onClick={() => {
+              setDiffScope("all");
+              void loadGit();
+            }}
+          >
+            G
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={diffIgnoreWhitespace()}
+            title={t("review.tooltipIgnoreWhitespace")}
+            onClick={() => {
+              setDiffIgnoreWhitespace((value) => !value);
+              void loadGit();
+            }}
+          >
+            W
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={viewMode() === "unified"}
+            title="Unified"
+            onClick={() => {
+              setViewMode("unified");
+              setAstBatchPanelOpen(false);
+            }}
+          >
+            U
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={viewMode() === "split"}
+            title="Split"
+            onClick={() => {
+              setViewMode("split");
+              setAstBatchPanelOpen(false);
+            }}
+          >
+            ⇄
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={viewMode() === "ast" && !astBatchPanelOpen()}
+            title="AST"
+            onClick={() => {
+              setViewMode("ast");
+              setAstBatchPanelOpen(false);
+              void loadAstDiffForSelectedFile();
+            }}
+          >
+            A
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={
+              viewMode() === "ast" &&
+              astBatchPanelOpen() &&
+              astBatchMode() === "structure"
+            }
+            title={t("review.tooltipBatchAst")}
+            onClick={() => {
+              setViewMode("ast");
+              setAstBatchPanelOpen(true);
+              setAstBatchMode("structure");
+              void loadAstBatch();
+            }}
+          >
+            B
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={
+              viewMode() === "ast" &&
+              astBatchPanelOpen() &&
+              astBatchMode() === "refactor"
+            }
+            title={t("review.tooltipRefactorPreview")}
+            onClick={() => {
+              setViewMode("ast");
+              setAstBatchPanelOpen(true);
+              setAstBatchMode("refactor");
+              void loadAstBatch();
+            }}
+          >
+            R
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={
+              viewMode() === "ast" &&
+              astBatchPanelOpen() &&
+              astBatchMode() === "search"
+            }
+            title={t("review.tooltipAstSearch")}
+            onClick={() => {
+              setViewMode("ast");
+              setAstBatchPanelOpen(true);
+              setAstBatchMode("search");
+              setAstSearchResult(undefined);
+              setAstSearchError(undefined);
+            }}
+          >
+            Q
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            data-active={
+              viewMode() === "ast" &&
+              astBatchPanelOpen() &&
+              astBatchMode() === "plan"
+            }
+            title={t("review.tooltipRefactorPlan")}
+            onClick={() => {
+              setViewMode("ast");
+              setAstBatchPanelOpen(true);
+              setAstBatchMode("plan");
+              setAstPlanResult(undefined);
+              setAstPlanError(undefined);
+            }}
+          >
+            P
+          </button>
         </div>
       </div>
       <div class="review-body">
@@ -1530,690 +1691,629 @@ export function ReviewPane(
                 />
               }
             >
-              <div
-                class="review-files"
-                data-narrow={fileWidth() < 170}
-                style={{ width: `${fileWidth()}px` }}
-              >
-                <div class="review-files-heading">Files changed</div>
-                <For each={changesForTab()}>
-                  {(change) => (
-                    <button
-                      type="button"
-                      class="review-file-row"
-                      data-active={selectedForTab() === change.path}
-                      onClick={() =>
-                        tab() === "git"
-                          ? void selectGitFile(change.path)
-                          : tab() === "sandbox"
-                            ? setSandboxSelected(change.path)
-                            : setCheckpointSelected(change.path)
-                      }
-                    >
-                      <span
-                        class={`review-file-status ${change.operation === "added" ? "is-added" : change.operation === "deleted" ? "is-deleted" : "is-modified"}`}
-                      >
-                        {statusFor(change.operation)}
-                      </span>
-                      <span class="review-file-name">{change.path}</span>
-                    </button>
-                  )}
-                </For>
-              </div>
-              <div
-                class="review-resizer"
-                role="separator"
-                aria-orientation="vertical"
-                onPointerDown={startFileResize}
-              />
-              <div class="review-diff">
-                <div class="review-diff-header">
-                  <span class="review-diff-path">
-                    {selectedFile()?.path ?? ""}
-                  </span>
-                  <div class={styles.diffActions}>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={diffScope() === "session"}
-                      title={t("review.tooltipSession")}
-                      onClick={() => {
-                        setDiffScope("session");
-                        void loadGit();
-                      }}
-                    >
-                      S
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={diffScope() === "all"}
-                      title={t("review.tooltipGlobal")}
-                      onClick={() => {
-                        setDiffScope("all");
-                        void loadGit();
-                      }}
-                    >
-                      G
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={diffIgnoreWhitespace()}
-                      title={t("review.tooltipIgnoreWhitespace")}
-                      onClick={() => {
-                        setDiffIgnoreWhitespace((value) => !value);
-                        void loadGit();
-                      }}
-                    >
-                      W
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={viewMode() === "unified"}
-                      title="Unified"
-                      onClick={() => setViewMode("unified")}
-                    >
-                      U
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={viewMode() === "split"}
-                      title="Split"
-                      onClick={() => setViewMode("split")}
-                    >
-                      ⇄
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={viewMode() === "ast" && !astBatchPanelOpen()}
-                      title="AST"
-                      onClick={() => {
-                        setViewMode("ast");
-                        setAstBatchPanelOpen(false);
-                        void loadAstDiffForSelectedFile();
-                      }}
-                    >
-                      A
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={
-                        viewMode() === "ast" &&
-                        astBatchPanelOpen() &&
-                        astBatchMode() === "structure"
-                      }
-                      title={t("review.tooltipBatchAst")}
-                      onClick={() => {
-                        setViewMode("ast");
-                        setAstBatchPanelOpen(true);
-                        setAstBatchMode("structure");
-                        void loadAstBatch();
-                      }}
-                    >
-                      B
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={
-                        viewMode() === "ast" &&
-                        astBatchPanelOpen() &&
-                        astBatchMode() === "refactor"
-                      }
-                      title={t("review.tooltipRefactorPreview")}
-                      onClick={() => {
-                        setViewMode("ast");
-                        setAstBatchPanelOpen(true);
-                        setAstBatchMode("refactor");
-                        void loadAstBatch();
-                      }}
-                    >
-                      R
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={
-                        viewMode() === "ast" &&
-                        astBatchPanelOpen() &&
-                        astBatchMode() === "search"
-                      }
-                      title={t("review.tooltipAstSearch")}
-                      onClick={() => {
-                        setViewMode("ast");
-                        setAstBatchPanelOpen(true);
-                        setAstBatchMode("search");
-                        setAstSearchResult(undefined);
-                        setAstSearchError(undefined);
-                      }}
-                    >
-                      Q
-                    </button>
-                    <button
-                      type="button"
-                      class={styles.iconBtn}
-                      data-active={
-                        viewMode() === "ast" &&
-                        astBatchPanelOpen() &&
-                        astBatchMode() === "plan"
-                      }
-                      title={t("review.tooltipRefactorPlan")}
-                      onClick={() => {
-                        setViewMode("ast");
-                        setAstBatchPanelOpen(true);
-                        setAstBatchMode("plan");
-                        setAstPlanResult(undefined);
-                        setAstPlanError(undefined);
-                      }}
-                    >
-                      P
-                    </button>
-                  </div>
-                </div>
-                <Show
-                  when={
-                    (viewMode() === "ast" && astBatchPanelOpen()) ||
-                    selectedFile()?.patch ||
-                    selectedFile()?.before ||
-                    selectedFile()?.after ||
-                    selectedFile()?.structured ||
-                    structuredDiff()
-                  }
-                  fallback={
-                    <div class="review-diff-content">
-                      <PanelState
-                        state="empty"
-                        title={t("review.noLineDiff")}
-                        description={t("review.noLineDiffHint")}
-                      />
-                    </div>
-                  }
-                >
-                  <Show when={viewMode() === "ast"}>
-                    <div class="review-diff-content">
-                      <Show when={astBatchPanelOpen()}>
-                        <Show when={astBatchMode() === "search"}>
-                          <div class={styles.astSearchForm}>
-                            <input
-                              type="text"
-                              placeholder={t("review.astContainsPh")}
-                              value={astSearchText()}
-                              onInput={(event) =>
-                                setAstSearchText(event.currentTarget.value)
-                              }
-                            />
-                            <input
-                              type="text"
-                              placeholder={t("review.nodeTypePh")}
-                              value={astSearchNodeKind()}
-                              onInput={(event) =>
-                                setAstSearchNodeKind(event.currentTarget.value)
-                              }
-                            />
-                            <button
-                              type="button"
-                              onClick={() => void loadAstSearch()}
-                            >
-                              {t("review.search")}
-                            </button>
-                          </div>
-                          <Show when={astSearchLoading()}>
-                            <PanelState
-                              state="loading"
-                              title={t("review.astSearching")}
-                            />
-                          </Show>
-                          <Show when={astSearchError()}>
-                            <PanelState
-                              state="error"
-                              title={t("review.astSearchFailed")}
-                              description={astSearchError()}
-                            />
-                          </Show>
-                          <Show when={astSearchResult()}>
-                            <div class={styles.astDiffList}>
-                              <Show
-                                when={
-                                  !(astSearchResult()!.matches ?? []).length
-                                }
-                              >
-                                <PanelState
-                                  state="empty"
-                                  title={t("review.noMatchNodes")}
-                                />
-                              </Show>
-                              <For each={astSearchResult()!.matches ?? []}>
-                                {(file) => (
-                                  <div class={styles.astChangeGroup}>
-                                    <div class={styles.astGroupHeader}>
-                                      <span class="ast-group-name">
-                                        {file.path ?? "?"}
-                                      </span>
-                                      <span class={styles.astGroupCount}>
-                                        {file.nodes.length}
-                                      </span>
-                                    </div>
-                                    <For each={file.nodes}>
-                                      {(node) => (
-                                        <div
-                                          class={styles.astChangeRow}
-                                          data-kind={node.nodeKind}
-                                        >
-                                          <span class={styles.astChangeKind}>
-                                            {node.nodeKind}
-                                          </span>
-                                          <span class={styles.astChangeNode}>
-                                            {node.text || "—"}
-                                          </span>
-                                          <span class={styles.astChangePos}>
-                                            {node.start}-{node.end}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </For>
-                                  </div>
-                                )}
-                              </For>
-                            </div>
-                          </Show>
-                        </Show>
-
-                        <Show when={astBatchMode() === "plan"}>
-                          <div class={styles.astSearchForm}>
-                            <input
-                              type="text"
-                              placeholder={t("review.oldNamePh")}
-                              value={astPlanFrom()}
-                              onInput={(event) =>
-                                setAstPlanFrom(event.currentTarget.value)
-                              }
-                            />
-                            <input
-                              type="text"
-                              placeholder={t("review.newNamePh")}
-                              value={astPlanTo()}
-                              onInput={(event) =>
-                                setAstPlanTo(event.currentTarget.value)
-                              }
-                            />
-                            <button
-                              type="button"
-                              onClick={() => void loadAstPlan()}
-                            >
-                              {t("review.genPlan")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void applyAstPlan()}
-                            >
-                              {t("review.applyChanges")}
-                            </button>
-                          </div>
-                          <Show when={astPlanLoading()}>
-                            <PanelState
-                              state="loading"
-                              title={t("review.planGenerating")}
-                            />
-                          </Show>
-                          <Show when={astPlanError()}>
-                            <PanelState
-                              state="error"
-                              title={t("review.planFailed")}
-                              description={astPlanError()}
-                            />
-                          </Show>
-                          <Show when={astPlanResult()}>
-                            <div class={styles.astDiffList}>
-                              <Show when={!astPlanResult()!.targets.length}>
-                                <PanelState
-                                  state="empty"
-                                  title={t("review.noRefactorNodes")}
-                                />
-                              </Show>
-                              <For each={astPlanResult()!.targets}>
-                                {(target) => (
-                                  <div
-                                    class={styles.astChangeRow}
-                                    data-kind={target.nodeKind}
-                                  >
-                                    <span class={styles.astChangeKind}>
-                                      {target.nodeKind}
-                                    </span>
-                                    <span class={styles.astChangeNode}>
-                                      {target.text} →{" "}
-                                      {target.suggestedText ?? "?"}
-                                    </span>
-                                    <span class={styles.astChangePos}>
-                                      {target.path ?? "?"}
-                                    </span>
-                                  </div>
-                                )}
-                              </For>
-                            </div>
-                          </Show>
-                          <Show when={astApplyLoading()}>
-                            <PanelState
-                              state="loading"
-                              title={t("review.autoApplying")}
-                            />
-                          </Show>
-                          <Show when={astApplyError()}>
-                            <PanelState
-                              state="error"
-                              title={t("review.autoApplyFailed")}
-                              description={astApplyError()}
-                            />
-                          </Show>
-                          <Show when={astApplyResult()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.appliedChanges")}
-                                {
-                                  astApplyResult()!.applied.filter(
-                                    (item) => !item.error,
-                                  ).length
-                                }
-                                / {astApplyResult()!.applied.length}
-                              </div>
-                            </div>
-                          </Show>
-                        </Show>
-
-                        <Show
-                          when={
-                            astBatchMode() !== "search" &&
-                            astBatchMode() !== "plan"
-                          }
-                        >
-                          <Show when={astBatchLoading()}>
-                            <PanelState
-                              state="loading"
-                              title={
-                                astBatchMode() === "refactor"
-                                  ? t("review.previewComputing")
-                                  : t("review.batchComputing")
-                              }
-                            />
-                          </Show>
-                          <Show when={astBatchError()}>
-                            <PanelState
-                              state="error"
-                              title={
-                                astBatchMode() === "refactor"
-                                  ? t("review.previewFailed")
-                                  : t("review.batchFailed")
-                              }
-                              description={astBatchError()}
-                            />
-                          </Show>
-                          <Show when={astBatchResult()}>
-                            <div class={styles.astDiffList}>
-                              <Show when={!astBatchGroups().length}>
-                                <PanelState
-                                  state="empty"
-                                  title={t("review.noBatchChanges")}
-                                />
-                              </Show>
-                              <For each={astBatchGroups()}>
-                                {(group) => (
-                                  <div class={styles.astChangeGroup}>
-                                    <div class={styles.astGroupHeader}>
-                                      <span class="ast-group-name">
-                                        {group.nodeKind}
-                                      </span>
-                                      <span class={styles.astGroupCount}>
-                                        {group.items.length}
-                                      </span>
-                                    </div>
-                                    <For each={group.items}>
-                                      {(item) => (
-                                        <div
-                                          class={styles.astChangeRow}
-                                          data-kind={item.change.kind}
-                                        >
-                                          <span class={styles.astChangeKind}>
-                                            {item.change.kind}
-                                          </span>
-                                          <span class={styles.astChangeNode}>
-                                            {item.change.nodeKind}
-                                          </span>
-                                          <span class={styles.astChangePos}>
-                                            {item.path ?? "?"}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </For>
-                                  </div>
-                                )}
-                              </For>
-                            </div>
-                          </Show>
-                        </Show>
-                      </Show>
-
-                      <Show when={!astBatchPanelOpen()}>
-                        <Show
-                          when={astDiffError()}
-                          fallback={
-                            <Show
-                              when={astDiffResult()}
-                              fallback={
-                                <PanelState
-                                  state="loading"
-                                  title={t("review.loadingAst")}
-                                />
-                              }
-                            >
-                              <div class={styles.astDiffList}>
-                                <Show when={!astDiffResult()!.changes.length}>
-                                  <PanelState
-                                    state="empty"
-                                    title={t("review.noStructuralChanges")}
-                                  />
-                                </Show>
-                                <For each={astGroups()}>
-                                  {(group) => (
-                                    <div class={styles.astChangeGroup}>
-                                      <button
-                                        type="button"
-                                        class={styles.astGroupHeader}
-                                        onClick={() =>
-                                          setCollapsedAstGroups((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(group.nodeKind))
-                                              next.delete(group.nodeKind);
-                                            else next.add(group.nodeKind);
-                                            return next;
-                                          })
-                                        }
-                                      >
-                                        <span class="ast-group-name">
-                                          {collapsedAstGroups().has(
-                                            group.nodeKind,
-                                          )
-                                            ? "▸"
-                                            : "▾"}{" "}
-                                          {group.nodeKind}
-                                        </span>
-                                        <span class={styles.astGroupCount}>
-                                          {group.changes.length}
-                                        </span>
-                                      </button>
-                                      <Show
-                                        when={
-                                          !collapsedAstGroups().has(
-                                            group.nodeKind,
-                                          )
-                                        }
-                                      >
-                                        <For each={group.changes}>
-                                          {(change) => (
-                                            <div
-                                              class={styles.astChangeRow}
-                                              data-kind={change.kind}
-                                              onClick={() => {
-                                                const file = selectedFile();
-                                                if (!file) return;
-                                                const source =
-                                                  change.kind === "removed"
-                                                    ? (file.before ?? "")
-                                                    : (file.after ?? "");
-                                                const start =
-                                                  change.kind === "removed"
-                                                    ? change.oldStart
-                                                    : change.newStart;
-                                                const end =
-                                                  change.kind === "removed"
-                                                    ? change.oldEnd
-                                                    : change.newEnd;
-                                                setAstSnippet({
-                                                  kind: change.kind,
-                                                  nodeKind: change.nodeKind,
-                                                  text: source.slice(
-                                                    start,
-                                                    end,
-                                                  ),
-                                                });
-                                              }}
-                                            >
-                                              <span
-                                                class={styles.astChangeKind}
-                                              >
-                                                {change.kind}
-                                              </span>
-                                              <span
-                                                class={styles.astChangeNode}
-                                              >
-                                                {change.nodeKind}
-                                              </span>
-                                              <span class={styles.astChangePos}>
-                                                {change.kind === "removed"
-                                                  ? `${change.oldStart}-${change.oldEnd}`
-                                                  : `${change.newStart}-${change.newEnd}`}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </For>
-                                      </Show>
-                                    </div>
-                                  )}
-                                </For>
-                              </div>
-                              <Show when={astSnippet()}>
-                                <pre class={styles.astSnippet}>
-                                  {astSnippet()!.text}
-                                </pre>
-                              </Show>
-                            </Show>
-                          }
-                        >
+              <div class={styles.accordionStream}>
+                <Show when={viewMode() === "ast" && astBatchPanelOpen()}>
+                  <div class={styles.accordionCard} data-expanded="true">
+                    <div class={styles.accordionBody}>
+                      <Show when={astBatchMode() === "search"}>
+                        <div class={styles.astSearchForm}>
+                          <input
+                            type="text"
+                            placeholder={t("review.astContainsPh")}
+                            value={astSearchText()}
+                            onInput={(event) =>
+                              setAstSearchText(event.currentTarget.value)
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder={t("review.nodeTypePh")}
+                            value={astSearchNodeKind()}
+                            onInput={(event) =>
+                              setAstSearchNodeKind(event.currentTarget.value)
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void loadAstSearch()}
+                          >
+                            {t("review.search")}
+                          </button>
+                        </div>
+                        <Show when={astSearchLoading()}>
                           <PanelState
-                            state="error"
-                            title={t("review.astDiffFailed")}
-                            description={astDiffError()}
+                            state="loading"
+                            title={t("review.astSearching")}
                           />
                         </Show>
+                        <Show when={astSearchError()}>
+                          <PanelState
+                            state="error"
+                            title={t("review.astSearchFailed")}
+                            description={astSearchError()}
+                          />
+                        </Show>
+                        <Show when={astSearchResult()}>
+                          <div class={styles.astDiffList}>
+                            <Show
+                              when={!(astSearchResult()!.matches ?? []).length}
+                            >
+                              <PanelState
+                                state="empty"
+                                title={t("review.noMatchNodes")}
+                              />
+                            </Show>
+                            <For each={astSearchResult()!.matches ?? []}>
+                              {(file) => (
+                                <div class={styles.astChangeGroup}>
+                                  <div class={styles.astGroupHeader}>
+                                    <span class="ast-group-name">
+                                      {file.path ?? "?"}
+                                    </span>
+                                    <span class={styles.astGroupCount}>
+                                      {file.nodes.length}
+                                    </span>
+                                  </div>
+                                  <For each={file.nodes}>
+                                    {(node) => (
+                                      <div
+                                        class={styles.astChangeRow}
+                                        data-kind={node.nodeKind}
+                                      >
+                                        <span class={styles.astChangeKind}>
+                                          {node.nodeKind}
+                                        </span>
+                                        <span class={styles.astChangeNode}>
+                                          {node.text || "—"}
+                                        </span>
+                                        <span class={styles.astChangePos}>
+                                          {node.start}-{node.end}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </Show>
+
+                      <Show when={astBatchMode() === "plan"}>
+                        <div class={styles.astSearchForm}>
+                          <input
+                            type="text"
+                            placeholder={t("review.oldNamePh")}
+                            value={astPlanFrom()}
+                            onInput={(event) =>
+                              setAstPlanFrom(event.currentTarget.value)
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder={t("review.newNamePh")}
+                            value={astPlanTo()}
+                            onInput={(event) =>
+                              setAstPlanTo(event.currentTarget.value)
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void loadAstPlan()}
+                          >
+                            {t("review.genPlan")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void applyAstPlan()}
+                          >
+                            {t("review.applyChanges")}
+                          </button>
+                        </div>
+                        <Show when={astPlanLoading()}>
+                          <PanelState
+                            state="loading"
+                            title={t("review.planGenerating")}
+                          />
+                        </Show>
+                        <Show when={astPlanError()}>
+                          <PanelState
+                            state="error"
+                            title={t("review.planFailed")}
+                            description={astPlanError()}
+                          />
+                        </Show>
+                        <Show when={astPlanResult()}>
+                          <div class={styles.astDiffList}>
+                            <Show when={!astPlanResult()!.targets.length}>
+                              <PanelState
+                                state="empty"
+                                title={t("review.noRefactorNodes")}
+                              />
+                            </Show>
+                            <For each={astPlanResult()!.targets}>
+                              {(target) => (
+                                <div
+                                  class={styles.astChangeRow}
+                                  data-kind={target.nodeKind}
+                                >
+                                  <span class={styles.astChangeKind}>
+                                    {target.nodeKind}
+                                  </span>
+                                  <span class={styles.astChangeNode}>
+                                    {target.text} →{" "}
+                                    {target.suggestedText ?? "?"}
+                                  </span>
+                                  <span class={styles.astChangePos}>
+                                    {target.path ?? "?"}
+                                  </span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                        <Show when={astApplyLoading()}>
+                          <PanelState
+                            state="loading"
+                            title={t("review.autoApplying")}
+                          />
+                        </Show>
+                        <Show when={astApplyError()}>
+                          <PanelState
+                            state="error"
+                            title={t("review.autoApplyFailed")}
+                            description={astApplyError()}
+                          />
+                        </Show>
+                        <Show when={astApplyResult()}>
+                          <div class="review-empty">
+                            <div class="review-empty-title">
+                              {t("review.appliedChanges")}
+                              {
+                                astApplyResult()!.applied.filter(
+                                  (item) => !item.error,
+                                ).length
+                              }
+                              / {astApplyResult()!.applied.length}
+                            </div>
+                          </div>
+                        </Show>
+                      </Show>
+
+                      <Show
+                        when={
+                          astBatchMode() !== "search" &&
+                          astBatchMode() !== "plan"
+                        }
+                      >
+                        <Show when={astBatchLoading()}>
+                          <PanelState
+                            state="loading"
+                            title={
+                              astBatchMode() === "refactor"
+                                ? t("review.previewComputing")
+                                : t("review.batchComputing")
+                            }
+                          />
+                        </Show>
+                        <Show when={astBatchError()}>
+                          <PanelState
+                            state="error"
+                            title={
+                              astBatchMode() === "refactor"
+                                ? t("review.previewFailed")
+                                : t("review.batchFailed")
+                            }
+                            description={astBatchError()}
+                          />
+                        </Show>
+                        <Show when={astBatchResult()}>
+                          <div class={styles.astDiffList}>
+                            <Show when={!astBatchGroups().length}>
+                              <PanelState
+                                state="empty"
+                                title={t("review.noBatchChanges")}
+                              />
+                            </Show>
+                            <For each={astBatchGroups()}>
+                              {(group) => (
+                                <div class={styles.astChangeGroup}>
+                                  <div class={styles.astGroupHeader}>
+                                    <span class="ast-group-name">
+                                      {group.nodeKind}
+                                    </span>
+                                    <span class={styles.astGroupCount}>
+                                      {group.items.length}
+                                    </span>
+                                  </div>
+                                  <For each={group.items}>
+                                    {(item) => (
+                                      <div
+                                        class={styles.astChangeRow}
+                                        data-kind={item.change.kind}
+                                      >
+                                        <span class={styles.astChangeKind}>
+                                          {item.change.kind}
+                                        </span>
+                                        <span class={styles.astChangeNode}>
+                                          {item.change.nodeKind}
+                                        </span>
+                                        <span class={styles.astChangePos}>
+                                          {item.path ?? "?"}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
                       </Show>
                     </div>
-                  </Show>
-                  <Show
-                    when={
-                      viewMode() !== "ast" &&
-                      (selectedFile()?.structured || structuredDiff())
-                    }
-                  >
-                    <Show
-                      when={viewMode() === "split"}
-                      fallback={
-                        <UnifiedDiffView
-                          rows={structuredRows(
-                            selectedFile()?.structured ?? structuredDiff()!,
-                          )}
-                          language={languageFromPath(
-                            selectedFile()?.path ?? "",
-                          )}
-                        />
-                      }
-                    >
-                      <SplitDiffView
-                        rows={buildSplitRows(
-                          selectedFile()?.structured ?? structuredDiff()!,
-                        )}
-                        language={languageFromPath(selectedFile()?.path ?? "")}
-                      />
-                    </Show>
-                  </Show>
-                  <Show
-                    when={
-                      viewMode() !== "ast" &&
-                      !selectedFile()?.structured &&
-                      !structuredDiff() &&
-                      structuredDiffError()
-                    }
-                  >
-                    <div class="review-diff-content">
-                      <div class={styles.diffRaw}>
-                        <div class={styles.diffRawTitle}>
-                          {t("review.diffFailed")}
-                        </div>
-                        <pre>{structuredDiffError()}</pre>
-                      </div>
-                    </div>
-                  </Show>
-                  <Show
-                    when={
-                      viewMode() !== "ast" &&
-                      !selectedFile()?.structured &&
-                      !structuredDiff() &&
-                      !structuredDiffError() &&
-                      selectedFile()?.patch
-                    }
-                  >
-                    <UnifiedDiffView
-                      rows={diffLines(selectedFile()!.patch)}
-                      language={languageFromPath(selectedFile()!.path)}
-                    />
-                  </Show>
-                  <Show
-                    when={
-                      viewMode() !== "ast" &&
-                      !selectedFile()?.structured &&
-                      !structuredDiff() &&
-                      !structuredDiffError() &&
-                      !selectedFile()?.patch &&
-                      selectedFile()?.before
-                    }
-                  >
-                    <div class="review-diff-content">
-                      <div class={styles.diffRaw}>
-                        <div class={styles.diffRawTitle}>Before</div>
-                        <pre>{selectedFile()!.before}</pre>
-                      </div>
-                    </div>
-                  </Show>
-                  <Show
-                    when={
-                      viewMode() !== "ast" &&
-                      !selectedFile()?.structured &&
-                      !structuredDiff() &&
-                      !structuredDiffError() &&
-                      !selectedFile()?.patch &&
-                      selectedFile()?.after
-                    }
-                  >
-                    <div class="review-diff-content">
-                      <div class={styles.diffRaw}>
-                        <div class={styles.diffRawTitle}>After</div>
-                        <pre>{selectedFile()!.after}</pre>
-                      </div>
-                    </div>
-                  </Show>
+                  </div>
                 </Show>
+
+                <For each={changesForTab()}>
+                  {(change) => {
+                    const isExpanded = () => selectedForTab() === change.path;
+                    return (
+                      <div
+                        class={styles.accordionCard}
+                        data-expanded={isExpanded()}
+                      >
+                        <div class={styles.accordionHeader}>
+                          <button
+                            type="button"
+                            class={styles.accordionTrigger}
+                            aria-expanded={isExpanded()}
+                            onClick={() => toggleFileCard(change.path)}
+                          >
+                            <span
+                              class={`review-file-status ${change.operation === "added" ? "is-added" : change.operation === "deleted" ? "is-deleted" : "is-modified"}`}
+                            >
+                              {statusFor(change.operation)}
+                            </span>
+                            <span class={styles.accordionPath}>
+                              {change.path}
+                            </span>
+                            <span class={styles.accordionStats}>
+                              <Show when={change.additions !== undefined}>
+                                <span class={styles.additions}>
+                                  +{change.additions}
+                                </span>
+                              </Show>
+                              <Show when={change.deletions !== undefined}>
+                                <span class={styles.deletions}>
+                                  -{change.deletions}
+                                </span>
+                              </Show>
+                            </span>
+                            <span
+                              class={styles.accordionChevron}
+                              data-open={isExpanded()}
+                            >
+                              ▾
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            class={styles.openFileBtn}
+                            title={change.path}
+                            onClick={() => {
+                              window.dispatchEvent(
+                                new CustomEvent("natalia:open-file", {
+                                  detail: { path: change.path, line: 1 },
+                                }),
+                              );
+                            }}
+                          >
+                            ↗
+                          </button>
+                        </div>
+
+                        <Show when={isExpanded()}>
+                          <div class={styles.accordionBody}>
+                            <Show
+                              when={
+                                (viewMode() === "ast" &&
+                                  !astBatchPanelOpen()) ||
+                                selectedFile()?.patch ||
+                                selectedFile()?.before ||
+                                selectedFile()?.after ||
+                                selectedFile()?.structured ||
+                                structuredDiff()
+                              }
+                              fallback={
+                                <div class="review-diff-content">
+                                  <PanelState
+                                    state="empty"
+                                    title={t("review.noLineDiff")}
+                                    description={t("review.noLineDiffHint")}
+                                  />
+                                </div>
+                              }
+                            >
+                              <Show
+                                when={
+                                  viewMode() === "ast" && !astBatchPanelOpen()
+                                }
+                              >
+                                <div class="review-diff-content">
+                                  <Show
+                                    when={astDiffError()}
+                                    fallback={
+                                      <Show
+                                        when={astDiffResult()}
+                                        fallback={
+                                          <PanelState
+                                            state="loading"
+                                            title={t("review.loadingAst")}
+                                          />
+                                        }
+                                      >
+                                        <div class={styles.astDiffList}>
+                                          <Show
+                                            when={
+                                              !astDiffResult()!.changes.length
+                                            }
+                                          >
+                                            <PanelState
+                                              state="empty"
+                                              title={t(
+                                                "review.noStructuralChanges",
+                                              )}
+                                            />
+                                          </Show>
+                                          <For each={astGroups()}>
+                                            {(group) => (
+                                              <div
+                                                class={styles.astChangeGroup}
+                                              >
+                                                <button
+                                                  type="button"
+                                                  class={styles.astGroupHeader}
+                                                  onClick={() =>
+                                                    setCollapsedAstGroups(
+                                                      (prev) => {
+                                                        const next = new Set(
+                                                          prev,
+                                                        );
+                                                        if (
+                                                          next.has(
+                                                            group.nodeKind,
+                                                          )
+                                                        )
+                                                          next.delete(
+                                                            group.nodeKind,
+                                                          );
+                                                        else
+                                                          next.add(
+                                                            group.nodeKind,
+                                                          );
+                                                        return next;
+                                                      },
+                                                    )
+                                                  }
+                                                >
+                                                  <span class="ast-group-name">
+                                                    {collapsedAstGroups().has(
+                                                      group.nodeKind,
+                                                    )
+                                                      ? "▸"
+                                                      : "▾"}{" "}
+                                                    {group.nodeKind}
+                                                  </span>
+                                                  <span
+                                                    class={styles.astGroupCount}
+                                                  >
+                                                    {group.changes.length}
+                                                  </span>
+                                                </button>
+                                                <Show
+                                                  when={
+                                                    !collapsedAstGroups().has(
+                                                      group.nodeKind,
+                                                    )
+                                                  }
+                                                >
+                                                  <For each={group.changes}>
+                                                    {(astChange) => (
+                                                      <div
+                                                        class={
+                                                          styles.astChangeRow
+                                                        }
+                                                        data-kind={
+                                                          astChange.kind
+                                                        }
+                                                        onClick={() => {
+                                                          const file =
+                                                            selectedFile();
+                                                          if (!file) return;
+                                                          const source =
+                                                            astChange.kind ===
+                                                            "removed"
+                                                              ? (file.before ??
+                                                                "")
+                                                              : (file.after ??
+                                                                "");
+                                                          const start =
+                                                            astChange.kind ===
+                                                            "removed"
+                                                              ? astChange.oldStart
+                                                              : astChange.newStart;
+                                                          const end =
+                                                            astChange.kind ===
+                                                            "removed"
+                                                              ? astChange.oldEnd
+                                                              : astChange.newEnd;
+                                                          setAstSnippet({
+                                                            kind: astChange.kind,
+                                                            nodeKind:
+                                                              astChange.nodeKind,
+                                                            text: source.slice(
+                                                              start,
+                                                              end,
+                                                            ),
+                                                          });
+                                                        }}
+                                                      >
+                                                        <span
+                                                          class={
+                                                            styles.astChangeKind
+                                                          }
+                                                        >
+                                                          {astChange.kind}
+                                                        </span>
+                                                        <span
+                                                          class={
+                                                            styles.astChangeNode
+                                                          }
+                                                        >
+                                                          {astChange.nodeKind}
+                                                        </span>
+                                                        <span
+                                                          class={
+                                                            styles.astChangePos
+                                                          }
+                                                        >
+                                                          {astChange.kind ===
+                                                          "removed"
+                                                            ? `${astChange.oldStart}-${astChange.oldEnd}`
+                                                            : `${astChange.newStart}-${astChange.newEnd}`}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                  </For>
+                                                </Show>
+                                              </div>
+                                            )}
+                                          </For>
+                                        </div>
+                                        <Show when={astSnippet()}>
+                                          <pre class={styles.astSnippet}>
+                                            {astSnippet()!.text}
+                                          </pre>
+                                        </Show>
+                                      </Show>
+                                    }
+                                  >
+                                    <PanelState
+                                      state="error"
+                                      title={t("review.astDiffFailed")}
+                                      description={astDiffError()}
+                                    />
+                                  </Show>
+                                </div>
+                              </Show>
+                              <Show
+                                when={
+                                  viewMode() !== "ast" &&
+                                  (selectedFile()?.structured ||
+                                    structuredDiff())
+                                }
+                              >
+                                <Show
+                                  when={viewMode() === "split"}
+                                  fallback={
+                                    <UnifiedDiffView
+                                      rows={structuredRows(
+                                        selectedFile()?.structured ??
+                                          structuredDiff()!,
+                                      )}
+                                      language={languageFromPath(
+                                        selectedFile()?.path ?? "",
+                                      )}
+                                    />
+                                  }
+                                >
+                                  <SplitDiffView
+                                    rows={buildSplitRows(
+                                      selectedFile()?.structured ??
+                                        structuredDiff()!,
+                                    )}
+                                    language={languageFromPath(
+                                      selectedFile()?.path ?? "",
+                                    )}
+                                  />
+                                </Show>
+                              </Show>
+                              <Show
+                                when={
+                                  viewMode() !== "ast" &&
+                                  !selectedFile()?.structured &&
+                                  !structuredDiff() &&
+                                  structuredDiffError()
+                                }
+                              >
+                                <div class="review-diff-content">
+                                  <div class={styles.diffRaw}>
+                                    <div class={styles.diffRawTitle}>
+                                      {t("review.diffFailed")}
+                                    </div>
+                                    <pre>{structuredDiffError()}</pre>
+                                  </div>
+                                </div>
+                              </Show>
+                              <Show
+                                when={
+                                  viewMode() !== "ast" &&
+                                  !selectedFile()?.structured &&
+                                  !structuredDiff() &&
+                                  !structuredDiffError() &&
+                                  selectedFile()?.patch
+                                }
+                              >
+                                <UnifiedDiffView
+                                  rows={diffLines(selectedFile()!.patch)}
+                                  language={languageFromPath(
+                                    selectedFile()!.path,
+                                  )}
+                                />
+                              </Show>
+                              <Show
+                                when={
+                                  viewMode() !== "ast" &&
+                                  !selectedFile()?.structured &&
+                                  !structuredDiff() &&
+                                  !structuredDiffError() &&
+                                  !selectedFile()?.patch &&
+                                  selectedFile()?.before
+                                }
+                              >
+                                <div class="review-diff-content">
+                                  <div class={styles.diffRaw}>
+                                    <div class={styles.diffRawTitle}>
+                                      Before
+                                    </div>
+                                    <pre>{selectedFile()!.before}</pre>
+                                  </div>
+                                </div>
+                              </Show>
+                              <Show
+                                when={
+                                  viewMode() !== "ast" &&
+                                  !selectedFile()?.structured &&
+                                  !structuredDiff() &&
+                                  !structuredDiffError() &&
+                                  !selectedFile()?.patch &&
+                                  selectedFile()?.after
+                                }
+                              >
+                                <div class="review-diff-content">
+                                  <div class={styles.diffRaw}>
+                                    <div class={styles.diffRawTitle}>After</div>
+                                    <pre>{selectedFile()!.after}</pre>
+                                  </div>
+                                </div>
+                              </Show>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </For>
               </div>
             </Show>
           }

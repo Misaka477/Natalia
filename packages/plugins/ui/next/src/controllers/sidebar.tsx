@@ -93,7 +93,7 @@ export function Sidebar(props: SidebarProps) {
                   fallback={
                     <>
                       <span class={styles.brandTitle}>Natalia</span>
-                      <span class={styles.brandBadge}>CLI</span>
+                      <span class={styles.brandBadge}>Harness</span>
                     </>
                   }
                 />

@@ -51,6 +51,11 @@ import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { ModalLayer } from "./controllers/modals";
 import { SessionTreeRegion } from "./controllers/session-tree";
+import {
+  findReusableBlankSession,
+  isBlankSession,
+  resolveTargetWorkspaceID,
+} from "./controllers/workspace-tree";
 import { Sidebar } from "./controllers/sidebar";
 import { MainPanes, type PaneAgent } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
@@ -934,7 +939,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             const active = state().sessionID;
             const target = active
               ? sessions.find(
-                  (session) => session.id === active && !session.archived,
+                  (session) =>
+                    session.id === active &&
+                    !session.archived &&
+                    !isBlankSession(session),
                 )
               : undefined;
             if (target) {
@@ -949,27 +957,51 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
                 __nataliaReplayingHistory?: boolean;
               };
               if (load.__nataliaReplayingHistory) return;
-              const recent = sessions
-                .filter((session) => !session.archived)
+              const nonBlank = sessions
+                .filter(
+                  (session) => !session.archived && !isBlankSession(session),
+                )
                 .sort((a, b) => sessionRecency(b) - sessionRecency(a));
-              const touched = recent.filter(
+              const touched = nonBlank.filter(
                 (session) => session.lastAccessedAt,
               );
-              const meaningful = recent.filter(
+              const meaningful = nonBlank.filter(
                 (session) => session.title && session.title !== "New session",
               );
-              const nonEmpty = recent.filter((session) => session.events > 0);
               const fallbackSource = touched.length
                 ? touched
                 : meaningful.length
                   ? meaningful
-                  : nonEmpty.length
-                    ? nonEmpty
-                    : recent;
-              const fallback = fallbackSource[0] ?? sessions[0];
+                  : nonBlank;
+              const fallback = fallbackSource[0];
               if (fallback) {
                 setSelectedSessionID(fallback.id);
                 setSelectedSession(fallback.title);
+              }
+            } else {
+              // If startup provisionally set selectedSessionID to a blank seed
+              // session before the session list arrived, clear it when all
+              // sessions are blank or switch to the newest real session.
+              const currentEntry = sessions.find(
+                (session) => session.id === selectedSessionID(),
+              );
+              if (
+                currentEntry &&
+                isBlankSession(currentEntry) &&
+                state().natalia.messages.length === 0
+              ) {
+                const nonBlank = sessions
+                  .filter(
+                    (session) => !session.archived && !isBlankSession(session),
+                  )
+                  .sort((a, b) => sessionRecency(b) - sessionRecency(a));
+                if (nonBlank[0]) {
+                  setSelectedSessionID(nonBlank[0].id);
+                  setSelectedSession(nonBlank[0].title);
+                } else {
+                  setSelectedSessionID("");
+                  setSelectedSession("");
+                }
               }
             }
           }
@@ -993,8 +1025,29 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     });
   };
 
+  function clearSelectedSession() {
+    userSelectedSession = true;
+    setSelectedSessionID("");
+    setSelectedSession("");
+    props.ctx.projection.hydrateMessages?.([], "newer", { replace: true });
+    props.ctx.projection.hydrateNaviMessages?.([], { replace: true });
+    props.ctx.projection.hydrateNiaMessages?.([], { replace: true });
+    setState(cloneState(props.ctx.projection.getState()));
+  }
+
   async function createSession(workspaceID?: string) {
-    if (workspaceID) {
+    const targetWorkspaceID = resolveTargetWorkspaceID(
+      workspaceID,
+      selectedSessionID(),
+      sessionList(),
+      workspaces(),
+      state().activeWorkspaceID,
+    );
+    if (!targetWorkspaceID && workspaces().length === 0) {
+      clearSelectedSession();
+      return;
+    }
+    if (targetWorkspaceID) {
       if (!props.ctx.runtime.workspaceActivate) {
         await alert({
           title: t("shell.newSessionTitle"),
@@ -1002,12 +1055,24 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         });
         return;
       }
-      await props.ctx.runtime.workspaceActivate(workspaceID);
+      await props.ctx.runtime.workspaceActivate(targetWorkspaceID);
     }
-    const created = await props.ctx.runtime.sessionNew?.();
-    if (created?.sessionID) {
+    const reusable = targetWorkspaceID
+      ? findReusableBlankSession(
+          sessionList(),
+          targetWorkspaceID,
+          state().activeWorkspaceID,
+        )
+      : undefined;
+    const nextSessionID =
+      reusable?.id ??
+      (
+        await props.ctx.runtime.sessionNew?.(
+          targetWorkspaceID ? { workspaceID: targetWorkspaceID } : undefined,
+        )
+      )?.sessionID;
+    if (nextSessionID) {
       userSelectedSession = true;
-      const nextSessionID = created.sessionID;
       setSelectedSessionID(nextSessionID);
       setSelectedSession(t("shell.newSessionName"));
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
@@ -1090,105 +1155,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
   }
 
-  function selectedSessionIsActive() {
-    return Boolean(
-      selectedSessionID() && selectedSessionID() === state().sessionID,
-    );
-  }
-
-  function workspaceIDForSessionID(sessionID: string): string | undefined {
-    const fromList = sessionList().find(
-      (session) => session.id === sessionID,
-    )?.workspaceID;
-    if (fromList) return fromList;
-    const fromState = state().sessions.find(
-      (session) => session.id === sessionID,
-    )?.workspaceID;
-    if (fromState) return fromState;
-    if (sessionID === selectedSessionID() || sessionID === state().sessionID)
-      return state().activeWorkspaceID;
-    return undefined;
-  }
-
-  async function attachAndSelectSession(session: {
-    id: string;
-    title: string;
-  }): Promise<void> {
-    const attach = props.ctx.runtime.sessionAttach;
-    if (typeof attach !== "function")
-      throw new Error(t("shell.sessionSwitchUnsupported"));
-    // Select locally before awaiting attach: the web runtime emits
-    // `natalia:session-attached` from inside the attach promise, and the
-    // hydration listener reads selectedSessionID() at that moment. Updating the
-    // signals afterwards makes hydration load the previous session even though
-    // the tree already shows the new one.
-    const previousID = selectedSessionID();
-    const previousTitle = selectedSession();
-    const previousUserSelected = userSelectedSession;
-    userSelectedSession = true;
-    setSelectedSessionID(session.id);
-    setSelectedSession(session.title);
-    try {
-      await attach(session.id);
-      void loadPerSessionModelConfig(session.id);
-    } catch (error) {
-      userSelectedSession = previousUserSelected;
-      setSelectedSessionID(previousID);
-      setSelectedSession(previousTitle);
-      throw error;
-    }
-  }
-
-  async function switchAwayFromSession(targetID: string): Promise<boolean> {
-    const findOther = (list: RuntimeSessionSummary[]) => {
-      const candidates = list.filter(
-        (session) => session.id !== targetID && !session.archived,
-      );
-      if (!candidates.length) return undefined;
-      const targetWorkspaceID = workspaceIDForSessionID(targetID);
-      if (targetWorkspaceID) {
-        const sameWorkspace = candidates.find(
-          (session) => session.workspaceID === targetWorkspaceID,
-        );
-        if (sameWorkspace) return sameWorkspace;
-      }
-      return candidates[0];
-    };
-    let other = findOther(sessionList());
-    if (!other) {
-      // A stale/short list must not force a brand-new session when older
-      // sessions already exist. Refresh once before falling back to creation.
-      sessionsRefreshInFlight = undefined;
-      await refreshSessions();
-      other = findOther(sessionList());
-    }
-    if (!other) other = findOther(state().sessions);
-    if (other) {
-      await attachAndSelectSession(other);
-      return true;
-    }
-    const created = await props.ctx.runtime.sessionNew?.();
-    if (!created?.sessionID) return false;
-    await attachAndSelectSession({
-      id: created.sessionID,
-      title: t("shell.newSessionTitle"),
-    });
-    return true;
-  }
-
   async function archiveSession(targetID: string) {
     try {
-      if (targetID === selectedSessionID()) {
-        const switched = await switchAwayFromSession(targetID);
-        if (!switched) {
-          props.ctx.runtime.diagnostic?.(
-            t("shell.archiveNeedsSession"),
-            "warning",
-          );
-          return;
-        }
-      }
       await props.ctx.runtime.sessionArchive?.(targetID);
+      if (targetID === selectedSessionID()) {
+        clearSelectedSession();
+      }
+      sessionsRefreshInFlight = undefined;
       await refreshSessions();
     } catch (error: unknown) {
       props.ctx.runtime.diagnostic?.(
@@ -1253,41 +1226,14 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     setBulkSelected(next);
   }
 
-  async function switchAwayFromActiveIfNeeded(ids: string[]) {
-    const active = state().sessionID;
-    if (!active || !ids.includes(active)) return true;
-    const activeWorkspaceID =
-      workspaceIDForSessionID(active) ?? state().activeWorkspaceID;
-    const candidates = sessionList().filter(
-      (session) => !ids.includes(session.id) && !session.archived,
-    );
-    const other =
-      (activeWorkspaceID
-        ? candidates.find(
-            (session) => session.workspaceID === activeWorkspaceID,
-          )
-        : undefined) ?? candidates[0];
-    if (other) {
-      await attachAndSelectSession(other);
-      return true;
-    }
-    const created = await props.ctx.runtime.sessionNew?.();
-    if (!created?.sessionID) {
-      props.ctx.runtime.diagnostic?.(t("shell.bulkNeedsSession"), "warning");
-      return false;
-    }
-    await attachAndSelectSession({
-      id: created.sessionID,
-      title: t("shell.newSessionTitle"),
-    });
-    return true;
-  }
-
   async function bulkArchiveSelected() {
     const ids = [...bulkSelected()];
     if (!ids.length) return;
-    if (!(await switchAwayFromActiveIfNeeded(ids))) return;
     for (const id of ids) await props.ctx.runtime.sessionArchive?.(id);
+    if (ids.includes(selectedSessionID())) {
+      clearSelectedSession();
+    }
+    sessionsRefreshInFlight = undefined;
     await refreshSessions();
     setBulkSelected(new Set<string>());
     setBulkSelectMode(false);
@@ -1316,12 +1262,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     )
       return;
     try {
-      if (!(await switchAwayFromActiveIfNeeded(ids))) return;
       if (!props.ctx.runtime.sessionDelete) {
         props.ctx.runtime.diagnostic?.(t("shell.purgeUnsupported"), "warning");
         return;
       }
       for (const id of ids) await props.ctx.runtime.sessionDelete(id);
+      if (ids.includes(selectedSessionID())) {
+        clearSelectedSession();
+      }
+      sessionsRefreshInFlight = undefined;
       await refreshSessions();
       setBulkSelected(new Set<string>());
       setBulkSelectMode(false);
@@ -1477,18 +1426,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       return;
     }
     try {
-      if (targetID === selectedSessionID()) {
-        const switched = await switchAwayFromSession(targetID);
-        if (!switched) {
-          await alert({
-            title: t("shell.deleteFailed"),
-            message: t("shell.purgeNeedsSession"),
-          });
-          return;
-        }
-      }
       await deleteSession(targetID);
+      if (targetID === selectedSessionID()) {
+        clearSelectedSession();
+      }
       setSessionMenuOpen(false);
+      sessionsRefreshInFlight = undefined;
       await refreshSessions();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

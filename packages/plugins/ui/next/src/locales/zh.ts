@@ -115,6 +115,7 @@ export const zh = {
   "transcript.startupDataFailed": "启动数据读取失败",
   "transcript.startupDataFailedHint":
     "会话与配置数据没读到。重试一次；在重试成功前，列表和菜单可能是空的。",
+  "transcript.agentSwitchLabel": "选择要对话的助手",
   "transcript.selectPermission": "选择权限",
   "transcript.rollbackPrepared": "已准备回滚：{label}",
   "transcript.rollbackEffectiveOnSend": "发送新消息后生效",

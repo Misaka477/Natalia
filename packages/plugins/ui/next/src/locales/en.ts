@@ -106,6 +106,7 @@ export const en = {
   "transcript.startupDataFailed": "The startup data failed to load",
   "transcript.startupDataFailedHint":
     "The session and config data could not be read. Retry — until it succeeds, the lists and menus may be empty.",
+  "transcript.agentSwitchLabel": "Choose which assistant to talk to",
   "transcript.selectPermission": "Select permission",
   "transcript.rollbackPrepared": "Rollback ready: {label}",
   "transcript.rollbackEffectiveOnSend":

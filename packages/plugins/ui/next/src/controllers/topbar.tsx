@@ -35,6 +35,9 @@ export interface TopbarProps {
   layoutMode: () => "wide" | "compact" | "tiny";
   naviOpen: () => boolean;
   setNaviOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  /** Which agent the one main pane shows; the Navi button drives it. */
+  focusAgent: () => "natalia" | "navi";
+  setFocusAgent: (value: "natalia" | "navi") => void;
   setStatusOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setHelpOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setStashOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -67,6 +70,8 @@ export function Topbar(props: TopbarProps) {
     layoutMode,
     naviOpen,
     setNaviOpen,
+    focusAgent,
+    setFocusAgent,
     setStatusOpen,
     setHelpOpen,
     setStashOpen,
@@ -129,16 +134,19 @@ export function Topbar(props: TopbarProps) {
         >
           {t("topbar.right")}
         </button>
-        <Show when={layoutMode() === "tiny"}>
-          <button
-            type="button"
-            class={styles.btn}
-            data-active={naviOpen()}
-            onClick={() => setNaviOpen((value) => !value)}
-          >
-            {t("topbar.navi")}
-          </button>
-        </Show>
+        {/* The pane's agent switcher, remote-controlled from the bar. The
+            main pane is one pane now, so this is the same choice the
+            pane's own header makes. */}
+        <button
+          type="button"
+          class={styles.btn}
+          data-active={focusAgent() === "navi"}
+          onClick={() =>
+            setFocusAgent(focusAgent() === "navi" ? "natalia" : "navi")
+          }
+        >
+          {t("topbar.navi")}
+        </button>
         <button
           type="button"
           class={styles.btn}

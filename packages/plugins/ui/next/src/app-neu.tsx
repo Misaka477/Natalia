@@ -3249,14 +3249,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     onCleanup(() => window.removeEventListener("resize", updateLayout));
   });
 
-  const nataliaVisible = () => layoutMode() !== "tiny" || !naviOpen();
-  const naviVisible = () =>
-    layoutMode() === "wide" ||
-    (layoutMode() === "compact" && !leftVisible() && !rightVisible()) ||
-    (layoutMode() === "tiny" &&
-      naviOpen() &&
-      !leftVisible() &&
-      !rightVisible());
+  // Which agent the ONE main pane shows. The pane used to be two panes
+  // side by side, each with its own composer; the architecture wants one
+  // pane and a switcher inside it, so this is the pane's only state.
+  const [focusAgent, setFocusAgent] = createSignal<"natalia" | "navi">(
+    "natalia",
+  );
 
   let leftSidebarWasVisible = true;
   createEffect(() => {
@@ -3310,6 +3308,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         layoutMode={layoutMode}
         naviOpen={naviOpen}
         setNaviOpen={setNaviOpen}
+        focusAgent={focusAgent}
+        setFocusAgent={setFocusAgent}
         setStatusOpen={setStatusOpen}
         setHelpOpen={setHelpOpen}
         setStashOpen={setStashOpen}
@@ -3460,10 +3460,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           configRungID={configRungID}
           modelOptions={modelOptions}
           permissionOptions={permissionOptions}
-          nataliaVisible={nataliaVisible}
-          naviVisible={naviVisible}
           renderedMainMessages={renderedMainMessages}
           renderedChatMessages={renderedChatMessages}
+          focusAgent={focusAgent}
+          setFocusAgent={setFocusAgent}
           loadAttachmentUrl={loadAttachmentUrl}
           loadOlderHistory={loadOlderHistory}
           loadOlderNaviChat={loadOlderNaviChat}

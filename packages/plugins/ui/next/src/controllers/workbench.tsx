@@ -34,6 +34,8 @@ export interface RightRailProps {
   rightTabs: () => { id: string; label: string }[];
   rightTab: () => string;
   setRightTab: (value: string) => void;
+  /** Walks the terminal's dock mode: rail tab → side split → float. */
+  onCycleDockMode: () => void;
   openDriftCount: () => number | undefined;
   rightPanelScopeKey: () => string;
   reviewRequestedTab: () => "git" | "sandbox" | "checkpoint";
@@ -126,6 +128,25 @@ export function RightRail(props: RightRailProps) {
                 </button>
               )}
             </For>
+            {/* THE TERMINAL'S OWN FRAME CONTROL. The terminal is not a
+                right-rail tab that happens to be able to move: where it
+                lives is the reader's choice, and this is that choice, one
+                click from the rail it starts in. The panel host re-parents
+                rather than re-mounts, so the xterm, its socket and its
+                scrollback survive every mode change. Only shown when a
+                side panel is actually hosted — otherwise the control would
+                offer a frame with nothing in it. */}
+            <Show when={props.sidePanels().length > 0}>
+              <button
+                type="button"
+                class={styles.dockBtn}
+                data-mode={props.dockMode()}
+                onClick={() => props.onCycleDockMode()}
+                title={t(`dock.hint.${props.dockMode()}`)}
+              >
+                {t(`dock.mode.${props.dockMode()}`)}
+              </button>
+            </Show>
           </div>
           <div class={styles.content}>
             <Show

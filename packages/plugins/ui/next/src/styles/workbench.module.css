@@ -16,6 +16,42 @@
   min-width: 0;
 }
 
+/* The terminal's dock-mode control: the terminal's own frame choice, one
+   click from the rail it starts in. It reads as the last tab rather than
+   a settings item, because that is what it is — where the terminal lives
+   is a layout choice, not a preference page. */
+
+.dockBtn {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+  transition:
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.dockBtn:hover {
+  color: var(--neu-accent);
+}
+
+/* Not the rail's tab any more: the frame is somewhere else, and the
+   control says so with the accent rather than the inset. */
+.dockBtn[data-mode="split"],
+.dockBtn[data-mode="float"] {
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+  box-shadow: var(--neu-elevation-1);
+}
+
 .tabs {
   position: relative;
   z-index: 1;

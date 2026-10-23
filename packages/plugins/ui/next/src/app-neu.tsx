@@ -3524,6 +3524,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           rightTabs={rightTabs}
           rightTab={rightTab}
           setRightTab={setRightTab}
+          onCycleDockMode={cycleDockMode}
           openDriftCount={openDriftCount}
           rightPanelScopeKey={rightPanelScopeKey}
           reviewRequestedTab={reviewRequestedTab}

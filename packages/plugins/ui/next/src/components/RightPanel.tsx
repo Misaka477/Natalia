@@ -1515,48 +1515,19 @@ export function ReviewPane(
             <Show
               when={changesForTab().length}
               fallback={
-                <div class="review-empty">
-                  <div class="review-empty-icon">
-                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                      <rect
-                        x="3"
-                        y="4"
-                        width="22"
-                        height="5"
-                        rx="1.5"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                      />
-                      <rect
-                        x="3"
-                        y="12"
-                        width="22"
-                        height="5"
-                        rx="1.5"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                      />
-                      <circle cx="6" cy="6.5" r="1.2" fill="currentColor" />
-                      <circle cx="6" cy="14.5" r="1.2" fill="currentColor" />
-                      <path
-                        d="M22 6.5h3M22 14.5h3"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                  </div>
-                  <div class="review-empty-title">
-                    {tab() === "rounds"
+                <PanelState
+                  state="empty"
+                  title={
+                    tab() === "rounds"
                       ? t("review.emptyRounds")
-                      : t("review.emptyChanges")}
-                  </div>
-                  <div class="review-empty-desc">
-                    {tab() === "rounds"
+                      : t("review.emptyChanges")
+                  }
+                  description={
+                    tab() === "rounds"
                       ? t("review.emptyRoundsHint")
-                      : t("review.emptyChangesHint")}
-                  </div>
-                </div>
+                      : t("review.emptyChangesHint")
+                  }
+                />
               }
             >
               <div
@@ -1755,14 +1726,11 @@ export function ReviewPane(
                   }
                   fallback={
                     <div class="review-diff-content">
-                      <div class="review-empty">
-                        <div class="review-empty-title">
-                          {t("review.noLineDiff")}
-                        </div>
-                        <div class="review-empty-desc">
-                          {t("review.noLineDiffHint")}
-                        </div>
-                      </div>
+                      <PanelState
+                        state="empty"
+                        title={t("review.noLineDiff")}
+                        description={t("review.noLineDiffHint")}
+                      />
                     </div>
                   }
                 >
@@ -1814,11 +1782,10 @@ export function ReviewPane(
                                   !(astSearchResult()!.matches ?? []).length
                                 }
                               >
-                                <div class="review-empty">
-                                  <div class="review-empty-title">
-                                    {t("review.noMatchNodes")}
-                                  </div>
-                                </div>
+                                <PanelState
+                                  state="empty"
+                                  title={t("review.noMatchNodes")}
+                                />
                               </Show>
                               <For each={astSearchResult()!.matches ?? []}>
                                 {(file) => (
@@ -1903,11 +1870,10 @@ export function ReviewPane(
                           <Show when={astPlanResult()}>
                             <div class={styles.astDiffList}>
                               <Show when={!astPlanResult()!.targets.length}>
-                                <div class="review-empty">
-                                  <div class="review-empty-title">
-                                    {t("review.noRefactorNodes")}
-                                  </div>
-                                </div>
+                                <PanelState
+                                  state="empty"
+                                  title={t("review.noRefactorNodes")}
+                                />
                               </Show>
                               <For each={astPlanResult()!.targets}>
                                 {(target) => (
@@ -1988,11 +1954,10 @@ export function ReviewPane(
                           <Show when={astBatchResult()}>
                             <div class={styles.astDiffList}>
                               <Show when={!astBatchGroups().length}>
-                                <div class="review-empty">
-                                  <div class="review-empty-title">
-                                    {t("review.noBatchChanges")}
-                                  </div>
-                                </div>
+                                <PanelState
+                                  state="empty"
+                                  title={t("review.noBatchChanges")}
+                                />
                               </Show>
                               <For each={astBatchGroups()}>
                                 {(group) => (
@@ -2046,11 +2011,10 @@ export function ReviewPane(
                             >
                               <div class={styles.astDiffList}>
                                 <Show when={!astDiffResult()!.changes.length}>
-                                  <div class="review-empty">
-                                    <div class="review-empty-title">
-                                      {t("review.noStructuralChanges")}
-                                    </div>
-                                  </div>
+                                  <PanelState
+                                    state="empty"
+                                    title={t("review.noStructuralChanges")}
+                                  />
                                 </Show>
                                 <For each={astGroups()}>
                                   {(group) => (

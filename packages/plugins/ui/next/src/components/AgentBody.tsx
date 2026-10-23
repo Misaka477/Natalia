@@ -16,8 +16,9 @@
  * for one surface.
  *
  * So the body is written once. An agent passes its transcript, its
- * notices and its jump state; the run bar and the input stay beside it
- * in the pane, which is where each agent's own controls belong.
+ * notices, its jump state, and the run bar and input it needs — the
+ * run bar and the input are part of the shared surface, and only the
+ * controls inside them differ per agent.
  */
 import { Show, type JSX } from "solid-js";
 import { Transcript, type TranscriptHandle } from "@natalia/ui-kit";
@@ -55,6 +56,14 @@ export interface AgentBodyProps {
   notices?: JSX.Element;
   slots: SlotsRegistry;
   t: (key: string, params?: Record<string, unknown>) => string;
+  /** The run bar and the input — the part that differs per agent. */
+  children: JSX.Element;
+  /** The decision band: a pending approval, question or interactive. It
+   *  belongs to the pane rather than to an agent — it blocks the run
+   *  whoever is focused — so every body renders the same one, in the
+   *  same place: above the run bar, between the transcript and the
+   *  input. */
+  decision?: JSX.Element;
 }
 
 export function AgentBody(props: AgentBodyProps) {
@@ -99,6 +108,12 @@ export function AgentBody(props: AgentBodyProps) {
           <SlotMount slots={props.slots} name="transcript.empty" t={t} />
         </div>
       </Show>
+      {props.decision}
+      {/* The run bar and the input, in the band the pane owns. Every agent
+          gets the same band — that is the whole point: the band is what
+          gives the transcript its height, and a body without it pushes
+          the empty state to the top of the pane. */}
+      <div class={styles.runbar}>{props.children}</div>
     </div>
   );
 }

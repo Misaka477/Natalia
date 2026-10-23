@@ -109,6 +109,12 @@ export function AgentBody(props: AgentBodyProps) {
         </div>
       </Show>
       {props.decision}
+      {/* The input dock: full-width entries above the composer card. It
+          belongs to the body rather than to one agent's input area,
+          because a plugin's entry — the todo list, anything else that
+          rides along with the message — is there whichever agent the
+          pane is talking to. */}
+      <SlotMount slots={props.slots} name="input.dock" t={t} />
       {/* The run bar and the input, in the band the pane owns. Every agent
           gets the same band — that is the whole point: the band is what
           gives the transcript its height, and a body without it pushes

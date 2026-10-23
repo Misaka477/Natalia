@@ -52,6 +52,12 @@ export const zh = {
   "tab.diff": "审阅 / Diff",
   "tab.plan": "计划",
   "tab.governance": "治理",
+  // todo dock entry (the todo plugin's own copy, registered into input.dock)
+  "todo.pending": "{count} 待处理",
+  "todo.done": "{done}/{total} 完成",
+  "todo.inProgress": "进行中",
+  "todo.pendingStatus": "待处理",
+  "todo.completedHeader": "已完成（{count}）",
   // sidebar
   "sidebar.workspace": "工作区",
   "sidebar.sessions": "会话",

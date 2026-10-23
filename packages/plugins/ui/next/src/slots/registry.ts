@@ -23,7 +23,7 @@ export const SLOT_NAMES = [
   "topbar.start",
   /** The topbar's trailing area, before the shell's own controls. */
   "topbar.end",
-  /** The dock beside the composer (attachments, context, tools). */
+  /** Full-width entries above the composer card. */
   "input.dock",
   /** The run bar under the transcript: what the turn is doing now. */
   "runbar",

@@ -12,9 +12,42 @@ import {
   type TodoItem,
 } from "../todo-item";
 import { todoItemsFromProjection } from "../todo-projection";
-import { TodoPanel } from "./todo-panel";
+import { TodoDock } from "./todo-dock";
 
-function TodoPanelHost(props: { ctx: UiPluginContext }) {
+/**
+ * The one shape this plugin needs from the shell's slot registry.
+ *
+ * Written structurally rather than imported: the todo plugin has no
+ * dependency on the shell package, and a deep import into another
+ * package's source is how a plugin starts breaking on a refactor it
+ * has nothing to do with.
+ */
+type SlotRegistryLike = {
+  register: (
+    name: string,
+    component: (props: {
+      t: (key: string, params?: Record<string, unknown>) => string;
+    }) => unknown,
+  ) => () => void;
+};
+
+/**
+ * The todo list is not a panel.
+ *
+ * It used to register `region: "side"`, which made it a tab in the right
+ * rail — one more click away from the run it describes. The list is the
+ * run's own state: what is being done right now, and what is left. So it
+ * rides the shell's `input.dock` slot, a full-width entry directly above
+ * the composer, and it is there whichever agent the pane is talking to.
+ *
+ * The `todo_write` tool card is the second registration point and stays
+ * where it is: the card is the tool call's own record in the
+ * transcript, the dock entry is the live list. Two places, two jobs.
+ */
+function TodoDockHost(props: {
+  ctx: UiPluginContext;
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
   const [state, setState] = createSignal<AppState>(
     props.ctx.projection.getState(),
   );
@@ -69,7 +102,7 @@ function TodoPanelHost(props: { ctx: UiPluginContext }) {
     });
   });
 
-  return <TodoPanel todos={todos()} />;
+  return <TodoDock todos={todos()} t={props.t} />;
 }
 
 export function createTodoUiPlugin(): UiPlugin {
@@ -77,21 +110,22 @@ export function createTodoUiPlugin(): UiPlugin {
     id: "natalia.ui.todo",
     name: "Todo UI",
     version: "1.0.0",
-    description: "Todo panel.",
-    panels: [
-      {
-        id: "todo",
-        title: "待办",
-        region: "side",
-        mount(ctx, container) {
-          container.replaceChildren();
-          const dispose = render(() => <TodoPanelHost ctx={ctx} />, container);
-          return () => dispose();
-        },
-      },
-    ],
-    mount() {
-      return undefined;
+    description: "The todo list as a dock entry above the composer.",
+    // No panels: the right rail keeps the shell's review surfaces and
+    // whatever a plugin genuinely needs a whole tab for. The list is
+    // neither.
+    panels: [],
+    mount(ctx) {
+      // The shell publishes its slot registry on the context's extra
+      // seat; the same place it publishes the locale and the tool-card
+      // registries. A plugin fills a slot; it never reaches into the
+      // shell's markup.
+      const slots = (ctx.extra as { slots?: SlotRegistryLike }).slots;
+      if (!slots) return undefined;
+      const dispose = slots.register("input.dock", (props) => (
+        <TodoDockHost ctx={ctx} t={props.t} />
+      ));
+      return { dispose };
     },
   });
 }

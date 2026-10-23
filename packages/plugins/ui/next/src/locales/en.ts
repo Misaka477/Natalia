@@ -44,6 +44,12 @@ export const en = {
   "tab.diff": "Review / Diff",
   "tab.plan": "Plan",
   "tab.governance": "Governance",
+  // todo dock entry (the todo plugin's own copy, registered into input.dock)
+  "todo.pending": "{count} pending",
+  "todo.done": "{done}/{total} done",
+  "todo.inProgress": "in progress",
+  "todo.pendingStatus": "pending",
+  "todo.completedHeader": "Completed ({count})",
   "sidebar.workspace": "Workspace",
   "sidebar.sessions": "Sessions",
   "sidebar.search": "Search sessions",

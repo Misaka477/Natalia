@@ -78,7 +78,6 @@ export function MainInputArea(props: MainInputAreaProps) {
   } = props;
   return (
     <>
-      <SlotMount slots={slots} name="input.dock" t={t} />
       <QueueDock
         t={t}
         items={state().pendingInputs}

@@ -1,0 +1,207 @@
+/* The status and diagnostics panel: its window and tabs, the status
+   cards, the diagnostic rows and the tool/capability lists. The modal
+   chrome stays global. Tokens only. */
+
+.window {
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+
+.tabs :global(.neu-settings-category) {
+  width: auto;
+  padding: 8px 16px;
+  background: var(--neu-bg);
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.cardLabel {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.cardValue {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diagnosticRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.diagnosticLevel {
+  width: 48px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.diagnosticRow[data-level="info"] .diagnosticLevel {
+  color: var(--neu-success);
+}
+
+.diagnosticRow[data-level="warn"] .diagnosticLevel {
+  color: var(--neu-warning);
+}
+
+.diagnosticRow[data-level="error"] .diagnosticLevel {
+  color: var(--neu-error);
+}
+
+.diagnosticMessage {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--neu-text);
+}
+
+.diagnosticTime {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.sectionTitle {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--neu-muted);
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolRow,
+.capRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.toolRow {
+  width: 100%;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toolArrow {
+  margin-left: auto;
+  color: var(--neu-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.toolDetail {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg-light);
+  box-shadow: var(--neu-inset-2);
+}
+
+.toolDetailSummary {
+  font-size: 12px;
+  color: var(--neu-text);
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.toolDetailRaw {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--neu-bg);
+  font-size: 11px;
+  color: var(--neu-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.toolName,
+.capName {
+  width: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+}
+
+.capGrants {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+
+.toolStatus {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+}
+
+.toolStatus[data-pending="true"] {
+  color: var(--neu-warning);
+}
+
+.capVersion {
+  font-size: 11px;
+  color: var(--neu-accent);
+}

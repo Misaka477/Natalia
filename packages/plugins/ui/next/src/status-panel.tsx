@@ -1,3 +1,4 @@
+import styles from "./styles/status-panel.module.css";
 import { createSignal, Show, onCleanup, onMount, For } from "solid-js";
 import type { AppState, CapabilityView, ToolBlock } from "@natalia/view-store";
 import {
@@ -157,10 +158,7 @@ export function StatusPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-status-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("status.title")}</span>
             <button
@@ -179,7 +177,7 @@ export function StatusPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-status-tabs">
+          <div class={styles.tabs}>
             <button
               type="button"
               class="neu-settings-category"
@@ -205,44 +203,38 @@ export function StatusPanel(props: {
               {t("status.toolsCapabilities")}
             </button>
           </div>
-          <div class="neu-status-content">
+          <div class={styles.content}>
             <Show when={tab() === "status"}>
-              <div class="neu-status-grid">
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">Runtime</span>
-                  <span class="neu-status-card-value">
-                    {props.state.status}
-                  </span>
+              <div class={styles.grid}>
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>Runtime</span>
+                  <span class={styles.cardValue}>{props.state.status}</span>
                 </div>
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>
                     {t("status.currentModel")}
                   </span>
-                  <span class="neu-status-card-value">
+                  <span class={styles.cardValue}>
                     {statusData()?.model ??
                       props.state.modelSelection?.modelID ??
                       t("status.unselected")}
                   </span>
                 </div>
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">Provider</span>
-                  <span class="neu-status-card-value">
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>Provider</span>
+                  <span class={styles.cardValue}>
                     {statusData()?.provider ?? t("status.unselected")}
                   </span>
                 </div>
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">
-                    {t("status.workspace")}
-                  </span>
-                  <span class="neu-status-card-value">
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>{t("status.workspace")}</span>
+                  <span class={styles.cardValue}>
                     {statusData()?.cwd ?? "unknown"}
                   </span>
                 </div>
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">
-                    {t("status.session")}
-                  </span>
-                  <span class="neu-status-card-value">
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>{t("status.session")}</span>
+                  <span class={styles.cardValue}>
                     {props.state.sessionID ?? t("status.none")}
                   </span>
                 </div>
@@ -254,11 +246,11 @@ export function StatusPanel(props: {
                 */}
                 <Show when={cacheLine()}>
                   {(line) => (
-                    <div class="neu-status-card">
-                      <span class="neu-status-card-label">
+                    <div class={styles.card}>
+                      <span class={styles.cardLabel}>
                         {t("status.readCacheL1")}
                       </span>
-                      <span class="neu-status-card-value" title={line().title}>
+                      <span class={styles.cardValue} title={line().title}>
                         {line().text}
                       </span>
                     </div>
@@ -269,21 +261,19 @@ export function StatusPanel(props: {
                     session has run steps, with or without an L1. */}
                 <Show when={providerCacheLine()}>
                   {(line) => (
-                    <div class="neu-status-card">
-                      <span class="neu-status-card-label">
+                    <div class={styles.card}>
+                      <span class={styles.cardLabel}>
                         {t("status.prefixCache")}
                       </span>
-                      <span class="neu-status-card-value" title={line().title}>
+                      <span class={styles.cardValue} title={line().title}>
                         {line().text}
                       </span>
                     </div>
                   )}
                 </Show>
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">
-                    {t("status.context")}
-                  </span>
-                  <span class="neu-status-card-value">
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>{t("status.context")}</span>
+                  <span class={styles.cardValue}>
                     {statusData()?.context ?? "—"}
                   </span>
                 </div>
@@ -292,25 +282,24 @@ export function StatusPanel(props: {
                       `step` field is the journal's entry count, a different
                       measure that used to be printed as "steps" and made one
                       run read as 422 here and 140 on the usage bar. */}
-                <div class="neu-status-card">
-                  <span class="neu-status-card-label">{t("status.steps")}</span>
-                  <span
-                    class="neu-status-card-value"
-                    title={t("status.stepsTitle")}
-                  >
+                <div class={styles.card}>
+                  <span class={styles.cardLabel}>{t("status.steps")}</span>
+                  <span class={styles.cardValue} title={t("status.stepsTitle")}>
                     {statusData()?.steps ?? "—"}
                   </span>
                 </div>
               </div>
             </Show>
             <Show when={tab() === "diagnostics"}>
-              <div class="neu-status-diagnostics">
+              <div class={styles.diagnostics}>
                 <For each={diagRows()}>
                   {(item) => (
-                    <div class="neu-diagnostic-row" data-level={item.level}>
-                      <span class="neu-diagnostic-level">{item.level}</span>
-                      <span class="neu-diagnostic-message">{item.message}</span>
-                      <span class="neu-diagnostic-time">{item.at ?? ""}</span>
+                    <div class={styles.diagnosticRow} data-level={item.level}>
+                      <span class={styles.diagnosticLevel}>{item.level}</span>
+                      <span class={styles.diagnosticMessage}>
+                        {item.message}
+                      </span>
+                      <span class={styles.diagnosticTime}>{item.at ?? ""}</span>
                     </div>
                   )}
                 </For>
@@ -321,22 +310,24 @@ export function StatusPanel(props: {
                 face — the same records the debug bundle reads.
               */}
               <Show when={opRows().length > 0}>
-                <div class="neu-status-section-title">{t("status.opLog")}</div>
-                <div class="neu-status-diagnostics">
+                <div class={styles.sectionTitle}>{t("status.opLog")}</div>
+                <div class={styles.diagnostics}>
                   <For each={newestOperationRecords(opRows())}>
                     {(record) => {
                       const line = operationRecordLine(record);
                       return (
                         <div
-                          class="neu-diagnostic-row"
+                          class={styles.diagnosticRow}
                           data-level={line.level}
                           title={line.title}
                         >
-                          <span class="neu-diagnostic-level">{line.level}</span>
-                          <span class="neu-diagnostic-message">
+                          <span class={styles.diagnosticLevel}>
+                            {line.level}
+                          </span>
+                          <span class={styles.diagnosticMessage}>
                             {line.component} · {line.message}
                           </span>
-                          <span class="neu-diagnostic-time">{line.at}</span>
+                          <span class={styles.diagnosticTime}>{line.at}</span>
                         </div>
                       );
                     }}
@@ -345,14 +336,14 @@ export function StatusPanel(props: {
               </Show>
             </Show>
             <Show when={tab() === "tools"}>
-              <div class="neu-status-tools">
-                <div class="neu-status-section-title">{t("status.tools")}</div>
+              <div class={styles.tools}>
+                <div class={styles.sectionTitle}>{t("status.tools")}</div>
                 <For each={Object.values(props.state.tools).slice(-60)}>
                   {(tool: ToolBlock) => (
                     <div>
                       <button
                         type="button"
-                        class="neu-status-tool-row"
+                        class={styles.toolRow}
                         data-active={expandedTool() === tool.name + tool.callID}
                         onClick={() =>
                           setExpandedTool((value) =>
@@ -362,23 +353,21 @@ export function StatusPanel(props: {
                           )
                         }
                       >
-                        <span class="neu-status-tool-name">{tool.name}</span>
-                        <span class="neu-status-tool-arrow">
+                        <span class={styles.toolName}>{tool.name}</span>
+                        <span class={styles.toolArrow}>
                           {expandedTool() === tool.name + tool.callID
                             ? "▾"
                             : "▸"}
                         </span>
-                        <span class="neu-status-tool-status">
-                          {tool.status}
-                        </span>
+                        <span class={styles.toolStatus}>{tool.status}</span>
                       </button>
                       <Show when={expandedTool() === tool.name + tool.callID}>
-                        <div class="neu-status-tool-detail">
-                          <div class="neu-status-tool-detail-summary">
+                        <div class={styles.toolDetail}>
+                          <div class={styles.toolDetailSummary}>
                             {formatToolDetail(tool, t)}
                           </div>
                           <Show when={needsRawDetail(tool, t)}>
-                            <pre class="neu-status-tool-detail-raw">
+                            <pre class={styles.toolDetailRaw}>
                               {tool.result ??
                                 tool.summary ??
                                 tool.argumentsRaw ??
@@ -390,17 +379,15 @@ export function StatusPanel(props: {
                     </div>
                   )}
                 </For>
-                <div class="neu-status-section-title">
+                <div class={styles.sectionTitle}>
                   {t("status.capabilities")}
                 </div>
                 <For each={Object.values(props.state.capabilities)}>
                   {(cap: CapabilityView) => (
-                    <div class="neu-status-cap-row">
-                      <span class="neu-status-cap-name">
-                        {cap.name ?? cap.id}
-                      </span>
-                      <span class="neu-status-cap-version">v{cap.version}</span>
-                      <span class="neu-status-cap-grants">
+                    <div class={styles.capRow}>
+                      <span class={styles.capName}>{cap.name ?? cap.id}</span>
+                      <span class={styles.capVersion}>v{cap.version}</span>
+                      <span class={styles.capGrants}>
                         {(cap.grants ?? []).join(" · ")}
                       </span>
                     </div>

@@ -50,7 +50,8 @@ import type { UiPanelDefinition } from "@natalia/ui-host";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { ModalLayer } from "./controllers/modals";
-import { SessionSidebar } from "./controllers/session-tree";
+import { SessionTreeRegion } from "./controllers/session-tree";
+import { Sidebar } from "./controllers/sidebar";
 import { MainPanes, type PaneAgent } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
 import { Topbar } from "./controllers/topbar";
@@ -3238,6 +3239,55 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     leftSidebarWasVisible = visible;
   });
 
+  // The workspace and session browser fills the left column's hole, the
+  // same way a plugin would: the shell owns the column, and what browses
+  // in it is one registration away from being swapped. Registered here,
+  // before the first render, so the column is never empty.
+  slots.register("sidebar.workspaces", () => (
+    <SessionTreeRegion
+      t={t}
+      ctx={props.ctx}
+      sessionSearchOpen={sessionSearchOpen}
+      setSessionSearchOpen={setSessionSearchOpen}
+      sessionQuery={sessionQuery}
+      setSessionQuery={setSessionQuery}
+      sidebarMenuOpen={sidebarMenuOpen}
+      setSidebarMenuOpen={setSidebarMenuOpen}
+      bulkSelectMode={bulkSelectMode}
+      setBulkSelectMode={setBulkSelectMode}
+      bulkSelected={bulkSelected}
+      setBulkSelected={setBulkSelected}
+      showArchived={showArchived}
+      setShowArchived={setShowArchived}
+      selectedSessionID={selectedSessionID}
+      selectedSession={selectedSession}
+      setSelectedSessionID={setSelectedSessionID}
+      setSelectedSession={setSelectedSession}
+      workspaces={workspaces}
+      visibleSessions={visibleSessions}
+      setSettingsWorkspaceID={setSettingsWorkspaceID}
+      setWorkspaceSettingsOpen={setWorkspaceSettingsOpen}
+      setSessionMenuOpen={setSessionMenuOpen}
+      setWorkspaceOpen={setWorkspaceOpen}
+      createSession={createSession}
+      refreshSessions={refreshSessions}
+      refreshWorkspaces={refreshWorkspaces}
+      loadPerSessionModelConfig={loadPerSessionModelConfig}
+      removeWorkspace={removeWorkspace}
+      renameWorkspace={renameWorkspace}
+      restoreSession={restoreSession}
+      archiveSession={archiveSession}
+      toggleSelectAllVisible={toggleSelectAllVisible}
+      toggleBulkSelected={toggleBulkSelected}
+      bulkArchiveSelected={bulkArchiveSelected}
+      bulkRestoreSelected={bulkRestoreSelected}
+      bulkDeleteSelected={bulkDeleteSelected}
+      markUserSelectedSession={() => {
+        userSelectedSession = true;
+      }}
+    />
+  ));
+
   return (
     <div
       class="neu-shell"
@@ -3299,52 +3349,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       />
       <SlotMount slots={slots} name="statusbar" t={t} />
       <div class="neu-app">
-        {/* Left session tree */}
-        <SessionSidebar
+        {/* The left column. The shell owns the column; the workspace and
+            session browser is what fills it. */}
+        <Sidebar
           t={t}
-          ctx={props.ctx}
+          slots={slots}
           leftVisible={leftVisible}
-          leftWidth={leftWidth}
           setLeftVisible={setLeftVisible}
-          sessionSearchOpen={sessionSearchOpen}
-          setSessionSearchOpen={setSessionSearchOpen}
-          sessionQuery={sessionQuery}
-          setSessionQuery={setSessionQuery}
-          sidebarMenuOpen={sidebarMenuOpen}
-          setSidebarMenuOpen={setSidebarMenuOpen}
-          bulkSelectMode={bulkSelectMode}
-          setBulkSelectMode={setBulkSelectMode}
-          bulkSelected={bulkSelected}
-          setBulkSelected={setBulkSelected}
-          showArchived={showArchived}
-          setShowArchived={setShowArchived}
-          selectedSessionID={selectedSessionID}
-          selectedSession={selectedSession}
-          setSelectedSessionID={setSelectedSessionID}
-          setSelectedSession={setSelectedSession}
-          workspaces={workspaces}
-          visibleSessions={visibleSessions}
-          setSettingsWorkspaceID={setSettingsWorkspaceID}
-          setWorkspaceSettingsOpen={setWorkspaceSettingsOpen}
-          setSessionMenuOpen={setSessionMenuOpen}
-          setWorkspaceOpen={setWorkspaceOpen}
-          createSession={createSession}
-          refreshSessions={refreshSessions}
-          refreshWorkspaces={refreshWorkspaces}
-          loadPerSessionModelConfig={loadPerSessionModelConfig}
-          removeWorkspace={removeWorkspace}
-          renameWorkspace={renameWorkspace}
-          restoreSession={restoreSession}
-          archiveSession={archiveSession}
-          toggleSelectAllVisible={toggleSelectAllVisible}
-          toggleBulkSelected={toggleBulkSelected}
-          bulkArchiveSelected={bulkArchiveSelected}
-          bulkRestoreSelected={bulkRestoreSelected}
-          bulkDeleteSelected={bulkDeleteSelected}
+          leftWidth={leftWidth}
           startLeftResize={startLeftResize}
-          markUserSelectedSession={() => {
-            userSelectedSession = true;
-          }}
+          onCreateSession={() => void createSession()}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
         {/* Middle dual agent panes */}

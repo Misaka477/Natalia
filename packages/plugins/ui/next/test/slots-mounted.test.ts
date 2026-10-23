@@ -47,14 +47,25 @@ function sourceFiles(dir: string): string[] {
   return found;
 }
 
-test("every declared slot is rendered by the shell", () => {
+/** Every mount, including the ones that ride through a helper: the
+ *  sidebar's brand row and settings seat render through `SlotOr`, which
+ *  carries the shell's own fallback for an unfilled hole. The name is
+ *  still literal at the call site, so the walk sees it. */
+function mountedSlots(): Set<string> {
   const mounted = new Set<string>();
   for (const file of sourceFiles(srcRoot)) {
     const source = readFileSync(file, "utf8");
-    for (const match of source.matchAll(/SlotMount[^>]*name="([^"]+)"/g)) {
+    for (const match of source.matchAll(
+      /Slot(?:Mount|Or)[^>]*name="([^"]+)"/g,
+    )) {
       mounted.add(match[1]!);
     }
   }
+  return mounted;
+}
+
+test("every declared slot is rendered by the shell", () => {
+  const mounted = mountedSlots();
   const missing = declaredSlots().filter((name) => !mounted.has(name));
   expect(
     missing,
@@ -65,14 +76,7 @@ test("every declared slot is rendered by the shell", () => {
 
 test("every mounted slot is one the shell declares", () => {
   const declared = new Set(declaredSlots());
-  const mounted = new Set<string>();
-  for (const file of sourceFiles(srcRoot)) {
-    const source = readFileSync(file, "utf8");
-    for (const match of source.matchAll(/SlotMount[^>]*name="([^"]+)"/g)) {
-      mounted.add(match[1]!);
-    }
-  }
-  const unknown = [...mounted].filter((name) => !declared.has(name));
+  const unknown = [...mountedSlots()].filter((name) => !declared.has(name));
   expect(
     unknown,
     "these SlotMounts name a slot the registry does not declare — the " +
@@ -80,13 +84,20 @@ test("every mounted slot is one the shell declares", () => {
   ).toEqual([]);
 });
 
-test("the shell declares the nine slots the architecture names", () => {
+test("the shell declares the sixteen slots the architecture names", () => {
   expect(declaredSlots().sort()).toEqual(
     [
       "decision",
       "input.dock",
       "runbar",
       "settings.end",
+      "sidebar.brand.mark",
+      "sidebar.brand.name",
+      "sidebar.footer.action",
+      "sidebar.panellist",
+      "sidebar.settings",
+      "sidebar.toggle.badge",
+      "sidebar.workspaces",
       "statusbar",
       "topbar.end",
       "topbar.start",

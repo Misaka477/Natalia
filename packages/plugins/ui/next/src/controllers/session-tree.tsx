@@ -602,12 +602,10 @@ function SessionTree(props: {
     </div>
   );
 }
+/** The left column's browsing region: the props the shell passes it. */
 export interface SessionSidebarProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
-  leftVisible: () => boolean;
-  leftWidth: () => number;
-  setLeftVisible: (visible: boolean) => void;
   sessionSearchOpen: () => boolean;
   setSessionSearchOpen: (open: boolean | ((value: boolean) => boolean)) => void;
   sessionQuery: () => string;
@@ -643,316 +641,290 @@ export interface SessionSidebarProps {
   bulkArchiveSelected: () => Promise<void> | void;
   bulkRestoreSelected: () => Promise<void> | void;
   bulkDeleteSelected: () => Promise<void> | void;
-  startLeftResize: (event: PointerEvent) => void;
   markUserSelectedSession: () => void;
 }
 
-/** The left session tree: workspace groups, session rows, bulk and search chrome. */
-export function SessionSidebar(props: SessionSidebarProps) {
+/** The workspace and session browsing region — the left column's
+ *  content, not the column itself. The shell owns the column (see
+ *  controllers/sidebar.tsx: the brand row, New Session, the panel rows
+ *  and the foot); this is what fills it. It used to render its own
+ *  `<aside>`, which meant the tree owned the shell's left column and
+ *  nothing else could live there. */
+export function SessionTreeRegion(props: SessionSidebarProps) {
   const t = props.t;
   return (
     <>
-      {props.leftVisible() ? (
-        <>
-          <aside
-            class={styles.sidebar}
-            style={{ width: `${props.leftWidth()}px` }}
+      <div class={styles.header}>
+        <span class={styles.title}>{t("sidebar.workspace")}</span>
+        <div class={styles.actions}>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            title={t("sidebar.search")}
+            data-active={props.sessionSearchOpen()}
+            onClick={() => {
+              props.setSessionSearchOpen((value) => !value);
+              props.setSidebarMenuOpen(false);
+            }}
           >
-            <div class={styles.header}>
-              <span class={styles.title}>{t("sidebar.workspace")}</span>
-              <div class={styles.actions}>
-                <button
-                  type="button"
-                  class={styles.iconBtn}
-                  title={t("sidebar.search")}
-                  data-active={props.sessionSearchOpen()}
-                  onClick={() => {
-                    props.setSessionSearchOpen((value) => !value);
-                    props.setSidebarMenuOpen(false);
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <circle
-                      cx="7"
-                      cy="7"
-                      r="4.5"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                    />
-                    <path
-                      d="M10.3 10.3L13.5 13.5"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class={styles.iconBtn}
-                  title={t("sidebar.moreSessionActions")}
-                  data-active={props.sidebarMenuOpen()}
-                  onClick={() => {
-                    props.setSidebarMenuOpen((value) => !value);
-                    props.setSessionSearchOpen(false);
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M3 4.5h10"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linecap="round"
-                    />
-                    <circle
-                      cx="6"
-                      cy="4.5"
-                      r="1.6"
-                      fill="var(--neu-bg-light)"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                    />
-                    <path
-                      d="M3 11.5h10"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linecap="round"
-                    />
-                    <circle
-                      cx="10"
-                      cy="11.5"
-                      r="1.6"
-                      fill="var(--neu-bg-light)"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class={styles.iconBtn}
-                  title={t("sidebar.bulkSelect")}
-                  data-active={props.bulkSelectMode()}
-                  onClick={() => {
-                    props.setSidebarMenuOpen(false);
-                    props.setSessionSearchOpen(false);
-                    props.setBulkSelectMode((value) => !value);
-                    props.setBulkSelected(new Set<string>());
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <rect
-                      x="2.5"
-                      y="2.5"
-                      width="11"
-                      height="11"
-                      rx="2"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                    />
-                    <path
-                      d="M5.2 8.2L7 10L10.8 6.2"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class={styles.iconBtn}
-                  title={t("sidebar.newSession")}
-                  onClick={() => {
-                    props.setSidebarMenuOpen(false);
-                    void props.createSession();
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M8 3v10M3 8h10"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class={`${styles.iconBtn} ${styles.newWorkspaceBtn}`}
-                  data-tooltip={t("sidebar.addWorkspace")}
-                  aria-label={t("sidebar.addWorkspace")}
-                  onClick={() => {
-                    props.setSidebarMenuOpen(false);
-                    props.setWorkspaceOpen(true);
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M2 4h4l1-2h5l3 3v9a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linejoin="round"
-                    />
-                    <path
-                      d="M8 7v6M6 9h4"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <Show when={props.sessionSearchOpen()}>
-              <input
-                class={styles.search}
-                placeholder={t("sidebar.searchSessions")}
-                value={props.sessionQuery()}
-                onInput={(event) =>
-                  props.setSessionQuery(event.currentTarget.value)
-                }
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <circle
+                cx="7"
+                cy="7"
+                r="4.5"
+                stroke="currentColor"
+                stroke-width="1.4"
               />
-            </Show>
-            <Show when={props.bulkSelectMode()}>
-              <div class="neu-bulk-bar">
-                <span class="neu-bulk-count">
-                  {t("sidebar.selectedCount", {
-                    count: props.bulkSelected().size,
-                  })}
-                </span>
-                <div class="neu-bulk-actions">
-                  <button
-                    type="button"
-                    class="neu-bulk-btn"
-                    onClick={() => props.toggleSelectAllVisible()}
-                  >
-                    {t("common.selectAll")}
-                  </button>
-                  <button
-                    type="button"
-                    class="neu-bulk-btn"
-                    onClick={() => void props.bulkArchiveSelected()}
-                  >
-                    {t("common.archive")}
-                  </button>
-                  <button
-                    type="button"
-                    class="neu-bulk-btn"
-                    onClick={() => void props.bulkRestoreSelected()}
-                  >
-                    {t("common.restore")}
-                  </button>
-                  <button
-                    type="button"
-                    class="neu-bulk-btn neu-bulk-btn-danger"
-                    onClick={() => void props.bulkDeleteSelected()}
-                  >
-                    {t("common.delete")}
-                  </button>
-                  <button
-                    type="button"
-                    class="neu-bulk-btn"
-                    onClick={() => {
-                      props.setBulkSelectMode(false);
-                      props.setBulkSelected(new Set<string>());
-                    }}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                </div>
-              </div>
-            </Show>
-            <Show when={props.sidebarMenuOpen()}>
-              <div class={styles.menu}>
-                <button
-                  type="button"
-                  class={styles.menuItem}
-                  onClick={() => {
-                    props.setSidebarMenuOpen(false);
-                    props.setSessionMenuOpen(true);
-                  }}
-                >
-                  {t("sidebar.sessionActions")}
-                </button>
-                <button
-                  type="button"
-                  class={`${styles.menuItem} ${styles.menuToggle}`}
-                  data-active={props.showArchived()}
-                  onClick={() => props.setShowArchived((value) => !value)}
-                >
-                  {t("sidebar.showArchived")}
-                </button>
-              </div>
-            </Show>
-            <div class={styles.content}>
-              <SessionTree
-                t={t}
-                selected={props.selectedSessionID()}
-                sessions={props.visibleSessions()}
-                workspaces={props.workspaces()}
-                onRename={(id, title) => {
-                  void props.ctx.runtime
-                    .sessionRename?.(id, title)
-                    .then(() => props.refreshSessions());
-                }}
-                onSelect={(id, name) => {
-                  props.markUserSelectedSession();
-                  props.setSelectedSessionID(id);
-                  props.setSelectedSession(name);
-                  void props.ctx.runtime.sessionAttach?.(id).then(async () => {
-                    await props.refreshWorkspaces();
-                    await props.refreshSessions();
-                    void props.loadPerSessionModelConfig(id);
-                  });
-                }}
-                onRemoveWorkspace={(workspaceID) => {
-                  void props.removeWorkspace(workspaceID);
-                }}
-                onWorkspaceSettings={(workspaceID) => {
-                  props.setSettingsWorkspaceID(workspaceID);
-                  props.setWorkspaceSettingsOpen(true);
-                }}
-                onRenameWorkspace={(workspaceID, title) => {
-                  void props.renameWorkspace(workspaceID, title);
-                }}
-                onCreateSessionInWorkspace={(workspaceID) => {
-                  void props.createSession(workspaceID);
-                }}
-                onRestore={(sessionID) => {
-                  void props.restoreSession(sessionID);
-                }}
-                onArchive={(sessionID) => {
-                  void props.archiveSession(sessionID);
-                }}
-                bulkMode={props.bulkSelectMode()}
-                bulkSelected={(sessionID) =>
-                  props.bulkSelected().has(sessionID)
-                }
-                onBulkToggle={(sessionID) =>
-                  props.toggleBulkSelected(sessionID)
-                }
+              <path
+                d="M10.3 10.3L13.5 13.5"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
               />
-            </div>
-          </aside>
-          <div
-            class="neu-resizer"
-            role="separator"
-            aria-orientation="vertical"
-            onPointerDown={props.startLeftResize}
-          />
-        </>
-      ) : (
-        <button
-          type="button"
-          class="neu-collapsed-rail neu-left-rail"
-          onClick={() => props.setLeftVisible(true)}
-          title={t("workbench.collapseLeft")}
-        >
-          <span class="neu-rail-dots" />
-        </button>
-      )}
+            </svg>
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            title={t("sidebar.moreSessionActions")}
+            data-active={props.sidebarMenuOpen()}
+            onClick={() => {
+              props.setSidebarMenuOpen((value) => !value);
+              props.setSessionSearchOpen(false);
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3 4.5h10"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+              <circle
+                cx="6"
+                cy="4.5"
+                r="1.6"
+                fill="var(--neu-bg-light)"
+                stroke="currentColor"
+                stroke-width="1.3"
+              />
+              <path
+                d="M3 11.5h10"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+              <circle
+                cx="10"
+                cy="11.5"
+                r="1.6"
+                fill="var(--neu-bg-light)"
+                stroke="currentColor"
+                stroke-width="1.3"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            title={t("sidebar.bulkSelect")}
+            data-active={props.bulkSelectMode()}
+            onClick={() => {
+              props.setSidebarMenuOpen(false);
+              props.setSessionSearchOpen(false);
+              props.setBulkSelectMode((value) => !value);
+              props.setBulkSelected(new Set<string>());
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <rect
+                x="2.5"
+                y="2.5"
+                width="11"
+                height="11"
+                rx="2"
+                stroke="currentColor"
+                stroke-width="1.3"
+              />
+              <path
+                d="M5.2 8.2L7 10L10.8 6.2"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            title={t("sidebar.newSession")}
+            onClick={() => {
+              props.setSidebarMenuOpen(false);
+              void props.createSession();
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M8 3v10M3 8h10"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class={`${styles.iconBtn} ${styles.newWorkspaceBtn}`}
+            data-tooltip={t("sidebar.addWorkspace")}
+            aria-label={t("sidebar.addWorkspace")}
+            onClick={() => {
+              props.setSidebarMenuOpen(false);
+              props.setWorkspaceOpen(true);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2 4h4l1-2h5l3 3v9a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M8 7v6M6 9h4"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <Show when={props.sessionSearchOpen()}>
+        <input
+          class={styles.search}
+          placeholder={t("sidebar.searchSessions")}
+          value={props.sessionQuery()}
+          onInput={(event) => props.setSessionQuery(event.currentTarget.value)}
+        />
+      </Show>
+      <Show when={props.bulkSelectMode()}>
+        <div class="neu-bulk-bar">
+          <span class="neu-bulk-count">
+            {t("sidebar.selectedCount", {
+              count: props.bulkSelected().size,
+            })}
+          </span>
+          <div class="neu-bulk-actions">
+            <button
+              type="button"
+              class="neu-bulk-btn"
+              onClick={() => props.toggleSelectAllVisible()}
+            >
+              {t("common.selectAll")}
+            </button>
+            <button
+              type="button"
+              class="neu-bulk-btn"
+              onClick={() => void props.bulkArchiveSelected()}
+            >
+              {t("common.archive")}
+            </button>
+            <button
+              type="button"
+              class="neu-bulk-btn"
+              onClick={() => void props.bulkRestoreSelected()}
+            >
+              {t("common.restore")}
+            </button>
+            <button
+              type="button"
+              class="neu-bulk-btn neu-bulk-btn-danger"
+              onClick={() => void props.bulkDeleteSelected()}
+            >
+              {t("common.delete")}
+            </button>
+            <button
+              type="button"
+              class="neu-bulk-btn"
+              onClick={() => {
+                props.setBulkSelectMode(false);
+                props.setBulkSelected(new Set<string>());
+              }}
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      </Show>
+      <Show when={props.sidebarMenuOpen()}>
+        <div class={styles.menu}>
+          <button
+            type="button"
+            class={styles.menuItem}
+            onClick={() => {
+              props.setSidebarMenuOpen(false);
+              props.setSessionMenuOpen(true);
+            }}
+          >
+            {t("sidebar.sessionActions")}
+          </button>
+          <button
+            type="button"
+            class={`${styles.menuItem} ${styles.menuToggle}`}
+            data-active={props.showArchived()}
+            onClick={() => props.setShowArchived((value) => !value)}
+          >
+            {t("sidebar.showArchived")}
+          </button>
+        </div>
+      </Show>
+      <div class={styles.content}>
+        <SessionTree
+          t={t}
+          selected={props.selectedSessionID()}
+          sessions={props.visibleSessions()}
+          workspaces={props.workspaces()}
+          onRename={(id, title) => {
+            void props.ctx.runtime
+              .sessionRename?.(id, title)
+              .then(() => props.refreshSessions());
+          }}
+          onSelect={(id, name) => {
+            props.markUserSelectedSession();
+            props.setSelectedSessionID(id);
+            props.setSelectedSession(name);
+            void props.ctx.runtime.sessionAttach?.(id).then(async () => {
+              await props.refreshWorkspaces();
+              await props.refreshSessions();
+              void props.loadPerSessionModelConfig(id);
+            });
+          }}
+          onRemoveWorkspace={(workspaceID) => {
+            void props.removeWorkspace(workspaceID);
+          }}
+          onWorkspaceSettings={(workspaceID) => {
+            props.setSettingsWorkspaceID(workspaceID);
+            props.setWorkspaceSettingsOpen(true);
+          }}
+          onRenameWorkspace={(workspaceID, title) => {
+            void props.renameWorkspace(workspaceID, title);
+          }}
+          onCreateSessionInWorkspace={(workspaceID) => {
+            void props.createSession(workspaceID);
+          }}
+          onRestore={(sessionID) => {
+            void props.restoreSession(sessionID);
+          }}
+          onArchive={(sessionID) => {
+            void props.archiveSession(sessionID);
+          }}
+          bulkMode={props.bulkSelectMode()}
+          bulkSelected={(sessionID) => props.bulkSelected().has(sessionID)}
+          onBulkToggle={(sessionID) => props.toggleBulkSelected(sessionID)}
+        />
+      </div>
     </>
   );
 }

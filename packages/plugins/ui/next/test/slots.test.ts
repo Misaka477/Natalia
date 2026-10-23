@@ -38,8 +38,8 @@ test("registration bumps the revision so mounted slots re-render", () => {
   expect(slots.get("statusbar")).toBeUndefined();
 });
 
-test("the nine slots are the architecture's slots", () => {
-  expect(SLOT_NAMES.length).toBe(9);
+test("the shell's slots are the architecture's slots", () => {
+  expect(SLOT_NAMES.length).toBe(16);
   expect([...SLOT_NAMES]).toEqual([
     "topbar.start",
     "topbar.end",
@@ -50,6 +50,13 @@ test("the nine slots are the architecture's slots", () => {
     "transcript.empty",
     "workbench.end",
     "settings.end",
+    "sidebar.brand.mark",
+    "sidebar.brand.name",
+    "sidebar.panellist",
+    "sidebar.workspaces",
+    "sidebar.settings",
+    "sidebar.footer.action",
+    "sidebar.toggle.badge",
   ]);
 });
 

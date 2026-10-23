@@ -66,6 +66,115 @@
   }
 }
 
+/* The left column's own chrome, which the shell owns: the brand row,
+   New Session, the global panel rows and the foot. The browsing region
+   below them is the session tree's. Tokens only. */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--neu-accent);
+  color: var(--neu-on-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.brandName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neu-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* New Session: the column's one action, and the shell's. */
+.newSession {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: none;
+  border-radius: var(--neu-radius-3);
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-2);
+}
+
+.newSession:hover {
+  color: var(--neu-accent-soft);
+  box-shadow: var(--neu-elevation-1);
+}
+
+.newSession:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+/* The global panel rows. Empty until a deployment fills the hole. */
+.panellist {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+/* The browsing region: everything between the panel rows and the foot. */
+.workspaces {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The foot: an action beside the settings seat, then the seat. */
+.foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid var(--neu-hairline);
+}
+
+.settingsSeat {
+  flex: 1;
+  padding: 7px 12px;
+  border: none;
+  border-radius: var(--neu-radius-3);
+  background: transparent;
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsSeat:hover {
+  background: var(--neu-hover-overlay);
+  color: var(--neu-text);
+}
+
 /* The sidebar's compact header: the actions cluster, the icon buttons
    with their tooltips, the session search field and the overflow menu.
    Every rule in this cluster is session-tree-only, verified before the

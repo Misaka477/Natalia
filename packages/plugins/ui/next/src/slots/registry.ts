@@ -37,6 +37,27 @@ export const SLOT_NAMES = [
   "workbench.end",
   /** The settings window, after the shell's own sections. */
   "settings.end",
+  /* ===== The left column =====
+     The shell owns the column: its geometry, the brand row, New Session,
+     the global panel rows and the foot. A plugin fills the holes — the
+     same division the reference harness uses, so the workspace browser
+     is one registration away from being swapped and the settings seat
+     at the foot is a deployment's to replace. */
+  /** The brand mark in the column's brand row. */
+  "sidebar.brand.mark",
+  /** The brand name beside the mark. */
+  "sidebar.brand.name",
+  /** The global panel rows: each addresses one of the shell's panels. */
+  "sidebar.panellist",
+  /** The workspace and session browsing region. */
+  "sidebar.workspaces",
+  /** The settings seat at the column's foot. */
+  "sidebar.settings",
+  /** An action beside the settings seat. */
+  "sidebar.footer.action",
+  /** A non-interactive notification inside the collapsed column's
+   *  expand button. */
+  "sidebar.toggle.badge",
 ] as const;
 
 export type SlotName = (typeof SLOT_NAMES)[number];

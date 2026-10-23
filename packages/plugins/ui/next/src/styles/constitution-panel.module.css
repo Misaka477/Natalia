@@ -1,0 +1,129 @@
+/* The constitution panel: the rule rows, the toolbar, the editor with its
+   inputs and chooser, the row actions and the protected-rule label.
+   Tokens only. */
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: var(--neu-surface-sunken);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: var(--neu-surface-raised);
+}
+
+.editorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.input {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--neu-border-strong);
+  border-radius: 4px;
+  background: var(--neu-surface-raised);
+  color: inherit;
+  font-size: 12px;
+}
+
+/* The chooser beside a path input: same height and type size as the input it
+   sits next to, so the row does not grow and the two read as one control. */
+.browse {
+  flex: 0 0 auto;
+  cursor: pointer;
+  color: var(--neu-accent);
+  border-color: var(--neu-border-strong);
+  background: var(--neu-surface-raised-strong);
+  font-size: 12px;
+}
+
+.browse:hover {
+  background: var(--neu-border);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  gap: 5px;
+}
+
+.btn {
+  padding: 2px 9px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-surface-raised-strong);
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.btn:hover {
+  background: var(--neu-surface-raised-strong);
+}
+
+.btn[data-danger] {
+  background: var(--neu-state-danger-bg);
+}
+
+.btn[data-danger]:hover {
+  background: var(--neu-state-danger-border);
+}
+
+/* EI Phase 1 panel pagination: scrolling to the end of the pane appends the
+   next durable page (unified-scroll plan §9); there is no per-page affordance
+   in the markup. */
+/* A release-scope (runtime self-protection) rule: not an empty action slot but
+   an explicit label, so the panel explains why it cannot be edited. */
+.protected {
+  flex: none;
+  align-self: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--neu-surface-raised);
+  color: var(--neu-muted);
+  font-size: 11px;
+  cursor: help;
+  user-select: none;
+}

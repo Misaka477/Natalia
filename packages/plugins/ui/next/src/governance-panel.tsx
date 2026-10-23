@@ -1,6 +1,7 @@
 import styles from "./styles/governance-panel.module.css";
 import wg from "./styles/work-graph.module.css";
 import drift from "./styles/drift-cards.module.css";
+import constitution from "./styles/constitution-panel.module.css";
 import { createSignal, createEffect, createMemo, Show, For } from "solid-js";
 import type {
   RuntimeClient,
@@ -932,7 +933,7 @@ function RuleOverrides(props: {
         <Show when={view().hiddenCount > 0 || expanded()}>
           <button
             type="button"
-            class="constitution-btn"
+            class={constitution.btn}
             onClick={() => setExpanded(!expanded())}
           >
             {expanded()
@@ -1608,10 +1609,10 @@ export function GovernancePane(props: {
           </Show>
         </Show>
         <Show when={tab() === "constitution"}>
-          <div class="constitution-toolbar">
+          <div class={constitution.toolbar}>
             <button
               type="button"
-              class="constitution-btn"
+              class={constitution.btn}
               disabled={actionBusy()}
               onClick={() => openRuleEditor("add")}
             >
@@ -1620,9 +1621,9 @@ export function GovernancePane(props: {
           </div>
           <Show when={ruleEditor()}>
             {(editor) => (
-              <div class="constitution-editor">
+              <div class={constitution.editor}>
                 <input
-                  class="constitution-input"
+                  class={constitution.input}
                   placeholder={t("gov.statementPh")}
                   value={editor().statement}
                   onInput={(event) =>
@@ -1632,9 +1633,9 @@ export function GovernancePane(props: {
                     })
                   }
                 />
-                <div class="constitution-editor-row">
+                <div class={constitution.editorRow}>
                   <select
-                    class="constitution-input"
+                    class={constitution.input}
                     value={editor().enforcement}
                     onChange={(event) =>
                       setRuleEditor({
@@ -1651,7 +1652,7 @@ export function GovernancePane(props: {
                     <option value="deny">deny</option>
                   </select>
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.toolsPh")}
                     value={editor().tools}
                     onInput={(event) =>
@@ -1662,7 +1663,7 @@ export function GovernancePane(props: {
                     }
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.pathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
@@ -1690,7 +1691,7 @@ export function GovernancePane(props: {
                     }}
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder="commandPattern"
                     value={editor().commandPattern}
                     onInput={(event) =>
@@ -1701,10 +1702,10 @@ export function GovernancePane(props: {
                     }
                   />
                 </div>
-                <div class="constitution-editor-actions">
+                <div class={constitution.editorActions}>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     disabled={actionBusy()}
                     onClick={() => void saveRule()}
                   >
@@ -1712,7 +1713,7 @@ export function GovernancePane(props: {
                   </button>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     onClick={() => setRuleEditor(undefined)}
                   >
                     {t("common.cancel")}
@@ -1723,12 +1724,12 @@ export function GovernancePane(props: {
           </Show>
           <Show when={overrideEditor()}>
             {(editor) => (
-              <div class="constitution-editor">
+              <div class={constitution.editor}>
                 <div class={styles.title}>
                   {t("gov.overrideRequest", { ruleID: editor().ruleID })}
                 </div>
                 <input
-                  class="constitution-input"
+                  class={constitution.input}
                   placeholder={t("gov.reasonPh")}
                   value={editor().reason}
                   onInput={(event) =>
@@ -1738,9 +1739,9 @@ export function GovernancePane(props: {
                     })
                   }
                 />
-                <div class="constitution-editor-row">
+                <div class={constitution.editorRow}>
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.overridePathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
@@ -1767,7 +1768,7 @@ export function GovernancePane(props: {
                     }}
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.taskIDPh")}
                     value={editor().taskID}
                     onInput={(event) =>
@@ -1778,7 +1779,7 @@ export function GovernancePane(props: {
                     }
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.expiryPh")}
                     value={editor().expiresAt}
                     onInput={(event) =>
@@ -1789,10 +1790,10 @@ export function GovernancePane(props: {
                     }
                   />
                 </div>
-                <div class="constitution-editor-actions">
+                <div class={constitution.editorActions}>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     disabled={actionBusy()}
                     onClick={() => void submitOverride()}
                   >
@@ -1800,7 +1801,7 @@ export function GovernancePane(props: {
                   </button>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     onClick={() => setOverrideEditor(undefined)}
                   >
                     {t("common.cancel")}
@@ -1817,8 +1818,8 @@ export function GovernancePane(props: {
             }
           >
             {(rule) => (
-              <div class="constitution-row">
-                <div class="constitution-row-main">
+              <div class={constitution.row}>
+                <div class={constitution.rowMain}>
                   <span class={styles.title} data-priority={rule.priority}>
                     {rule.ruleID}
                   </span>
@@ -1832,10 +1833,10 @@ export function GovernancePane(props: {
                   />
                 </div>
                 <Show when={constitutionRuleAffordance(rule) === "editable"}>
-                  <div class="constitution-row-actions">
+                  <div class={constitution.rowActions}>
                     <button
                       type="button"
-                      class="constitution-btn"
+                      class={constitution.btn}
                       disabled={actionBusy()}
                       onClick={() => openRuleEditor("edit", rule)}
                     >
@@ -1848,7 +1849,7 @@ export function GovernancePane(props: {
                     >
                       <button
                         type="button"
-                        class="constitution-btn"
+                        class={constitution.btn}
                         disabled={actionBusy()}
                         onClick={() => openOverrideEditor(rule)}
                       >
@@ -1857,7 +1858,7 @@ export function GovernancePane(props: {
                     </Show>
                     <button
                       type="button"
-                      class="constitution-btn"
+                      class={constitution.btn}
                       onClick={() =>
                         void updateConstitutionRuleViaRpc(
                           props.runtime,
@@ -1871,7 +1872,7 @@ export function GovernancePane(props: {
                     </button>
                     <button
                       type="button"
-                      class="constitution-btn"
+                      class={constitution.btn}
                       data-danger
                       onClick={() =>
                         void (async () => {
@@ -1914,7 +1915,7 @@ export function GovernancePane(props: {
                 */}
                 <Show when={constitutionRuleAffordance(rule) === "protected"}>
                   <span
-                    class="constitution-protected"
+                    class={constitution.protected}
                     title={t("gov.systemProtectedTitle")}
                   >
                     系统保护
@@ -1927,8 +1928,8 @@ export function GovernancePane(props: {
             <div class="neu-gov-section-label">{t("gov.docRulesSection")}</div>
             <For each={liveDocRules()}>
               {(rule) => (
-                <div class="constitution-row">
-                  <div class="constitution-row-main">
+                <div class={constitution.row}>
+                  <div class={constitution.rowMain}>
                     <span class={styles.title}>{rule.section}</span>
                     <span class={styles.text}>{rule.statement}</span>
                     <span class={styles.meta}>
@@ -1936,17 +1937,17 @@ export function GovernancePane(props: {
                       {rule.annotated ? t("gov.annotated") : t("gov.prose")}
                     </span>
                   </div>
-                  <div class="constitution-row-actions">
+                  <div class={constitution.rowActions}>
                     <button
                       type="button"
-                      class="constitution-btn"
+                      class={constitution.btn}
                       onClick={() => openDocRuleEditor(rule)}
                     >
                       {t("gov.edit")}
                     </button>
                     <button
                       type="button"
-                      class="constitution-btn"
+                      class={constitution.btn}
                       onClick={() =>
                         void (async () => {
                           const result = await promoteConstitutionDocRuleViaRpc(
@@ -1975,8 +1976,8 @@ export function GovernancePane(props: {
           </Show>
           <Show when={docRuleEditor()}>
             {(editor) => (
-              <div class="constitution-editor">
-                <div class="constitution-editor-row">
+              <div class={constitution.editor}>
+                <div class={constitution.editorRow}>
                   <span class={styles.meta}>
                     {t("gov.docRuleEditorTitle", {
                       section: editor().section,
@@ -1995,9 +1996,9 @@ export function GovernancePane(props: {
                     })
                   }
                 />
-                <div class="constitution-editor-row">
+                <div class={constitution.editorRow}>
                   <select
-                    class="constitution-input"
+                    class={constitution.input}
                     value={editor().enforcement}
                     onChange={(event) =>
                       setDocRuleEditor({
@@ -2014,7 +2015,7 @@ export function GovernancePane(props: {
                     <option value="deny">deny</option>
                   </select>
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.docRuleToolsPh")}
                     value={editor().tools}
                     onInput={(event) =>
@@ -2025,7 +2026,7 @@ export function GovernancePane(props: {
                     }
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder={t("gov.pathsPh")}
                     value={editor().paths}
                     onInput={(event) =>
@@ -2052,7 +2053,7 @@ export function GovernancePane(props: {
                     }}
                   />
                   <input
-                    class="constitution-input"
+                    class={constitution.input}
                     placeholder="commandPattern"
                     value={editor().commandPattern}
                     onInput={(event) =>
@@ -2063,10 +2064,10 @@ export function GovernancePane(props: {
                     }
                   />
                 </div>
-                <div class="constitution-editor-actions">
+                <div class={constitution.editorActions}>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     disabled={actionBusy()}
                     onClick={() => void saveDocRule()}
                   >
@@ -2074,7 +2075,7 @@ export function GovernancePane(props: {
                   </button>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     onClick={() => setDocRuleEditor(undefined)}
                   >
                     {t("common.cancel")}
@@ -2273,7 +2274,7 @@ export function GovernancePane(props: {
                   <span class={styles.cardMeta}>{record.recordedAt}</span>
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     disabled={actionBusy()}
                     onClick={() => void recordHumanValidation(record.taskID)}
                   >
@@ -2372,7 +2373,7 @@ export function GovernancePane(props: {
             <div class={wg.viewToggle}>
               <button
                 type="button"
-                class="constitution-btn"
+                class={constitution.btn}
                 data-active={workGraphView() === "tree"}
                 onClick={() => setWorkGraphView("tree")}
               >
@@ -2380,7 +2381,7 @@ export function GovernancePane(props: {
               </button>
               <button
                 type="button"
-                class="constitution-btn"
+                class={constitution.btn}
                 data-active={workGraphView() === "graph"}
                 onClick={() => setWorkGraphView("graph")}
               >
@@ -2466,7 +2467,7 @@ export function GovernancePane(props: {
                     trigger onward; the loop never takes itself from here. */}
                   <button
                     type="button"
-                    class="constitution-btn"
+                    class={constitution.btn}
                     disabled={actionBusy()}
                     onClick={() =>
                       void (async () => {

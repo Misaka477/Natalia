@@ -736,6 +736,14 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 
 
 /* ===== Review / Diff ===== */
+/* SHARED VOCABULARY — the review surface (pane, header, title, subtabs,
+   diff, file rows, entity lists, empty states, section labels, resizer)
+   is rendered by the review panel AND by the agent and plan panels,
+   which reuse it for their own content. It stays global under the
+   cross-region rule. What is review-only (the AST search and diff
+   renderers, the PR rows, the git ranges, the entity buttons and the
+   checkpoint rename button) moves into that panel's module when its
+   clusters are cut. */
 .review-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .review-subtabs { display: flex; gap: 6px; padding: 0 12px 8px; }
 .review-subtab {

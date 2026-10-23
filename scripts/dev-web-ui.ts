@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
@@ -57,12 +57,30 @@ let serve: ChildProcess | undefined;
  */
 const isWindows = process.platform === "win32";
 const npmCacheDir = join(tmpdir(), "natalia-npm-cache");
+/**
+ * The command to actually spawn on Windows. `npm` ships `npm.cmd` beside
+ * `npm.exe`, but a bun installed by its own installer may ship only
+ * `bun.exe` — spawning `bun.cmd` then fails with ENOENT before the shell
+ * ever sees it, which is how the runtime died with "'bun.cmd' is not
+ * recognized". The `.cmd` shim is still what npm needs, so this checks
+ * for it rather than assuming either way: POSIX keeps the bare name.
+ */
+function windowsCommand(command: string): string {
+  if (!isWindows) return command;
+  const shim = `${command}.cmd`;
+  const sameDir = resolve(dirname(process.execPath), `${shim}`);
+  if (existsSync(sameDir)) return sameDir;
+  const onPath = spawnSync("where", [shim], { stdio: "ignore" });
+  if (onPath.status === 0) return shim;
+  return command;
+}
+
 function spawnCommand(
   command: string,
   args: string[],
   options: Parameters<typeof spawn>[2] = {},
 ): ChildProcess {
-  return spawn(isWindows ? `${command}.cmd` : command, args, {
+  return spawn(windowsCommand(command), args, {
     ...options,
     ...(isWindows ? { shell: true } : {}),
   });

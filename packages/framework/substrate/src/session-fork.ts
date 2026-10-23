@@ -48,7 +48,11 @@ export type ForkGoalInput = {
 export type ForkGoalPlan =
   | { kind: "none"; reason: "parent has no goal" }
   | { kind: "move"; goal: ForkGoalInput; parentReason: "handed_off" }
-  | { kind: "supersede"; goal: ForkGoalInput; parentReason: "superseded_by_fork" };
+  | {
+      kind: "supersede";
+      goal: ForkGoalInput;
+      parentReason: "superseded_by_fork";
+    };
 
 export type ForkPlanInput = {
   /** The parent's live goal, when it has one. */

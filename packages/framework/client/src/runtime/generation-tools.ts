@@ -16,7 +16,14 @@
  *   undo (study: 回退永不被候选禁止).
  */
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -766,7 +773,9 @@ async function landGenerationSource(
     // to hand over to the new one, or the swap lands and nothing changes.
     // POSIX leaves this absent and lets `restartUnit` cover it — which the
     // installer's own update path already passes.
-    ...(process.platform === "win32" ? { relaunch: () => relaunchSelf(home, source.version) } : {}),
+    ...(process.platform === "win32"
+      ? { relaunch: () => relaunchSelf(home, source.version) }
+      : {}),
   });
   if (landed.outcome === "rolled_back")
     throw new Error(
@@ -947,10 +956,7 @@ export function createProposeCodeGenerationTool(
         requireStringArg(args.buildDir, "buildDir"),
       );
       const version = requireStringArg(args.version, "version");
-      const sourceRoot = resolve(
-        workspaceRoot(ctx),
-        args.sourceRoot ?? ".",
-      );
+      const sourceRoot = resolve(workspaceRoot(ctx), args.sourceRoot ?? ".");
       const note = args.note;
 
       const buildStats = await stat(buildDir).catch(() => undefined);
@@ -976,8 +982,7 @@ export function createProposeCodeGenerationTool(
 
       const store = objectStore(ctx);
       const artifact = await store.put(
-        Buffer.from(
-          JSON.stringify({ version, files: build.files })),
+        Buffer.from(JSON.stringify({ version, files: build.files })),
       );
       const sourceArtifact = await store.put(
         Buffer.from(
@@ -986,7 +991,8 @@ export function createProposeCodeGenerationTool(
               path: file.name,
               next: file.hash,
             })),
-          })),
+          }),
+        ),
       );
 
       const live = ctx.ports.getTsRuntimeConfig();
@@ -1063,7 +1069,10 @@ function requireStringArg(value: unknown, name: string): string {
  * silently did nothing leaves the new binary linked while the old code
  * keeps running, which is the exact failure this exists to prevent.
  */
-function relaunchSelf(home: string, version: string): {
+function relaunchSelf(
+  home: string,
+  version: string,
+): {
   code: number;
   output: string;
 } {
@@ -1087,5 +1096,3 @@ function relaunchSelf(home: string, version: string): {
     };
   }
 }
-
-

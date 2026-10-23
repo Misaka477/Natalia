@@ -26,7 +26,11 @@ function iterateOutput(callSummary: string) {
   return {
     schema: { type: "object", properties: {} } as const,
     presentCall() {
-      return { kind: "generic" as const, title: "iterate", summary: callSummary };
+      return {
+        kind: "generic" as const,
+        title: "iterate",
+        summary: callSummary,
+      };
     },
     presentResult(_args: unknown, value: string) {
       return {
@@ -62,11 +66,13 @@ function iterateBranchTool(): RuntimeTool {
         },
         prompt: {
           type: "string",
-          description: "The first task, submitted into the new session immediately.",
+          description:
+            "The first task, submitted into the new session immediately.",
         },
         resume: {
           type: "boolean",
-          description: "Continue in an existing tree at `path` instead of copying the baseline.",
+          description:
+            "Continue in an existing tree at `path` instead of copying the baseline.",
         },
         title: { type: "string" },
       },

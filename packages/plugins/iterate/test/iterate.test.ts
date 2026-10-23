@@ -49,10 +49,9 @@ test("the description says what it is NOT for", () => {
 test("a host without a workspace manager gets a named refusal", async () => {
   const tool = iterateTools[0]!;
   const error = await tool
-    .execute(
-      { path: "/tmp/x", prompt: "go" },
-      { workspaceRoot: process.cwd() } as never,
-    )
+    .execute({ path: "/tmp/x", prompt: "go" }, {
+      workspaceRoot: process.cwd(),
+    } as never)
     .then(
       () => null,
       (cause: unknown) => cause as Error,

@@ -23,7 +23,11 @@
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildForkNotice, planGoalMove, type ForkGoalInput } from "./session-fork";
+import {
+  buildForkNotice,
+  planGoalMove,
+  type ForkGoalInput,
+} from "./session-fork";
 
 /** What the handoff was asked to do. */
 export type IterateBranchRequest = {
@@ -85,7 +89,10 @@ export type IterateBranchHost = {
  * derived by guessing — the caller passes what it knows, and a deployment
  * with neither answers with the reason rather than a wrong path.
  */
-export function resolveBaseline(explicit: string | undefined, installRoot: string): string {
+export function resolveBaseline(
+  explicit: string | undefined,
+  installRoot: string,
+): string {
   if (explicit) return resolve(explicit);
   const shipped = join(resolve(installRoot), "source");
   if (existsSync(join(shipped, "package.json"))) return shipped;
@@ -156,9 +163,18 @@ function javaSeparator(): string {
  * of megabytes for nothing. The lockfile travels because the install must
  * resolve the same versions the baseline was built with.
  */
-export async function copyBaseline(baseline: string, target: string): Promise<number> {
+export async function copyBaseline(
+  baseline: string,
+  target: string,
+): Promise<number> {
   let files = 0;
-  const skip = new Set(["node_modules", ".git", "dist", ".bun-install", ".bun-tmp"]);
+  const skip = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    ".bun-install",
+    ".bun-tmp",
+  ]);
   await mkdir(target, { recursive: true });
   const entries = await readdir(baseline, { withFileTypes: true });
   for (const entry of entries) {
@@ -180,21 +196,30 @@ export async function iterateBranch(
   baseline: string,
   request: IterateBranchRequest,
 ): Promise<IterateBranchResult> {
-  const check = checkBranchTarget(request.path, baseline, request.resume === true);
+  const check = checkBranchTarget(
+    request.path,
+    baseline,
+    request.resume === true,
+  );
   if (!check.ok) throw new Error(check.reason);
 
   const target = resolve(request.path);
   let copiedFrom: string | undefined;
-  if (request.resume !== true) await copyBaseline(baseline, target), (copiedFrom = baseline);
+  if (request.resume !== true)
+    (await copyBaseline(baseline, target), (copiedFrom = baseline));
 
   const existing = (await host.listWorkspaces()).find((workspace) =>
     samePath(workspace.root, target),
   );
   const registered = !existing;
-  const workspace = existing ?? (await host.addWorkspace({ path: target, title: request.title }));
+  const workspace =
+    existing ??
+    (await host.addWorkspace({ path: target, title: request.title }));
   const client = host.clientFor(workspace.workspaceID) as {
     sessionSeed?: (input: unknown) => Promise<{ sessionID: string }>;
-    sessionNew?: (input: unknown) => Promise<{ sessionID: string; created: boolean }>;
+    sessionNew?: (
+      input: unknown,
+    ) => Promise<{ sessionID: string; created: boolean }>;
     goalControl?: (
       action: "pause" | "resume" | "clear",
       sessionID?: string,
@@ -232,7 +257,12 @@ export async function iterateBranch(
     childWorkspace: target,
     cutAt: `${events.length} events`,
     ...(request.parentGoal
-      ? { goal: { title: request.parentGoal.title, moved: goalPlan.kind === "move" } }
+      ? {
+          goal: {
+            title: request.parentGoal.title,
+            moved: goalPlan.kind === "move",
+          },
+        }
       : {}),
   });
 
@@ -253,5 +283,3 @@ function samePath(left: string, right: string): boolean {
     return resolve(left).toLowerCase() === resolve(right).toLowerCase();
   return resolve(left) === resolve(right);
 }
-
-

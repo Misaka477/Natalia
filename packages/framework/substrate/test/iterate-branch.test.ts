@@ -23,7 +23,8 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    await rm(root, { recursive: true, force: true });
 });
 
 async function tree(): Promise<string> {
@@ -83,7 +84,10 @@ test("the copy carries the source and leaves the build output behind", async () 
   await writeFile(join(baseline, "package.json"), "{}");
   await writeFile(join(baseline, "bun.lock"), "");
   await writeFile(join(baseline, "packages", "core", "index.ts"), "export {}");
-  await writeFile(join(baseline, "node_modules", "junk", "big.bin"), "x".repeat(1024));
+  await writeFile(
+    join(baseline, "node_modules", "junk", "big.bin"),
+    "x".repeat(1024),
+  );
   await writeFile(join(baseline, "dist", "out.js"), "x");
 
   const target = join(root, "work");
@@ -130,7 +134,11 @@ test("the handoff seeds the child, arms the goal, and reports the move", async (
     clientFor: () => ({
       sessionSeed: async (input: { title?: string; events: unknown[] }) => {
         calls.push(`sessionSeed:${input.events.length}:${input.title ?? ""}`);
-        return { sessionID: "ses_child", created: true, seeded: input.events.length };
+        return {
+          sessionID: "ses_child",
+          created: true,
+          seeded: input.events.length,
+        };
       },
       goalControl: async (action: string, sessionID?: string) => {
         calls.push(`goalControl:${action}:${sessionID ?? ""}`);
@@ -196,7 +204,11 @@ test("a handoff into an existing tree reuses its workspace", async () => {
       return { workspaceID: "ws_new", root: target, status: "active" };
     },
     clientFor: () => ({
-      sessionSeed: async () => ({ sessionID: "ses_child", created: true, seeded: 0 }),
+      sessionSeed: async () => ({
+        sessionID: "ses_child",
+        created: true,
+        seeded: 0,
+      }),
     }),
     exportSession: async () => ({ events: [] }),
   };
@@ -233,7 +245,11 @@ test("a different task supersedes the goal instead of dragging it along", async 
       status: "active",
     }),
     clientFor: () => ({
-      sessionSeed: async () => ({ sessionID: "ses_child", created: true, seeded: 0 }),
+      sessionSeed: async () => ({
+        sessionID: "ses_child",
+        created: true,
+        seeded: 0,
+      }),
       goalControl: async (action: string) => {
         calls.push(`goalControl:${action}`);
         return { ok: true };

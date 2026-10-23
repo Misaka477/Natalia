@@ -30,7 +30,11 @@ import {
   runtimeFailureData,
 } from "@anthelia/contracts";
 import { CONFINEMENT_MODES } from "@anthelia/contracts";
-import type { RuntimeClient, RuntimeFailureData, RuntimeEvent } from "@anthelia/contracts";
+import type {
+  RuntimeClient,
+  RuntimeFailureData,
+  RuntimeEvent,
+} from "@anthelia/contracts";
 import type { RPCRequest, RPCResponse } from "./rpc-client";
 
 /**

@@ -586,7 +586,9 @@ export function createWorkspaceManager(
       // session is created through the TARGET workspace's client, and the
       // closure below is the only path from that runtime back to the
       // manager that holds every workspace.
-      ...(options.iterateBranch ? { iterateBranch: options.iterateBranch } : {}),
+      ...(options.iterateBranch
+        ? { iterateBranch: options.iterateBranch }
+        : {}),
       ...(activeSessionID ? { sessionID: activeSessionID } : {}),
     });
     const ws: WorkspaceRuntime = {
@@ -732,22 +734,31 @@ export function createWorkspaceManager(
           const fn = (owner.client as unknown as Record<string, unknown>)
             .sessionExport;
           if (typeof fn !== "function")
-            throw new Error("session export is unavailable on the owning runtime");
-          return (await (fn as (id: string) => Promise<{
-            events: Array<{ seq: number; event: unknown }>;
-          }>).call(owner.client, sessionID)) as {
+            throw new Error(
+              "session export is unavailable on the owning runtime",
+            );
+          return (await (
+            fn as (id: string) => Promise<{
+              events: Array<{ seq: number; event: unknown }>;
+            }>
+          ).call(owner.client, sessionID)) as {
             events: Array<{ seq: number; event: unknown }>;
           };
         },
       };
       const activeRoot =
-        (activeWorkspaceID ? runtimes.get(activeWorkspaceID)?.root : undefined) ??
-        process.cwd();
+        (activeWorkspaceID
+          ? runtimes.get(activeWorkspaceID)?.root
+          : undefined) ?? process.cwd();
       // The active workspace's root IS the install root in an installed
       // deployment (the app runs from <install>) and the repository root in
       // a checkout; resolveBaseline checks for the shipped `source/` beside
       // it and falls back to the tree itself.
-      return await iterateBranch(host, resolveBaseline(baseline, activeRoot), request);
+      return await iterateBranch(
+        host,
+        resolveBaseline(baseline, activeRoot),
+        request,
+      );
     },
     async workspacePermissionGet(workspaceID) {
       const ws = runtimes.get(workspaceID);
@@ -1197,8 +1208,10 @@ export function createWorkspaceRuntimeClient(
             const fn = owner
               ? ((owner.client as unknown as Record<string, unknown>)
                   .drainForUpdate as
-                | ((input?: { timeoutMs?: number }) => Promise<{ waitedMs: number }>)
-                | undefined)
+                  | ((input?: {
+                      timeoutMs?: number;
+                    }) => Promise<{ waitedMs: number }>)
+                  | undefined)
               : undefined;
             if (!owner || typeof fn !== "function") continue;
             const result = await fn.call(owner.client, input);

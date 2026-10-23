@@ -35,7 +35,13 @@ function stagedInput(
     ["natalia.exe", new Uint8Array([1, 2, 3])],
     ["plugins/keep.txt", new Uint8Array([4, 5])],
   ]);
-  return { home, version: "0.0.0-m99", files, probeRunner: probeAnswering("0.0.0-m99"), ...over };
+  return {
+    home,
+    version: "0.0.0-m99",
+    files,
+    probeRunner: probeAnswering("0.0.0-m99"),
+    ...over,
+  };
 }
 
 test("a passed probe hands the process over (the Windows self-replace)", async () => {
@@ -150,7 +156,11 @@ test("the baseline update refuses a path that escapes it", () => {
   const guard = (filePath: string, baseline: string) => {
     const target = resolve(baseline, filePath);
     const base = resolve(baseline);
-    return target === base || target.startsWith(`${base}/`) || target.startsWith(`${base}\\`);
+    return (
+      target === base ||
+      target.startsWith(`${base}/`) ||
+      target.startsWith(`${base}\\`)
+    );
   };
   expect(guard("packages/core/index.ts", "/home/source")).toBe(true);
   expect(guard("../escape.txt", "/home/source")).toBe(false);
@@ -174,4 +184,3 @@ test("a continuation moves the goal, a different task supersedes it", () => {
     parentReason: "superseded_by_fork",
   });
 });
-

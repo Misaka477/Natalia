@@ -10,6 +10,7 @@ import {
 import type {
   RuntimeClient,
   RuntimeModelCatalogEntry,
+  WorkspaceSummary,
 } from "@anthelia/contracts";
 import { type AppState } from "@natalia/view-store";
 import {
@@ -53,6 +54,10 @@ export function NiaPanel(props: {
    *  the call sites that still pass it; the body no longer has a header
    *  to suppress. */
   embedded?: boolean;
+  workspaces?: () => WorkspaceSummary[];
+  activeWorkspaceID?: () => string | undefined;
+  onSelectWorkspace?: (workspaceID: string) => void;
+  onAddWorkspace?: () => void;
 }) {
   const t = props.t;
   const [draft, setDraft] = createSignal("");
@@ -357,29 +362,49 @@ export function NiaPanel(props: {
       onJump={() => niaApi?.scrollToBottom()}
       slots={props.slots}
       t={t}
+      workspaces={props.workspaces}
+      activeWorkspaceID={props.activeWorkspaceID}
+      onSelectWorkspace={props.onSelectWorkspace}
+      onAddWorkspace={props.onAddWorkspace}
     >
-      <div class="neu-activity-bar" data-running={Boolean(active())}>
-        <span class="neu-activity-pulse" />
-        <span class="neu-activity-label">{activityLabel()}</span>
-      </div>
-      <div class="neu-main-toolbar">
-        <NeuSelect
-          value={modelID()}
-          options={modelOptions()}
-          // No model configured: this click opens the model settings
-          // instead of an empty menu. The control is unchanged either way.
-          onActivate={
-            modelOptions().length > 0
-              ? undefined
-              : () => props.onOpenSettings?.()
-          }
-          placeholder={t("nia.model")}
-          onChange={(next) => {
-            setModelID(next);
-            void saveProfile({ modelID: next });
-          }}
-          menuPosition="top"
-        />
+      <Show when={Boolean(active())}>
+        <div class="neu-activity-bar" data-running={Boolean(active())}>
+          <span class="neu-activity-pulse" />
+          <span class="neu-activity-label">{activityLabel()}</span>
+        </div>
+      </Show>
+      <SessionUsageBar t={props.t} usage={props.state.usageByChannel.nia} />
+      <Composer
+        t={props.t}
+        value={draft()}
+        placeholder={t("nia.chatPlaceholder")}
+        busy={Boolean(active()) || busy()}
+        onInput={setDraft}
+        onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}
+        attachments={attachments()}
+        onRemoveAttachment={(path) =>
+          setAttachments(attachments().filter((item) => item.path !== path))
+        }
+        onPaste={handlePaste}
+        onSubmit={() => void submit()}
+        trailing={
+          <NeuSelect
+            value={modelID()}
+            options={modelOptions()}
+            onActivate={
+              modelOptions().length > 0
+                ? undefined
+                : () => props.onOpenSettings?.()
+            }
+            placeholder={t("nia.model")}
+            onChange={(next) => {
+              setModelID(next);
+              void saveProfile({ modelID: next });
+            }}
+            menuPosition="top"
+          />
+        }
+      >
         <NeuSelect
           value={reasoning()}
           options={[
@@ -403,22 +428,7 @@ export function NiaPanel(props: {
           placeholder={t("nia.reasoning")}
           menuPosition="top"
         />
-      </div>
-      <SessionUsageBar t={props.t} usage={props.state.usageByChannel.nia} />
-      <Composer
-        t={props.t}
-        value={draft()}
-        placeholder={t("nia.chatPlaceholder")}
-        busy={Boolean(active()) || busy()}
-        onInput={setDraft}
-        onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}
-        attachments={attachments()}
-        onRemoveAttachment={(path) =>
-          setAttachments(attachments().filter((item) => item.path !== path))
-        }
-        onPaste={handlePaste}
-        onSubmit={() => void submit()}
-      />
+      </Composer>
     </AgentBody>
   );
 }

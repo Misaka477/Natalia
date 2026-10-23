@@ -27,7 +27,10 @@ export interface ComposerProps {
   onAddAttachment?: () => void;
   onRemoveAttachment?: (path: string) => void;
   onPaste?: (event: ClipboardEvent) => void;
+  /** Left-side mode/permission/reasoning controls in the bottom control bar. */
   children?: JSX.Element;
+  /** Right-side controls (e.g. model selector) immediately before the send button. */
+  trailing?: JSX.Element;
 }
 
 export function Composer(props: ComposerProps) {
@@ -93,6 +96,19 @@ export function Composer(props: ComposerProps) {
     if (canSubmit() && !props.disabled) {
       props.onSubmit();
       setTimeout(() => adjustHeight(), 0);
+    }
+  }
+
+  function handleAddClick() {
+    if (props.disabled) return;
+    if (props.onAddAttachment) {
+      props.onAddAttachment();
+      return;
+    }
+    textareaRef?.focus();
+    if (!props.value.startsWith("/")) {
+      props.onInput(`/${props.value}`);
+      adjustHeight();
     }
   }
 
@@ -171,32 +187,32 @@ export function Composer(props: ComposerProps) {
       />
 
       <div class={styles.toolbar}>
-        <div class={styles.controls}>{props.children}</div>
-        <div class={styles.actions}>
-          <Show when={props.onAddAttachment}>
-            <button
-              type="button"
-              class={styles.iconBtn}
-              onClick={props.onAddAttachment}
-              disabled={props.disabled}
-              title={t("composer.attachTitle")}
+        <div class={styles.controls}>
+          <button
+            type="button"
+            class={styles.addBtn}
+            onClick={handleAddClick}
+            disabled={props.disabled}
+            title={t("composer.attachTitle")}
+            aria-label={t("composer.attachTitle")}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.3"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path
-                  d="M13.5 7.5V11.5C13.5 13.1569 12.1569 14.5 10.5 14.5H5.5C3.84315 14.5 2.5 13.1569 2.5 11.5V5.5C2.5 3.84315 3.84315 2.5 5.5 2.5H9"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M11 2.5H13.5M13.5 2.5V5M13.5 2.5L9 6.5"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </button>
+              <path d="M8 2V14" />
+              <path d="M2 8H14" />
+            </svg>
+          </button>
+          {props.children}
+        </div>
+        <div class={styles.actions}>
+          <Show when={props.trailing}>
+            <div class={styles.trailing}>{props.trailing}</div>
           </Show>
           <Show when={showStop()}>
             <button
@@ -231,13 +247,10 @@ export function Composer(props: ComposerProps) {
                   : t("composer.sendTitle")
               }
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
-                  d="M16.5 8.5L2.5 15V2L16.5 8.5Z"
+                  d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z"
                   fill="currentColor"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  stroke-linejoin="round"
                 />
               </svg>
             </button>

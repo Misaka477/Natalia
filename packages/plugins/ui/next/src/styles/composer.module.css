@@ -29,13 +29,47 @@
 
 :global(.neu-pane) .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 :global(.neu-pane) .controls {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:global(.neu-pane) .addBtn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  cursor: pointer;
+}
+
+:global(.neu-pane) .addBtn:hover:not(:disabled) {
+  background: var(--neu-hover-overlay);
+}
+
+:global(.neu-pane) .addBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+:global(.neu-pane) .trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 :global(.neu-pane) .iconBtn {
@@ -64,16 +98,21 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 12px;
-  background: var(--neu-bg-light);
-  color: var(--neu-accent);
+  border-radius: 999px;
+  background: var(--neu-accent);
+  color: var(--neu-on-accent);
   box-shadow: var(--neu-elevation-2);
   cursor: pointer;
 }
 
-:global(.neu-pane) .submit:hover {
+:global(.neu-pane) .submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:global(.neu-pane) .submit:hover:not(:disabled) {
   box-shadow: var(--neu-elevation-1);
-  color: var(--neu-accent-soft);
+  background: var(--neu-accent-soft);
 }
 
 :global(.neu-pane) .submit:active {
@@ -118,7 +157,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 12px;
+  border-radius: 999px;
   margin-right: 6px;
   background: var(--neu-error-soft);
   color: var(--neu-error);

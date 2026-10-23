@@ -25,6 +25,7 @@ import type { AppState } from "@natalia/view-store";
 import type {
   ChatModelProfile,
   RuntimeSessionSummary,
+  WorkspaceSummary,
 } from "@anthelia/contracts";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { cloneState } from "@natalia/view-store";
@@ -161,6 +162,11 @@ export interface MainPanesProps {
   modelCatalog: any;
   /** Opens a terminal in the right rail — the team panel's deep link. */
   onOpenTerminal: (terminalID: string) => void;
+  workspaces?: () => WorkspaceSummary[];
+  activeWorkspaceID?: () => string | undefined;
+  onSelectWorkspace?: (workspaceID: string) => void;
+  onAddWorkspace?: () => void;
+  ensureSession?: () => Promise<string | undefined>;
 }
 
 /** The one main pane, and the four agents it switches between. */
@@ -461,6 +467,10 @@ export function MainPanes(props: MainPanesProps) {
                 onJump={jumpToBottom}
                 slots={slots}
                 t={t}
+                workspaces={props.workspaces}
+                activeWorkspaceID={props.activeWorkspaceID}
+                onSelectWorkspace={props.onSelectWorkspace}
+                onAddWorkspace={props.onAddWorkspace}
                 notices={
                   <>
                     <Show when={feedbackNotice()}>
@@ -496,188 +506,93 @@ export function MainPanes(props: MainPanesProps) {
                 controls — the fourth of the architecture's nine slots. */}
                 <SlotMount slots={slots} name="runbar" t={t} />
                 <Show when={focusAgent() === "natalia"}>
-                  <div class="neu-activity-bar">
-                    <span class="neu-activity-pulse" />
-                    <Show when={state().goal}>
-                      {(goal) => (
-                        <span class={styles.slot}>
-                          <span
-                            class={styles.control}
-                            data-phase={goal()!.phase}
-                          >
+                  <Show
+                    when={
+                      Boolean(state().natalia.activeTurn) ||
+                      Boolean(state().goal) ||
+                      Boolean(goalNotice())
+                    }
+                  >
+                    <div class="neu-activity-bar">
+                      <span class="neu-activity-pulse" />
+                      <Show when={state().goal}>
+                        {(goal) => (
+                          <span class={styles.slot}>
                             <span
-                              class={styles.chip}
-                              title={`${goal()!.objective}${
-                                goal()!.blockedReason
-                                  ? ` — ${goal()!.blockedReason!.code}: ${goal()!.blockedReason!.message}`
-                                  : ""
-                              }`}
+                              class={styles.control}
+                              data-phase={goal()!.phase}
                             >
-                              <span class={styles.chipLabel}>Goal</span>
-                              <span class={styles.chipText}>
-                                {goal()!.objective.length > 40
-                                  ? `${goal()!.objective.slice(0, 40)}…`
-                                  : goal()!.objective}
+                              <span
+                                class={styles.chip}
+                                title={`${goal()!.objective}${
+                                  goal()!.blockedReason
+                                    ? ` — ${goal()!.blockedReason!.code}: ${goal()!.blockedReason!.message}`
+                                    : ""
+                                }`}
+                              >
+                                <span class={styles.chipLabel}>Goal</span>
+                                <span class={styles.chipText}>
+                                  {goal()!.objective.length > 40
+                                    ? `${goal()!.objective.slice(0, 40)}…`
+                                    : goal()!.objective}
+                                </span>
+                                <span class={styles.chipRound}>
+                                  R{goal()!.roundsStarted}
+                                </span>
+                                <Show when={goal()!.phase === "complete"}>
+                                  <span class={styles.chipDone}>done</span>
+                                </Show>
                               </span>
-                              <span class={styles.chipRound}>
-                                R{goal()!.roundsStarted}
-                              </span>
-                              <Show when={goal()!.phase === "complete"}>
-                                <span class={styles.chipDone}>done</span>
-                              </Show>
+                              <button
+                                type="button"
+                                class={`${styles.action} ${styles.toggle}`}
+                                disabled={goalBusy()}
+                                onClick={() =>
+                                  void runGoalControl(
+                                    goal()!.phase === "paused"
+                                      ? "resume"
+                                      : "pause",
+                                  )
+                                }
+                              >
+                                {goal()!.phase === "paused" ? "▶" : "⏸"}
+                              </button>
+                              <button
+                                type="button"
+                                class={`${styles.action} ${styles.clear}`}
+                                disabled={goalBusy()}
+                                onClick={() => void runGoalControl("clear")}
+                              >
+                                ✕
+                              </button>
                             </span>
-                            <button
-                              type="button"
-                              class={`${styles.action} ${styles.toggle}`}
-                              disabled={goalBusy()}
-                              onClick={() =>
-                                void runGoalControl(
-                                  goal()!.phase === "paused"
-                                    ? "resume"
-                                    : "pause",
-                                )
-                              }
-                            >
-                              {goal()!.phase === "paused" ? "▶" : "⏸"}
-                            </button>
-                            <button
-                              type="button"
-                              class={`${styles.action} ${styles.clear}`}
-                              disabled={goalBusy()}
-                              onClick={() => void runGoalControl("clear")}
-                            >
-                              ✕
-                            </button>
                           </span>
-                        </span>
-                      )}
-                    </Show>
-                    <Show when={goalNotice()}>
-                      <span class={styles.notice}>{goalNotice()}</span>
-                    </Show>
-                    <span class="neu-activity-label">
-                      {state().natalia.activeTurn
-                        ? `${activityLabel()} · ${
-                            turnStartAt() === undefined
-                              ? t("transcript.timingUnknown")
-                              : formatDuration(turnElapsedMs())
-                          }`
-                        : "idle"}
-                    </span>
-                  </div>
-                  <div class="neu-main-toolbar">
-                    <NeuSelect
-                      value={modelSelectionSignal()?.modelID ?? ""}
-                      options={modelOptions()}
-                      // No provider configured means an empty menu, so this
-                      // click goes to the model settings instead of listing
-                      // nothing. The control itself is untouched: same box,
-                      // same chevron, in the same position. With a model to
-                      // pick, the menu opens as it always did.
-                      onActivate={
-                        modelOptions().length > 0
-                          ? undefined
-                          : openModelSettings
-                      }
-                      onChange={(modelID) => {
-                        const sessionID =
-                          selectedSessionID() || state().sessionID;
-                        setModelSelectionSignal({
-                          modelID,
-                          variant: undefined,
-                        });
-                        void props.ctx.runtime.selectModel?.(
-                          modelID,
-                          undefined,
-                          sessionID,
-                        );
-                      }}
-                      placeholder={t("transcript.selectModel")}
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={reasoningEffort()}
-                      options={[
-                        { value: "minimal", label: "minimal" },
-                        { value: "low", label: "low" },
-                        { value: "medium", label: "medium" },
-                        { value: "high", label: "high" },
-                        { value: "xhigh", label: "xhigh" },
-                      ]}
-                      onChange={(effort) => {
-                        const sessionID =
-                          selectedSessionID() || state().sessionID;
-                        setReasoningEffortSignal(effort);
-                        void props.ctx.runtime.setReasoningEffort?.(
-                          effort as
-                            | "minimal"
-                            | "low"
-                            | "medium"
-                            | "high"
-                            | "xhigh",
-                          sessionID,
-                        );
-                      }}
-                      placeholder={t("transcript.reasoningEffort")}
-                      menuPosition="top"
-                    />
-                    <NeuSelect
-                      value={currentRung()?.id ?? configRungID() ?? "ask"}
-                      options={
-                        startupDataDegraded()
-                          ? [
-                              {
-                                value: "__retry",
-                                label: t("transcript.configLoadFailedRetry"),
-                              },
-                            ]
-                          : permissionOptions()
-                      }
-                      // With no permissions to choose from the menu would open
-                      // empty — the same bug the model controls had — and the
-                      // place to configure this is the settings' model page, so
-                      // the click goes there. The degraded state keeps its
-                      // retry: that entry IS a real option with a real action.
-                      onActivate={
-                        !startupDataDegraded() &&
-                        permissionOptions().length === 0
-                          ? openModelSettings
-                          : undefined
-                      }
-                      onChange={(permission) => {
-                        // The degraded entry is the retry, not a mode:
-                        // choosing it re-runs the fetch instead of
-                        // writing a config value that does not exist.
-                        if (permission === "__retry") {
-                          void loadSecondaryStartupData();
-                          return;
-                        }
-                        void changePermission(permission);
-                      }}
-                      placeholder={
-                        startupDataDegraded()
-                          ? t("transcript.configLoadFailed")
-                          : t("transcript.selectPermission")
-                      }
-                      menuPosition="top"
-                    />
-                  </div>
-                  {/* The run's one control: stop it. It lives here, in the
-                    runbar, rather than beside the send key — the runbar is
-                    the run's surface and the dock is the message's. */}
-                  <Show when={state().natalia.activeTurn}>
-                    <button
-                      type="button"
-                      class={styles.runbarStop}
-                      onClick={() => props.ctx.runtime.cancel?.()}
-                      title={t("composer.stopTitle")}
-                    >
-                      {t("composer.stop")}
-                    </button>
+                        )}
+                      </Show>
+                      <Show when={goalNotice()}>
+                        <span class={styles.notice}>{goalNotice()}</span>
+                      </Show>
+                      <span class="neu-activity-label">
+                        {state().natalia.activeTurn
+                          ? `${activityLabel()} · ${
+                              turnStartAt() === undefined
+                                ? t("transcript.timingUnknown")
+                                : formatDuration(turnElapsedMs())
+                            }`
+                          : "idle"}
+                      </span>
+                      <Show when={state().natalia.activeTurn}>
+                        <button
+                          type="button"
+                          class={styles.runbarStop}
+                          onClick={() => props.ctx.runtime.cancel?.()}
+                          title={t("composer.stopTitle")}
+                        >
+                          {t("composer.stop")}
+                        </button>
+                      </Show>
+                    </div>
                   </Show>
-                  {/* A switch that did not take says so. A control that looks
-                      alive while writing nothing is the exact failure this path
-                      had before the runtime face was wired. */}
                   <Show when={permissionProblem()}>
                     <div class={styles.banner}>
                       <span>{permissionProblem()}</span>
@@ -733,6 +648,7 @@ export function MainPanes(props: MainPanesProps) {
                     ctx={props.ctx}
                     state={state}
                     selectedSessionID={selectedSessionID}
+                    ensureSession={props.ensureSession}
                     mainDraft={mainDraft}
                     setMainDraft={setMainDraft}
                     mainAttachments={mainAttachments}
@@ -748,7 +664,92 @@ export function MainPanes(props: MainPanesProps) {
                     setRollbackNotice={setRollbackNotice}
                     refreshTranscript={refreshTranscript}
                     perfLog={perfLog}
-                  />
+                    trailing={
+                      <NeuSelect
+                        value={modelSelectionSignal()?.modelID ?? ""}
+                        options={modelOptions()}
+                        onActivate={
+                          modelOptions().length > 0
+                            ? undefined
+                            : openModelSettings
+                        }
+                        onChange={(modelID) => {
+                          const sessionID =
+                            selectedSessionID() || state().sessionID;
+                          setModelSelectionSignal({
+                            modelID,
+                            variant: undefined,
+                          });
+                          void props.ctx.runtime.selectModel?.(
+                            modelID,
+                            undefined,
+                            sessionID,
+                          );
+                        }}
+                        placeholder={t("transcript.selectModel")}
+                        menuPosition="top"
+                      />
+                    }
+                  >
+                    <NeuSelect
+                      value={currentRung()?.id ?? configRungID() ?? "ask"}
+                      options={
+                        startupDataDegraded()
+                          ? [
+                              {
+                                value: "__retry",
+                                label: t("transcript.configLoadFailedRetry"),
+                              },
+                            ]
+                          : permissionOptions()
+                      }
+                      onActivate={
+                        !startupDataDegraded() &&
+                        permissionOptions().length === 0
+                          ? openModelSettings
+                          : undefined
+                      }
+                      onChange={(permission) => {
+                        if (permission === "__retry") {
+                          void loadSecondaryStartupData();
+                          return;
+                        }
+                        void changePermission(permission);
+                      }}
+                      placeholder={
+                        startupDataDegraded()
+                          ? t("transcript.configLoadFailed")
+                          : t("transcript.selectPermission")
+                      }
+                      menuPosition="top"
+                    />
+                    <NeuSelect
+                      value={reasoningEffort()}
+                      options={[
+                        { value: "minimal", label: "minimal" },
+                        { value: "low", label: "low" },
+                        { value: "medium", label: "medium" },
+                        { value: "high", label: "high" },
+                        { value: "xhigh", label: "xhigh" },
+                      ]}
+                      onChange={(effort) => {
+                        const sessionID =
+                          selectedSessionID() || state().sessionID;
+                        setReasoningEffortSignal(effort);
+                        void props.ctx.runtime.setReasoningEffort?.(
+                          effort as
+                            | "minimal"
+                            | "low"
+                            | "medium"
+                            | "high"
+                            | "xhigh",
+                          sessionID,
+                        );
+                      }}
+                      placeholder={t("transcript.reasoningEffort")}
+                      menuPosition="top"
+                    />
+                  </MainInputArea>
                 </Show>
               </AgentBody>
             </Show>
@@ -778,36 +779,71 @@ export function MainPanes(props: MainPanesProps) {
                 onJump={jumpChatToBottom}
                 slots={slots}
                 t={t}
+                workspaces={props.workspaces}
+                activeWorkspaceID={props.activeWorkspaceID}
+                onSelectWorkspace={props.onSelectWorkspace}
+                onAddWorkspace={props.onAddWorkspace}
               >
-                <div
-                  class="neu-activity-bar"
-                  data-running={Boolean(naviChatActivity())}
+                <Show when={Boolean(naviChatActivity())}>
+                  <div
+                    class="neu-activity-bar"
+                    data-running={Boolean(naviChatActivity())}
+                  >
+                    <span class="neu-activity-pulse" />
+                    <span class="neu-activity-label">
+                      {naviChatActivity()
+                        ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
+                        : "idle"}
+                    </span>
+                    <button
+                      type="button"
+                      class={styles.runbarStop}
+                      onClick={() =>
+                        void props.ctx.runtime.naviChat?.abort?.(
+                          selectedSessionID() || state().sessionID,
+                        )
+                      }
+                      title={t("composer.stopTitle")}
+                    >
+                      {t("composer.stop")}
+                    </button>
+                  </div>
+                </Show>
+                <ChatInputArea
+                  slots={slots}
+                  t={t}
+                  naviChatActivity={naviChatActivity}
+                  ctx={props.ctx}
+                  state={state}
+                  selectedSessionID={selectedSessionID}
+                  ensureSession={props.ensureSession}
+                  chatDraft={chatDraft}
+                  setChatDraft={setChatDraft}
+                  chatAttachments={chatAttachments}
+                  setChatAttachments={setChatAttachments}
+                  handlePasteAttachments={handlePasteAttachments}
+                  updateChatProfile={updateChatProfile}
+                  perfLog={perfLog}
+                  trailing={
+                    <NeuSelect
+                      value={chatProfile().normal?.modelID ?? ""}
+                      options={modelOptions()}
+                      onActivate={
+                        modelOptions().length > 0
+                          ? undefined
+                          : openModelSettings
+                      }
+                      onChange={(modelID) =>
+                        void updateChatProfile({
+                          ...chatProfile(),
+                          normal: { ...chatProfile().normal, modelID },
+                        })
+                      }
+                      placeholder={t("transcript.chatModel")}
+                      menuPosition="top"
+                    />
+                  }
                 >
-                  <span class="neu-activity-pulse" />
-                  <span class="neu-activity-label">
-                    {naviChatActivity()
-                      ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
-                      : "idle"}
-                  </span>
-                </div>
-                <div class="neu-main-toolbar">
-                  <NeuSelect
-                    value={chatProfile().normal?.modelID ?? ""}
-                    options={modelOptions()}
-                    // See the main toolbar's model control: no model to
-                    // choose means this click opens the model settings.
-                    onActivate={
-                      modelOptions().length > 0 ? undefined : openModelSettings
-                    }
-                    onChange={(modelID) =>
-                      void updateChatProfile({
-                        ...chatProfile(),
-                        normal: { ...chatProfile().normal, modelID },
-                      })
-                    }
-                    placeholder={t("transcript.chatModel")}
-                    menuPosition="top"
-                  />
                   <NeuSelect
                     value={chatProfile().normal?.reasoningEffort ?? ""}
                     options={[
@@ -875,36 +911,7 @@ export function MainPanes(props: MainPanesProps) {
                     placeholder={t("transcript.expertReasoning")}
                     menuPosition="top"
                   />
-                </div>
-                <Show when={naviChatActivity()}>
-                  <button
-                    type="button"
-                    class={styles.runbarStop}
-                    onClick={() =>
-                      void props.ctx.runtime.naviChat?.abort?.(
-                        selectedSessionID() || state().sessionID,
-                      )
-                    }
-                    title={t("composer.stopTitle")}
-                  >
-                    {t("composer.stop")}
-                  </button>
-                </Show>
-                <ChatInputArea
-                  slots={slots}
-                  t={t}
-                  naviChatActivity={naviChatActivity}
-                  ctx={props.ctx}
-                  state={state}
-                  selectedSessionID={selectedSessionID}
-                  chatDraft={chatDraft}
-                  setChatDraft={setChatDraft}
-                  chatAttachments={chatAttachments}
-                  setChatAttachments={setChatAttachments}
-                  handlePasteAttachments={handlePasteAttachments}
-                  updateChatProfile={updateChatProfile}
-                  perfLog={perfLog}
-                />
+                </ChatInputArea>
               </AgentBody>
             </Show>
 
@@ -927,6 +934,10 @@ export function MainPanes(props: MainPanesProps) {
                 onOpenSettings={openModelSettings}
                 toolCards={toolCards}
                 slots={slots}
+                workspaces={props.workspaces}
+                activeWorkspaceID={props.activeWorkspaceID}
+                onSelectWorkspace={props.onSelectWorkspace}
+                onAddWorkspace={props.onAddWorkspace}
               />
             </Show>
 

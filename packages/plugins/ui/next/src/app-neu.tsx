@@ -3415,6 +3415,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           niaPaging={niaPaging}
           modelCatalog={modelCatalog}
           onOpenTerminal={openTerminal}
+          workspaces={workspaces}
+          activeWorkspaceID={workspaceIDForRightPanels}
+          onSelectWorkspace={(wsID) => void createSession(wsID)}
+          onAddWorkspace={() => setWorkspaceOpen(true)}
+          ensureSession={async () => {
+            if (!selectedSessionID()) {
+              await createSession();
+            }
+            return selectedSessionID() || state().sessionID;
+          }}
         />
 
         {/* Right secondary tabs */}

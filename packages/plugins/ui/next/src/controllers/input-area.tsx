@@ -1,19 +1,12 @@
 /** Input area controller: the message queue, usage bar, pending takeover
  * and composer for both agent panes.
- *
- * Extracted verbatim from the transcript controller; every shell value the
- * markup reads arrives through destructured props, so the markup needed no
- * rewriting.
  */
 
-import { Show } from "solid-js";
-import { SlotMount } from "../slots/mount";
-import { SlashMenu, slashQuery } from "./slash-menu";
+import { type JSX } from "solid-js";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import { QueueDock } from "../components/QueueDock";
 import { SessionUsageBar } from "../components/SessionUsageBar";
-import { PendingTakeover } from "../components/PendingTakeover";
 import { Composer, type ComposerAttachment } from "../components/Composer";
 import { goalCommandInstruction } from "../app-neu";
 
@@ -24,6 +17,7 @@ export interface MainInputAreaProps {
   commands: any;
   state: () => AppState;
   selectedSessionID: () => string;
+  ensureSession?: () => Promise<string | undefined>;
   mainDraft: () => string;
   setMainDraft: (value: string | ((prev: string) => string)) => void;
   mainAttachments: () => ComposerAttachment[];
@@ -49,15 +43,14 @@ export interface MainInputAreaProps {
   setRollbackNotice: (value: any) => void;
   refreshTranscript: () => Promise<void>;
   perfLog: (...args: unknown[]) => void;
+  children?: JSX.Element;
+  trailing?: JSX.Element;
 }
 
-/** The Natalia pane's input area: queue, usage, pending takeover, composer. */
+/** The Natalia pane's input area: queue, usage, composer and bottom controls. */
 export function MainInputArea(props: MainInputAreaProps) {
   const t = props.t;
-  const slots = props.slots;
-  const commands = props.commands;
   const {
-    ctx,
     state,
     selectedSessionID,
     mainDraft,
@@ -65,11 +58,6 @@ export function MainInputArea(props: MainInputAreaProps) {
     mainAttachments,
     setMainAttachments,
     handlePasteAttachments,
-    pendingTakeoverCount,
-    pendingTakeoverMinimized,
-    setPendingTakeoverMinimized,
-    pendingTakeoverFocus,
-    setPendingTakeoverFocus,
     pendingRollback,
     setPendingRollback,
     setRollbackNotice,
@@ -105,9 +93,10 @@ export function MainInputArea(props: MainInputAreaProps) {
       <Composer
         t={t}
         value={mainDraft()}
-        placeholder={t("input.messagePlaceholder")}
+        placeholder={t("hero.placeholder")}
         busy={Boolean(state().natalia.activeTurn)}
         onInput={setMainDraft}
+        onStop={() => props.ctx.runtime.cancel?.()}
         attachments={mainAttachments()}
         onRemoveAttachment={(path) =>
           setMainAttachments(
@@ -117,6 +106,7 @@ export function MainInputArea(props: MainInputAreaProps) {
         onPaste={(event) =>
           handlePasteAttachments(event, mainAttachments(), setMainAttachments)
         }
+        trailing={props.trailing}
         onSubmit={() => {
           const text = mainDraft();
           const paths = mainAttachments().map((item) => item.path);
@@ -124,8 +114,12 @@ export function MainInputArea(props: MainInputAreaProps) {
             const rollback = pendingRollback();
             const submit = async () => {
               try {
+                let sessionID: string | undefined = selectedSessionID();
+                if (!sessionID && props.ensureSession) {
+                  sessionID = await props.ensureSession();
+                }
+                if (!sessionID) sessionID = state().sessionID;
                 if (rollback) {
-                  const sessionID = selectedSessionID() || state().sessionID;
                   const messageResult =
                     rollback.turnID && sessionID
                       ? await props.ctx.runtime.sessionRollbackMessages?.(
@@ -141,16 +135,6 @@ export function MainInputArea(props: MainInputAreaProps) {
                     : undefined;
                   await refreshTranscript();
                   if (messageResult || preview) {
-                    // No count: the rollback contract
-                    // returns {id, rolledBackTo} and nothing
-                    // about how much was removed, so the
-                    // "1 条消息" this used to print was
-                    // invented — a number that was wrong
-                    // for every rollback that removed more
-                    // than one message and right only by
-                    // coincidence. Saying what happened is
-                    // honest; counting it needs the store
-                    // to return the number.
                     setRollbackNotice({
                       text:
                         messageResult && preview
@@ -169,15 +153,11 @@ export function MainInputArea(props: MainInputAreaProps) {
                   setRollbackNotice(undefined);
                 }
                 perfLog("[web-plugin] send", text);
-                // The Composer opts into mid-turn injection by
-                // default. The settings panel can switch a busy send
-                // to `next-turn`, which queues a separate turn.
                 const busy = Boolean(state().natalia.activeTurn);
                 const busySendDelivery =
                   props.ctx.preferences.get<"next-step" | "next-turn">(
                     "busySendDelivery",
                   ) ?? "next-step";
-                const sessionID = selectedSessionID() || state().sessionID;
                 const outgoing = goalCommandInstruction(text) ?? text;
                 if (props.ctx.runtime.submitInput) {
                   props.ctx.runtime.submitInput({
@@ -197,12 +177,10 @@ export function MainInputArea(props: MainInputAreaProps) {
             };
             void submit();
           }
-          // No onStop: the run's stop lives in the runbar, above this
-          // dock. The composer keeps its send key and its busy state; the
-          // control that interrupts a run is the runbar's, because the
-          // runbar is the run's surface and this is the message's.
         }}
-      />
+      >
+        {props.children}
+      </Composer>
     </>
   );
 }
@@ -214,6 +192,7 @@ export interface ChatInputAreaProps {
   naviChatActivity: any;
   state: () => AppState;
   selectedSessionID: () => string;
+  ensureSession?: () => Promise<string | undefined>;
   chatDraft: () => string;
   setChatDraft: (value: string | ((prev: string) => string)) => void;
   chatAttachments: () => ComposerAttachment[];
@@ -229,14 +208,14 @@ export interface ChatInputAreaProps {
   ) => void;
   updateChatProfile: (next: any) => Promise<void>;
   perfLog: (...args: unknown[]) => void;
+  children?: JSX.Element;
+  trailing?: JSX.Element;
 }
 
 /** The Navi pane's input area: usage bar and chat composer. */
 export function ChatInputArea(props: ChatInputAreaProps) {
   const t = props.t;
-  const slots = props.slots;
   const {
-    ctx,
     naviChatActivity,
     state,
     selectedSessionID,
@@ -245,7 +224,6 @@ export function ChatInputArea(props: ChatInputAreaProps) {
     chatAttachments,
     setChatAttachments,
     handlePasteAttachments,
-    updateChatProfile,
     perfLog,
   } = props;
   return (
@@ -257,7 +235,11 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         placeholder={t("input.chatPlaceholder")}
         busy={Boolean(naviChatActivity())}
         onInput={setChatDraft}
-        // No onStop: the runbar carries the stop for both agents.
+        onStop={() =>
+          void props.ctx.runtime.naviChat?.abort?.(
+            selectedSessionID() || state().sessionID,
+          )
+        }
         attachments={chatAttachments()}
         onRemoveAttachment={(path) =>
           setChatAttachments(
@@ -267,39 +249,50 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         onPaste={(event) =>
           handlePasteAttachments(event, chatAttachments(), setChatAttachments)
         }
+        trailing={props.trailing}
         onSubmit={() => {
           const text = chatDraft();
-          if (text.trim() || chatAttachments().length) {
-            perfLog("[navi-ui] submitting chat", {
-              text,
-              attachments: chatAttachments().map((item) => item.path),
-            });
-            const result = props.ctx.runtime.naviChat?.submit?.({
-              text,
-              sessionID: selectedSessionID() || state().sessionID,
-              ...(chatAttachments().length
-                ? {
-                    attachments: chatAttachments().map((item) => item.path),
-                  }
-                : {}),
-            });
-            if (result && typeof result.then === "function") {
-              void result
-                .then((value) =>
-                  perfLog("[navi-ui] chatSubmit resolved", value),
-                )
-                .catch((cause) =>
-                  console.error(
-                    "[navi-ui] chatSubmit failed",
-                    cause instanceof Error ? cause.message : String(cause),
-                  ),
-                );
-            }
+          const pending = chatAttachments();
+          if (text.trim() || pending.length) {
             setChatDraft("");
             setChatAttachments([]);
+            void (async () => {
+              let sessionID: string | undefined = selectedSessionID();
+              if (!sessionID && props.ensureSession) {
+                sessionID = await props.ensureSession();
+              }
+              if (!sessionID) sessionID = state().sessionID;
+              perfLog("[navi-ui] submitting chat", {
+                text,
+                attachments: pending.map((item) => item.path),
+              });
+              const result = props.ctx.runtime.naviChat?.submit?.({
+                text,
+                sessionID,
+                ...(pending.length
+                  ? {
+                      attachments: pending.map((item) => item.path),
+                    }
+                  : {}),
+              });
+              if (result && typeof result.then === "function") {
+                void result
+                  .then((value) =>
+                    perfLog("[navi-ui] chatSubmit resolved", value),
+                  )
+                  .catch((cause) =>
+                    console.error(
+                      "[navi-ui] chatSubmit failed",
+                      cause instanceof Error ? cause.message : String(cause),
+                    ),
+                  );
+              }
+            })();
           }
         }}
-      />
+      >
+        {props.children}
+      </Composer>
     </>
   );
 }

@@ -24,6 +24,8 @@ import type {
 } from "@anthelia/contracts";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { transcriptRefs } from "../transcript-refs";
+import { transcriptScrollMemory } from "../transcript-scroll-memory";
+import { anchorIndexFor, readTranscriptAnchor } from "./scroll-memory";
 import { goalCommandInstruction } from "../app-neu";
 import type { ComposerAttachment } from "../components/Composer";
 import type { MessageAction } from "@natalia/ui-kit";
@@ -233,6 +235,57 @@ export function MainPanes(props: MainPanesProps) {
     chatProfile,
     reasoningEffort,
   } = props;
+
+  // --- Where the reader was, per session ---
+  // Saved on every scroll and restored when a session's history lands, so
+  // coming back to a session puts the reader where they left it instead of
+  // at the bottom. `pendingRestore` is armed by a session change and spent
+  // by the first render that has messages to scroll to.
+  let mainFollowing = true;
+  let pendingRestore = false;
+  let restoredSessionID = "";
+
+  createEffect(() => {
+    const sessionID = selectedSessionID();
+    if (sessionID && sessionID !== restoredSessionID) {
+      pendingRestore = true;
+    }
+  });
+
+  createEffect(() => {
+    const messages = renderedMainMessages();
+    if (!pendingRestore || messages.length === 0) return;
+    pendingRestore = false;
+    const sessionID = selectedSessionID();
+    restoredSessionID = sessionID;
+    const anchor = transcriptScrollMemory.recall(sessionID);
+    if (anchor?.following) {
+      transcriptRefs.main?.scrollToBottom();
+      return;
+    }
+    const index = anchorIndexFor(
+      anchor,
+      messages.map((message: { id: string }) => message.id),
+    );
+    if (index < 0) {
+      // The message the reader was on is gone (the history was rebuilt or
+      // the session grew past it): the tail is the honest landing place.
+      transcriptRefs.main?.scrollToBottom();
+      return;
+    }
+    transcriptRefs.main?.scrollToIndex(index, { align: "start" });
+  });
+
+  function saveMainScrollAnchor(event: Event) {
+    const sessionID = selectedSessionID();
+    if (!sessionID) return;
+    const anchor = readTranscriptAnchor(
+      event.currentTarget as HTMLElement | undefined,
+      mainFollowing,
+    );
+    if (anchor) transcriptScrollMemory.remember(sessionID, anchor);
+  }
+
   return (
     <>
       {/* Middle dual agent panes */}
@@ -274,9 +327,11 @@ export function MainPanes(props: MainPanesProps) {
                       apiRef={(api) => {
                         transcriptRefs.main = api;
                       }}
-                      onFollowChange={(following) =>
-                        setShowJumpToBottom(!following)
-                      }
+                      onFollowChange={(following) => {
+                        mainFollowing = following;
+                        setShowJumpToBottom(!following);
+                      }}
+                      onScroll={saveMainScrollAnchor}
                       onNearTop={() => void loadOlderHistory()}
                       hasOlder={mainPaging().hasOlder}
                       historyLoading={transcriptHistoryLoading()}

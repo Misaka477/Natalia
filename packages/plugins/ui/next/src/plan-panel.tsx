@@ -368,7 +368,9 @@ t("plan.summarySection")
         {/* The chooser rides the same row as the buttons beside it, so the
             dialog gains no line of its own. */}
         <PathBrowseButton
+          t={props.t}
           runtime={props.runtime}
+          class={styles.btn}
           onPick={(chosen) => setMarkPath(chosen)}
         />
         <button

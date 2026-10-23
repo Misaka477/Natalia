@@ -1677,6 +1677,7 @@ export function GovernancePane(props: {
                       than replacing the field: browsing for a second path must
                       not silently drop the first. */}
                   <PathBrowseButton
+                    t={props.t}
                     runtime={props.runtime}
                     class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {
@@ -1754,6 +1755,7 @@ export function GovernancePane(props: {
                   {/* Same rule as the rule editor's row: a LIST appends the
                       picked directory rather than replacing it. */}
                   <PathBrowseButton
+                    t={props.t}
                     runtime={props.runtime}
                     class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {
@@ -2039,6 +2041,7 @@ export function GovernancePane(props: {
                   {/* Same rule as the other two path rows: a LIST appends the
                       picked directory rather than replacing it. */}
                   <PathBrowseButton
+                    t={props.t}
                     runtime={props.runtime}
                     class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {

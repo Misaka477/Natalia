@@ -76,6 +76,7 @@ export function WorkspacePanel(props: {
                   its own: a second `neu-form-actions` between the field and the
                   buttons added a whole line to the dialog. */}
               <PathBrowseButton
+                t={props.t}
                 runtime={props.runtime}
                 disabled={busy()}
                 onPick={(chosen) => setPath(chosen)}

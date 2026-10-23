@@ -298,13 +298,7 @@ export const TODO_PLUGIN_MANIFEST: PluginManifest = {
   integrationPoints: ["tools", "resources"],
   ui: {
     entry: "ui/plugin.js",
-    panels: [
-      {
-        id: "todo",
-        title: "待办",
-        region: "side",
-      },
-    ],
+    panels: [],
   },
 };
 

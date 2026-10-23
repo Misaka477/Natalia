@@ -13,6 +13,7 @@ import {
 } from "../todo-item";
 import { todoItemsFromProjection } from "../todo-projection";
 import { TodoDock } from "./todo-dock";
+import { bindTodoLocale } from "./locales";
 
 /**
  * The one shape this plugin needs from the shell's slot registry.
@@ -48,6 +49,7 @@ function TodoDockHost(props: {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
 }) {
+  const t = bindTodoLocale(props.ctx.extra);
   const [state, setState] = createSignal<AppState>(
     props.ctx.projection.getState(),
   );
@@ -102,7 +104,7 @@ function TodoDockHost(props: {
     });
   });
 
-  return <TodoDock todos={todos()} t={props.t} />;
+  return <TodoDock todos={todos()} t={t} />;
 }
 
 export function createTodoUiPlugin(): UiPlugin {

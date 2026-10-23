@@ -1606,7 +1606,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   background: var(--neu-bg-light);
   border-radius: var(--neu-radius);
   box-shadow: var(--neu-elevation-5);
-  overflow: hidden;
+  overflow: visible;
 }
 .neu-workspace-body {
   padding: 14px 20px 20px;
@@ -1863,13 +1863,19 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 8px 16px;
   border: none;
   border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
   transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
-.neu-form-btn:active {
+.neu-form-btn:hover:not(:disabled) {
+  color: var(--neu-accent);
+}
+.neu-form-btn:active:not(:disabled) {
   box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
 }
 .neu-form-cancel {
@@ -1879,6 +1885,10 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-form-primary {
   background: var(--neu-accent);
   color: var(--neu-on-accent);
+}
+.neu-form-primary:hover:not(:disabled) {
+  color: var(--neu-on-accent);
+  background: var(--neu-accent-soft);
 }
 .neu-form-section-title {
   margin-top: 4px;
@@ -2002,6 +2012,117 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-question-option-active { color: var(--neu-accent) !important; box-shadow: var(--neu-inset-2) !important; }
 .neu-question-option-description { display: block; font-size: 12px; color: var(--neu-muted); }
 .neu-question-custom { width: 100%; box-sizing: border-box; padding: 10px 12px; border: none; border-radius: 12px; background: var(--neu-bg); color: var(--neu-text); font-family: inherit; font-size: 13px; box-shadow: var(--neu-inset-2); outline: none; }
+
+/* Todo dock card above composer (input.dock slot) */
+.neu-todo-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-elevation-1);
+}
+.neu-todo-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--neu-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.neu-todo-dock-lead {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--neu-muted);
+}
+.neu-todo-dock-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+.neu-todo-dock-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--neu-muted);
+}
+.neu-todo-dock-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--neu-muted);
+  transition: transform 0.15s ease;
+}
+.neu-todo-dock-chevron[data-open="false"] {
+  transform: rotate(180deg);
+}
+.neu-todo-dock-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 0 4px;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.neu-todo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--neu-text);
+}
+.neu-todo-row[data-status="completed"] {
+  color: var(--neu-muted);
+}
+.neu-todo-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--neu-muted);
+}
+.neu-todo-glyph[data-status="completed"] {
+  color: var(--neu-success);
+}
+.neu-todo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--neu-muted);
+}
+.neu-todo-dot[data-status="in_progress"] {
+  background: var(--neu-accent);
+  box-shadow: 0 0 0 3px var(--neu-accent-soft);
+}
+.neu-todo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Live status pulse */
 @keyframes neu-pulse {

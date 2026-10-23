@@ -8,7 +8,11 @@ import {
 } from "@natalia/ui-host";
 import { createWebRuntimeClient } from "./runtime-rpc";
 import { createLocalPreferenceStore } from "./local-preferences";
-import { activatePluginUi, syncPluginUiBundles } from "./plugin-ui-loader";
+import {
+  activatePluginUi,
+  loadSlotPluginUiBundles,
+  syncPluginUiBundles,
+} from "./plugin-ui-loader";
 import { startRendererMemoryTrace } from "./memory-trace";
 
 startRendererMemoryTrace();
@@ -128,6 +132,9 @@ perfLog(
 
 // Load the Neumorphism light UI plugin
 await host.load(createNataliaNeuLightPlugin());
+// Load slot-filling UI plugins (such as natalia-tool-todo -> input.dock)
+// after the shell has published `ctx.extra.slots`.
+void loadSlotPluginUiBundles(host, runtime, runtimeURL, runtimeToken);
 perfLog(
   `[startup] main ui loaded +${(performance.now() - startupStart).toFixed(1)}ms`,
 );

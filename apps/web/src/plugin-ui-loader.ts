@@ -57,6 +57,28 @@ function enabledUiPlugins(
 }
 
 /**
+ * Loads enabled/installed plugins whose UI contributes to shell slots rather
+ * than declaring lazy panels (`panels.length === 0`). Panel-owning plugins
+ * continue to load lazily when their panel is mounted.
+ */
+export async function loadSlotPluginUiBundles(
+  host: UiPluginHost,
+  runtime: RuntimeClient,
+  runtimeURL: string,
+  token?: string,
+): Promise<void> {
+  const catalog = (await runtime.pluginCatalog?.()) ?? [];
+  const slotPlugins = enabledUiPlugins(catalog).filter(
+    (plugin) => (plugin.ui?.panels?.length ?? 0) === 0,
+  );
+  await forEachWithConcurrency(
+    slotPlugins,
+    MAX_CONCURRENT_PLUGIN_UI_LOADS,
+    (plugin) => loadOnePluginUi(host, runtimeURL, plugin, token),
+  );
+}
+
+/**
  * Loads every enabled/installed plugin's renderer-side UI bundle through the
  * same path used for official and third-party plugins.
  *

@@ -7,6 +7,7 @@
  * xterm instances, sockets or unsaved buffers.
  */
 
+import styles from "../styles/workbench.module.css";
 import { createEffect, For, Show } from "solid-js";
 import type { AppState } from "@natalia/view-store";
 import type { UiPluginContext } from "@natalia/ui-host";
@@ -108,13 +109,13 @@ export function RightRail(props: RightRailProps) {
           aria-orientation="vertical"
           onPointerDown={startRightResize}
         />
-        <aside class="neu-secondary" style={{ width: `${rightWidth()}px` }}>
-          <div class="neu-secondary-tabs">
+        <aside class={styles.secondary} style={{ width: `${rightWidth()}px` }}>
+          <div class={styles.tabs}>
             <For each={rightTabs()}>
               {(tab) => (
                 <button
                   type="button"
-                  class="neu-secondary-tab"
+                  class={styles.tab}
                   data-active={rightTab() === tab.id}
                   onClick={() => setRightTab(tab.id)}
                 >
@@ -126,7 +127,7 @@ export function RightRail(props: RightRailProps) {
               )}
             </For>
           </div>
-          <div class="neu-secondary-content">
+          <div class={styles.content}>
             <Show
               keyed
               when={rightTab() === "diff" ? rightPanelScopeKey() : undefined}
@@ -287,7 +288,7 @@ export function RightRail(props: RightRailProps) {
                 // rebuilt" property stays true under all three modes.
                 return (
                   <div
-                    class="neu-side-panel-host"
+                    class={styles.panelHost}
                     style={{
                       height: "100%",
                       ...(rightTab() === item.panel.id

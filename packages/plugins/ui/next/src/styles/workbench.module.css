@@ -1,0 +1,138 @@
+/* The right rail: the secondary sidebar with its tab strip and content
+   column, and the plugin panel host inside it. The shell stays the
+   global ancestor for the state and responsive rules (the rail's width
+   and stacking are the shell's layout decisions); this module owns the
+   rail's own surface. Tokens only. */
+
+.secondary {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-3);
+  padding: 16px 16px 14px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.tabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 12px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.tab {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--neu-elevation-4);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  box-shadow: var(--neu-elevation-1);
+  color: var(--neu-text);
+}
+
+.tab[data-active="true"] {
+  background: var(--neu-bg-light);
+  color: var(--neu-accent);
+  box-shadow: var(--neu-inset-3);
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--neu-radius-sm);
+}
+
+.content > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * The plugin panel slot. It is a percentage-height chain's last definite link:
+ * the plugin's root sizes itself against this element, and a plain block here
+ * resolves a height of 100% to auto -- which makes a terminal pane's height
+ * mutually dependent on the terminal's own content, so the pane stops at its
+ * content height and leaves the rest of the sidebar empty (the reported
+ * "height is locked"). A flex column gives the plugin root a basis to stretch
+ * against instead of a percentage to resolve.
+ */
+.panelHost {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+/* The rail while a resize is in flight: no transition, no layout
+   containment surprises, and its content stops taking pointer events. */
+.neu-shell[data-resizing="true"] .secondary {
+  transition: none;
+  contain: layout;
+  overflow-anchor: none;
+}
+
+.neu-shell[data-resizing="true"] .content {
+  pointer-events: none;
+}
+
+/* The smooth-transition pass the global sheet applied to the tab. */
+.tab {
+  transition:
+    box-shadow 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+@media (max-width: 1200px) {
+  .secondary {
+    max-width: 380px;
+  }
+}
+
+@media (max-width: 1700px) {
+  .neu-shell[data-compact="true"] .secondary {
+    width: min(720px, 66vw);
+  }
+}
+
+@media (max-width: 1000px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Tiny mode: the right rail takes the whole content area when opened. */
+  .neu-shell[data-tiny="true"][data-right-open="true"] .secondary {
+    flex: 1;
+    width: auto !important;
+    max-width: none;
+    min-width: 0;
+  }
+}

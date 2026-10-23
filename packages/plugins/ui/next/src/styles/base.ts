@@ -154,8 +154,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   cursor: col-resize;
   user-select: none;
 }
-.neu-shell[data-resizing="true"] .neu-sidebar,
-.neu-shell[data-resizing="true"] .neu-secondary {
+.neu-shell[data-resizing="true"] .neu-sidebar {
   transition: none;
   contain: layout;
   overflow-anchor: none;
@@ -165,7 +164,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   overflow-anchor: none;
 }
 .neu-shell[data-resizing="true"] .neu-sidebar-content,
-.neu-shell[data-resizing="true"] .neu-secondary-content,
 .neu-shell[data-resizing="true"] .neu-main {
   pointer-events: none;
 }
@@ -736,75 +734,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 }
 
 
-
-/* ===== Right secondary sidebar ===== */
-.neu-secondary {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--neu-bg-light);
-  border-radius: var(--neu-radius);
-  box-shadow: var(--neu-elevation-3);
-  padding: 16px 16px 14px;
-  overflow: hidden;
-  min-width: 0;
-}
-.neu-secondary-tabs {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 0 12px;
-  margin-bottom: 8px;
-  flex-shrink: 0;
-  overflow: visible;
-}
-.neu-secondary-tab {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border: none;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  color: var(--neu-muted);
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: var(--neu-elevation-4);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.neu-secondary-tab:hover { box-shadow: var(--neu-elevation-1); color: var(--neu-text); }
-.neu-secondary-tab[data-active="true"] {
-  background: var(--neu-bg-light);
-  color: var(--neu-accent);
-  box-shadow: var(--neu-inset-3);
-}
-.neu-secondary-content {
-  position: relative;
-  z-index: 2;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--neu-radius-sm);
-}
-.neu-secondary-content > * { flex: 1; min-height: 0; }
-/*
- * The plugin panel slot. It is a percentage-height chain's last definite link:
- * the plugin's root sizes itself against this element, and a plain block here
- * resolves a height of 100% to auto -- which makes a terminal pane's height
- * mutually dependent on the terminal's own content, so the pane stops at its
- * content height and leaves the rest of the sidebar empty (the reported
- * "height is locked"). A flex column gives the plugin root a basis to stretch
- * against instead of a percentage to resolve.
- */
-.neu-side-panel-host {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-}
 
 /* ===== Review / Diff ===== */
 .review-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
@@ -3688,8 +3617,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
 }
 
 /* ===== Smooth transitions ===== */
-.neu-workspace-row,
-.neu-secondary-tab,
 .neu-pane .natalia-action-btn,
 .file-tree-item,
 .review-file-row,
@@ -3712,13 +3639,9 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   .neu-shell { padding: 10px; gap: 10px; }
   .neu-app { gap: 10px; }
   .neu-pane { padding: 12px; }
-  .neu-secondary { max-width: 380px; }
   .neu-sidebar { max-width: 240px; }
 }
 @media (max-width: 1700px) {
-  .neu-shell[data-compact="true"] .neu-secondary {
-    width: min(720px, 66vw);
-  }
   .neu-shell[data-compact="true"] .neu-resizer {
     display: block;
   }
@@ -3733,18 +3656,10 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   .neu-shell { padding: 6px; gap: 6px; }
   .neu-app { gap: 6px; }
   .neu-pane { min-height: 220px; }
-  .neu-secondary-tabs { flex-wrap: nowrap; overflow-x: auto; }
-  .neu-secondary-tab { white-space: nowrap; flex-shrink: 0; }
 
   /* Tiny mode: right sidebar takes the whole content area when opened. */
   .neu-shell[data-tiny="true"][data-right-open="true"] .neu-main {
     display: none;
-  }
-  .neu-shell[data-tiny="true"][data-right-open="true"] .neu-secondary {
-    flex: 1;
-    width: auto !important;
-    max-width: none;
-    min-width: 0;
   }
   .neu-shell[data-tiny="true"][data-right-open="true"] .neu-right-resizer {
     display: none;

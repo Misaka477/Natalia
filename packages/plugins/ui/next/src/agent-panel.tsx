@@ -1,3 +1,4 @@
+import { PanelState } from "./components/PanelState";
 import styles from "./styles/agent-panel.module.css";
 import {
   For,
@@ -429,27 +430,11 @@ export function AgentPanel(props: {
         <Show
           when={subagents().length}
           fallback={
-            <div class={styles.emptyFull}>
-              <div class="review-empty-icon">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <circle
-                    cx="18"
-                    cy="12"
-                    r="6"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                  />
-                  <path
-                    d="M8 30C8 23.373 12.477 19 18 19C23.523 19 28 23.373 28 30"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                  />
-                </svg>
-              </div>
-              <div class="review-empty-title">{t("agent.emptyTitle")}</div>
-              <div class="review-empty-desc">{t("agent.emptyHint")}</div>
-            </div>
+            <PanelState
+              state="empty"
+              title={t("agent.emptyTitle")}
+              description={t("agent.emptyHint")}
+            />
           }
         >
           <div class="review-body">
@@ -660,9 +645,7 @@ export function AgentPanel(props: {
           </div>
         </Show>
         <Show when={!teamPRs().length}>
-          <div class="review-empty">
-            <div class="review-empty-title">{t("agent.noTeamTasks")}</div>
-          </div>
+          <PanelState state="empty" title={t("agent.noTeamTasks")} />
         </Show>
       </Show>
     </div>

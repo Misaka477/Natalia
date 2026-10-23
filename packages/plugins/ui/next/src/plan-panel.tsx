@@ -1,3 +1,4 @@
+import { PanelState } from "./components/PanelState";
 import styles from "./styles/plan-panel.module.css";
 import {
   For,
@@ -381,11 +382,11 @@ t("plan.summarySection")
         </button>
       </div>
       <Show when={!plans().length}>
-        <div class="agent-empty-full">
-          <div class="review-empty-icon">📄</div>
-          <div class="review-empty-title">{t("plan.emptyTitle")}</div>
-          <div class="review-empty-desc">{t("plan.emptyHint")}</div>
-        </div>
+        <PanelState
+          state="empty"
+          title={t("plan.emptyTitle")}
+          description={t("plan.emptyHint")}
+        />
       </Show>
       <Show when={plans().length}>
         <div class="agent-layout">
@@ -414,7 +415,9 @@ t("plan.summarySection")
           <div class="agent-stream">
             <Show
               when={selected()}
-              fallback={<div class="agent-empty">{t("plan.selectFirst")}</div>}
+              fallback={
+                <PanelState state="empty" title={t("plan.selectFirst")} />
+              }
             >
               <div class="agent-stream-header">
                 <div class="agent-stream-title">{selected()!.title}</div>

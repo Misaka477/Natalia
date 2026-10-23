@@ -177,6 +177,32 @@
   color: var(--neu-error);
 }
 
+/* The toolbar's right cluster: the attach key, the stop key and the send
+   key, in that order. The shipped package carried this class with no
+   rule either (verified by reading its sheet), so the three keys had no
+   gap between them and no shared baseline. */
+:global(.neu-pane) .actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The attachment chip's file glyph and its name. Both were unstyled in
+   the shipped package too; the name is the one that matters, because an
+   untruncated file path pushes the chip's remove button out of the
+   composer. */
+:global(.neu-pane) .attachmentIcon {
+  flex-shrink: 0;
+  color: var(--neu-muted);
+}
+
+:global(.neu-pane) .attachmentName {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The smooth-transition pass the global sheet applied to these two
    keys; it travels with them. */
 :global(.neu-pane) .iconBtn,

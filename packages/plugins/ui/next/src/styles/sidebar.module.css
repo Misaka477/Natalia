@@ -1,3 +1,71 @@
+/* The left column itself: the workspace column the session tree lives
+   in, its title and its scrolling body.
+
+   These three rules were dropped when the shell's stylesheet was
+   rewritten for the token layer. The markup kept the class names, so
+   the column lost its surface, the title lost its type and the body
+   lost its scroll — and nothing in the suite noticed, because a class
+   with no rule is not an error anywhere in the toolchain. They are
+   restored here, in the module that owns the column, with the values
+   the shipped web package's sheet carries (verified by reading
+   packages/plugins/ui/web/src/styles/base.ts).
+
+   The shell owns the geometry AROUND the column — the app row, the
+   resizer, the responsive passes. This module owns the column's own
+   surface. Tokens only. */
+
+.sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-3);
+  padding: 18px;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: 14px;
+}
+
+/* Inside the compact header the row supplies the spacing. */
+.header .title {
+  margin-bottom: 0;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+/* The shell's resize pass named these two classes from the global
+   sheet; they are local now, so the pass travels with them. */
+:global(.neu-shell[data-resizing="true"]) .sidebar {
+  transition: none;
+  contain: layout;
+  overflow-anchor: none;
+}
+
+:global(.neu-shell[data-resizing="true"]) .content {
+  pointer-events: none;
+}
+
+@media (max-width: 1200px) {
+  .sidebar {
+    max-width: 240px;
+  }
+}
+
 /* The sidebar's compact header: the actions cluster, the icon buttons
    with their tooltips, the session search field and the overflow menu.
    Every rule in this cluster is session-tree-only, verified before the

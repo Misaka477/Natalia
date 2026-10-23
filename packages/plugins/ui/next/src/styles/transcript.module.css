@@ -49,6 +49,19 @@
   border-top: 1px solid var(--neu-hairline);
 }
 
+/* THE RUNBAR — the active run, in one band above the input dock. The
+   bar is a column: the activity line, the model/reasoning/permission
+   toolbar, the stop control and the notices, each with its own rule.
+   This is only the band they sit in, and the band is what makes them
+   read as one run rather than four loose controls. */
+.runbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* The runbar's stop control: the run's one button, at the bar's end. */
 .runbarStop {
   flex-shrink: 0;

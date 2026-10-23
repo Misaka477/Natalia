@@ -1107,7 +1107,7 @@ export function SettingsPanel(props: {
                 {(category) => (
                   <button
                     type="button"
-                    class={styles.category}
+                    class="neu-settings-category"
                     data-active={activeCategory() === category.id}
                     onClick={() => {
                       setActiveCategory(category.id);

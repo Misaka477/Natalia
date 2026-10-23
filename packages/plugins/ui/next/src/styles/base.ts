@@ -154,17 +154,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   cursor: col-resize;
   user-select: none;
 }
-.neu-shell[data-resizing="true"] .neu-sidebar {
-  transition: none;
-  contain: layout;
-  overflow-anchor: none;
-}
 .neu-shell[data-resizing="true"] .neu-main {
   contain: layout paint;
   overflow-anchor: none;
-}
-.neu-shell[data-resizing="true"] .neu-sidebar-content,
-.neu-shell[data-resizing="true"] .neu-main {
   pointer-events: none;
 }
 
@@ -1645,7 +1637,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   .neu-shell { padding: 10px; gap: 10px; }
   .neu-app { gap: 10px; }
   .neu-pane { padding: 12px; }
-  .neu-sidebar { max-width: 240px; }
 }
 @media (max-width: 1700px) {
   .neu-shell[data-compact="true"] .neu-resizer {
@@ -1909,6 +1900,38 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   box-shadow: var(--neu-elevation-2);
 }
 .neu-settings-close:active {
+  box-shadow: var(--neu-inset-2);
+}
+
+/* ===== Category button (SHARED VOCABULARY) =====
+   The button that switches a window's right-hand column. Four surfaces
+   write it verbatim — the settings dialog's category column, and the
+   status, model and governance panels' tab strips (each of those three
+   scopes it further in its own module). It was dropped in the same
+   rewrite as the modal chrome above, which left the settings dialog's
+   category column as a stack of raw browser buttons; the user found it
+   in a screenshot. */
+.neu-settings-category {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.neu-settings-category:hover {
+  background: var(--neu-bg);
+  color: var(--neu-text);
+}
+.neu-settings-category[data-active="true"] {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
   box-shadow: var(--neu-inset-2);
 }
 

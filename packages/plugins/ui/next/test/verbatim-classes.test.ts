@@ -51,18 +51,27 @@ const CLASS_NAME = /^[a-zA-Z][\w-]*$/;
  * and the literal parts of a template (`class={`a ${styles.b}`}` — only
  * `a` counts; `styles.b` is a module local this guard says nothing
  * about).
+ *
+ * The template arm takes the span between the backticks that open and
+ * close the attribute's literal. An earlier arm stopped at the first
+ * `}`, which is inside the very interpolations it has to step over:
+ * `class={`${styles.btn} neu-topbar-btn-primary`}` has its literal
+ * AFTER an interpolation, and `class={`neu-select ${props.class ?? ""}`.trim()}`
+ * has braces inside one. Both were invisible to it, so the most-used
+ * class in the shell and a documented hook both went unchecked.
+ * Interpolations are dropped before the split, so what is left is what
+ * the browser would see as a literal class.
  */
 function verbatimClasses(source: string): Set<string> {
   const names = new Set<string>();
-  for (const match of source.matchAll(/class=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
-    const raw = match[1] ?? match[2] ?? "";
-    // Drop `${...}` interpolations before splitting: what is left is
-    // what the browser would see as a literal class.
+  const add = (raw: string) => {
     const literal = raw.replace(/\$\{[^}]*\}/gu, " ");
     for (const token of literal.split(/\s+/u)) {
       if (CLASS_NAME.test(token)) names.add(token);
     }
-  }
+  };
+  for (const match of source.matchAll(/class="([^"]*)"/g)) add(match[1]!);
+  for (const match of source.matchAll(/class=\{\s*`([^`]*)`/g)) add(match[1]!);
   return names;
 }
 

@@ -100,6 +100,24 @@
   overflow-wrap: break-word;
 }
 
+/* The plan that is running right now, named in the stream header's meta
+   line. It was an unstyled span in the shipped package too (verified by
+   reading that sheet: the class carried no rule), which left the one
+   fact a reader most needs — WHICH plan is live — as the least visible
+   thing on the panel. */
+
+.activeBadge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--neu-radius-pill);
+  background: var(--neu-accent-soft);
+  color: var(--neu-accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .docMeta {
   display: flex;
   flex-wrap: wrap;

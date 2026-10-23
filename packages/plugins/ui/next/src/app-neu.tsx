@@ -51,7 +51,7 @@ import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { ModalLayer } from "./controllers/modals";
 import { SessionSidebar } from "./controllers/session-tree";
-import { MainPanes } from "./controllers/transcript";
+import { MainPanes, type PaneAgent } from "./controllers/transcript";
 import { RightRail } from "./controllers/workbench";
 import { Topbar } from "./controllers/topbar";
 import { createLocaleRuntime, type LocaleRuntime } from "./locale/runtime";
@@ -272,7 +272,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const requestedRightTab = queryParam("rightTab") ?? queryParam("tab");
   const [rightTab, setRightTab] = createSignal<RightTab>(
     requestedRightTab &&
-      ["diff", "plan", "governance", "nia", "agent"].includes(requestedRightTab)
+      ["diff", "plan", "governance"].includes(requestedRightTab)
       ? requestedRightTab
       : "plan",
   );
@@ -3127,8 +3127,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       { id: "diff", label: t("tab.diff") },
       { id: "plan", label: t("tab.plan") },
       { id: "governance", label: t("tab.governance") },
-      { id: "nia", label: t("tab.nia") },
-      { id: "agent", label: t("tab.agent") },
       ...sidePanels().map((item) => ({
         id: item.panel.id,
         label: item.panel.title,
@@ -3218,9 +3216,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   // Which agent the ONE main pane shows. The pane used to be two panes
   // side by side, each with its own composer; the architecture wants one
   // pane and a switcher inside it, so this is the pane's only state.
-  const [focusAgent, setFocusAgent] = createSignal<"natalia" | "navi">(
-    "natalia",
-  );
+  // Four agents, because Nia and the team were right-rail tabs — two
+  // whole agents the reader had to leave the conversation to reach.
+  const [focusAgent, setFocusAgent] = createSignal<PaneAgent>("natalia");
+
+  // Opens a terminal in the right rail. The team panel links straight to
+  // a subagent's terminal; the rail is where the terminal lives, so this
+  // is a tab switch with the rail made visible first.
+  function openTerminal(terminalID: string) {
+    setRightVisible(true);
+    setRightTab(terminalID || "terminal");
+  }
 
   let leftSidebarWasVisible = true;
   createEffect(() => {
@@ -3397,6 +3403,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           loadAttachmentUrl={loadAttachmentUrl}
           loadOlderHistory={loadOlderHistory}
           loadOlderNaviChat={loadOlderNaviChat}
+          loadOlderNiaChat={loadOlderNiaChat}
           loadSecondaryStartupData={loadSecondaryStartupData}
           refreshTranscript={refreshTranscript}
           updateChatProfile={updateChatProfile}
@@ -3437,6 +3444,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           chatElapsedMs={chatElapsedMs}
           chatProfile={chatProfile}
           reasoningEffort={reasoningEffort}
+          niaPaging={niaPaging}
+          modelCatalog={modelCatalog}
+          onOpenTerminal={openTerminal}
         />
 
         {/* Right secondary tabs */}
@@ -3460,12 +3470,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           selectedSessionID={selectedSessionID}
           workspaceIDForRightPanels={workspaceIDForRightPanels}
           governanceInitialTab={governanceInitialTab}
-          modelCatalog={modelCatalog}
-          openModelSettings={openModelSettings}
-          loadAttachmentUrl={loadAttachmentUrl}
-          resizing={resizing}
-          niaPaging={niaPaging}
-          loadOlderNiaChat={loadOlderNiaChat}
           sidePanels={sidePanels}
           panelRevision={panelRevision}
         />

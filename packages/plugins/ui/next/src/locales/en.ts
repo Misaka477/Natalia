@@ -44,8 +44,6 @@ export const en = {
   "tab.diff": "Review / Diff",
   "tab.plan": "Plan",
   "tab.governance": "Governance",
-  "tab.nia": "Nia",
-  "tab.agent": "Team",
   "sidebar.workspace": "Workspace",
   "sidebar.sessions": "Sessions",
   "sidebar.search": "Search sessions",
@@ -107,6 +105,11 @@ export const en = {
   "transcript.startupDataFailedHint":
     "The session and config data could not be read. Retry — until it succeeds, the lists and menus may be empty.",
   "transcript.agentSwitchLabel": "Choose which assistant to talk to",
+  // the four agents the one pane switches between
+  "transcript.agent.natalia": "Natalia",
+  "transcript.agent.navi": "Navi",
+  "transcript.agent.nia": "Nia",
+  "transcript.agent.team": "Team",
   "transcript.selectPermission": "Select permission",
   "transcript.rollbackPrepared": "Rollback ready: {label}",
   "transcript.rollbackEffectiveOnSend":

@@ -52,8 +52,6 @@ export const zh = {
   "tab.diff": "审阅 / Diff",
   "tab.plan": "计划",
   "tab.governance": "治理",
-  "tab.nia": "Nia",
-  "tab.agent": "协同",
   // sidebar
   "sidebar.workspace": "工作区",
   "sidebar.sessions": "会话",
@@ -116,6 +114,11 @@ export const zh = {
   "transcript.startupDataFailedHint":
     "会话与配置数据没读到。重试一次；在重试成功前，列表和菜单可能是空的。",
   "transcript.agentSwitchLabel": "选择要对话的助手",
+  // the four agents the one pane switches between
+  "transcript.agent.natalia": "Natalia",
+  "transcript.agent.navi": "Navi",
+  "transcript.agent.nia": "Nia",
+  "transcript.agent.team": "协同",
   "transcript.selectPermission": "选择权限",
   "transcript.rollbackPrepared": "已准备回滚：{label}",
   "transcript.rollbackEffectiveOnSend": "发送新消息后生效",

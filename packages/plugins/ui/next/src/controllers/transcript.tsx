@@ -1,4 +1,5 @@
-/** Transcript controller: the dual agent panes (Natalia + Navi chat).
+/** Transcript controller: the one main pane and the four agents it
+ * switches between (Natalia, Navi, Nia, the team).
  *
  * The JSX moved verbatim from the shell; every shell value it reads arrives
  * through the destructured props, so the pane markup needed no rewriting.
@@ -16,6 +17,8 @@ import { QueueDock } from "../components/QueueDock";
 import { SlotMount } from "../slots/mount";
 import { MainInputArea, ChatInputArea } from "./input-area";
 import { SessionUsageBar } from "../components/SessionUsageBar";
+import { NiaPanel } from "../nia-panel";
+import { AgentPanel } from "../agent-panel";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import type {
@@ -23,6 +26,7 @@ import type {
   RuntimeSessionSummary,
 } from "@anthelia/contracts";
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
+import { cloneState } from "@natalia/view-store";
 import { transcriptRefs } from "../transcript-refs";
 import { transcriptScrollMemory } from "../transcript-scroll-memory";
 import { PanelState } from "../components/PanelState";
@@ -33,6 +37,16 @@ import type { MessageAction } from "@natalia/ui-kit";
 import type { PagedTranscriptState, TranscriptHandle } from "@natalia/ui-kit";
 import type { PermissionRungID } from "../permission-rungs";
 import type { GoalEditorTarget } from "../app-neu";
+
+/** The agents the one main pane switches between. Natalia does the work,
+ *  Navi is the chat agent, Nia is the read-only auditor and 协同 is the
+ *  team of subagents — all four were rail tabs before, which put two
+ *  whole agents one click away from the reader's main work. */
+export type PaneAgent = "natalia" | "navi" | "nia" | "team";
+
+/** The switcher's order: the agent that does the work first. */
+const PANE_AGENTS: readonly PaneAgent[] = ["natalia", "navi", "nia", "team"];
+
 export interface MainPanesProps {
   ctx: UiPluginContext;
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -64,8 +78,8 @@ export interface MainPanesProps {
   naviOpen: () => boolean;
   setNaviOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   /** Which agent the one main pane shows. */
-  focusAgent: () => "natalia" | "navi";
-  setFocusAgent: (value: "natalia" | "navi") => void;
+  focusAgent: () => PaneAgent;
+  setFocusAgent: (value: PaneAgent) => void;
   showJumpToBottom: () => boolean;
   setShowJumpToBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   chatShowJumpToBottom: () => boolean;
@@ -97,6 +111,7 @@ export interface MainPanesProps {
   loadAttachmentUrl: (attachment: Attachment) => Promise<string>;
   loadOlderHistory: () => Promise<boolean>;
   loadOlderNaviChat: () => Promise<void>;
+  loadOlderNiaChat: () => Promise<void>;
   loadSecondaryStartupData: () => void;
   refreshTranscript: () => Promise<void>;
   updateChatProfile: (next: ChatModelProfile) => Promise<void>;
@@ -141,9 +156,13 @@ export interface MainPanesProps {
   naviPaging: any;
   chatElapsedMs: any;
   chatProfile: any;
+  niaPaging: any;
+  modelCatalog: any;
+  /** Opens a terminal in the right rail — the team panel's deep link. */
+  onOpenTerminal: (terminalID: string) => void;
 }
 
-/** The dual agent panes: Natalia's workspace transcript and the Navi chat. */
+/** The one main pane, and the four agents it switches between. */
 export function MainPanes(props: MainPanesProps) {
   const {
     ctx,
@@ -196,6 +215,7 @@ export function MainPanes(props: MainPanesProps) {
     loadAttachmentUrl,
     loadOlderHistory,
     loadOlderNaviChat,
+    loadOlderNiaChat,
     loadSecondaryStartupData,
     refreshTranscript,
     updateChatProfile,
@@ -236,7 +256,17 @@ export function MainPanes(props: MainPanesProps) {
     chatElapsedMs,
     chatProfile,
     reasoningEffort,
+    niaPaging,
+    modelCatalog,
   } = props;
+
+  /** Any subagent of the team is running. The team pane has no single
+   *  turn of its own, so its state is the team's. */
+  const teamRunning = createMemo(() =>
+    Object.values(state().subagentStream?.active ?? {}).some(
+      (agent) => agent?.status === "running",
+    ),
+  );
 
   // --- Where the reader was, per session ---
   // Saved on every scroll and restored when a session's history lands, so
@@ -298,38 +328,59 @@ export function MainPanes(props: MainPanesProps) {
       <section class="neu-main">
         <div class="neu-pane">
           <div class="neu-pane-header">
-            {/* The switcher: which agent this pane is. */}
+            {/* The switcher: which agent this pane is. Four of them —
+                Natalia, Navi, Nia and the team — because the pane is the
+                whole conversation surface, not one agent's window. */}
             <div
               class={styles.agentSwitch}
               role="tablist"
               aria-label={t("transcript.agentSwitchLabel")}
             >
-              <button
-                type="button"
-                role="tab"
-                class={styles.agentSwitchBtn}
-                aria-selected={focusAgent() === "natalia"}
-                data-active={focusAgent() === "natalia"}
-                onClick={() => setFocusAgent("natalia")}
-              >
-                Natalia
-              </button>
-              <button
-                type="button"
-                role="tab"
-                class={styles.agentSwitchBtn}
-                aria-selected={focusAgent() === "navi"}
-                data-active={focusAgent() === "navi"}
-                onClick={() => setFocusAgent("navi")}
-              >
-                Navi
-              </button>
+              <For each={PANE_AGENTS}>
+                {(agent) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    class={styles.agentSwitchBtn}
+                    aria-selected={focusAgent() === agent}
+                    data-active={focusAgent() === agent}
+                    onClick={() => setFocusAgent(agent)}
+                  >
+                    {t(`transcript.agent.${agent}`)}
+                  </button>
+                )}
+              </For>
             </div>
             <span class={styles.headerRight}>
               <Show
                 when={focusAgent() === "natalia"}
                 fallback={
-                  <>
+                  <Show
+                    when={focusAgent() === "navi"}
+                    fallback={
+                      <Show
+                        when={focusAgent() === "nia"}
+                        fallback={
+                          <>
+                            <span
+                              class="neu-pane-status"
+                              data-running={teamRunning()}
+                            >
+                              {teamRunning() ? "running" : "idle"}
+                            </span>
+                          </>
+                        }
+                      >
+                        <ContextMeter usage={state().nia.context} compact />
+                        <span
+                          class="neu-pane-status"
+                          data-running={Boolean(state().nia.activity)}
+                        >
+                          {state().nia.activity ? "running" : "idle"}
+                        </span>
+                      </Show>
+                    }
+                  >
                     <ContextMeter usage={state().navi.context} compact />
                     <span
                       class="neu-pane-status"
@@ -337,7 +388,7 @@ export function MainPanes(props: MainPanesProps) {
                     >
                       {naviChatActivity() ? "running" : "idle"}
                     </span>
-                  </>
+                  </Show>
                 }
               >
                 <ContextMeter
@@ -868,6 +919,49 @@ export function MainPanes(props: MainPanesProps) {
                   handlePasteAttachments={handlePasteAttachments}
                   updateChatProfile={updateChatProfile}
                   perfLog={perfLog}
+                />
+              </Show>
+
+              {/* Nia: the read-only auditor, who also talks. She was a
+                  right-rail tab, which made the one agent a reader asks
+                  questions of the hardest one to reach. Embedded in the
+                  pane she is a switcher away, and she keeps her own
+                  transcript, run bar, toolbar and composer. */}
+              <Show when={focusAgent() === "nia"}>
+                <NiaPanel
+                  t={t}
+                  state={state()}
+                  runtime={props.ctx.runtime}
+                  sessionID={selectedSessionID() || state().sessionID}
+                  catalog={modelCatalog()}
+                  loadAttachmentUrl={loadAttachmentUrl}
+                  suspendVirtualization={resizing()}
+                  paging={niaPaging()}
+                  onLoadOlder={() => void loadOlderNiaChat()}
+                  onOpenSettings={openModelSettings}
+                  embedded
+                />
+              </Show>
+
+              {/* 协同: the team of subagents. Same move — it was the
+                  rail's agent tab, now it is the pane's fourth agent.
+                  The panel keeps its own subagent/team subtabs. */}
+              <Show when={focusAgent() === "team"}>
+                <AgentPanel
+                  t={t}
+                  state={state()}
+                  runtime={props.ctx.runtime}
+                  sessionID={selectedSessionID() || state().sessionID}
+                  onOpenTerminal={(terminalID) =>
+                    props.onOpenTerminal(terminalID)
+                  }
+                  onHydrateSubagentHistory={(history, options) => {
+                    props.ctx.projection.hydrateSubagentHistory?.(
+                      history,
+                      options,
+                    );
+                    setState(cloneState(props.ctx.projection.getState()));
+                  }}
                 />
               </Show>
             </div>

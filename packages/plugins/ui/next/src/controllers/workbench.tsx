@@ -15,9 +15,6 @@ import { PendingBadge } from "@natalia/ui-kit";
 import { ReviewPane } from "../components/RightPanel";
 import { PlanPanel } from "../plan-panel";
 import { GovernancePane } from "../governance-panel";
-import { NiaPanel } from "../nia-panel";
-import { AgentPanel } from "../agent-panel";
-import { cloneState } from "@natalia/view-store";
 import { SlotMount } from "../slots/mount";
 
 export interface RightRailProps {
@@ -40,12 +37,6 @@ export interface RightRailProps {
   selectedSessionID: () => string;
   workspaceIDForRightPanels: () => string | undefined;
   governanceInitialTab: any;
-  modelCatalog: () => any;
-  openModelSettings: () => void;
-  loadAttachmentUrl: (attachment: any) => Promise<string>;
-  resizing: () => boolean;
-  niaPaging: () => any;
-  loadOlderNiaChat: () => Promise<void>;
   sidePanels: () => {
     pluginId: string;
     panel: { id: string; title?: string };
@@ -75,12 +66,6 @@ export function RightRail(props: RightRailProps) {
     selectedSessionID,
     workspaceIDForRightPanels,
     governanceInitialTab,
-    modelCatalog,
-    openModelSettings,
-    loadAttachmentUrl,
-    resizing,
-    niaPaging,
-    loadOlderNiaChat,
     sidePanels,
     panelRevision,
   } = props;
@@ -165,42 +150,6 @@ export function RightRail(props: RightRailProps) {
                 runtime={props.ctx.runtime}
                 sessionID={selectedSessionID() || state().sessionID}
                 initialTab={governanceInitialTab}
-              />
-            </Show>
-            <Show
-              when={rightTab() === "nia" ? rightPanelScopeKey() : undefined}
-              keyed
-            >
-              <NiaPanel
-                t={t}
-                state={state()}
-                runtime={props.ctx.runtime}
-                catalog={modelCatalog()}
-                sessionID={selectedSessionID() || state().sessionID}
-                onOpenSettings={openModelSettings}
-                loadAttachmentUrl={loadAttachmentUrl}
-                suspendVirtualization={resizing()}
-                paging={niaPaging()}
-                onLoadOlder={() => void loadOlderNiaChat()}
-              />
-            </Show>
-            <Show
-              keyed
-              when={rightTab() === "agent" ? rightPanelScopeKey() : undefined}
-            >
-              <AgentPanel
-                t={t}
-                state={state()}
-                runtime={props.ctx.runtime}
-                sessionID={selectedSessionID() || state().sessionID}
-                onOpenTerminal={() => setRightTab("terminal")}
-                onHydrateSubagentHistory={(history, options) => {
-                  props.ctx.projection.hydrateSubagentHistory?.(
-                    history,
-                    options,
-                  );
-                  setState(cloneState(props.ctx.projection.getState()));
-                }}
               />
             </Show>
             <For each={sidePanels()}>

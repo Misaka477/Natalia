@@ -9,6 +9,7 @@ import { For, Show } from "solid-js";
 import type { LocaleRuntime } from "../locale/runtime";
 import type { SlotsRegistry } from "../slots/registry";
 import { SlotMount } from "../slots/mount";
+import type { PaneAgent } from "./transcript";
 import styles from "../styles/topbar.module.css";
 
 export interface TopbarProps {
@@ -36,8 +37,8 @@ export interface TopbarProps {
   naviOpen: () => boolean;
   setNaviOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   /** Which agent the one main pane shows; the Navi button drives it. */
-  focusAgent: () => "natalia" | "navi";
-  setFocusAgent: (value: "natalia" | "navi") => void;
+  focusAgent: () => PaneAgent;
+  setFocusAgent: (value: PaneAgent) => void;
   setStatusOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setHelpOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setStashOpen: (value: boolean | ((prev: boolean) => boolean)) => void;

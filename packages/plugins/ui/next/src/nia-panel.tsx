@@ -43,6 +43,15 @@ export function NiaPanel(props: {
    * opening its own menu.
    */
   onOpenSettings?: () => void;
+  /**
+   * Rendered inside the main pane rather than as a rail tab.
+   *
+   * The main pane's header already carries the agent switcher and the
+   * running state, so the panel drops its own header instead of stacking
+   * a second one under it. Everything else — the transcript, the run
+   * bar, the toolbar, the usage bar and the composer — is unchanged.
+   */
+  embedded?: boolean;
 }) {
   const t = props.t;
   const [draft, setDraft] = createSignal("");
@@ -326,15 +335,17 @@ export function NiaPanel(props: {
 
   return (
     <div class={`neu-pane ${styles.flatPane}`}>
-      <div class="neu-pane-header">
-        <span class="neu-pane-title">Nia</span>
-        <span class={styles.headerActions}>
-          <ContextMeter usage={props.state.nia.context} compact />
-          <span class="neu-pane-status" data-running={Boolean(active())}>
-            {active() ? "running" : "idle"}
+      <Show when={!props.embedded}>
+        <div class="neu-pane-header">
+          <span class="neu-pane-title">Nia</span>
+          <span class={styles.headerActions}>
+            <ContextMeter usage={props.state.nia.context} compact />
+            <span class="neu-pane-status" data-running={Boolean(active())}>
+              {active() ? "running" : "idle"}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      </Show>
       <div class="neu-pane-content">
         <div class={styles.transcriptWrap}>
           <Transcript

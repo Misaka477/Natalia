@@ -81,8 +81,12 @@ test("first activation, not eagerness: mounting the terminal would start a pane"
   );
 });
 
-test("the five shell-owned panels keep the session-scoped key", () => {
-  expect(rail.match(/rightPanelScopeKey\(\)/gu)?.length).toBe(5);
+test("every shell-owned rail panel keeps the session-scoped key", () => {
+  // Three of them now: diff, plan and governance. Nia and the team used
+  // to be rail tabs and are pane agents — the pane's switcher reaches
+  // them — so the rail hosts the shell's three review surfaces plus
+  // whatever panels plugins register.
+  expect(rail.match(/rightPanelScopeKey\(\)/gu)?.length).toBe(3);
   // One source, computed by the pure helper — no session-list lookup mixed in.
   expect(app).toContain("panelScopeKey({");
   expect(app).toContain("workspaceID: state().activeWorkspaceID,");

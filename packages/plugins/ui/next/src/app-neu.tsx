@@ -1057,11 +1057,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       }
       await props.ctx.runtime.workspaceActivate(targetWorkspaceID);
     }
+    const currentHasMessages =
+      state().natalia.messages.length > 0 ||
+      state().navi.messages.length > 0 ||
+      state().nia.messages.length > 0;
     const reusable = targetWorkspaceID
       ? findReusableBlankSession(
           sessionList(),
           targetWorkspaceID,
           state().activeWorkspaceID,
+          currentHasMessages ? selectedSessionID() : undefined,
         )
       : undefined;
     const nextSessionID =
@@ -1075,6 +1080,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       userSelectedSession = true;
       setSelectedSessionID(nextSessionID);
       setSelectedSession(t("shell.newSessionName"));
+      props.ctx.projection.activateSession?.(nextSessionID, targetWorkspaceID);
+      props.ctx.projection.hydrateMessages?.([], "newer", { replace: true });
+      props.ctx.projection.hydrateNaviMessages?.([], { replace: true });
+      props.ctx.projection.hydrateNiaMessages?.([], { replace: true });
+      setState(cloneState(props.ctx.projection.getState()));
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
       void loadPerSessionModelConfig(nextSessionID);
     }

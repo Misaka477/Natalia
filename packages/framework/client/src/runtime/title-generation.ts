@@ -29,7 +29,7 @@ export function createTitleGeneration(ctx: RuntimeContext) {
   function rememberTitleInput(id: SessionID, text: string) {
     const { titleGenerationTasks } = ctx.state;
     const sanitized = sanitizeSessionTitleInput(text);
-    if (sanitized.replace(/\[redacted\]|\[home path\]/gu, "").trim().length < 3)
+    if (sanitized.replace(/\[redacted\]|\[home path\]/gu, "").trim().length < 1)
       return;
     if (!titleGenerationTasks.has(id))
       titleGenerationTasks.set(id, { input: text });
@@ -100,7 +100,7 @@ export function createTitleGeneration(ctx: RuntimeContext) {
       getExecutionBySession,
     } = ctx.ports;
     const sanitized = sanitizeSessionTitleInput(text);
-    if (sanitized.replace(/\[redacted\]|\[home path\]/gu, "").trim().length < 3)
+    if (sanitized.replace(/\[redacted\]|\[home path\]/gu, "").trim().length < 1)
       return;
     const sessionStoreController = ctx.state.serviceDirectory.get(
       sessionStoreControllerToken,

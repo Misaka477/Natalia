@@ -28,7 +28,7 @@ export type SessionOrderBy = "manual" | "updated";
  */
 export function isBlankSession(session: RuntimeSessionSummary): boolean {
   return (
-    (session.events === 0 || session.title === "New session") &&
+    session.events === 0 &&
     (session.pendingInputs ?? 0) === 0 &&
     session.status !== "running" &&
     !session.archived
@@ -162,8 +162,10 @@ export function findReusableBlankSession(
   sessions: readonly RuntimeSessionSummary[],
   workspaceID: string,
   activeWorkspaceID?: string,
+  excludeSessionID?: string,
 ): RuntimeSessionSummary | undefined {
   return sessions.find((session) => {
+    if (excludeSessionID && session.id === excludeSessionID) return false;
     const owner = session.workspaceID ?? activeWorkspaceID;
     return owner === workspaceID && isBlankSession(session);
   });

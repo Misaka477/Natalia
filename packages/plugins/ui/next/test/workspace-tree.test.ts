@@ -40,15 +40,11 @@ function makeSession(
 
 test("unselected blank sessions are hidden while the selected blank session is visible", () => {
   const blankA = makeSession({ id: "ses_blank_a", events: 0 });
-  const blankB = makeSession({
-    id: "ses_blank_b",
-    events: 3,
-    title: "New session",
-  });
+  const blankB = makeSession({ id: "ses_blank_b", events: 0 });
   const engaged = makeSession({
     id: "ses_engaged",
     events: 4,
-    title: "Real chat",
+    title: "New session",
   });
 
   expect(isBlankSession(blankA)).toBe(true);

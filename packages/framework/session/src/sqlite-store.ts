@@ -1237,7 +1237,17 @@ export class SqliteSessionStore {
 
   eventCount(sessionID: SessionID): number {
     const row = this.db
-      .query(`SELECT COUNT(*) as cnt FROM events WHERE session_id = ?`)
+      .query(
+        `SELECT COUNT(*) as cnt FROM events
+         WHERE session_id = ?
+           AND COALESCE(json_extract(event, '$.type'), '') NOT IN (
+             'session.usage',
+             'status.snapshot',
+             'checkpoint.failed',
+             'terminal.action',
+             'terminal.timeline'
+           )`,
+      )
       .get(sessionID) as { cnt: number } | undefined;
     return row?.cnt ?? 0;
   }

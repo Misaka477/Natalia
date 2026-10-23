@@ -1186,7 +1186,7 @@ export function ReviewPane(
           data-active={tab() === "git"}
           onClick={() => selectTab("git")}
         >
-          Git
+          {t("review.tabGit")}
         </button>
         <button
           type="button"
@@ -1194,7 +1194,7 @@ export function ReviewPane(
           data-active={tab() === "sandbox"}
           onClick={() => selectTab("sandbox")}
         >
-          Sandbox / Team
+          {t("review.tabSandbox")}
         </button>
         <button
           type="button"
@@ -1202,7 +1202,7 @@ export function ReviewPane(
           data-active={tab() === "checkpoint"}
           onClick={() => selectTab("checkpoint")}
         >
-          Checkpoint
+          {t("review.tabCheckpoint")}
         </button>
         <button
           type="button"
@@ -1210,10 +1210,10 @@ export function ReviewPane(
           data-active={tab() === "rounds"}
           onClick={() => selectTab("rounds")}
         >
-          Rounds
+          {t("review.tabRounds")}
         </button>
       </div>
-      <Show when={tab() === "git"}>
+      <Show when={tab() === "git" && diffScope() === "all"}>
         <div class={styles.gitRanges}>
           <NeuSelect
             value={gitFrom()}
@@ -1506,169 +1506,156 @@ export function ReviewPane(
             />
             <path d="M2 7H12" stroke="currentColor" stroke-width="1.2" />
           </svg>
-          <span>
-            {tab() === "git"
-              ? "Git Changes"
-              : tab() === "sandbox"
-                ? "Sandbox Changes"
-                : tab() === "rounds"
-                  ? "Round Changes"
-                  : "Checkpoint Changes"}
+          <span class="review-count">
+            {t("review.filesCount", { count: changesForTab().length })}
           </span>
-          <span class="review-count">{changesForTab().length} files</span>
           <span class={styles.additions}>+{totalAdditions()}</span>
           <span class={styles.deletions}>-{totalDeletions()}</span>
         </div>
         <div class={styles.diffActions}>
+          <Show when={tab() === "git"}>
+            <div class={styles.segGroup}>
+              <button
+                type="button"
+                class={styles.segBtn}
+                data-active={diffScope() === "session"}
+                title={t("review.tooltipSession")}
+                onClick={() => {
+                  setDiffScope("session");
+                  void loadGit();
+                }}
+              >
+                {t("review.scopeSession")}
+              </button>
+              <button
+                type="button"
+                class={styles.segBtn}
+                data-active={diffScope() === "all"}
+                title={t("review.tooltipGlobal")}
+                onClick={() => {
+                  setDiffScope("all");
+                  void loadGit();
+                }}
+              >
+                {t("review.scopeGlobal")}
+              </button>
+            </div>
+            <button
+              type="button"
+              class={styles.iconBtn}
+              data-active={diffIgnoreWhitespace()}
+              title={t("review.tooltipIgnoreWhitespace")}
+              onClick={() => {
+                setDiffIgnoreWhitespace((value) => !value);
+                void loadGit();
+              }}
+            >
+              W
+            </button>
+          </Show>
+          <div class={styles.segGroup}>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={viewMode() === "unified"}
+              onClick={() => {
+                setViewMode("unified");
+                setAstBatchPanelOpen(false);
+              }}
+            >
+              {t("review.viewUnified")}
+            </button>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={viewMode() === "split"}
+              onClick={() => {
+                setViewMode("split");
+                setAstBatchPanelOpen(false);
+              }}
+            >
+              {t("review.viewSplit")}
+            </button>
+            <button
+              type="button"
+              class={styles.segBtn}
+              data-active={viewMode() === "ast"}
+              onClick={() => {
+                setViewMode("ast");
+                setAstBatchPanelOpen(false);
+                void loadAstDiffForSelectedFile();
+              }}
+            >
+              {t("review.viewAst")}
+            </button>
+          </div>
+        </div>
+      </div>
+      <Show when={viewMode() === "ast"}>
+        <div class={styles.astSubbar}>
           <button
             type="button"
-            class={styles.iconBtn}
-            data-active={diffScope() === "session"}
-            title={t("review.tooltipSession")}
+            class={styles.segBtn}
+            data-active={!astBatchPanelOpen()}
             onClick={() => {
-              setDiffScope("session");
-              void loadGit();
-            }}
-          >
-            S
-          </button>
-          <button
-            type="button"
-            class={styles.iconBtn}
-            data-active={diffScope() === "all"}
-            title={t("review.tooltipGlobal")}
-            onClick={() => {
-              setDiffScope("all");
-              void loadGit();
-            }}
-          >
-            G
-          </button>
-          <button
-            type="button"
-            class={styles.iconBtn}
-            data-active={diffIgnoreWhitespace()}
-            title={t("review.tooltipIgnoreWhitespace")}
-            onClick={() => {
-              setDiffIgnoreWhitespace((value) => !value);
-              void loadGit();
-            }}
-          >
-            W
-          </button>
-          <button
-            type="button"
-            class={styles.iconBtn}
-            data-active={viewMode() === "unified"}
-            title="Unified"
-            onClick={() => {
-              setViewMode("unified");
-              setAstBatchPanelOpen(false);
-            }}
-          >
-            U
-          </button>
-          <button
-            type="button"
-            class={styles.iconBtn}
-            data-active={viewMode() === "split"}
-            title="Split"
-            onClick={() => {
-              setViewMode("split");
-              setAstBatchPanelOpen(false);
-            }}
-          >
-            ⇄
-          </button>
-          <button
-            type="button"
-            class={styles.iconBtn}
-            data-active={viewMode() === "ast" && !astBatchPanelOpen()}
-            title="AST"
-            onClick={() => {
-              setViewMode("ast");
               setAstBatchPanelOpen(false);
               void loadAstDiffForSelectedFile();
             }}
           >
-            A
+            {t("review.astFile")}
           </button>
           <button
             type="button"
-            class={styles.iconBtn}
-            data-active={
-              viewMode() === "ast" &&
-              astBatchPanelOpen() &&
-              astBatchMode() === "structure"
-            }
-            title={t("review.tooltipBatchAst")}
+            class={styles.segBtn}
+            data-active={astBatchPanelOpen() && astBatchMode() === "structure"}
             onClick={() => {
-              setViewMode("ast");
               setAstBatchPanelOpen(true);
               setAstBatchMode("structure");
               void loadAstBatch();
             }}
           >
-            B
+            {t("review.astBatch")}
           </button>
           <button
             type="button"
-            class={styles.iconBtn}
-            data-active={
-              viewMode() === "ast" &&
-              astBatchPanelOpen() &&
-              astBatchMode() === "refactor"
-            }
-            title={t("review.tooltipRefactorPreview")}
+            class={styles.segBtn}
+            data-active={astBatchPanelOpen() && astBatchMode() === "refactor"}
             onClick={() => {
-              setViewMode("ast");
               setAstBatchPanelOpen(true);
               setAstBatchMode("refactor");
               void loadAstBatch();
             }}
           >
-            R
+            {t("review.astRefactor")}
           </button>
           <button
             type="button"
-            class={styles.iconBtn}
-            data-active={
-              viewMode() === "ast" &&
-              astBatchPanelOpen() &&
-              astBatchMode() === "search"
-            }
-            title={t("review.tooltipAstSearch")}
+            class={styles.segBtn}
+            data-active={astBatchPanelOpen() && astBatchMode() === "search"}
             onClick={() => {
-              setViewMode("ast");
               setAstBatchPanelOpen(true);
               setAstBatchMode("search");
               setAstSearchResult(undefined);
               setAstSearchError(undefined);
             }}
           >
-            Q
+            {t("review.astSearch")}
           </button>
           <button
             type="button"
-            class={styles.iconBtn}
-            data-active={
-              viewMode() === "ast" &&
-              astBatchPanelOpen() &&
-              astBatchMode() === "plan"
-            }
-            title={t("review.tooltipRefactorPlan")}
+            class={styles.segBtn}
+            data-active={astBatchPanelOpen() && astBatchMode() === "plan"}
             onClick={() => {
-              setViewMode("ast");
               setAstBatchPanelOpen(true);
               setAstBatchMode("plan");
               setAstPlanResult(undefined);
               setAstPlanError(undefined);
             }}
           >
-            P
+            {t("review.astPlan")}
           </button>
         </div>
-      </div>
+      </Show>
       <div class="review-body">
         <Show
           when={!loaded()}

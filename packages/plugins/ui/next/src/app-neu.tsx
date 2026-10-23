@@ -1086,7 +1086,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       props.ctx.projection.hydrateNiaMessages?.([], { replace: true });
       setState(cloneState(props.ctx.projection.getState()));
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
-      void loadPerSessionModelConfig(nextSessionID);
     }
     await refreshWorkspaces();
     // A refresh requested before sessionNew may still be in flight. Drop it so
@@ -1459,10 +1458,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   let perSessionLoadToken = 0;
   async function loadPerSessionModelConfig(sessionID: string) {
     const token = ++perSessionLoadToken;
-    setModelSelectionSignal(undefined);
-    // Unset until the runtime answers: the placeholder shows the truth.
-    setReasoningEffortSignal("");
-    setChatProfile({});
     const [selectionResult, effortResult, profileResult] =
       await Promise.allSettled([
         props.ctx.runtime.modelSelection?.(sessionID),
@@ -1480,13 +1475,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const profileValue =
       profileResult.status === "fulfilled" ? profileResult.value : undefined;
     batch(() => {
-      if (selectionValue?.modelID) setModelSelectionSignal(selectionValue);
-      if (effortValue) setReasoningEffortSignal(effortValue);
-      if (
+      setModelSelectionSignal(
+        selectionValue?.modelID ? selectionValue : undefined,
+      );
+      setReasoningEffortSignal(effortValue || "");
+      setChatProfile(
         profileValue &&
-        (profileValue.normal?.modelID || profileValue.expert?.modelID)
-      )
-        setChatProfile(profileValue);
+          (profileValue.normal?.modelID || profileValue.expert?.modelID)
+          ? profileValue
+          : {},
+      );
     });
     perfLog(
       `[perf] perSessionModelConfig applied selection=${selectionValue?.modelID ?? "-"} reasoning=${effortValue ?? "-"} profile=${profileValue?.normal?.modelID ?? "-"} +${(performance.now() - appliedStart).toFixed(1)}ms`,

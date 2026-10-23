@@ -40,21 +40,33 @@
 .content {
   flex: 1;
   min-height: 0;
-  padding: 14px 20px 20px;
+  padding: 10px 12px 18px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.auditSubbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+  flex-shrink: 0;
+}
+
 .row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
+  border: 1px solid var(--neu-hairline);
 }
 
 .title {
@@ -83,6 +95,7 @@
 .text {
   font-size: 13px;
   color: var(--neu-text);
+  line-height: 1.5;
 }
 
 .meta {
@@ -99,10 +112,10 @@
 
 .card {
   margin-bottom: 6px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--neu-surface-raised);
-  box-shadow: var(--neu-ring-raised);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
   font-size: 12px;
 }
 
@@ -113,28 +126,41 @@
 }
 
 .scopeBtn {
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--neu-border-strong);
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--neu-muted);
-  cursor: pointer;
+  font-family: inherit;
   font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.scopeBtn:hover {
+  color: var(--neu-text);
+  background: var(--neu-hover-overlay);
 }
 
 .scopeBtn[data-active="true"] {
-  color: var(--neu-text);
-  border-color: var(--neu-state-info-border);
-  background: var(--neu-state-info-bg);
+  color: var(--neu-accent);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--neu-accent) 30%, transparent);
+  background: var(--neu-accent-soft);
 }
 
 .completionCard {
-  border-left: 3px solid var(--neu-state-ok-border);
+  border-left: 3px solid var(--neu-success);
 }
 
 .cardHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
@@ -142,19 +168,21 @@
 .cardMeta {
   color: var(--neu-muted);
   font-size: 10px;
+  font-family: var(--neu-font-mono);
   white-space: nowrap;
 }
 
 .cardSection {
-  margin-top: 5px;
-  padding-top: 4px;
-  border-top: 1px solid var(--neu-surface-raised-strong);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--neu-hairline);
 }
 
 .cardLabel {
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   color: var(--neu-muted);
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -162,7 +190,8 @@
 .cardText {
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.45;
+  line-height: 1.5;
+  color: var(--neu-text);
 }
 
 .error {

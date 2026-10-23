@@ -1012,7 +1012,10 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
 
   createEffect(() => {
     if (wide() && props.sessionSearchOpen()) {
-      queueMicrotask(() => searchInputRef?.focus());
+      const timer = window.setTimeout(() => {
+        searchInputRef?.focus({ preventScroll: true });
+      }, 60);
+      onCleanup(() => window.clearTimeout(timer));
     }
   });
 
@@ -1091,7 +1094,7 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
               onClick={() => {
                 props.setSidebarMenuOpen(false);
                 props.setSessionSearchOpen(true);
-                searchInputRef?.focus();
+                searchInputRef?.focus({ preventScroll: true });
               }}
             >
               <button

@@ -134,9 +134,57 @@
 
 .diffActions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
+}
+
+.segGroup {
+  display: inline-flex;
+  align-items: center;
   gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+}
+
+.segBtn {
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.segBtn:hover {
+  color: var(--neu-text);
+}
+
+.segBtn[data-active="true"] {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  font-weight: 600;
+}
+
+.astSubbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
 }
 
 .iconBtn {

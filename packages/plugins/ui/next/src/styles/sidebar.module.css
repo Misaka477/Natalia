@@ -14,6 +14,7 @@
   overflow: hidden;
   min-width: 0;
   position: relative;
+  z-index: 25;
   color: var(--neu-text);
   font-size: 14px;
   transition:
@@ -440,10 +441,12 @@
   flex-direction: column;
   position: relative;
   width: 100%;
+  overflow: hidden;
 }
 
 .rail {
   align-items: center;
+  overflow: visible;
 }
 
 .railControls {
@@ -458,6 +461,7 @@
   opacity: 0;
   transform: translateX(-8px);
   pointer-events: none;
+  overflow: visible;
   transition:
     opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -478,6 +482,7 @@
   width: var(--sidebar-content-width, 216px);
   opacity: 1;
   transform: translateX(0);
+  overflow: hidden;
   transition:
     opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -485,7 +490,8 @@
 
 .rail .wideBrowser {
   opacity: 0;
-  transform: translateX(-12px);
+  max-width: 0;
+  transform: translateX(-8px);
   pointer-events: none;
 }
 

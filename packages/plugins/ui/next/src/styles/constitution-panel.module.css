@@ -6,44 +6,52 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  padding: 5px 8px;
-  margin-bottom: 4px;
-  border-radius: 6px;
-  background: var(--neu-surface-sunken);
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
 }
 
 .toolbar {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  background: var(--neu-surface-raised);
+  gap: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
 }
 
 .editorRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .input {
   flex: 1 1 140px;
   min-width: 0;
-  padding: 4px 8px;
-  border: 1px solid var(--neu-border-strong);
-  border-radius: 4px;
-  background: var(--neu-surface-raised);
-  color: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
   font-size: 12px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--neu-accent);
 }
 
 /* The chooser beside a path input: same height and type size as the input it
@@ -52,13 +60,13 @@
   flex: 0 0 auto;
   cursor: pointer;
   color: var(--neu-accent);
-  border-color: var(--neu-border-strong);
-  background: var(--neu-surface-raised-strong);
+  border-color: var(--neu-hairline);
+  background: var(--neu-bg-light);
   font-size: 12px;
 }
 
 .browse:hover {
-  background: var(--neu-border);
+  background: var(--neu-hover-overlay);
 }
 
 .textarea {
@@ -78,7 +86,7 @@
 .rowMain {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
   min-width: 0;
   font-size: 12px;
 }
@@ -86,25 +94,43 @@
 .rowActions {
   display: flex;
   flex: none;
-  gap: 5px;
+  align-items: center;
+  gap: 6px;
 }
 
 .btn {
-  padding: 2px 9px;
-  border: none;
-  border-radius: 999px;
-  background: var(--neu-surface-raised-strong);
-  color: inherit;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 7px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: inherit;
   cursor: pointer;
   font-size: 11px;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.btn:hover {
-  background: var(--neu-surface-raised-strong);
+.btn:hover:not(:disabled) {
+  border-color: var(--neu-accent);
+  color: var(--neu-accent);
+}
+
+.btn[data-active="true"] {
+  background: var(--neu-accent-soft);
+  border-color: color-mix(in srgb, var(--neu-accent) 35%, transparent);
+  color: var(--neu-accent);
+  font-weight: 600;
 }
 
 .btn[data-danger] {
   background: var(--neu-state-danger-bg);
+  border-color: var(--neu-state-danger-border);
+  color: var(--neu-error);
 }
 
 .btn[data-danger]:hover {

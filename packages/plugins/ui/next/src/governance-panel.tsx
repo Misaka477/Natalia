@@ -693,14 +693,20 @@ function DriftCard(props: {
           </span>
         </Show>
       </div>
-      <div class={drift.goal}>Goal: {finding().originalObjective}</div>
+      <div class={drift.goal}>
+        {t("gov.goalPrefix")}
+        {finding().originalObjective}
+      </div>
       <Show when={finding().planID}>
-        <div class={drift.meta}>Plan: {finding().planID}</div>
+        <div class={drift.meta}>
+          {t("gov.planPrefix")}
+          {finding().planID}
+        </div>
       </Show>
       <Show when={props.resolveContract(finding().planID)}>
         {(contract) => (
           <div class={drift.section}>
-            <div class={drift.sectionTitle}>Reference frame</div>
+            <div class={drift.sectionTitle}>{t("gov.refFrame")}</div>
             <Show when={contract().scope?.length}>
               <div class={drift.evidence}>
                 scope: {contract().scope!.join(", ")}
@@ -723,7 +729,8 @@ function DriftCard(props: {
         )}
       </Show>
       <div class={drift.current}>
-        Current: {activityView().shown.join(", ")}
+        {t("gov.currentPrefix")}
+        {activityView().shown.join(", ")}
         <Show when={activityView().hiddenCount > 0 || activityExpanded()}>
           <button
             type="button"
@@ -743,7 +750,7 @@ function DriftCard(props: {
         }
       >
         <div class={drift.section}>
-          <div class={drift.sectionTitle}>Why this fired</div>
+          <div class={drift.sectionTitle}>{t("gov.whyFired")}</div>
           <Show when={finding().contractVersion !== undefined}>
             <div class={drift.meta}>contract v{finding().contractVersion}</div>
           </Show>
@@ -758,7 +765,7 @@ function DriftCard(props: {
       </Show>
       <Show when={evidenceItems().length}>
         <div class={drift.section}>
-          <div class={drift.sectionTitle}>Evidence</div>
+          <div class={drift.sectionTitle}>{t("gov.evidenceSection")}</div>
           <For each={evidenceView().shown}>
             {(item) => <div class={drift.evidence}>{item}</div>}
           </For>
@@ -779,7 +786,7 @@ function DriftCard(props: {
       </Show>
       <Show when={finding().applicableConstraints?.length}>
         <div class={drift.section}>
-          <div class={drift.sectionTitle}>Constraints</div>
+          <div class={drift.sectionTitle}>{t("gov.constraintsSection")}</div>
           <For each={finding().applicableConstraints}>
             {(item) => <div class={drift.evidence}>{item}</div>}
           </For>
@@ -1497,42 +1504,23 @@ export function GovernancePane(props: {
         <button
           type="button"
           class="review-subtab"
-          data-active={tab() === "drift"}
-          onClick={() => setTab("drift")}
-        >
-          Drift
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
           data-active={tab() === "constitution"}
           onClick={() => setTab("constitution")}
         >
-          Constitution
+          {t("gov.tabConstitution")}
         </button>
         <button
           type="button"
           class="review-subtab"
-          data-active={tab() === "decisions"}
-          onClick={() => setTab("decisions")}
+          data-active={
+            tab() === "drift" ||
+            tab() === "decisions" ||
+            tab() === "evidence" ||
+            tab() === "completions"
+          }
+          onClick={() => setTab("drift")}
         >
-          Decisions
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "evidence"}
-          onClick={() => setTab("evidence")}
-        >
-          Evidence
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "completions"}
-          onClick={() => setTab("completions")}
-        >
-          Completions
+          {t("gov.tabAudit")}
         </button>
         <button
           type="button"
@@ -1540,33 +1528,44 @@ export function GovernancePane(props: {
           data-active={tab() === "workgraph"}
           onClick={() => setTab("workgraph")}
         >
-          Work Graph
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "notices"}
-          onClick={() => setTab("notices")}
-        >
-          Notices
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "growth"}
-          onClick={() => setTab("growth")}
-        >
-          Growth
-        </button>
-        <button
-          type="button"
-          class="review-subtab"
-          data-active={tab() === "eval"}
-          onClick={() => setTab("eval")}
-        >
-          Eval
+          {t("gov.tabWorkGraph")}
         </button>
       </div>
+      <Show
+        when={
+          tab() === "drift" ||
+          tab() === "decisions" ||
+          tab() === "evidence" ||
+          tab() === "completions"
+        }
+      >
+        <div class={styles.auditSubbar}>
+          <button
+            type="button"
+            class={styles.scopeBtn}
+            data-active={tab() === "drift"}
+            onClick={() => setTab("drift")}
+          >
+            {t("gov.subDrift")}
+          </button>
+          <button
+            type="button"
+            class={styles.scopeBtn}
+            data-active={tab() === "decisions"}
+            onClick={() => setTab("decisions")}
+          >
+            {t("gov.subDecisions")}
+          </button>
+          <button
+            type="button"
+            class={styles.scopeBtn}
+            data-active={tab() === "evidence" || tab() === "completions"}
+            onClick={() => setTab("evidence")}
+          >
+            {t("gov.subEvidence")}
+          </button>
+        </div>
+      </Show>
       <div
         class={styles.content}
         ref={setContentEl}
@@ -1602,10 +1601,7 @@ export function GovernancePane(props: {
               !liveDrift().length && !(props.state.driftFindings ?? []).length
             }
           >
-            <div class="neu-gov-empty">
-              No drift findings yet. The evaluator opens them from accepted
-              contracts, constitution hits or behaviour signals.
-            </div>
+            <div class="neu-gov-empty">{t("gov.driftEmpty")}</div>
           </Show>
         </Show>
         <Show when={tab() === "constitution"}>
@@ -1855,7 +1851,7 @@ export function GovernancePane(props: {
                         disabled={actionBusy()}
                         onClick={() => openOverrideEditor(rule)}
                       >
-                        Override
+                        {t("gov.overrideBtn")}
                       </button>
                     </Show>
                     <button
@@ -1920,7 +1916,7 @@ export function GovernancePane(props: {
                     class={constitution.protected}
                     title={t("gov.systemProtectedTitle")}
                   >
-                    系统保护
+                    {t("gov.systemProtected")}
                   </span>
                 </Show>
               </div>
@@ -2093,10 +2089,7 @@ export function GovernancePane(props: {
               !Object.values(props.state.constitutionRules ?? {}).length
             }
           >
-            <div class="neu-gov-empty">
-              No constitution rules loaded. Seeded self-protection rules and
-              user/project rules appear here.
-            </div>
+            <div class="neu-gov-empty">{t("gov.constitutionEmpty")}</div>
           </Show>
           {dialog}
         </Show>
@@ -2108,7 +2101,7 @@ export function GovernancePane(props: {
               data-active={decisionScope() === "session"}
               onClick={() => setDecisionScope("session")}
             >
-              This session
+              {t("gov.scopeSession")}
             </button>
             <button
               type="button"
@@ -2116,7 +2109,7 @@ export function GovernancePane(props: {
               data-active={decisionScope() === "workspace"}
               onClick={() => setDecisionScope("workspace")}
             >
-              Workspace
+              {t("gov.scopeWorkspace")}
             </button>
           </div>
           <For
@@ -2135,12 +2128,14 @@ export function GovernancePane(props: {
                   <span class={styles.cardMeta}>{record.id}</span>
                 </div>
                 <div class={styles.cardSection}>
-                  <div class={styles.cardLabel}>Decision</div>
+                  <div class={styles.cardLabel}>{t("gov.labelDecision")}</div>
                   <div class={styles.cardText}>{record.decision}</div>
                 </div>
                 <Show when={record.rationale?.length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Rationale</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelRationale")}
+                    </div>
                     <div class={styles.cardText}>
                       {(record.rationale ?? []).join("; ")}
                     </div>
@@ -2148,7 +2143,9 @@ export function GovernancePane(props: {
                 </Show>
                 <Show when={record.alternatives?.length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Alternatives</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelAlternatives")}
+                    </div>
                     <For each={record.alternatives ?? []}>
                       {(item: { option: string; rejectedReason?: string }) => (
                         <div class={styles.cardText}>
@@ -2163,7 +2160,9 @@ export function GovernancePane(props: {
                 </Show>
                 <Show when={record.consequences?.length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Consequences</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelConsequences")}
+                    </div>
                     <div class={styles.cardText}>
                       {(record.consequences ?? []).join("; ")}
                     </div>
@@ -2177,14 +2176,10 @@ export function GovernancePane(props: {
               !liveDecisions().length && !(props.state.decisions ?? []).length
             }
           >
-            <div class="neu-gov-empty">
-              No decision.recorded for this {decisionScope()} scope yet. Session
-              decisions appear when the model calls record_decision; workspace
-              decisions come from an explicit workspace promotion.
-            </div>
+            <div class="neu-gov-empty">{t("gov.decisionsEmpty")}</div>
           </Show>
         </Show>
-        <Show when={tab() === "evidence"}>
+        <Show when={tab() === "evidence" || tab() === "completions"}>
           <For
             each={
               liveEvidence().length
@@ -2203,7 +2198,9 @@ export function GovernancePane(props: {
                 <div class={styles.cardText}>{record.objective}</div>
                 <Show when={record.validations?.length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Validations</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelValidations")}
+                    </div>
                     <For each={record.validations ?? []}>
                       {(validation: {
                         command: string;
@@ -2221,7 +2218,7 @@ export function GovernancePane(props: {
                 <Show when={record.changes?.length}>
                   <div class={styles.cardSection}>
                     <div class={styles.cardLabel}>
-                      Changes ({record.changes!.length})
+                      {t("gov.labelChanges", { count: record.changes!.length })}
                     </div>
                     <For each={record.changes ?? []}>
                       {(change: {
@@ -2239,7 +2236,9 @@ export function GovernancePane(props: {
                 </Show>
                 <Show when={record.knownGaps?.length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Known gaps</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelKnownGaps")}
+                    </div>
                     <div class={styles.cardText}>
                       {(record.knownGaps ?? []).join("; ")}
                     </div>
@@ -2248,19 +2247,6 @@ export function GovernancePane(props: {
               </div>
             )}
           </For>
-          <Show
-            when={
-              !liveEvidence().length && !(props.state.evidence ?? []).length
-            }
-          >
-            <div class="neu-gov-empty">
-              No evidence.recorded for this session yet. Evidence appears after
-              the model runs record_validation / record_completion or Nia
-              submits an audit report.
-            </div>
-          </Show>
-        </Show>
-        <Show when={tab() === "completions"}>
           <For
             each={
               liveCompletions().length
@@ -2285,25 +2271,33 @@ export function GovernancePane(props: {
                   </button>
                 </div>
                 <div class={styles.cardSection}>
-                  <div class={styles.cardLabel}>Target</div>
+                  <div class={styles.cardLabel}>{t("gov.labelTarget")}</div>
                   <div class={styles.cardText}>{record.objective}</div>
                 </div>
                 <div class={styles.cardSection}>
-                  <div class={styles.cardLabel}>Changes</div>
+                  <div class={styles.cardLabel}>
+                    {t("gov.labelChanges", { count: 1 })}
+                  </div>
                   <div class={styles.cardText}>{record.changeSummary}</div>
                 </div>
                 <Show when={record.behaviorImpact}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Behavior impact</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelBehaviorImpact")}
+                    </div>
                     <div class={styles.cardText}>{record.behaviorImpact}</div>
                   </div>
                 </Show>
                 <div class={styles.cardSection}>
-                  <div class={styles.cardLabel}>Validation matrix</div>
+                  <div class={styles.cardLabel}>
+                    {t("gov.labelValidationMatrix")}
+                  </div>
                   <Show
                     when={(record.validations ?? []).length}
                     fallback={
-                      <div class={styles.cardText}>no validation recorded</div>
+                      <div class={styles.cardText}>
+                        {t("gov.noValidationRecorded")}
+                      </div>
                     }
                   >
                     <For each={record.validations ?? []}>
@@ -2322,7 +2316,9 @@ export function GovernancePane(props: {
                 </div>
                 <Show when={(record.knownGaps ?? []).length}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Known gaps</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelKnownGaps")}
+                    </div>
                     <div class={styles.cardText}>
                       {(record.knownGaps ?? []).join("; ")}
                     </div>
@@ -2330,30 +2326,10 @@ export function GovernancePane(props: {
                 </Show>
                 <Show when={record.humanValidation}>
                   <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Human validation</div>
+                    <div class={styles.cardLabel}>
+                      {t("gov.labelHumanValidation")}
+                    </div>
                     <div class={styles.cardText}>{record.humanValidation}</div>
-                  </div>
-                </Show>
-                <Show when={(record.externalSideEffects ?? []).length}>
-                  <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>External side effects</div>
-                    <div class={styles.cardText}>
-                      {(record.externalSideEffects ?? []).join("; ")}
-                    </div>
-                  </div>
-                </Show>
-                <Show when={(record.evidenceIDs ?? []).length}>
-                  <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Evidence IDs</div>
-                    <div class={styles.cardText}>
-                      {(record.evidenceIDs ?? []).join(", ")}
-                    </div>
-                  </div>
-                </Show>
-                <Show when={record.rollbackState}>
-                  <div class={styles.cardSection}>
-                    <div class={styles.cardLabel}>Rollback</div>
-                    <div class={styles.cardText}>{record.rollbackState}</div>
                   </div>
                 </Show>
               </div>
@@ -2361,14 +2337,13 @@ export function GovernancePane(props: {
           </For>
           <Show
             when={
+              !liveEvidence().length &&
+              !(props.state.evidence ?? []).length &&
               !liveCompletions().length &&
               !(props.state.completions ?? []).length
             }
           >
-            <div class="neu-gov-empty">
-              No completion.recorded yet. A completion card appears after the
-              model calls record_completion with its validation matrix.
-            </div>
+            <div class="neu-gov-empty">{t("gov.evidenceEmpty")}</div>
           </Show>
         </Show>
         <Show when={tab() === "workgraph"}>
@@ -2398,251 +2373,6 @@ export function GovernancePane(props: {
               <WorkGraphTree state={workGraphState()} />
             </Show>
           </div>
-        </Show>
-        <Show when={tab() === "notices"}>
-          <div class={styles.sectionTitle}>Runtime Notices</div>
-          <For
-            each={
-              liveNotices().length
-                ? liveNotices()
-                : (props.state.runtimeNotices ?? [])
-            }
-          >
-            {(notice) => (
-              <div class={styles.row}>
-                <span class={styles.title} data-priority={notice.kind}>
-                  {notice.kind} · r{notice.revision}
-                </span>
-                <span class={styles.text}>{notice.summary}</span>
-                <span class={styles.meta}>{notice.at}</span>
-              </div>
-            )}
-          </For>
-          <Show
-            when={
-              !liveNotices().length &&
-              !(props.state.runtimeNotices ?? []).length
-            }
-          >
-            <div class="neu-gov-empty">
-              No runtime notices yet — a config reload or agent switch records
-              one here.
-            </div>
-          </Show>
-        </Show>
-        <Show when={tab() === "growth"}>
-          {/* 全空时这个页面只说一件事。四段平铺的「什么都没有」是一屏散
-              文——需要行动的人打开它，得到的是一次阅读作业。哪一段有东
-              西，哪一段才出现。 */}
-          <Show
-            when={growthHasAnything()}
-            fallback={
-              <div class="neu-gov-empty">
-                {t("gov.growthEmpty")}
-                <br />
-                {t("gov.growthEmptyHint")}
-              </div>
-            }
-          >
-            <div class={styles.sectionTitle}>Growth Triggers</div>
-            {/* S4: the order is the triage's (frequency × potential, stable
-              tie-break), not the sources' own — the rank used to be
-              computed and read by nobody, so the operator re-derived the
-              priority by eye. The subtitle says which yardstick the order
-              is, so a reader never mistakes it for a chronology. */}
-            <div class={styles.text} style="margin-bottom:6px;">
-              {t("gov.growthSortHint")}
-            </div>
-            <For each={liveGrowthTriggers()}>
-              {(trigger) => (
-                <div class={styles.row}>
-                  <span class={styles.title}>{trigger.capability}</span>
-                  <span class={styles.text}>{trigger.reason}</span>
-                  <span class={styles.meta}>
-                    {trigger.rule} · {trigger.class} ·{" "}
-                    {Object.entries(trigger.evidence ?? {})
-                      .map(([key, value]) => `${key}=${value}`)
-                      .join(" ")}
-                  </span>
-                  {/* L7: the trigger surface. One click records the promotion
-                    fact (destination + required approval) and reloads — it
-                    does NOT run a mutation. The human hands the ranked
-                    trigger onward; the loop never takes itself from here. */}
-                  <button
-                    type="button"
-                    class={constitution.btn}
-                    disabled={actionBusy()}
-                    onClick={() =>
-                      void (async () => {
-                        const result = await promoteGrowthTriggerViaRpc(
-                          props.runtime,
-                          props.sessionID,
-                          trigger.capability,
-                        );
-                        setActionNotice(
-                          result?.promoted
-                            ? t("gov.promotionRecorded", {
-                                capability: trigger.capability,
-                                destination: result.destination,
-                                approval: result.approval,
-                                next: result.next,
-                              })
-                            : t("gov.promotionNotRecorded", {
-                                reason:
-                                  result?.reason ?? t("gov.unknownReason"),
-                              }),
-                        );
-                        await load();
-                      })()
-                    }
-                  >
-                    {t("gov.promote")}
-                  </button>
-                </div>
-              )}
-            </For>
-            <Show when={!liveGrowthTriggers().length}>
-              <div class="neu-gov-empty">
-                No growth trigger right now. A trigger is derived on each read
-                from the four growth systems (internal runs, external benchmark
-                gaps, correction patterns, capability curriculum) — nothing is
-                staged, and a trigger applies nothing.
-              </div>
-            </Show>
-            <div class={styles.sectionTitle}>Growth Proposals</div>
-            <For
-              each={
-                liveGrowthProposals().length
-                  ? liveGrowthProposals()
-                  : (props.state.growthProposals ?? [])
-              }
-            >
-              {(proposal) => (
-                <div class={styles.row}>
-                  <span class={styles.title}>{proposal.at}</span>
-                  <For each={proposal.suggestions ?? []}>
-                    {(suggestion) => (
-                      <span class={styles.text}>
-                        [{suggestion.kind}] {suggestion.capability} —{" "}
-                        {suggestion.reason} ({suggestion.observations}{" "}
-                        observations)
-                      </span>
-                    )}
-                  </For>
-                  <span class={styles.meta}>
-                    considered {proposal.considered?.tasks ?? 0} tasks ·{" "}
-                    {proposal.considered?.gaps ?? 0} gaps
-                  </span>
-                </div>
-              )}
-            </For>
-            <Show
-              when={
-                !liveGrowthProposals().length &&
-                !(props.state.growthProposals ?? []).length
-              }
-            >
-              <div class="neu-gov-empty">
-                No growth proposal yet. A proposal is a FACT — recording one
-                applies nothing; the destination's approval policy decides.
-              </div>
-            </Show>
-            <div class={styles.sectionTitle}>Growth Promotions</div>
-            <For
-              each={
-                liveGrowthPromotions().length
-                  ? liveGrowthPromotions()
-                  : (props.state.growthPromotions ?? [])
-              }
-            >
-              {(promotion) => (
-                <div class={styles.row}>
-                  <span class={styles.title}>
-                    {promotion.trigger?.capability ?? promotion.promotionID}
-                  </span>
-                  <span class={styles.text}>
-                    → {promotion.destination} ({promotion.approval}) ·{" "}
-                    {promotion.next}
-                  </span>
-                  <span class={styles.meta}>{promotion.at}</span>
-                </div>
-              )}
-            </For>
-            <Show
-              when={
-                !liveGrowthPromotions().length &&
-                !(props.state.growthPromotions ?? []).length
-              }
-            >
-              <div class="neu-gov-empty">
-                No promotion yet. Promoting a trigger records where it lands and
-                what approval it needs — it applies nothing by itself.
-              </div>
-            </Show>
-          </Show>
-        </Show>
-        <Show when={tab() === "eval"}>
-          {/* 同一个病：两段「什么都没有」。有数据才展开。 */}
-          <Show
-            when={
-              liveExternalJoinedTasks().length > 0 ||
-              (props.state.externalRuns ?? []).length > 0
-            }
-            fallback={<div class="neu-gov-empty">{t("gov.evalEmpty")}</div>}
-          >
-            <div class={styles.sectionTitle}>
-              External Benchmark — Per-Task Comparison
-            </div>
-            <For each={liveExternalJoinedTasks()}>
-              {(task) => (
-                <div class={styles.row}>
-                  <span class={styles.title}>{task.externalTaskID}</span>
-                  <span class={styles.text}>
-                    baseline {Math.round((task.baselineSuccessRate ?? 0) * 100)}
-                    % · ours {Math.round((task.ourSuccessRate ?? 0) * 100)}%
-                    over {task.ourRuns} run{task.ourRuns === 1 ? "" : "s"}
-                  </span>
-                  <span class={styles.meta}>
-                    {task.ourRuns > 0 &&
-                    (task.ourSuccessRate ?? 0) > (task.baselineSuccessRate ?? 0)
-                      ? "above baseline"
-                      : task.ourRuns > 0
-                        ? "at or below baseline"
-                        : "no runs yet"}
-                  </span>
-                </div>
-              )}
-            </For>
-            <Show when={!liveExternalJoinedTasks().length}>
-              <div class="neu-gov-empty">
-                No external benchmark runs joined yet. `natalia eval` records
-                one join per task; the comparison reads the benchmark's own
-                baseline against our recorded runs.
-              </div>
-            </Show>
-            <div class={styles.sectionTitle}>This Session's Recorded Runs</div>
-            <For each={props.state.externalRuns ?? []}>
-              {(run) => (
-                <div class={styles.row}>
-                  <span class={styles.title}>{run.externalTaskID}</span>
-                  <span class={styles.text}>
-                    {run.success === undefined
-                      ? "unscored"
-                      : run.success
-                        ? "success"
-                        : "failure"}{" "}
-                    · {run.benchmark}
-                  </span>
-                  <span class={styles.meta}>{run.at}</span>
-                </div>
-              )}
-            </For>
-            <Show when={!(props.state.externalRuns ?? []).length}>
-              <div class="neu-gov-empty">
-                No external run recorded in this session yet.
-              </div>
-            </Show>
-          </Show>
         </Show>
       </div>
     </div>

@@ -94,12 +94,9 @@ export function AgentBody(props: AgentBodyProps) {
 
   return (
     <div class={styles.agentWrap} data-hero={hero()}>
-      <Show when={props.sessionKey} keyed>
-        {props.notices}
-        <div
-          class={styles.agentWrap}
-          style={hero() ? { display: "none" } : undefined}
-        >
+      {props.notices}
+      <Show when={!hero() && props.sessionKey} keyed>
+        <div class={styles.agentWrap}>
           <Transcript
             messages={props.messages()}
             emptyTitle={props.emptyTitle}

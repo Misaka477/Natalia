@@ -12,18 +12,10 @@
  * Session, the workspace region's rail actions (Add Workspace and Search), and
  * the bottom-pinned Settings gear.
  */
-import {
-  createEffect,
-  createSignal,
-  onCleanup,
-  Show,
-  type JSX,
-} from "solid-js";
+import { Show, type JSX } from "solid-js";
 import { SlotMount } from "../slots/mount";
 import type { SlotsRegistry, SlotName } from "../slots/registry";
 import styles from "../styles/sidebar.module.css";
-
-const COLLAPSE_SETTLE_MS = 140;
 
 /** A hole with the shell's own fallback, so an unfilled slot is not a
  *  gap: the brand row and the settings seat are the shell's until a
@@ -56,92 +48,58 @@ export interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const t = props.t;
-  const collapsed = () => !props.leftVisible();
-  const [settled, setSettled] = createSignal(collapsed());
-  let lastWideWidth = props.leftWidth();
-  let everWide = !collapsed();
-
-  createEffect(() => {
-    if (!collapsed()) {
-      lastWideWidth = props.leftWidth();
-      everWide = true;
-      setSettled(false);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setSettled(true);
-    }, COLLAPSE_SETTLE_MS);
-    onCleanup(() => window.clearTimeout(timer));
-  });
-
-  // Wide content stays mounted while the collapse animates (fading via
-  // .fading), unmounts at settle, and remounts right away on expand.
-  const wide = () => !collapsed() || !settled();
+  const wide = () => props.leftVisible();
   const toggleLabel = () =>
-    !collapsed() ? t("sidebar.toggleCollapse") : t("sidebar.toggleOpen");
+    wide() ? t("sidebar.toggleCollapse") : t("sidebar.toggleOpen");
 
   return (
     <>
       <aside
-        class={[
-          styles.sidebar,
-          wide() ? styles.wide : styles.collapsed,
-          collapsed() && wide() ? styles.fading : "",
-          collapsed() && !wide() && everWide ? styles.railIn : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={
-          !collapsed()
-            ? { width: `${props.leftWidth()}px` }
-            : wide()
-              ? {
-                  width: "56px",
-                  "--sidebar-content-width": `${lastWideWidth - 24}px`,
-                }
-              : undefined
-        }
+        class={`${styles.sidebar} ${wide() ? "" : styles.collapsed}`}
+        style={{
+          width: wide() ? `${props.leftWidth()}px` : "56px",
+          "--sidebar-content-width": `${Math.max(180, props.leftWidth() - 24)}px`,
+        }}
         data-wide={wide()}
       >
         <div class={styles.logoRow}>
-          <Show when={wide()}>
-            <button
-              type="button"
-              class={styles.brand}
-              aria-label={t("sidebar.newSession")}
-              onClick={() => props.onCreateSession()}
-            >
-              <span class={styles.brandIdentity}>
-                <span class={styles.brandMark}>
-                  <SlotOr
-                    slots={props.slots}
-                    name="sidebar.brand.mark"
-                    t={t}
-                    fallback={
-                      <img
-                        class={styles.brandLogoImg}
-                        src="/brand.png"
-                        alt="Natalia"
-                      />
-                    }
-                  />
-                </span>
-                <span class={styles.brandName}>
-                  <SlotOr
-                    slots={props.slots}
-                    name="sidebar.brand.name"
-                    t={t}
-                    fallback={
-                      <>
-                        <span class={styles.brandTitle}>Natalia</span>
-                        <span class={styles.brandBadge}>CLI</span>
-                      </>
-                    }
-                  />
-                </span>
+          <button
+            type="button"
+            class={styles.brand}
+            aria-label={t("sidebar.newSession")}
+            tabIndex={wide() ? 0 : -1}
+            onClick={() => props.onCreateSession()}
+          >
+            <span class={styles.brandIdentity}>
+              <span class={styles.brandMark}>
+                <SlotOr
+                  slots={props.slots}
+                  name="sidebar.brand.mark"
+                  t={t}
+                  fallback={
+                    <img
+                      class={styles.brandLogoImg}
+                      src="/brand.png"
+                      alt="Natalia"
+                    />
+                  }
+                />
               </span>
-            </button>
-          </Show>
+              <span class={styles.brandName}>
+                <SlotOr
+                  slots={props.slots}
+                  name="sidebar.brand.name"
+                  t={t}
+                  fallback={
+                    <>
+                      <span class={styles.brandTitle}>Natalia</span>
+                      <span class={styles.brandBadge}>CLI</span>
+                    </>
+                  }
+                />
+              </span>
+            </span>
+          </button>
           <button
             type="button"
             class={`${styles.iconButton} ${styles.toggle}`}
@@ -208,11 +166,9 @@ export function Sidebar(props: SidebarProps) {
                 <path d="M8 5V11" stroke="currentColor" />
                 <path d="M5 8H11" stroke="currentColor" />
               </svg>
-              <Show when={wide()}>
-                <span class={styles.newSessionLabel}>
-                  {t("sidebar.newSessionShort")}
-                </span>
-              </Show>
+              <span class={styles.newSessionLabel}>
+                {t("sidebar.newSessionShort")}
+              </span>
             </span>
           </span>
         </button>
@@ -263,11 +219,9 @@ export function Sidebar(props: SidebarProps) {
                       stroke-miterlimit="10"
                     />
                   </svg>
-                  <Show when={wide()}>
-                    <span class={styles.settingsLabel}>
-                      {t("topbar.settings")}
-                    </span>
-                  </Show>
+                  <span class={styles.settingsLabel}>
+                    {t("topbar.settings")}
+                  </span>
                 </button>
               }
             />

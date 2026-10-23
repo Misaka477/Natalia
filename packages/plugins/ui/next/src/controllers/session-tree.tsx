@@ -985,17 +985,7 @@ export interface SessionSidebarProps {
 
 export function SessionTreeRegion(props: SessionSidebarProps) {
   const t = props.t;
-  const collapsed = () => (props.wide ? !props.wide() : false);
-  const [settled, setSettled] = createSignal(collapsed());
-  createEffect(() => {
-    if (!collapsed()) {
-      setSettled(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSettled(true), 140);
-    onCleanup(() => window.clearTimeout(timer));
-  });
-  const wide = () => !collapsed() || !settled();
+  const wide = () => (props.wide ? props.wide() : true);
   let searchInputRef: HTMLInputElement | undefined;
 
   const [groupBy, setGroupBy] = createSignal<SessionGroupBy>("workspace");
@@ -1028,71 +1018,63 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
 
   return (
     <div class={`${styles.browserRoot} ${wide() ? "" : styles.rail}`}>
-      <Show
-        when={wide()}
-        fallback={
-          <div class={styles.railControls}>
-            <button
-              type="button"
-              class={styles.railIconBtn}
-              data-tooltip={t("sidebar.addWorkspace")}
-              aria-label={t("sidebar.addWorkspace")}
-              onClick={() => {
-                props.setSidebarMenuOpen(false);
-                props.setWorkspaceOpen(true);
-              }}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-                stroke-width="1"
-              >
-                <path
-                  d="M5.54492 2.06738C5.91034 2.06754 6.26318 2.20149 6.53711 2.44336L7.94043 3.68164V4.7998C7.71462 4.74105 7.50367 4.63139 7.32617 4.47461L5.87598 3.19238C5.78477 3.11185 5.66658 3.06754 5.54492 3.06738H2.94922C2.67322 3.06738 2.44946 3.29145 2.44922 3.56738V12.4326C2.44927 12.7087 2.67311 12.9326 2.94922 12.9326H12.9326C13.2086 12.9325 13.4326 12.7086 13.4326 12.4326V8.53613H14.4326V12.4326C14.4326 13.2609 13.7609 13.9325 12.9326 13.9326H2.94922C2.12083 13.9326 1.44927 13.261 1.44922 12.4326V3.56738C1.44946 2.73916 2.12094 2.06738 2.94922 2.06738H5.54492Z"
-                  fill="currentColor"
-                />
-                <path d="M9.75977 4.50208H14.5509" stroke="currentColor" />
-                <path
-                  d="M12.1492 6.89758L12.1492 2.10642"
-                  stroke="currentColor"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class={styles.railIconBtn}
-              data-tooltip={t("sidebar.search")}
-              aria-label={t("sidebar.search")}
-              onClick={() => {
-                props.setSidebarMenuOpen(false);
-                props.setSessionSearchOpen(true);
-                props.expandSidebar?.();
-              }}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-                stroke-width="1"
-              >
-                <path
-                  d="M6.58727 11.8586C9.55061 11.8586 11.9529 9.45637 11.9529 6.49304C11.9529 3.5297 9.55061 1.12744 6.58727 1.12744C3.62394 1.12744 1.22168 3.5297 1.22168 6.49304C1.22168 9.45637 3.62394 11.8586 6.58727 11.8586Z"
-                  stroke="currentColor"
-                />
-                <path
-                  d="M10.2991 10.3933L14.7783 14.8725"
-                  stroke="currentColor"
-                />
-              </svg>
-            </button>
-          </div>
-        }
-      >
+      <div class={styles.railControls} aria-hidden={wide()}>
+        <button
+          type="button"
+          class={styles.railIconBtn}
+          data-tooltip={t("sidebar.addWorkspace")}
+          aria-label={t("sidebar.addWorkspace")}
+          tabIndex={wide() ? -1 : 0}
+          onClick={() => {
+            props.setSidebarMenuOpen(false);
+            props.setWorkspaceOpen(true);
+          }}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+            stroke-width="1"
+          >
+            <path
+              d="M5.54492 2.06738C5.91034 2.06754 6.26318 2.20149 6.53711 2.44336L7.94043 3.68164V4.7998C7.71462 4.74105 7.50367 4.63139 7.32617 4.47461L5.87598 3.19238C5.78477 3.11185 5.66658 3.06754 5.54492 3.06738H2.94922C2.67322 3.06738 2.44946 3.29145 2.44922 3.56738V12.4326C2.44927 12.7087 2.67311 12.9326 2.94922 12.9326H12.9326C13.2086 12.9325 13.4326 12.7086 13.4326 12.4326V8.53613H14.4326V12.4326C14.4326 13.2609 13.7609 13.9325 12.9326 13.9326H2.94922C2.12083 13.9326 1.44927 13.261 1.44922 12.4326V3.56738C1.44946 2.73916 2.12094 2.06738 2.94922 2.06738H5.54492Z"
+              fill="currentColor"
+            />
+            <path d="M9.75977 4.50208H14.5509" stroke="currentColor" />
+            <path d="M12.1492 6.89758L12.1492 2.10642" stroke="currentColor" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class={styles.railIconBtn}
+          data-tooltip={t("sidebar.search")}
+          aria-label={t("sidebar.search")}
+          tabIndex={wide() ? -1 : 0}
+          onClick={() => {
+            props.setSidebarMenuOpen(false);
+            props.setSessionSearchOpen(true);
+            props.expandSidebar?.();
+          }}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+            stroke-width="1"
+          >
+            <path
+              d="M6.58727 11.8586C9.55061 11.8586 11.9529 9.45637 11.9529 6.49304C11.9529 3.5297 9.55061 1.12744 6.58727 1.12744C3.62394 1.12744 1.22168 3.5297 1.22168 6.49304C1.22168 9.45637 3.62394 11.8586 6.58727 11.8586Z"
+              stroke="currentColor"
+            />
+            <path d="M10.2991 10.3933L14.7783 14.8725" stroke="currentColor" />
+          </svg>
+        </button>
+      </div>
+      <div class={styles.wideBrowser} aria-hidden={!wide()}>
         <div class={styles.sectionHeader}>
           <span
             class={`${styles.sectionLabel} ${props.sessionSearchOpen() ? styles.sectionLabelHidden : ""}`}
@@ -1476,7 +1458,7 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
             <span class={styles.fade} />
           </div>
         </div>
-      </Show>
+      </div>
     </div>
   );
 }

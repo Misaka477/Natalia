@@ -3136,15 +3136,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   onMount(() => {
     const updateLayout = () => {
       const width = window.innerWidth;
-      const height = window.innerHeight;
-      const screenWidth =
-        window.screen?.availWidth || window.screen?.width || width;
-      const screenHeight =
-        window.screen?.availHeight || window.screen?.height || height;
-      const area = width * height;
-      const quarterArea = screenWidth * screenHeight * 0.25;
-      const tiny =
-        width <= 1000 || height <= screenHeight * 0.5 || area <= quarterArea;
+      const tiny = width <= 1000;
       const mode = tiny ? "tiny" : width <= 1700 ? "compact" : "wide";
       setLayoutMode(mode);
       if (mode !== "wide") {
@@ -3471,6 +3463,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           <button
             type="button"
             class="neu-collapsed-rail neu-right-rail"
+            style={{ display: "none" }}
             onClick={() => setRightVisible(true)}
             title={t("workbench.expandRight")}
           >

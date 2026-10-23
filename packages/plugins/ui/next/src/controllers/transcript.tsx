@@ -25,6 +25,7 @@ import type {
 import { humanizeToolResult, pendingToolLink } from "@natalia/ui-model";
 import { transcriptRefs } from "../transcript-refs";
 import { transcriptScrollMemory } from "../transcript-scroll-memory";
+import { PanelState } from "../components/PanelState";
 import { anchorIndexFor, readTranscriptAnchor } from "./scroll-memory";
 import { goalCommandInstruction } from "../app-neu";
 import type { ComposerAttachment } from "../components/Composer";
@@ -315,6 +316,19 @@ export function MainPanes(props: MainPanesProps) {
                 >
                   <Show when={feedbackNotice()}>
                     <div class="neu-gov-action-note">{feedbackNotice()}</div>
+                  </Show>
+                  {/* The startup data failed after every retry. The shell says
+                      so once, at the top of the transcript, with the retry that
+                      re-runs the fetch — an empty session list or an empty
+                      permission menu must not read as "no data exists". */}
+                  <Show when={startupDataDegraded()}>
+                    <PanelState
+                      state="error"
+                      title={t("transcript.startupDataFailed")}
+                      description={t("transcript.startupDataFailedHint")}
+                      actionLabel={t("state.retry")}
+                      onAction={() => void loadSecondaryStartupData()}
+                    />
                   </Show>
                   <div class={styles.mainWrap}>
                     <Transcript

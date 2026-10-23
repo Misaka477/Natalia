@@ -103,6 +103,9 @@ export const en = {
   "transcript.reasoningEffort": "Reasoning effort",
   "transcript.configLoadFailedRetry": "Config failed to load — click to retry",
   "transcript.configLoadFailed": "Config failed to load",
+  "transcript.startupDataFailed": "The startup data failed to load",
+  "transcript.startupDataFailedHint":
+    "The session and config data could not be read. Retry — until it succeeds, the lists and menus may be empty.",
   "transcript.selectPermission": "Select permission",
   "transcript.rollbackPrepared": "Rollback ready: {label}",
   "transcript.rollbackEffectiveOnSend":

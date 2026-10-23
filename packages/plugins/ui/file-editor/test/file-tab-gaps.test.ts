@@ -17,6 +17,7 @@
  */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { en, zh } from "../src/locales";
 
 const repoRoot = join(import.meta.dir, "..", "..", "..", "..");
 const editor = await Bun.file(
@@ -38,19 +39,24 @@ test("the selected row keeps its label readable", () => {
 });
 
 test("the right-click menu copies, cuts, pastes and names both paths", () => {
-  for (const label of [
-    "复制",
-    "剪切",
-    "复制相对路径",
-    "复制绝对路径",
-    "重命名",
-    "删除",
-    "新建文件夹",
-  ])
-    expect(editor).toContain(`label: "${label}"`);
+  for (const [key, zhLabel, enLabel] of [
+    ["files.copy", "复制", "Copy"],
+    ["files.cut", "剪切", "Cut"],
+    ["files.copyRelPath", "复制相对路径", "Copy relative path"],
+    ["files.copyAbsPath", "复制绝对路径", "Copy absolute path"],
+    ["files.rename", "重命名", "Rename"],
+    ["files.delete", "删除", "Delete"],
+    ["files.newFolder", "新建文件夹", "New folder"],
+  ] as const) {
+    expect(editor).toContain(`label: t("${key}")`);
+    expect(zh[key]).toBe(zhLabel);
+    expect(en[key]).toBe(enLabel);
+  }
   // 粘贴 names which kind it is, so the label is built rather than literal.
-  expect(editor).toContain('"粘贴（移动）"');
-  expect(editor).toContain('"粘贴（复制）"');
+  expect(editor).toContain('t("files.pasteMove")');
+  expect(editor).toContain('t("files.pasteCopy")');
+  expect(zh["files.pasteMove"]).toBe("粘贴（移动）");
+  expect(zh["files.pasteCopy"]).toBe("粘贴（复制）");
   // The clipboard is real state, so 粘贴 only exists while something is on it.
   expect(editor).toContain("const [clipboard, setClipboard] = createSignal");
   expect(editor).toContain("if (clipboard())");

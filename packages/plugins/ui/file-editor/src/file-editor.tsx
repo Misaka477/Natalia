@@ -41,6 +41,7 @@ import { lintGutter } from "@codemirror/lint";
 import { shell } from "@codemirror/legacy-modes/mode/shell";
 import { cmake } from "@codemirror/legacy-modes/mode/cmake";
 import type { Extension } from "@codemirror/state";
+import { bindFileEditorLocale } from "./locales";
 
 type FileNode = {
   name: string;
@@ -225,7 +226,9 @@ export function FileEditor(props: {
   transport?: UiTransport;
   runtime?: RuntimeClient;
   projection?: UiProjection;
+  extra?: unknown;
 }) {
+  const t = bindFileEditorLocale(props.extra);
   const [contents, setContents] = createSignal<Record<string, string>>({});
   const [selectedPath, setSelectedPath] = createSignal<string>("");
   const [openTabs, setOpenTabs] = createSignal<Array<{ path: string }>>([]);
@@ -373,7 +376,7 @@ export function FileEditor(props: {
       setListError(
         error instanceof Error && error.message
           ? error.message
-          : "无法读取工作区文件列表",
+          : t("files.listErrorDefault") || "无法读取工作区文件列表",
       );
       return;
     }
@@ -925,7 +928,7 @@ export function FileEditor(props: {
     const items: ContextMenuItem[] = [
       {
         type: "item",
-        label: "新建文件",
+        label: t("files.newFile"),
         onClick() {
           selectContextDirectory(path);
           openNewFile();
@@ -933,7 +936,7 @@ export function FileEditor(props: {
       },
       {
         type: "item",
-        label: "新建文件夹",
+        label: t("files.newFolder"),
         onClick() {
           selectContextDirectory(path);
           openNewFolder();
@@ -945,7 +948,7 @@ export function FileEditor(props: {
     if (clipboard()) {
       items.push({
         type: "item",
-        label: clipboard()!.cut ? "粘贴（移动）" : "粘贴（复制）",
+        label: clipboard()!.cut ? t("files.pasteMove") : t("files.pasteCopy"),
         onClick() {
           void pasteClipboard();
         },
@@ -957,47 +960,53 @@ export function FileEditor(props: {
         { type: "separator" },
         {
           type: "item",
-          label: "复制",
+          label: t("files.copy"),
           onClick() {
             setClipboard({ path, cut: false });
-            props.runtime?.diagnostic?.(`已复制：${relative}`, "info");
+            props.runtime?.diagnostic?.(
+              t("files.copied", { path: relative }),
+              "info",
+            );
           },
         },
         {
           type: "item",
-          label: "剪切",
+          label: t("files.cut"),
           onClick() {
             setClipboard({ path, cut: true });
-            props.runtime?.diagnostic?.(`已剪切：${relative}`, "info");
+            props.runtime?.diagnostic?.(
+              t("files.cutDone", { path: relative }),
+              "info",
+            );
           },
         },
         { type: "separator" },
         {
           type: "item",
-          label: "复制相对路径",
+          label: t("files.copyRelPath"),
           onClick() {
-            void copyText(relative, `已复制相对路径：${relative}`);
+            void copyText(relative, t("files.copiedRel", { path: relative }));
           },
         },
         {
           type: "item",
-          label: "复制绝对路径",
+          label: t("files.copyAbsPath"),
           onClick() {
             const absolute = absolutePathFor(relative);
-            void copyText(absolute, `已复制绝对路径：${absolute}`);
+            void copyText(absolute, t("files.copiedAbs", { path: absolute }));
           },
         },
         { type: "separator" },
         {
           type: "item",
-          label: "重命名",
+          label: t("files.rename"),
           onClick() {
             openRename(path);
           },
         },
         {
           type: "item",
-          label: "删除",
+          label: t("files.delete"),
           danger: true,
           onClick() {
             void deletePath(path);
@@ -1109,7 +1118,7 @@ export function FileEditor(props: {
     <div class="neu-file-pane">
       <div class="neu-top-row">
         <div class="neu-file-header">
-          <span>资源管理器</span>
+          <span>{t("files.explorer")}</span>
         </div>
         <Show when={openTabs().length}>
           <div class="neu-file-tabs-scroll">
@@ -1134,7 +1143,7 @@ export function FileEditor(props: {
                   data-active={!preview()}
                   onClick={() => setPreview(false)}
                 >
-                  编辑
+                  {t("files.edit")}
                 </button>
                 <button
                   type="button"
@@ -1142,7 +1151,7 @@ export function FileEditor(props: {
                   data-active={preview()}
                   onClick={() => setPreview(true)}
                 >
-                  预览
+                  {t("files.preview")}
                 </button>
               </Show>
               <For each={openTabs()}>
@@ -1179,7 +1188,7 @@ export function FileEditor(props: {
                     <button
                       type="button"
                       class="neu-tab-close"
-                      aria-label="关闭文件"
+                      aria-label={t("files.closeFile")}
                       onClick={(event) => {
                         event.stopPropagation();
                         closeTab(tab.path);
@@ -1218,7 +1227,7 @@ export function FileEditor(props: {
             <Show when={listError()}>
               <div class="neu-file-list-error" role="alert">
                 <span class="neu-file-list-error-title">
-                  工作区列表读取失败
+                  {t("files.listErrorTitle") || "工作区列表读取失败"}
                 </span>
                 <span class="neu-file-list-error-detail">{listError()}</span>
                 <button
@@ -1226,7 +1235,7 @@ export function FileEditor(props: {
                   class="neu-file-list-error-retry"
                   onClick={() => void reloadWorkspace()}
                 >
-                  重试
+                  {t("files.retry")}
                 </button>
               </div>
             </Show>
@@ -1277,7 +1286,11 @@ export function FileEditor(props: {
               >
                 <Show
                   when={mediaURL()}
-                  fallback={<span class="neu-file-media-loading">读取中…</span>}
+                  fallback={
+                    <span class="neu-file-media-loading">
+                      {t("files.loadingMedia")}
+                    </span>
+                  }
                 >
                   <Show
                     when={mediaKindFor(selectedPath()) === "image"}
@@ -1319,10 +1332,10 @@ export function FileEditor(props: {
           >
             <div class="neu-file-dialog-title">
               {dialog()?.mode === "new-file"
-                ? "新建文件"
+                ? t("files.newFile")
                 : dialog()?.mode === "new-folder"
-                  ? "新建文件夹"
-                  : "重命名"}
+                  ? t("files.newFolder")
+                  : t("files.rename")}
             </div>
             <input
               class="neu-file-dialog-input"
@@ -1340,14 +1353,14 @@ export function FileEditor(props: {
                 class="neu-file-dialog-button"
                 onClick={() => setDialog(null)}
               >
-                取消
+                {t("files.cancel")}
               </button>
               <button
                 type="button"
                 class="neu-file-dialog-button neu-file-dialog-primary"
                 onClick={() => void submitDialog()}
               >
-                确定
+                {t("files.ok")}
               </button>
             </div>
           </div>

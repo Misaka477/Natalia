@@ -30,6 +30,7 @@ function TerminalPanelHost(props: { ctx: UiPluginContext }) {
       token={extra?.token}
       active={true}
       events={props.ctx.events}
+      extra={props.ctx.extra}
     />
   );
 }

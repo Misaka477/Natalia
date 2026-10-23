@@ -33,6 +33,7 @@ export function createFileEditorPlugin(): UiPlugin {
                 transport={ctx.transport}
                 runtime={ctx.runtime}
                 projection={ctx.projection}
+                extra={ctx.extra}
               />
             ),
             container,

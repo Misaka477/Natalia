@@ -6,6 +6,7 @@ import type {
 } from "@anthelia/contracts";
 import { WebTerminal, type WebTerminalApi } from "./web-terminal";
 import { reconcileTabs, sameTabs, type TerminalTab } from "./terminal-tabs";
+import { bindTerminalLocale } from "./locales";
 import "./styles.css";
 
 const MAX_TERMINALS_PER_SESSION = 8;
@@ -27,10 +28,6 @@ function newTerminalID() {
   return `terminal_${crypto.randomUUID()}`;
 }
 
-function tabTitle(index: number) {
-  return `终端 ${index + 1}`;
-}
-
 export function TerminalPane(
   props: {
     runtime?: RuntimeClient;
@@ -41,8 +38,11 @@ export function TerminalPane(
     events?: {
       subscribe(listener: (event: RuntimeEvent) => void): () => void;
     };
+    extra?: unknown;
   } = {},
 ) {
+  const t = bindTerminalLocale(props.extra);
+  const tabTitle = (index: number) => t("terminal.tabTitle", { n: index + 1 });
   const [tabs, setTabs] = createSignal<TerminalTab[]>([]);
   const [activeID, setActiveID] = createSignal<string>();
   const [limitError, setLimitError] = createSignal<string>();
@@ -206,7 +206,9 @@ export function TerminalPane(
   async function addTab() {
     if (!sessionID()) return;
     if (tabs().length >= MAX_TERMINALS_PER_SESSION) {
-      setLimitError(`每个会话最多 ${MAX_TERMINALS_PER_SESSION} 个终端`);
+      setLimitError(
+        t("terminal.limitError", { max: MAX_TERMINALS_PER_SESSION }),
+      );
       return;
     }
     const id = newTerminalID();
@@ -284,7 +286,7 @@ export function TerminalPane(
         fallback={
           <div class="terminal-output">
             <div class="terminal-line terminal-line-header">
-              选择一个会话以打开交互式终端
+              {t("terminal.selectSession")}
             </div>
           </div>
         }
@@ -299,8 +301,8 @@ export function TerminalPane(
           >
             {sessions().find((item) => item.id === activeID())?.inputOwner ===
             "human"
-              ? "人工控制"
-              : "模型控制"}
+              ? t("terminal.ownerHuman")
+              : t("terminal.ownerModel")}
           </span>
           <Show
             when={
@@ -312,9 +314,9 @@ export function TerminalPane(
               type="button"
               class="terminal-toolbar-btn"
               onClick={() => void claimActiveTerminal()}
-              title="接管终端"
+              title={t("terminal.takeoverTitle")}
             >
-              接管
+              {t("terminal.takeover")}
             </button>
           </Show>
           <Show
@@ -327,9 +329,9 @@ export function TerminalPane(
               type="button"
               class="terminal-toolbar-btn"
               onClick={() => void releaseActiveTerminal()}
-              title="交还模型控制"
+              title={t("terminal.releaseTitle")}
             >
-              交还模型
+              {t("terminal.release")}
             </button>
             <button
               type="button"
@@ -337,19 +339,19 @@ export function TerminalPane(
               onClick={() => void toggleSecureInput()}
               title={
                 sessions().find((item) => item.id === activeID())?.secureInput
-                  ? "结束安全输入"
-                  : "开始安全输入"
+                  ? t("terminal.secureEndTitle")
+                  : t("terminal.secureStartTitle")
               }
             >
               {sessions().find((item) => item.id === activeID())?.secureInput
-                ? "结束安全输入"
-                : "安全输入"}
+                ? t("terminal.secureEnd")
+                : t("terminal.secureStart")}
             </button>
           </Show>
           <input
             class="terminal-search-input"
             value={searchQuery()}
-            placeholder="搜索终端"
+            placeholder={t("terminal.searchPlaceholder")}
             onInput={(event) => setSearchQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") activeApi()?.findNext(searchQuery());
@@ -363,7 +365,7 @@ export function TerminalPane(
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.findNext(searchQuery())}
-            title="下一个匹配"
+            title={t("terminal.nextMatch")}
           >
             ↓
           </button>
@@ -371,7 +373,7 @@ export function TerminalPane(
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.findPrevious(searchQuery())}
-            title="上一个匹配"
+            title={t("terminal.prevMatch")}
           >
             ↑
           </button>
@@ -379,39 +381,39 @@ export function TerminalPane(
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.reset()}
-            title="刷新/重连当前终端"
+            title={t("terminal.refreshTitle")}
           >
-            刷新
+            {t("terminal.refresh")}
           </button>
           <button
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.clear()}
-            title="清空"
+            title={t("terminal.clear")}
           >
-            清空
+            {t("terminal.clear")}
           </button>
           <button
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => void activeApi()?.copy()}
-            title="复制"
+            title={t("terminal.copy")}
           >
-            复制
+            {t("terminal.copy")}
           </button>
           <button
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => void activeApi()?.paste()}
-            title="粘贴"
+            title={t("terminal.paste")}
           >
-            粘贴
+            {t("terminal.paste")}
           </button>
           <button
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.zoomOut()}
-            title="缩小字体"
+            title={t("terminal.zoomOut")}
           >
             A-
           </button>
@@ -419,7 +421,7 @@ export function TerminalPane(
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => activeApi()?.zoomIn()}
-            title="放大字体"
+            title={t("terminal.zoomIn")}
           >
             A+
           </button>
@@ -427,17 +429,17 @@ export function TerminalPane(
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => splitActiveTab("horizontal")}
-            title="纵向分屏"
+            title={t("terminal.splitVerticalTitle")}
           >
-            分屏↕
+            {t("terminal.splitVertical")}
           </button>
           <button
             type="button"
             class="terminal-toolbar-btn"
             onClick={() => splitActiveTab("vertical")}
-            title="横向分屏"
+            title={t("terminal.splitHorizontalTitle")}
           >
-            分屏↔
+            {t("terminal.splitHorizontal")}
           </button>
         </div>
         <div class="terminal-tabs">
@@ -455,7 +457,9 @@ export function TerminalPane(
                 <span
                   class="terminal-tab-close"
                   role="button"
-                  aria-label={`关闭 ${tabTitle(index())}`}
+                  aria-label={t("terminal.closeTab", {
+                    title: tabTitle(index()),
+                  })}
                   onClick={(event) => {
                     event.stopPropagation();
                     void closeTab(tab.id);
@@ -469,7 +473,7 @@ export function TerminalPane(
           <button
             type="button"
             class="terminal-tab-add"
-            title="新建终端"
+            title={t("terminal.newTab")}
             disabled={tabs().length >= MAX_TERMINALS_PER_SESSION}
             onClick={() => void addTab()}
           >

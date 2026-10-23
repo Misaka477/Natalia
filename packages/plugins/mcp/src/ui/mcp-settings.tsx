@@ -1,13 +1,16 @@
 import { createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import type { MCPServerConfig, RuntimeClient } from "@anthelia/contracts";
 import type { UiProjection } from "@natalia/ui-host";
+import { bindMcpLocale } from "./locales";
 
 type MCPType = "stdio" | "http";
 
 export function McpSettings(props: {
   runtime: RuntimeClient;
   projection: UiProjection;
+  extra?: unknown;
 }) {
+  const t = bindMcpLocale(props.extra);
   const [servers, setServers] = createSignal<Record<string, unknown>>({});
   const [adding, setAdding] = createSignal(false);
   const [type, setType] = createSignal<MCPType>("stdio");
@@ -87,15 +90,15 @@ export function McpSettings(props: {
 
   return (
     <div>
-      <div class="neu-settings-content-title">MCP 配置</div>
+      <div class="neu-settings-content-title">{t("mcp.title")}</div>
       <Show
         when={rows().length}
         fallback={
           <div class="neu-settings-item">
             <div class="neu-settings-item-main">
-              <span class="neu-settings-item-label">暂无 MCP 服务器</span>
+              <span class="neu-settings-item-label">{t("mcp.empty")}</span>
               <span class="neu-settings-item-description">
-                点击下方添加 MCP
+                {t("mcp.emptyHint")}
               </span>
             </div>
           </div>
@@ -107,14 +110,14 @@ export function McpSettings(props: {
               <span class="neu-extension-name">{row.name}</span>
               <span class="neu-extension-description">{row.description}</span>
               <span class="neu-extension-toggle" data-enabled={row.enabled}>
-                {row.enabled ? "已连接" : "未连接"}
+                {row.enabled ? t("mcp.connected") : t("mcp.disconnected")}
               </span>
               <button
                 type="button"
                 class="neu-extension-btn neu-extension-remove"
                 onClick={() => void removeMcp(row.name)}
               >
-                删除
+                {t("mcp.delete")}
               </button>
             </div>
           )}
@@ -134,7 +137,7 @@ export function McpSettings(props: {
           <input
             class="neu-form-input"
             value={name()}
-            placeholder="名称（例如 my-mcp）"
+            placeholder={t("mcp.namePlaceholder")}
             onInput={(event) => setName(event.currentTarget.value)}
           />
           <Show
@@ -143,7 +146,7 @@ export function McpSettings(props: {
               <input
                 class="neu-form-input"
                 value={url()}
-                placeholder="MCP URL（例如 https://example.com/mcp）"
+                placeholder={t("mcp.urlPlaceholder")}
                 onInput={(event) => setUrl(event.currentTarget.value)}
               />
             }
@@ -151,26 +154,26 @@ export function McpSettings(props: {
             <input
               class="neu-form-input"
               value={command()}
-              placeholder="command（例如 npx）"
+              placeholder={t("mcp.commandPlaceholder")}
               onInput={(event) => setCommand(event.currentTarget.value)}
             />
             <input
               class="neu-form-input"
               value={args()}
-              placeholder="args（空格分隔）"
+              placeholder={t("mcp.argsPlaceholder")}
               onInput={(event) => setArgs(event.currentTarget.value)}
             />
           </Show>
           <div class="neu-extension-form-actions">
             <button type="button" class="neu-extension-btn" onClick={resetForm}>
-              取消
+              {t("mcp.cancel")}
             </button>
             <button
               type="button"
               class="neu-extension-btn neu-extension-primary-btn"
               onClick={() => void addMcp()}
             >
-              添加
+              {t("mcp.add")}
             </button>
           </div>
         </div>
@@ -182,7 +185,7 @@ export function McpSettings(props: {
           class="neu-extension-add"
           onClick={() => setAdding(!adding())}
         >
-          添加 MCP
+          {t("mcp.addServer")}
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import type {
   RuntimeSkillCatalogEntry,
 } from "@anthelia/contracts";
 import type { UiEventBus } from "@natalia/ui-host";
+import { bindSkillsLocale, type SkillsLocaleKey } from "./locales";
 
 /**
  * The skill panel: list, switch, remove.
@@ -29,15 +30,20 @@ export function removableSource(source: string): boolean {
 }
 
 /** The badge a non-owned row carries where its delete button would be. */
-export function sourceLabel(source: string): string {
-  if (source === "plugin") return "插件内置";
-  if (source === "remote") return "远程索引";
+export function sourceLabel(
+  source: string,
+  t?: (key: SkillsLocaleKey) => string,
+): string {
+  if (source === "plugin") return t ? t("skills.sourcePlugin") : "插件内置";
+  if (source === "remote") return t ? t("skills.sourceRemote") : "远程索引";
   return source;
 }
 export function SkillsSettings(props: {
   runtime: RuntimeClient;
   events: UiEventBus;
+  extra?: unknown;
 }) {
+  const t = bindSkillsLocale(props.extra);
   const [skills, setSkills] = createSignal<RuntimeSkillCatalogEntry[]>([]);
   const [adding, setAdding] = createSignal(false);
   const [source, setSource] = createSignal("");
@@ -72,11 +78,13 @@ export function SkillsSettings(props: {
       });
       setSource("");
       setAdding(false);
-      setStatus("已提交安装，技能安装完成后会自动刷新列表");
+      setStatus(t("skills.installSubmitted"));
     } catch (error) {
       // The install is a command; a refusal names its reason.
       setStatus(
-        `安装失败：${error instanceof Error ? error.message : String(error)}`,
+        t("skills.installFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setBusy(false);
@@ -99,7 +107,10 @@ export function SkillsSettings(props: {
       await refresh();
     } catch (error) {
       setStatus(
-        `${skill.name} 切换失败：${error instanceof Error ? error.message : String(error)}`,
+        t("skills.toggleFailed", {
+          name: skill.name,
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setBusy(false);
@@ -114,12 +125,15 @@ export function SkillsSettings(props: {
     setStatus("");
     try {
       await props.runtime.skillRemove?.({ name: skill.name });
-      setStatus(`已删除 ${skill.name}`);
+      setStatus(t("skills.removed", { name: skill.name }));
       await refresh();
     } catch (error) {
       // A plugin-sourced skill refuses: the reason is the answer, so show it.
       setStatus(
-        `${skill.name} 删除失败：${error instanceof Error ? error.message : String(error)}`,
+        t("skills.removeFailed", {
+          name: skill.name,
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setBusy(false);
@@ -129,15 +143,15 @@ export function SkillsSettings(props: {
 
   return (
     <div>
-      <div class="neu-settings-content-title">Skill 配置</div>
+      <div class="neu-settings-content-title">{t("skills.title")}</div>
       <Show
         when={skills().length}
         fallback={
           <div class="neu-settings-item">
             <div class="neu-settings-item-main">
-              <span class="neu-settings-item-label">暂无技能</span>
+              <span class="neu-settings-item-label">{t("skills.empty")}</span>
               <span class="neu-settings-item-description">
-                点击下方添加技能
+                {t("skills.emptyHint")}
               </span>
             </div>
           </div>
@@ -158,7 +172,7 @@ export function SkillsSettings(props: {
                 data-enabled={skill.enabled}
                 role="switch"
                 aria-checked={skill.enabled}
-                aria-label={`${skill.enabled ? "停用" : "启用"} ${skill.name}`}
+                aria-label={`${skill.enabled ? t("skills.disable") : t("skills.enable")} ${skill.name}`}
                 disabled={busy() && pending() === skill.name}
                 onClick={() => void toggle(skill)}
               >
@@ -167,8 +181,8 @@ export function SkillsSettings(props: {
                   {pending() === skill.name && busy()
                     ? "…"
                     : skill.enabled
-                      ? "已启用"
-                      : "已停用"}
+                      ? t("skills.enabled")
+                      : t("skills.disabled")}
                 </span>
               </button>
               {/* The remove is the workspace's own: a skill that ships
@@ -179,7 +193,7 @@ export function SkillsSettings(props: {
                 when={removableSource(skill.source)}
                 fallback={
                   <span class="neu-extension-source">
-                    {sourceLabel(skill.source)}
+                    {sourceLabel(skill.source, t)}
                   </span>
                 }
               >
@@ -189,7 +203,9 @@ export function SkillsSettings(props: {
                   disabled={busy() && pending() === skill.name}
                   onClick={() => void remove(skill)}
                 >
-                  {pending() === skill.name && busy() ? "…" : "删除"}
+                  {pending() === skill.name && busy()
+                    ? "…"
+                    : t("skills.delete")}
                 </button>
               </Show>
             </div>
@@ -202,7 +218,7 @@ export function SkillsSettings(props: {
           <input
             class="neu-form-input"
             value={source()}
-            placeholder="技能 URL 或本地路径"
+            placeholder={t("skills.sourcePlaceholder")}
             onInput={(event) => setSource(event.currentTarget.value)}
           />
           <div class="neu-extension-form-actions">
@@ -214,7 +230,7 @@ export function SkillsSettings(props: {
                 setSource("");
               }}
             >
-              取消
+              {t("skills.cancel")}
             </button>
             <button
               type="button"
@@ -222,7 +238,7 @@ export function SkillsSettings(props: {
               disabled={busy()}
               onClick={() => void addSkill()}
             >
-              {busy() ? "提交中…" : "添加"}
+              {busy() ? t("skills.submitting") : t("skills.add")}
             </button>
           </div>
         </div>
@@ -240,7 +256,7 @@ export function SkillsSettings(props: {
           class="neu-extension-add"
           onClick={() => setAdding(!adding())}
         >
-          添加技能
+          {t("skills.addSkill")}
         </button>
       </div>
     </div>

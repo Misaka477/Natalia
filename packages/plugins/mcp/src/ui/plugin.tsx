@@ -18,7 +18,11 @@ export function createMcpSettingsUiPlugin(): UiPlugin {
           container.replaceChildren();
           const dispose = render(
             () => (
-              <McpSettings runtime={ctx.runtime} projection={ctx.projection} />
+              <McpSettings
+                runtime={ctx.runtime}
+                projection={ctx.projection}
+                extra={ctx.extra}
+              />
             ),
             container,
           );

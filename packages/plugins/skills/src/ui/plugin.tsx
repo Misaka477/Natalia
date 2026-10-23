@@ -17,7 +17,13 @@ export function createSkillsSettingsUiPlugin(): UiPlugin {
         mount(ctx, container) {
           container.replaceChildren();
           const dispose = render(
-            () => <SkillsSettings runtime={ctx.runtime} events={ctx.events} />,
+            () => (
+              <SkillsSettings
+                runtime={ctx.runtime}
+                events={ctx.events}
+                extra={ctx.extra}
+              />
+            ),
             container,
           );
           return () => dispose();

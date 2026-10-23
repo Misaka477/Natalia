@@ -607,6 +607,18 @@ export const zh = {
   "gov.promotionNotRecorded": "晋升未记录：{reason}",
   "gov.evalEmpty":
     "没有对比数据。跑 `natalia eval` 接入外部基准、或本会话有记录的运行之后，这里才会有东西。",
+  // panel states (the eight a region can be in)
+  "state.empty": "这里还没有内容",
+  "state.loading": "正在读取…",
+  "state.error": "读取失败",
+  "state.offline": "连接已断开",
+  "state.partial": "部分内容缺失",
+  "state.stale": "内容已过期",
+  "state.forbidden": "没有权限",
+  "state.retry": "重试",
+  "state.refresh": "刷新",
+  "state.reconnect": "重新连接",
+  "state.dismiss": "知道了",
   // shell (app-neu handlers)
   "shell.newSessionTitle": "新建会话",
   "shell.newSessionName": "新会话",

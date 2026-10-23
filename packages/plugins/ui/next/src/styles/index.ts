@@ -2,6 +2,7 @@ import { applyUiSkin, defineUiSkin, type UiSkin } from "@natalia/ui-kit";
 import {
   confirmDialogCss,
   nataliaNeuBaseStyles,
+  panelStateCss,
   settingsFullscreenCss,
 } from "./base";
 import {
@@ -62,7 +63,8 @@ export const nataliaNeuStyles =
   nataliaNeuThemeStyles +
   nataliaNeuBaseStyles +
   confirmDialogCss +
-  settingsFullscreenCss;
+  settingsFullscreenCss +
+  panelStateCss;
 
 /** Skins per mode, kept for the shell's existing skin lookups. */
 export const NATALIA_SKINS: Record<string, UiSkin> = {

@@ -607,6 +607,17 @@ export const en = {
   "gov.promotionNotRecorded": "Promotion not recorded: {reason}",
   "gov.evalEmpty":
     "No comparison data. Run `natalia eval` to wire up an external benchmark, or record a run in this session, and this fills in.",
+  "state.empty": "Nothing here yet",
+  "state.loading": "Reading…",
+  "state.error": "The read failed",
+  "state.offline": "The connection dropped",
+  "state.partial": "Some content is missing",
+  "state.stale": "This content is out of date",
+  "state.forbidden": "You do not have access",
+  "state.retry": "Retry",
+  "state.refresh": "Refresh",
+  "state.reconnect": "Reconnect",
+  "state.dismiss": "Got it",
   "shell.newSessionTitle": "New session",
   "shell.newSessionName": "New session",
   "shell.switchWorkspaceUnsupported":

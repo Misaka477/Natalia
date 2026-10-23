@@ -1992,3 +1992,58 @@ export const settingsFullscreenCss = `
     box-shadow: none;
   }
 `;
+
+/** The eight states every region can be in, in one shape. Any region may
+ *  render it; the icons and the shape belong to all of them. */
+export const panelStateCss = `
+.panel-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--neu-muted);
+  text-align: center;
+}
+.panel-state-icon {
+  opacity: 0.7;
+}
+.panel-state[data-state="error"] .panel-state-icon,
+.panel-state[data-state="forbidden"] .panel-state-icon {
+  color: var(--neu-error);
+}
+.panel-state[data-state="stale"] .panel-state-icon,
+.panel-state[data-state="partial"] .panel-state-icon {
+  color: var(--neu-warning);
+}
+.panel-state[data-state="offline"] .panel-state-icon {
+  color: var(--neu-text-dim);
+}
+.panel-state-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+.panel-state-desc {
+  max-width: 42ch;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.panel-state-action {
+  margin-top: 4px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+.panel-state-action:hover {
+  color: var(--neu-text);
+}
+`;

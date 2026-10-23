@@ -609,7 +609,7 @@ export function ModelPanel(props: {
             <div class={styles.tree}>
               <Show when={providerAction()}>
                 <div
-                  class="neu-form-status neu-form-status-error"
+                  class={`${styles.formStatus} ${styles.formStatusError}`}
                   role="alert"
                   aria-live="assertive"
                 >
@@ -720,7 +720,7 @@ export function ModelPanel(props: {
             <div class="neu-form">
               <Show when={providerSaveStatus()}>
                 <div
-                  class="neu-form-status neu-form-status-error"
+                  class={`${styles.formStatus} ${styles.formStatusError}`}
                   role="alert"
                   aria-live="assertive"
                 >
@@ -795,11 +795,13 @@ export function ModelPanel(props: {
                 />
               </div>
 
-              <div class="neu-form-section-title neu-form-section-title-actions">
+              <div
+                class={`${styles.sectionTitle} ${styles.sectionTitleActions}`}
+              >
                 <span>{t("model.modelsSection")}</span>
                 <button
                   type="button"
-                  class="neu-model-add neu-model-add-secondary"
+                  class={`${styles.add} ${styles.addSecondary}`}
                   disabled={
                     !baseUrl().trim() ||
                     (!apiKey().trim() && !hasAuthHeader(headerRecord())) ||
@@ -906,7 +908,7 @@ export function ModelPanel(props: {
               </Index>
               <button
                 type="button"
-                class="neu-model-add neu-model-add-secondary neu-model-add-full"
+                class={`${styles.add} ${styles.addSecondary} ${styles.addFull}`}
                 onClick={addModelRow}
               >
                 {t("model.addModel")}
@@ -948,7 +950,7 @@ export function ModelPanel(props: {
               </Index>
               <button
                 type="button"
-                class="neu-model-add neu-model-add-secondary neu-model-add-full"
+                class={`${styles.add} ${styles.addSecondary} ${styles.addFull}`}
                 onClick={addHeaderRow}
               >
                 {t("model.addHeader")}

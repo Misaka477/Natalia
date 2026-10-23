@@ -1801,14 +1801,11 @@ export function ReviewPane(
                             />
                           </Show>
                           <Show when={astSearchError()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.astSearchFailed")}
-                              </div>
-                              <div class="review-empty-desc">
-                                {astSearchError()}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="error"
+                              title={t("review.astSearchFailed")}
+                              description={astSearchError()}
+                            />
                           </Show>
                           <Show when={astSearchResult()}>
                             <div class={styles.astDiffList}>
@@ -1897,14 +1894,11 @@ export function ReviewPane(
                             />
                           </Show>
                           <Show when={astPlanError()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.planFailed")}
-                              </div>
-                              <div class="review-empty-desc">
-                                {astPlanError()}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="error"
+                              title={t("review.planFailed")}
+                              description={astPlanError()}
+                            />
                           </Show>
                           <Show when={astPlanResult()}>
                             <div class={styles.astDiffList}>
@@ -1943,14 +1937,11 @@ export function ReviewPane(
                             />
                           </Show>
                           <Show when={astApplyError()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {t("review.autoApplyFailed")}
-                              </div>
-                              <div class="review-empty-desc">
-                                {astApplyError()}
-                              </div>
-                            </div>
+                            <PanelState
+                              state="error"
+                              title={t("review.autoApplyFailed")}
+                              description={astApplyError()}
+                            />
                           </Show>
                           <Show when={astApplyResult()}>
                             <div class="review-empty">
@@ -1974,25 +1965,25 @@ export function ReviewPane(
                           }
                         >
                           <Show when={astBatchLoading()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {astBatchMode() === "refactor"
+                            <PanelState
+                              state="loading"
+                              title={
+                                astBatchMode() === "refactor"
                                   ? t("review.previewComputing")
-                                  : t("review.batchComputing")}
-                              </div>
-                            </div>
+                                  : t("review.batchComputing")
+                              }
+                            />
                           </Show>
                           <Show when={astBatchError()}>
-                            <div class="review-empty">
-                              <div class="review-empty-title">
-                                {astBatchMode() === "refactor"
+                            <PanelState
+                              state="error"
+                              title={
+                                astBatchMode() === "refactor"
                                   ? t("review.previewFailed")
-                                  : t("review.batchFailed")}
-                              </div>
-                              <div class="review-empty-desc">
-                                {astBatchError()}
-                              </div>
-                            </div>
+                                  : t("review.batchFailed")
+                              }
+                              description={astBatchError()}
+                            />
                           </Show>
                           <Show when={astBatchResult()}>
                             <div class={styles.astDiffList}>
@@ -2157,14 +2148,11 @@ export function ReviewPane(
                             </Show>
                           }
                         >
-                          <div class="review-empty">
-                            <div class="review-empty-title">
-                              {t("review.astDiffFailed")}
-                            </div>
-                            <div class="review-empty-desc">
-                              {astDiffError()}
-                            </div>
-                          </div>
+                          <PanelState
+                            state="error"
+                            title={t("review.astDiffFailed")}
+                            description={astDiffError()}
+                          />
                         </Show>
                       </Show>
                     </div>

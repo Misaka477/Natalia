@@ -2914,65 +2914,6 @@ button.neu-settings-item.neu-settings-item-button.neu-settings-item-danger:activ
   gap: 8px;
 }
 
-/* ===== Workspace search panel ===== */
-.neu-search-window {
-  width: min(620px, 90vw);
-  max-height: 78vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--neu-bg-light);
-  border-radius: var(--neu-radius);
-  box-shadow: var(--neu-elevation-5);
-  overflow: hidden;
-}
-.neu-search-body {
-  flex: 1;
-  min-height: 0;
-  padding: 14px 20px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.neu-search-input {
-  flex-shrink: 0;
-}
-.neu-search-results {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.neu-search-result {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  color: var(--neu-text);
-  text-align: left;
-  cursor: pointer;
-  box-shadow: var(--neu-inset-2);
-}
-.neu-search-result:hover {
-  background: var(--neu-bg-light);
-}
-.neu-search-path {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--neu-accent);
-  font-family: var(--neu-font-mono);
-}
-.neu-search-snippet {
-  font-size: 12px;
-  color: var(--neu-muted);
-  font-family: var(--neu-font-mono);
-}
-
 /* ===== Help panel ===== */
 .neu-help-window {
   width: min(560px, 90vw);

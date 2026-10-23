@@ -1,3 +1,4 @@
+import styles from "./styles/search-panel.module.css";
 import { createSignal, Show, onCleanup, onMount, For } from "solid-js";
 import type { RuntimeWorkspaceMatch } from "@anthelia/contracts";
 
@@ -73,10 +74,7 @@ export function SearchPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-search-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("search.title")}</span>
             <button
@@ -95,7 +93,7 @@ export function SearchPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-search-body">
+          <div class={styles.body}>
             <input
               ref={(element) => queueMicrotask(() => element.focus())}
               class="neu-form-input neu-search-input"
@@ -103,12 +101,12 @@ export function SearchPanel(props: {
               placeholder={t("search.placeholder")}
               onInput={(event) => runSearch(event.currentTarget.value)}
             />
-            <div class="neu-search-results" aria-live="polite">
+            <div class={styles.results} aria-live="polite">
               <Show when={loading()}>
-                <div class="neu-search-status">{t("search.searching")}</div>
+                <div class={styles.status}>{t("search.searching")}</div>
               </Show>
               <Show when={!loading() && error()}>
-                <div class="neu-search-status neu-search-error">{error()}</div>
+                <div class={`${styles.status} ${styles.error}`}>{error()}</div>
               </Show>
               <Show
                 when={
@@ -118,19 +116,19 @@ export function SearchPanel(props: {
                   results().length === 0
                 }
               >
-                <div class="neu-search-status">{t("search.noResults")}</div>
+                <div class={styles.status}>{t("search.noResults")}</div>
               </Show>
               <For each={results()}>
                 {(result) => (
                   <button
                     type="button"
-                    class="neu-search-result"
+                    class={styles.result}
                     onClick={() => props.onSelect?.(result)}
                   >
-                    <span class="neu-search-path">
+                    <span class={styles.path}>
                       {result.path}:{result.line}
                     </span>
-                    <span class="neu-search-snippet">{result.text}</span>
+                    <span class={styles.snippet}>{result.text}</span>
                   </button>
                 )}
               </For>

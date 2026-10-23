@@ -1,0 +1,78 @@
+/* The workspace search panel: its window, body, the result list and the
+   result rows. The modal chrome (backdrop, header, title, close) and the
+   form input are shared vocabulary and stay global. Tokens only. */
+
+.window {
+  width: min(620px, 90vw);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input {
+  flex-shrink: 0;
+}
+
+.results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+}
+
+.result:hover {
+  background: var(--neu-bg-light);
+}
+
+.path {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-accent);
+  font-family: var(--neu-font-mono);
+}
+
+.snippet {
+  font-size: 12px;
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
+}
+
+.status {
+  padding: 8px 4px;
+  color: var(--neu-muted);
+  font-size: 12px;
+}
+
+.error {
+  color: var(--neu-error);
+}

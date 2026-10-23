@@ -105,13 +105,13 @@ export function WebTerminal(props: WebTerminalProps) {
 
   function sendResize(rows: number, cols: number, source: string) {
     if (closed || !sessionReady || !validResize(rows, cols)) {
-      if (!closed) {
-        console.warn("[web-terminal] ignore invalid resize", {
-          source,
-          rows,
-          cols,
-        });
-      }
+      // Invalid sizes are dropped silently: the caller is a ResizeObserver
+      // or a layout effect, both of which fire with zero or transitional
+      // values as a matter of course, and a console line per firing was
+      // pure noise. `source` stays on the signature because the callers
+      // name where the resize came from, and the next real diagnostic
+      // wants it.
+      void source;
       return;
     }
     const resizeKey = `${props.terminalID}:${rows}:${cols}`;
@@ -173,7 +173,8 @@ export function WebTerminal(props: WebTerminalProps) {
       !props.runtimeURL
     )
       return;
-    console.log("[web-terminal] using WebSocket transport");
+    // Transport selection is a fact the connection state already reports;
+    // announcing it here added a line per reconnect and nothing else.
     const previous = socket;
     socket = undefined;
     previous?.close();
@@ -447,10 +448,6 @@ export function WebTerminal(props: WebTerminalProps) {
   };
 
   onCleanup(() => {
-    console.log("[web-terminal] cleanup", {
-      sessionID: props.sessionID,
-      terminalID: props.terminalID,
-    });
     closed = true;
     props.registerApi?.(undefined);
     if (reconnectTimer) clearTimeout(reconnectTimer);

@@ -1565,6 +1565,16 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   outline: none;
   box-shadow: var(--neu-inset-2);
 }
+/* ===== Modal window chrome (SHARED VOCABULARY) =====
+   The backdrop, the window, the header with its title and close button,
+   and the form controls (label, input, button) are the shell's ONE shape
+   for a modal, used by every panel the modal layer opens — settings,
+   model, status, workspace, sandbox, stash, help, search, session
+   actions and the plugin manager. They stay global under the migration
+   plan's cross-region rule: localizing them would give eleven panels
+   eleven copies of one window. A panel's own rules (its body, its rows,
+   its specific controls) move into that panel's module when the region's
+   clusters are cut. */
 .neu-settings-backdrop {
   position: fixed;
   inset: 0;

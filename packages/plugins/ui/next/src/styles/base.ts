@@ -1679,11 +1679,200 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   padding: 16px;
   max-height: min(70vh, 720px);
   overflow-y: auto;
-}}
+}
 
+/* ===== Select control (SHARED VOCABULARY) =====
+   The one select the shell uses — the model, reasoning and permission
+   pickers in the pane toolbar, the topbar, and every panel's form. These
+   nine rules were dropped when this sheet was rewritten for the token
+   layer, which left the control's DOM classes with nothing to style:
+   the trigger lost its box, the chevron its rotation, the menu its
+   surface and the options their hover. Restored verbatim from the shell
+   this package was copied from; nothing here is re-authored. */
+.neu-select {
+  position: relative;
+  width: 100%;
+}
+.neu-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+}
+.neu-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.neu-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.neu-select-chevron {
+  flex-shrink: 0;
+  color: var(--neu-muted);
+  transition: transform 0.2s ease;
+}
+.neu-select-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+.neu-select-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--neu-bg-light);
+  box-shadow: 4px 4px 10px var(--neu-shadow-dark), -4px -4px 10px var(--neu-shadow-light);
+}
+.neu-select-option {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neu-text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.neu-select-option:hover,
+.neu-select-option[data-active="true"] {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+}
+.neu-form-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
-
-
+/* ===== Form controls (SHARED VOCABULARY) =====
+   The form every panel's modal uses: the column, the field, the label,
+   the input, the select, the checkbox and the action row with its
+   buttons. Dropped in the same rewrite as the select family, which left
+   every dialog's labels and buttons unstyled. Restored verbatim from the
+   shell this package was copied from. */
+.neu-form {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.neu-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.neu-form-label {
+  font-size: 12px;
+  color: var(--neu-muted);
+}
+.neu-form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888c8f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  cursor: pointer;
+}
+.neu-form-select option {
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+}
+.neu-form-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.neu-form-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 12px;
+  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  cursor: pointer;
+}
+.neu-form-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: var(--neu-bg);
+  box-shadow: inset 2px 2px 4px var(--neu-shadow-dark), inset -2px -2px 4px var(--neu-shadow-light);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.neu-form-checkbox input[type="checkbox"]:checked {
+  background: var(--neu-accent);
+  box-shadow:
+    inset 2px 2px 4px var(--neu-inset-pressed-dark),
+    inset -2px -2px 4px var(--neu-inset-pressed-light),
+    0 0 0 3px var(--neu-focus-ring);
+}
+.neu-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.neu-form-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  transition: box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+.neu-form-btn:active {
+  box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+}
+.neu-form-cancel {
+  background: var(--neu-bg);
+  color: var(--neu-text);
+}
+.neu-form-primary {
+  background: var(--neu-accent);
+  color: var(--neu-on-accent);
+}
+.neu-form-section-title {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
 
 .neu-main-toolbar {
   display: flex;

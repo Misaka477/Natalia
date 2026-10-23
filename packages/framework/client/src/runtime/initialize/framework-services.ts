@@ -110,6 +110,7 @@ import {
 import { createWorkGraphQueryTool } from "../work-graph-tools";
 import {
   createApplyGenerationTool,
+  createProposeCodeGenerationTool,
   createProposeGenerationTool,
   createRollbackGenerationTool,
   createCancelGenerationTool,
@@ -510,6 +511,7 @@ export async function wireFrameworkServices(
     // NGM §4.4: the L2 generation tools (propose -> apply through the
     // four-face gate -> rollback, always allowed).
     createProposeGenerationTool(ctx),
+    createProposeCodeGenerationTool(ctx),
     createApplyGenerationTool(ctx),
     createRollbackGenerationTool(ctx),
     createCancelGenerationTool(ctx),

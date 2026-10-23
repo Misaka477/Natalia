@@ -16,9 +16,10 @@
  *   undo (study: 回退永不被候选禁止).
  */
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
 import { sharedObjectStore, type ObjectStore } from "@anthelia/object-store";
 import {
   mergeConfig,
@@ -341,8 +342,17 @@ export function createApplyGenerationTool(ctx: RuntimeContext): RuntimeTool {
           await ctx.ports.reloadConfigFromDisk();
         },
         // 洞 5: a source-carrying generation's live switch drains first.
-        // The drain is the shared wait (the same one the lifecycle surface
-        // and the daemon's flip path use) — one answer to "is it quiet".
+        // The scope is the daemon's, not this workspace's: a staged build
+        // replaces the BINARY, so every workspace's runtime dies with the
+        // swap — and the drain that runs is `daemon.drain` on the facade,
+        // which drains every workspace (see workspace-manager's
+        // drainForUpdate). This runtime's own drain is what THIS process
+        // can establish directly; the facade's is what the daemon's RPC
+        // reaches, and the switch's caller (the daemon) is the one holding
+        // it. So the drain handed to the switch is the local one, and the
+        // ANSWER names which drain ran, because a switch that claims a
+        // quiet it did not establish is the lie this whole path exists to
+        // prevent.
         drain: async () => {
           await waitForDrain(ctx.ports, {
             timeoutMs: 120_000,
@@ -748,11 +758,334 @@ async function landGenerationSource(
     ]),
   );
   const home = resolveUpdateHome(process.env);
-  const landed = installStagedBuild({ home, version: source.version, files });
+  const landed = installStagedBuild({
+    home,
+    version: source.version,
+    files,
+    // Windows has no service manager: the process running the old code has
+    // to hand over to the new one, or the swap lands and nothing changes.
+    // POSIX leaves this absent and lets `restartUnit` cover it — which the
+    // installer's own update path already passes.
+    ...(process.platform === "win32" ? { relaunch: () => relaunchSelf(home, source.version) } : {}),
+  });
   if (landed.outcome === "rolled_back")
     throw new Error(
       `the staged build failed its self-check and was rolled back: ${landed.reason}`,
     );
   if (landed.outcome === "failed")
     throw new Error(`the staged build could not be landed: ${landed.reason}`);
+
+  // The baseline, updated AFTER the probe succeeded.
+  //
+  // This is the half that makes self-iteration more than a one-way trip:
+  // without it the next iteration copies the PREVIOUS baseline and this
+  // generation's work silently does not exist for it. It lands after the
+  // probe because a build that failed its self-check must not advance the
+  // baseline — the ordering is the atomicity, and a throw here leaves the
+  // binary new while the baseline is old, which the caller is told about
+  // rather than left to discover.
+  if (source.sourceArtifact) {
+    const sourceManifest = JSON.parse(
+      new TextDecoder().decode(await store.get(source.sourceArtifact)),
+    ) as { files: Array<{ path: string; next: string }> };
+    const baselineDir = join(home, "source");
+    await mkdir(baselineDir, { recursive: true });
+    let written = 0;
+    for (const file of sourceManifest.files) {
+      const content = Buffer.from(await store.get(file.next));
+      const target = resolve(baselineDir, file.path);
+      if (!target.startsWith(resolve(baselineDir)))
+        throw new Error(
+          `baseline update refused: ${file.path} escapes the baseline directory`,
+        );
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, content);
+      written += 1;
+    }
+    ctx.ports.publish({
+      type: "diagnostic",
+      level: "info",
+      owner: "natalia-generations",
+      message:
+        `baseline updated to ${source.version}: ${written} source file(s) ` +
+        `written to ${baselineDir}`,
+    });
+  }
 }
+
+/**
+ * Directories a build produces that are not part of the built product.
+ * `dist` is skipped for a SOURCE root (it is build output) and kept for a
+ * BUILD root (it IS the product) — the caller passes which it is walking.
+ */
+const BUILD_SKIP = new Set([
+  "node_modules",
+  ".git",
+  ".bun",
+  ".bun-local",
+  ".bun-scratch",
+  "coverage",
+  ".natalia",
+]);
+
+type StagedFile = { name: string; content: string; hash: string };
+
+function hashOf(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Every file under a directory, as store-ready records. */
+async function collectStagedFiles(
+  root: string,
+  prefix = "",
+): Promise<{ files: StagedFile[]; count: number }> {
+  const files: StagedFile[] = [];
+  let count = 0;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (BUILD_SKIP.has(entry.name)) continue;
+    const from = join(root, entry.name);
+    const name = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      const nested = await collectStagedFiles(from, name);
+      files.push(...nested.files);
+      count += nested.count;
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const bytes = await readFile(from);
+    files.push({
+      name,
+      content: Buffer.from(bytes).toString("base64"),
+      hash: hashOf(bytes),
+    });
+    count += 1;
+  }
+  return { files, count };
+}
+
+/**
+ * `propose_code_generation` — the tool that closes the L3 loop.
+ *
+ * Before this, nothing produced a generation carrying a `source`: the two
+ * `buildGeneration` callers passed none, so the `staged-build` lane above
+ * was built and unreachable — a session could edit the source copy and
+ * build it, and then have nowhere to put the result.
+ *
+ * It carries TWO payloads, because a self-iteration that landed only the
+ * binary would be a one-way trip:
+ *
+ *   1. the BUILT artifacts — what `installStagedBuild` stages, swaps and
+ *      probes, so the running process becomes the new code;
+ *   2. the SOURCE state — the baseline the next iteration copies. Without
+ *      it, iteration N+1 starts from the pre-N baseline and N's work
+ *      silently does not exist for it.
+ *
+ * Both go into the object store (content-addressed), so the generation
+ * stays self-contained and outlives the sandbox it was built in. The
+ * four-face gate and the atomic swap are `apply_generation`'s job; this
+ * tool only PROPOSES.
+ */
+export function createProposeCodeGenerationTool(
+  ctx: RuntimeContext,
+): RuntimeTool {
+  return {
+    name: "propose_code_generation",
+    description:
+      "Propose a self-iteration generation from a BUILT tree: it stores the build " +
+      "artifacts (what the swap stages and probes) AND the source state (what the " +
+      "next iteration copies) in the object store, and assembles a staged-build " +
+      "candidate. Returns the candidateID for apply_generation. Call it AFTER the " +
+      "build and tests pass in the source-copy workspace — a candidate built from " +
+      "an unverified tree lands an unverified binary.",
+    requiresApproval: true,
+    timeoutSec: 600,
+    parameters: {
+      type: "object",
+      properties: {
+        buildDir: {
+          type: "string",
+          description:
+            "The built distribution directory (the one holding natalia.exe and plugins/). Absolute, or relative to the workspace root.",
+        },
+        version: {
+          type: "string",
+          description: "The version this build reports, e.g. 0.0.0-m14.",
+        },
+        sourceRoot: {
+          type: "string",
+          description:
+            "The source tree the build was made from. Defaults to the workspace root; pass it when the build ran elsewhere.",
+        },
+        note: { type: "string" },
+      },
+      required: ["buildDir", "version"],
+      additionalProperties: false,
+    },
+    output: genericToolCard({
+      family: "generation",
+      callSummary: "propose_code",
+      resultSummary: (facts) =>
+        typeof facts.version === "string"
+          ? `proposed ${facts.version} · ${facts.buildFiles ?? 0} file(s)`
+          : "proposed",
+      titleKey: "candidateID",
+      meta: [
+        ["version", "version"],
+        ["buildFiles", "build files"],
+        ["sourceFiles", "source files"],
+      ],
+    }),
+    async execute(input) {
+      const args = input as {
+        buildDir: string;
+        version: string;
+        sourceRoot?: string;
+        note?: string;
+      };
+      const buildDir = resolve(
+        workspaceRoot(ctx),
+        requireStringArg(args.buildDir, "buildDir"),
+      );
+      const version = requireStringArg(args.version, "version");
+      const sourceRoot = resolve(
+        workspaceRoot(ctx),
+        args.sourceRoot ?? ".",
+      );
+      const note = args.note;
+
+      const buildStats = await stat(buildDir).catch(() => undefined);
+      if (!buildStats?.isDirectory())
+        throw new Error(
+          `propose_code_generation: ${buildDir} is not a directory — build first, then propose the result`,
+        );
+
+      // The build artifacts: everything the swap needs.
+      const build = await collectStagedFiles(buildDir);
+      if (build.count === 0)
+        throw new Error(
+          `propose_code_generation: ${buildDir} holds no files — nothing to land`,
+        );
+      // The source state: what the next iteration copies. `dist` is build
+      // output for a source root, so it is skipped there.
+      const source = await collectStagedFiles(sourceRoot);
+      if (source.files.length === 0)
+        throw new Error(
+          `propose_code_generation: ${sourceRoot} holds no source — the next ` +
+            `iteration would copy an empty baseline`,
+        );
+
+      const store = objectStore(ctx);
+      const artifact = await store.put(
+        Buffer.from(
+          JSON.stringify({ version, files: build.files })),
+      );
+      const sourceArtifact = await store.put(
+        Buffer.from(
+          JSON.stringify({
+            files: source.files.map((file) => ({
+              path: file.name,
+              next: file.hash,
+            })),
+          })),
+      );
+
+      const live = ctx.ports.getTsRuntimeConfig();
+      if (!live)
+        throw new Error(
+          "propose_code_generation: no running config to propose against",
+        );
+      const candidate = buildGeneration({
+        config: live,
+        catalog: ctx.ports
+          .getPluginsController()
+          .catalog()
+          .map((entry) => ({ ...entry })),
+        policyRows: activeConstitutionRows(ctx),
+        prompts: generationPrompts(workspaceRoot(ctx)),
+        rows: generationAdapterRows(ctx),
+        source: {
+          kind: "staged-build",
+          version,
+          artifact,
+          // The source state rides with the build: the landing updates the
+          // baseline atomically with the swap, or the next iteration starts
+          // from the previous one and this work is lost to it.
+          sourceArtifact,
+        },
+      });
+      const candidateID = await storeGeneration(store, candidate);
+      ctx.ports.publish({
+        type: "composition.proposed",
+        candidateID,
+        reason: note ?? `code: ${version}`,
+      });
+
+      return JSON.stringify(
+        {
+          ok: true,
+          candidateID,
+          version,
+          artifact,
+          sourceArtifact,
+          buildFiles: build.count,
+          sourceFiles: source.files.length,
+          next:
+            `call apply_generation with candidateID ${candidateID} — the four-face ` +
+            `gate runs, the turn drains, the binary is swapped and probed, and the ` +
+            `baseline is updated with the source state. A failed probe rolls the ` +
+            `swap back.`,
+        },
+        null,
+        2,
+      );
+    },
+  };
+}
+
+/** A string argument, with the tool's name in the refusal. */
+function requireStringArg(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`propose_code_generation: ${name} is required`);
+  return value;
+}
+
+/**
+ * Hand this process over to the version just landed.
+ *
+ * The new binary is spawned detached with the same arguments this process
+ * was started with, and then this process exits. Detached matters: the
+ * child must outlive the parent's exit, and inheriting the console would
+ * take it down with it. The parent's exit code is 0 on purpose — the
+ * switch SUCCEEDED, and a supervisor reading a failure would roll back a
+ * build that just passed its probe.
+ *
+ * The spawn failure is reported rather than swallowed: a relaunch that
+ * silently did nothing leaves the new binary linked while the old code
+ * keeps running, which is the exact failure this exists to prevent.
+ */
+function relaunchSelf(home: string, version: string): {
+  code: number;
+  output: string;
+} {
+  const target = join(home, "versions", version, "natalia.exe");
+  if (!existsSync(target))
+    return { code: 1, output: `no landed binary at ${target}` };
+  try {
+    const child = spawn(target, process.argv.slice(2), {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    // The exit is deferred one turn: the caller's `switched` answer has to
+    // reach the journal before the process that would write it is gone.
+    setTimeout(() => process.exit(0), 50).unref();
+    return { code: 0, output: `spawned ${target}` };
+  } catch (error) {
+    return {
+      code: 1,
+      output: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+

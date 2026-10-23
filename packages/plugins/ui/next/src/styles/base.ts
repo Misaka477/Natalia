@@ -794,17 +794,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   outline: none;
   box-shadow: var(--neu-inset-2);
 }
-.review-select {
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 10px;
-  background: var(--neu-bg);
-  color: var(--neu-text);
-  font-size: 11px;
-  outline: none;
-  box-shadow: var(--neu-inset-2);
-}
 .review-entity-list {
   display: flex;
   gap: 6px;
@@ -1043,94 +1032,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   opacity: 0.85;
 }
 
-.agent-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
-.agent-subtabs { display: flex; gap: 6px; padding: 0 12px 8px; flex-shrink: 0; }
-.agent-subtab {
-  flex: 1;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 10px;
-  background: var(--neu-bg);
-  color: var(--neu-muted);
-  font-size: 11px;
-  cursor: pointer;
-  box-shadow: var(--neu-inset-2);
-}
-.agent-subtab[data-active="true"] {
-  background: var(--neu-bg-light);
-  color: var(--neu-text);
-  box-shadow: var(--neu-inset-3);
-}
-.agent-layout { display: flex; flex: 1; min-height: 0; }
-.agent-sidebar { width: 220px; flex-shrink: 0; overflow-y: auto; padding: 8px; border-right: 1px solid var(--neu-divider); }
-.agent-card { display: block; width: 100%; text-align: left; border: none; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: var(--neu-bg); color: var(--neu-text); cursor: pointer; box-shadow: var(--neu-elevation-1); }
-.agent-card[data-active="true"] { box-shadow: var(--neu-inset-2); }
-.agent-card-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
-.agent-card-status { font-size: 10px; color: var(--neu-muted); margin-bottom: 2px; }
-.agent-card-detail { font-size: 11px; color: var(--neu-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agent-stream { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.agent-stream .natalia-transcript { flex: 1; }
-.agent-empty { padding: 12px; color: var(--neu-muted); font-size: 12px; }
-.agent-tree-child { margin-left: 12px; }
-.todo-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--neu-text);
-}
-.todo-row:hover { background: var(--neu-bg-light); }
-.todo-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--neu-muted);
-}
-.todo-dot[data-status="in_progress"] { background: var(--neu-accent); }
-.todo-dot[data-status="completed"] { background: var(--neu-success); }
-.todo-text { flex: 1; min-width: 0; }
-.todo-status { font-size: 10px; color: var(--neu-muted); }
-.todo-completed-header {
-  margin: 12px 0 4px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--neu-muted);
-  text-transform: uppercase;
-}
-.todo-completed-text { color: var(--neu-muted); text-decoration: line-through; }
-.agent-empty-full {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--neu-muted);
-  text-align: center;
-  padding: 24px;
-}
-.agent-tree-child { margin-left: 12px; }
-.agent-stream-header { padding: 8px 12px; border-bottom: 1px solid var(--neu-divider); }
-.agent-stream-title { font-size: 13px; font-weight: 600; }
-.agent-stream-meta { font-size: 11px; color: var(--neu-muted); margin-top: 2px; }
-.team-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
-.team-header { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.team-stat { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 10px; background: var(--neu-bg); margin-bottom: 8px; font-size: 12px; }
-.team-card { padding: 8px 10px; border-radius: 10px; background: var(--neu-bg); margin-bottom: 6px; box-shadow: var(--neu-elevation-1); }
-.team-card-title { font-size: 12px; font-weight: 600; }
-.team-card-detail { font-size: 11px; color: var(--neu-muted); }
-.team-card-result { font-size: 11px; color: var(--neu-success); margin-top: 4px; }
-.team-queue-card { padding: 10px 12px; border-radius: 12px; background: var(--neu-bg); margin-bottom: 8px; box-shadow: var(--neu-inset-2); }
-.team-queue-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-.team-queue-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--neu-muted); }
-.team-queue-result { margin-top: 6px; font-size: 11px; color: var(--neu-text); white-space: pre-wrap; }
-.natalia-tool-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--neu-muted); }
-.team-card-result { font-size: 11px; color: var(--neu-success); margin-top: 4px; }
-.team-card-error { font-size: 11px; color: var(--neu-error); margin-top: 4px; }
 /* ===== Scrollbars ===== */
 *::-webkit-scrollbar {
   width: 8px;

@@ -1,0 +1,190 @@
+/* The agent panel: its tab strip, the agent list sidebar, the cards and
+   the subagent stream. The review surface it reuses (pane, diff, files,
+   entity lists, empty states, section labels) and the shared run bar
+   stay global. Tokens only. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.subtabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+
+.subtab {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+}
+
+.subtab[data-active="true"] {
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  box-shadow: var(--neu-inset-3);
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border-right: 1px solid var(--neu-divider);
+}
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.card[data-active="true"] {
+  box-shadow: var(--neu-inset-2);
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.cardStatus {
+  font-size: 10px;
+  color: var(--neu-muted);
+  margin-bottom: 2px;
+}
+
+.cardDetail {
+  font-size: 11px;
+  color: var(--neu-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stream :global(.natalia-transcript) {
+  flex: 1;
+}
+
+.empty {
+  padding: 12px;
+  color: var(--neu-muted);
+  font-size: 12px;
+}
+
+.treeChild {
+  margin-left: 12px;
+}
+
+.emptyFull {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--neu-muted);
+  text-align: center;
+  padding: 24px;
+}
+
+.streamHeader {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--neu-divider);
+}
+
+.streamTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.streamMeta {
+  font-size: 11px;
+  color: var(--neu-muted);
+  margin-top: 2px;
+}
+
+/* The team queue rows the agent panel renders. */
+
+.queueCard {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  margin-bottom: 8px;
+  box-shadow: var(--neu-inset-2);
+}
+
+.queueTitle {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.queueMeta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.queueResult {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--neu-text);
+  white-space: pre-wrap;
+}
+
+.cardError {
+  font-size: 11px;
+  color: var(--neu-error);
+  margin-top: 4px;
+}
+
+/* The select the agent panel reuses from the review surface. */
+.select {
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 11px;
+  outline: none;
+  box-shadow: var(--neu-inset-2);
+}

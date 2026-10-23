@@ -1,3 +1,4 @@
+import styles from "./styles/agent-panel.module.css";
 import {
   For,
   Show,
@@ -428,7 +429,7 @@ export function AgentPanel(props: {
         <Show
           when={subagents().length}
           fallback={
-            <div class="agent-empty-full">
+            <div class={styles.emptyFull}>
               <div class="review-empty-icon">
                 <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
                   <circle
@@ -470,7 +471,7 @@ export function AgentPanel(props: {
                     </button>
                     <For each={subagentTree().children.get(agent.id) ?? []}>
                       {(child) => (
-                        <div class="agent-tree-child">
+                        <div class={styles.treeChild}>
                           <button
                             type="button"
                             class="review-file-row"
@@ -611,17 +612,17 @@ export function AgentPanel(props: {
         </div>
         <div class="review-section-label">{t("agent.concurrencyLimit")}</div>
         <div class="review-entity-control">
-          <div class="review-select">
+          <div class={styles.select}>
             {teamConcurrency() ?? t("agent.unset")}
           </div>
         </div>
         <div class="review-section-label">{t("agent.runningSubagents")}</div>
         <div class="review-entity-control">
-          <div class="review-select">{runningSubagents().length}</div>
+          <div class={styles.select}>{runningSubagents().length}</div>
         </div>
         <div class="review-section-label">{t("agent.statusTally")}</div>
         <div class="review-entity-control">
-          <div class="review-select">
+          <div class={styles.select}>
             {t("agent.completedFailed", {
               completed: teamStatusTally().completed ?? 0,
               failed: teamStatusTally().failed ?? 0,
@@ -634,9 +635,9 @@ export function AgentPanel(props: {
           <div class="review-entity-list">
             <For each={teamPRs()}>
               {(pr) => (
-                <div class="team-queue-card">
-                  <div class="team-queue-title">{pr.task || pr.id}</div>
-                  <div class="team-queue-meta">
+                <div class={styles.queueCard}>
+                  <div class={styles.queueTitle}>{pr.task || pr.id}</div>
+                  <div class={styles.queueMeta}>
                     <span>{t("agent.prStatus", { status: pr.status })}</span>
                     <span>{t("agent.prSubagent", { id: pr.sandboxID })}</span>
                     <span>
@@ -646,10 +647,10 @@ export function AgentPanel(props: {
                     </span>
                   </div>
                   <Show when={pr.result}>
-                    <div class="team-queue-result">{pr.result}</div>
+                    <div class={styles.queueResult}>{pr.result}</div>
                   </Show>
                   <Show when={pr.buildEvidence && !pr.buildEvidence.ok}>
-                    <div class="team-card-error">
+                    <div class={styles.cardError}>
                       build exit {pr.buildEvidence?.exitCode}
                     </div>
                   </Show>

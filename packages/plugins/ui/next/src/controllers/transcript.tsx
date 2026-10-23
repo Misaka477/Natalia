@@ -579,6 +579,15 @@ export function MainPanes(props: MainPanesProps) {
                       : "idle"}
                   </span>
                 </div>
+              </div>
+            </Show>
+
+            {/* The ONE docked input, at the pane's bottom edge. Whichever
+                agent the pane is showing, this is the box the reader types
+                into — the shell used to give each agent its own composer
+                inside its own pane. */}
+            <div class={styles.inputDock}>
+              <Show when={focusAgent() === "natalia"}>
                 <div class="neu-main-toolbar">
                   <NeuSelect
                     value={modelSelectionSignal()?.modelID ?? ""}
@@ -747,160 +756,163 @@ export function MainPanes(props: MainPanesProps) {
                   refreshTranscript={refreshTranscript}
                   perfLog={perfLog}
                 />
-              </div>
-            </Show>
+              </Show>
 
-            <Show when={focusAgent() === "navi"}>
-              <Show
-                when={selectedSessionID() || state().sessionID || "none"}
-                keyed
-              >
-                <div class={styles.chatWrap}>
-                  <Transcript
-                    messages={renderedChatMessages()}
-                    emptyTitle={t("transcript.emptyChatTitle")}
-                    emptyHint={t("transcript.emptyChatHint")}
-                    assistantName="Navi"
-                    assistantInitial="V"
-                    toolCards={toolCards}
-                    apiRef={(api) => {
-                      transcriptRefs.chat = api;
-                    }}
-                    onFollowChange={(following) =>
-                      setChatShowJumpToBottom(!following)
-                    }
-                    onNearTop={() => void loadOlderNaviChat()}
-                    hasOlder={naviPaging().hasOlder}
-                    historyLoading={!naviPaging().initialized}
-                    olderHistoryLoading={naviPaging().loadingOlder}
-                    loadAttachmentUrl={loadAttachmentUrl}
-                    suspendVirtualization={resizing()}
-                  />
-                  <Show when={chatShowJumpToBottom()}>
-                    <button
-                      type="button"
-                      class="neu-jump-bottom"
-                      onClick={jumpChatToBottom}
-                      title={t("transcript.jumpToBottom")}
-                    >
-                      ↓
-                    </button>
-                  </Show>
+              <Show when={focusAgent() === "navi"}>
+                <Show
+                  when={selectedSessionID() || state().sessionID || "none"}
+                  keyed
+                >
+                  <div class={styles.chatWrap}>
+                    <Transcript
+                      messages={renderedChatMessages()}
+                      emptyTitle={t("transcript.emptyChatTitle")}
+                      emptyHint={t("transcript.emptyChatHint")}
+                      assistantName="Navi"
+                      assistantInitial="V"
+                      toolCards={toolCards}
+                      apiRef={(api) => {
+                        transcriptRefs.chat = api;
+                      }}
+                      onFollowChange={(following) =>
+                        setChatShowJumpToBottom(!following)
+                      }
+                      onNearTop={() => void loadOlderNaviChat()}
+                      hasOlder={naviPaging().hasOlder}
+                      historyLoading={!naviPaging().initialized}
+                      olderHistoryLoading={naviPaging().loadingOlder}
+                      loadAttachmentUrl={loadAttachmentUrl}
+                      suspendVirtualization={resizing()}
+                    />
+                    <Show when={chatShowJumpToBottom()}>
+                      <button
+                        type="button"
+                        class="neu-jump-bottom"
+                        onClick={jumpChatToBottom}
+                        title={t("transcript.jumpToBottom")}
+                      >
+                        ↓
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+                <div
+                  class="neu-activity-bar"
+                  data-running={Boolean(naviChatActivity())}
+                >
+                  <span class="neu-activity-pulse" />
+                  <span class="neu-activity-label">
+                    {naviChatActivity()
+                      ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
+                      : "idle"}
+                  </span>
                 </div>
               </Show>
-              <div
-                class="neu-activity-bar"
-                data-running={Boolean(naviChatActivity())}
-              >
-                <span class="neu-activity-pulse" />
-                <span class="neu-activity-label">
-                  {naviChatActivity()
-                    ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
-                    : "idle"}
-                </span>
-              </div>
-              <div class="neu-main-toolbar">
-                <NeuSelect
-                  value={chatProfile().normal?.modelID ?? ""}
-                  options={modelOptions()}
-                  // See the main toolbar's model control: no model to
-                  // choose means this click opens the model settings.
-                  onActivate={
-                    modelOptions().length > 0 ? undefined : openModelSettings
-                  }
-                  onChange={(modelID) =>
-                    void updateChatProfile({
-                      ...chatProfile(),
-                      normal: { ...chatProfile().normal, modelID },
-                    })
-                  }
-                  placeholder={t("transcript.chatModel")}
-                  menuPosition="top"
+
+              <Show when={focusAgent() === "navi"}>
+                <div class="neu-main-toolbar">
+                  <NeuSelect
+                    value={chatProfile().normal?.modelID ?? ""}
+                    options={modelOptions()}
+                    // See the main toolbar's model control: no model to
+                    // choose means this click opens the model settings.
+                    onActivate={
+                      modelOptions().length > 0 ? undefined : openModelSettings
+                    }
+                    onChange={(modelID) =>
+                      void updateChatProfile({
+                        ...chatProfile(),
+                        normal: { ...chatProfile().normal, modelID },
+                      })
+                    }
+                    placeholder={t("transcript.chatModel")}
+                    menuPosition="top"
+                  />
+                  <NeuSelect
+                    value={chatProfile().normal?.reasoningEffort ?? ""}
+                    options={[
+                      { value: "minimal", label: "minimal" },
+                      { value: "low", label: "low" },
+                      { value: "medium", label: "medium" },
+                      { value: "high", label: "high" },
+                      { value: "xhigh", label: "xhigh" },
+                    ]}
+                    onChange={(effort) =>
+                      void updateChatProfile({
+                        ...chatProfile(),
+                        normal: {
+                          ...chatProfile().normal,
+                          reasoningEffort: effort as
+                            | "minimal"
+                            | "low"
+                            | "medium"
+                            | "high"
+                            | "xhigh",
+                        },
+                      })
+                    }
+                    placeholder={t("transcript.chatReasoning")}
+                    menuPosition="top"
+                  />
+                  <NeuSelect
+                    value={chatProfile().expert?.modelID ?? ""}
+                    options={modelOptions()}
+                    onActivate={
+                      modelOptions().length > 0 ? undefined : openModelSettings
+                    }
+                    onChange={(modelID) =>
+                      void updateChatProfile({
+                        ...chatProfile(),
+                        expert: { ...chatProfile().expert, modelID },
+                      })
+                    }
+                    placeholder={t("transcript.expertModel")}
+                    menuPosition="top"
+                  />
+                  <NeuSelect
+                    value={chatProfile().expert?.reasoningEffort ?? ""}
+                    options={[
+                      { value: "minimal", label: "minimal" },
+                      { value: "low", label: "low" },
+                      { value: "medium", label: "medium" },
+                      { value: "high", label: "high" },
+                      { value: "xhigh", label: "xhigh" },
+                    ]}
+                    onChange={(effort) =>
+                      void updateChatProfile({
+                        ...chatProfile(),
+                        expert: {
+                          ...chatProfile().expert,
+                          reasoningEffort: effort as
+                            | "minimal"
+                            | "low"
+                            | "medium"
+                            | "high"
+                            | "xhigh",
+                        },
+                      })
+                    }
+                    placeholder={t("transcript.expertReasoning")}
+                    menuPosition="top"
+                  />
+                </div>
+                <ChatInputArea
+                  slots={slots}
+                  t={t}
+                  naviChatActivity={naviChatActivity}
+                  ctx={props.ctx}
+                  state={state}
+                  selectedSessionID={selectedSessionID}
+                  chatDraft={chatDraft}
+                  setChatDraft={setChatDraft}
+                  chatAttachments={chatAttachments}
+                  setChatAttachments={setChatAttachments}
+                  handlePasteAttachments={handlePasteAttachments}
+                  updateChatProfile={updateChatProfile}
+                  perfLog={perfLog}
                 />
-                <NeuSelect
-                  value={chatProfile().normal?.reasoningEffort ?? ""}
-                  options={[
-                    { value: "minimal", label: "minimal" },
-                    { value: "low", label: "low" },
-                    { value: "medium", label: "medium" },
-                    { value: "high", label: "high" },
-                    { value: "xhigh", label: "xhigh" },
-                  ]}
-                  onChange={(effort) =>
-                    void updateChatProfile({
-                      ...chatProfile(),
-                      normal: {
-                        ...chatProfile().normal,
-                        reasoningEffort: effort as
-                          | "minimal"
-                          | "low"
-                          | "medium"
-                          | "high"
-                          | "xhigh",
-                      },
-                    })
-                  }
-                  placeholder={t("transcript.chatReasoning")}
-                  menuPosition="top"
-                />
-                <NeuSelect
-                  value={chatProfile().expert?.modelID ?? ""}
-                  options={modelOptions()}
-                  onActivate={
-                    modelOptions().length > 0 ? undefined : openModelSettings
-                  }
-                  onChange={(modelID) =>
-                    void updateChatProfile({
-                      ...chatProfile(),
-                      expert: { ...chatProfile().expert, modelID },
-                    })
-                  }
-                  placeholder={t("transcript.expertModel")}
-                  menuPosition="top"
-                />
-                <NeuSelect
-                  value={chatProfile().expert?.reasoningEffort ?? ""}
-                  options={[
-                    { value: "minimal", label: "minimal" },
-                    { value: "low", label: "low" },
-                    { value: "medium", label: "medium" },
-                    { value: "high", label: "high" },
-                    { value: "xhigh", label: "xhigh" },
-                  ]}
-                  onChange={(effort) =>
-                    void updateChatProfile({
-                      ...chatProfile(),
-                      expert: {
-                        ...chatProfile().expert,
-                        reasoningEffort: effort as
-                          | "minimal"
-                          | "low"
-                          | "medium"
-                          | "high"
-                          | "xhigh",
-                      },
-                    })
-                  }
-                  placeholder={t("transcript.expertReasoning")}
-                  menuPosition="top"
-                />
-              </div>
-              <ChatInputArea
-                slots={slots}
-                t={t}
-                naviChatActivity={naviChatActivity}
-                ctx={props.ctx}
-                state={state}
-                selectedSessionID={selectedSessionID}
-                chatDraft={chatDraft}
-                setChatDraft={setChatDraft}
-                chatAttachments={chatAttachments}
-                setChatAttachments={setChatAttachments}
-                handlePasteAttachments={handlePasteAttachments}
-                updateChatProfile={updateChatProfile}
-                perfLog={perfLog}
-              />
-            </Show>
+              </Show>
+            </div>
           </div>
         </div>
       </section>

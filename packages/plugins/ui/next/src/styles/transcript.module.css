@@ -19,6 +19,19 @@
   right: 16px;
 }
 
+/* The one docked input, at the pane's bottom edge. Whichever agent the
+   pane shows, this is the box the reader types into: the toolbar above
+   it and the composer inside it belong to the focused agent, and the
+   dock is what makes it one input rather than one per pane. Tokens
+   only. */
+
+.inputDock {
+  flex-shrink: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--neu-hairline);
+}
+
 /* The pane's agent switcher: which assistant this one pane is showing.
    It lives in the pane header, where the agent's title used to be — the
    pane is one pane now, so the choice is a control rather than a split

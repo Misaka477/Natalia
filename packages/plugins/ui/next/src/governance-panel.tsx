@@ -1678,7 +1678,7 @@ export function GovernancePane(props: {
                       not silently drop the first. */}
                   <PathBrowseButton
                     runtime={props.runtime}
-                    class="constitution-input constitution-browse"
+                    class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {
                       const existing = editor()
                         .paths.split(",")
@@ -1755,7 +1755,7 @@ export function GovernancePane(props: {
                       picked directory rather than replacing it. */}
                   <PathBrowseButton
                     runtime={props.runtime}
-                    class="constitution-input constitution-browse"
+                    class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {
                       const existing = editor()
                         .paths.split(",")
@@ -1986,7 +1986,7 @@ export function GovernancePane(props: {
                   </span>
                 </div>
                 <textarea
-                  class="constitution-input constitution-textarea"
+                  class={`${constitution.input} ${constitution.textarea}`}
                   placeholder={t("gov.docRuleStatementPh")}
                   value={editor().statement}
                   onInput={(event) =>
@@ -2040,7 +2040,7 @@ export function GovernancePane(props: {
                       picked directory rather than replacing it. */}
                   <PathBrowseButton
                     runtime={props.runtime}
-                    class="constitution-input constitution-browse"
+                    class={`${constitution.input} ${constitution.browse}`}
                     onPick={(chosen) => {
                       const existing = editor()
                         .paths.split(",")

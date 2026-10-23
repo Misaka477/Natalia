@@ -12,7 +12,7 @@
  *      all.
  */
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -27,12 +27,30 @@ function probeAnswering(version: string, code = 0) {
   return () => ({ code, stdout: `${version}\n`, stderr: "" });
 }
 
+/**
+ * An install home the staged-build lane can actually write into.
+ *
+ * `bin/` is created up front because the swap writes a link there and a
+ * fresh mkdtemp has no such directory: on Windows the copy path tolerates
+ * it and on POSIX `symlinkSync` does not, so a test that skipped this step
+ * passed on the author's machine and failed on Linux with a bare ENOENT
+ * that named neither the step nor the platform.
+ */
+async function installHome(label: string): Promise<string> {
+  const home = await mkdtemp(join(tmpdir(), `natalia-${label}-`));
+  await mkdir(join(home, "bin"), { recursive: true });
+  return home;
+}
+
 function stagedInput(
   home: string,
   over: Partial<StagedBuildInstall> = {},
 ): StagedBuildInstall {
+  // The binary's name is the platform's own: the staged tree mirrors an
+  // install, and an install's executable is `natalia` off Windows.
+  const binary = process.platform === "win32" ? "natalia.exe" : "natalia";
   const files = new Map<string, Uint8Array>([
-    ["natalia.exe", new Uint8Array([1, 2, 3])],
+    [binary, new Uint8Array([1, 2, 3])],
     ["plugins/keep.txt", new Uint8Array([4, 5])],
   ]);
   return {
@@ -45,7 +63,7 @@ function stagedInput(
 }
 
 test("a passed probe hands the process over (the Windows self-replace)", async () => {
-  const home = await mkdtemp(join(tmpdir(), "natalia-relaunch-"));
+  const home = await installHome("relaunch");
   try {
     let relaunched = 0;
     const landed = installStagedBuild(
@@ -66,7 +84,7 @@ test("a passed probe hands the process over (the Windows self-replace)", async (
 });
 
 test("a failed probe rolls back and never relaunches", async () => {
-  const home = await mkdtemp(join(tmpdir(), "natalia-relaunch-rb-"));
+  const home = await installHome("relaunch-rb");
   try {
     let relaunched = 0;
     const landed = installStagedBuild(
@@ -89,7 +107,7 @@ test("a failed probe rolls back and never relaunches", async () => {
 });
 
 test("a relaunch that fails is reported, not swallowed", async () => {
-  const home = await mkdtemp(join(tmpdir(), "natalia-relaunch-fail-"));
+  const home = await installHome("relaunch-fail");
   try {
     const landed = installStagedBuild(
       stagedInput(home, {

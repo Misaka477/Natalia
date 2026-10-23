@@ -1,0 +1,94 @@
+/* The sandbox panel: its window, body and change rows, plus the flow
+   vocabulary it renders (the sandbox list is where the flow cards and
+   their detail fields live now). The modal chrome and the shared form
+   controls stay global. Tokens only. */
+
+.window {
+  width: min(620px, 90vw);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.change {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-warning);
+  font-size: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--neu-inset-2);
+}
+
+.card:hover {
+  background: var(--neu-bg-light);
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardMeta {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.back {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--neu-bg);
+  color: var(--neu-text);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--neu-elevation-1);
+}
+
+.detailTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.detailField {
+  font-size: 12px;
+  color: var(--neu-muted);
+  margin-top: 2px;
+}
+
+.sectionTitle {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+}

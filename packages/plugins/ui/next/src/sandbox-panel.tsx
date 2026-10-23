@@ -1,3 +1,4 @@
+import styles from "./styles/sandbox-panel.module.css";
 import { createSignal, Show, onCleanup, onMount, For } from "solid-js";
 import type { SandboxView } from "@natalia/view-store";
 import type { RuntimeClient, RuntimeSandbox } from "@anthelia/contracts";
@@ -49,10 +50,7 @@ export function SandboxPanel(props: {
   return (
     <Show when={props.open}>
       <div class="neu-settings-backdrop" onClick={props.onClose}>
-        <div
-          class="neu-sandbox-window"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div class={styles.window} onClick={(event) => event.stopPropagation()}>
           <div class="neu-settings-header">
             <span class="neu-settings-title">{t("sandbox.title")}</span>
             <button
@@ -71,17 +69,17 @@ export function SandboxPanel(props: {
               </svg>
             </button>
           </div>
-          <div class="neu-sandbox-body">
+          <div class={styles.body}>
             <Show when={!selected()}>
               <For each={rows()}>
                 {(sandbox) => (
                   <button
                     type="button"
-                    class="neu-flow-card"
+                    class={styles.card}
                     onClick={() => setSelected(sandbox as SandboxView)}
                   >
-                    <span class="neu-flow-card-title">{sandbox.id}</span>
-                    <span class="neu-flow-card-meta">
+                    <span class={styles.cardTitle}>{sandbox.id}</span>
+                    <span class={styles.cardMeta}>
                       {sandbox.isolationLevel} · {sandbox.changedFiles} changes
                       · {sandbox.runningResources} resources
                     </span>
@@ -97,29 +95,29 @@ export function SandboxPanel(props: {
             <Show when={selected()}>
               <button
                 type="button"
-                class="neu-flow-back"
+                class={styles.back}
                 onClick={() => setSelected(null)}
               >
                 {t("sandbox.back")}
               </button>
-              <div class="neu-flow-detail-title">{selected()?.id}</div>
-              <div class="neu-flow-detail-field">
+              <div class={styles.detailTitle}>{selected()?.id}</div>
+              <div class={styles.detailField}>
                 {selected()?.isolationLevel} isolation ·{" "}
                 {selected()?.changedFiles} pending changes
               </div>
-              <div class="neu-flow-section-title">Changes</div>
+              <div class={styles.sectionTitle}>Changes</div>
               {/* The real count, and a condition that means what it
                   says. The old one was `changedFiles ?? 0 > 0`, which
                   parses as `changedFiles ?? (0 > 0)` — true whenever
                   the count is absent — so every changeless sandbox
                   showed a row claiming three pending changes. */}
               <Show when={(selected()?.changedFiles ?? 0) > 0}>
-                <div class="neu-sandbox-change">
+                <div class={styles.change}>
                   {t("sandbox.changes", { count: selected()?.changedFiles })}
                 </div>
               </Show>
-              <div class="neu-flow-section-title">Resources</div>
-              <div class="neu-flow-detail-field">
+              <div class={styles.sectionTitle}>Resources</div>
+              <div class={styles.detailField}>
                 {selected()?.runningResources ?? 0} running resources
               </div>
               <div class="neu-form-actions">

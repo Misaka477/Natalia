@@ -220,6 +220,13 @@ export function buildToolExecutionContext(input: BuildContextInput) {
       });
     },
     ...(attachImage ? { attachImage } : {}),
+    // The host-injected self-iteration handoff, when there is one. A
+    // runtime is bound to ONE workspace, so this is the only way a tool
+    // reaches a session in another tree; absent in hosts without a
+    // workspace manager, where the tool says so rather than reaching.
+    ...(ctx.ports.iterateBranch()
+      ? { iterateBranch: ctx.ports.iterateBranch()! }
+      : {}),
     workspaceReadAuthorize: (request: { toolName: string; paths: string[] }) =>
       authorizeWorkspaceRead(request, exec),
     // The write half of the same containment (洞 2's acceptance: no write

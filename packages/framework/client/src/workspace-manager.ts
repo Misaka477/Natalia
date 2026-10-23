@@ -31,6 +31,12 @@ import {
 } from "@anthelia/contracts";
 import { createRealRuntimeClient } from "./runtime/main";
 import type { RealRuntimeClientOptions } from "@anthelia/substrate";
+import {
+  iterateBranch,
+  resolveBaseline,
+  type IterateBranchRequest,
+  type IterateBranchResult,
+} from "@anthelia/substrate";
 
 /**
  * Whether two workspace roots name the same directory on this host.
@@ -57,6 +63,7 @@ export type WorkspaceManagerOptions = Pick<
   | "operationLogsDir"
   | "vaultDir"
   | "contextWindowCachePath"
+  | "iterateBranch"
 >;
 
 export type WorkspaceRuntime = {
@@ -260,6 +267,16 @@ export type WorkspaceManager = {
   }): Promise<WorkspaceSummary>;
   workspaceRemove(workspaceID: string): Promise<{ removed: boolean }>;
   workspaceActivate(workspaceID: string): Promise<WorkspaceSummary>;
+  /**
+   * The self-iteration handoff: copy the baseline source to a path the
+   * caller chooses, open a workspace there, seed a new session with the
+   * parent's journal, and move the goal. Declared on the interface because
+   * the tool reaches it through the manager.
+   */
+  iterateBranch(
+    baseline: string | undefined,
+    request: IterateBranchRequest,
+  ): Promise<IterateBranchResult>;
   get(workspaceID: string): WorkspaceRuntime | undefined;
   getActive(): WorkspaceRuntime | undefined;
   summaryFor(workspace: WorkspaceRuntime): Promise<WorkspaceSummary>;
@@ -565,6 +582,11 @@ export function createWorkspaceManager(
         ? { operationLogsDir: options.operationLogsDir }
         : {}),
       ...(options.vaultDir ? { vaultDir: options.vaultDir } : {}),
+      // The handoff travels down to every workspace's runtime: the child's
+      // session is created through the TARGET workspace's client, and the
+      // closure below is the only path from that runtime back to the
+      // manager that holds every workspace.
+      ...(options.iterateBranch ? { iterateBranch: options.iterateBranch } : {}),
       ...(activeSessionID ? { sessionID: activeSessionID } : {}),
     });
     const ws: WorkspaceRuntime = {
@@ -667,6 +689,66 @@ export function createWorkspaceManager(
     workspaceAdd: addWorkspace,
     workspaceRemove: removeWorkspace,
     workspaceActivate: activate,
+    /**
+     * The self-iteration handoff, wired here because the manager is the
+     * only object that holds every workspace's runtime — the child's
+     * session is created through the TARGET workspace's client, and
+     * nothing below this layer can reach it.
+     *
+     * The baseline is resolved by the caller (the tool passes the
+     * installed `<install>/source` or the checkout's repository root),
+     * never guessed from this process's location.
+     */
+    async iterateBranch(
+      baseline: string | undefined,
+      request: IterateBranchRequest,
+    ): Promise<IterateBranchResult> {
+      const host = {
+        listWorkspaces: async () =>
+          Promise.all(
+            [...runtimes.values()].map((workspace) => ({
+              workspaceID: workspace.workspaceID,
+              root: workspace.root,
+            })),
+          ),
+        addWorkspace: async (input: { path: string; title?: string }) => {
+          const added = await addWorkspace(input);
+          invalidateSessionCache(added.workspaceID);
+          return added;
+        },
+        clientFor: (workspaceID: string) => runtimes.get(workspaceID)?.client,
+        exportSession: async (sessionID: string) => {
+          // The owning workspace's client answers directly: a client starts
+          // its own runtime on first use, so there is no separate start step
+          // to reach for from inside this closure (the manager's own
+          // startWorkspaceClient lives outside createWorkspaceManager).
+          const owner =
+            (await findWorkspaceForSession(sessionID)) ??
+            (activeWorkspaceID ? runtimes.get(activeWorkspaceID) : undefined);
+          if (!owner)
+            throw new Error(
+              `no workspace owns session ${sessionID}; cannot inherit its context`,
+            );
+          const fn = (owner.client as unknown as Record<string, unknown>)
+            .sessionExport;
+          if (typeof fn !== "function")
+            throw new Error("session export is unavailable on the owning runtime");
+          return (await (fn as (id: string) => Promise<{
+            events: Array<{ seq: number; event: unknown }>;
+          }>).call(owner.client, sessionID)) as {
+            events: Array<{ seq: number; event: unknown }>;
+          };
+        },
+      };
+      const activeRoot =
+        (activeWorkspaceID ? runtimes.get(activeWorkspaceID)?.root : undefined) ??
+        process.cwd();
+      // The active workspace's root IS the install root in an installed
+      // deployment (the app runs from <install>) and the repository root in
+      // a checkout; resolveBaseline checks for the shipped `source/` beside
+      // it and falls back to the tree itself.
+      return await iterateBranch(host, resolveBaseline(baseline, activeRoot), request);
+    },
     async workspacePermissionGet(workspaceID) {
       const ws = runtimes.get(workspaceID);
       if (!ws) throw new Error(`workspace not found: ${workspaceID}`);
@@ -1086,6 +1168,49 @@ export function createWorkspaceRuntimeClient(
 
   const handler: ProxyHandler<object> = {
     get(_target, prop, _receiver) {
+      if (prop === "iterateBranch") {
+        // The manager's own handoff, reachable through the same facade the
+        // transport uses — so a runtime created for ANY workspace can ask
+        // the manager to open one somewhere else.
+        return (baseline: string, request: IterateBranchRequest) =>
+          manager.iterateBranch(baseline, request);
+      }
+      if (prop === "drainForUpdate") {
+        // EVERY workspace, not the active one. A staged build replaces the
+        // binary the whole daemon runs on, so the other workspaces' live
+        // turns die with the swap just as surely as this one's — and the
+        // generic route below drains only the active workspace, which is
+        // the one workspace whose quietness was never in question.
+        //
+        // The per-workspace wait is the SAME shared one (`waitForDrain` on
+        // each client), so "is it quiet" keeps one answer per workspace and
+        // one aggregate answer here. A workspace that refuses (its turns
+        // outlast the budget) fails the whole drain: switching code over a
+        // live turn drops it, and a drain that lied about being quiet would
+        // trade a visible refusal for invisible data loss.
+        return async (input?: { timeoutMs?: number }) => {
+          const started = Date.now();
+          let waited = 0;
+          const workspaces = await manager.workspaceRoots();
+          for (const workspace of workspaces) {
+            const owner = manager.get(workspace.workspaceID);
+            const fn = owner
+              ? ((owner.client as unknown as Record<string, unknown>)
+                  .drainForUpdate as
+                | ((input?: { timeoutMs?: number }) => Promise<{ waitedMs: number }>)
+                | undefined)
+              : undefined;
+            if (!owner || typeof fn !== "function") continue;
+            const result = await fn.call(owner.client, input);
+            waited += result?.waitedMs ?? 0;
+          }
+          return {
+            waitedMs: waited,
+            workspaces: workspaces.length,
+            at: started,
+          };
+        };
+      }
       if (prop === "start") {
         return (
           onEvent?: (event: import("@anthelia/contracts").RuntimeEvent) => void,

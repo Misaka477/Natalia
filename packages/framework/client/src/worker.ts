@@ -107,6 +107,7 @@ export const WORKER_ROUTE_MEMBERS = {
   "session.delete": "sessionDelete",
   "session.attach": "sessionAttach",
   "session.fork": "sessionFork",
+  "session.seed": "sessionSeed",
   "session.rollback.messages": "sessionRollbackMessages",
   "sandbox.list": "sandboxList",
   "sandbox.diff": "sandboxDiff",
@@ -266,6 +267,7 @@ type WorkerRequest = {
     | "session.delete"
     | "session.attach"
     | "session.fork"
+    | "session.seed"
     | "session.rollback.messages"
     | "sandbox.list"
     | "sandbox.diff"
@@ -882,6 +884,14 @@ export function createWorkerRuntimeClient(
       return (await request("session.fork", { id, turnID, title })) as Awaited<
         ReturnType<NonNullable<RuntimeClient["sessionFork"]>>
       >;
+    },
+
+    async sessionSeed(input) {
+      return (await request("session.seed", {
+        id: input.id,
+        title: input.title,
+        events: input.events,
+      })) as Awaited<ReturnType<NonNullable<RuntimeClient["sessionSeed"]>>>;
     },
     async sessionRollbackMessages(id, turnID) {
       return (await request("session.rollback.messages", {
@@ -1710,6 +1720,18 @@ export async function handleWorkerRequest(
       title?: string;
     };
     return await client.sessionFork?.(input.id, input.turnID, input.title);
+  }
+  if (request.method === "session.seed") {
+    const input = request.value as {
+      id?: string;
+      title?: string;
+      events: unknown[];
+    };
+    return await client.sessionSeed?.({
+      ...(input.id ? { id: input.id } : {}),
+      ...(input.title ? { title: input.title } : {}),
+      events: input.events as never,
+    });
   }
   if (request.method === "session.rollback.messages") {
     const input = request.value as { id: string; turnID: string };

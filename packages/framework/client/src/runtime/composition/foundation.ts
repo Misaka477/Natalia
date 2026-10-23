@@ -161,6 +161,11 @@ export function wireFoundation(ctx: ProductRuntimeContext) {
     ctx.state.serviceDirectory.getOptional(teamBehavior);
   ports.getProviderSource = () => state.providerSource;
   ports.getWorkspaceRoot = () => state.workspaceRoot;
+  // The self-iteration handoff, when the host injected one. A runtime is
+  // bound to one workspace, so this is the ONLY path from a session to a
+  // session in another tree; absent in hosts that own no workspace
+  // manager, where the tool says so rather than reaching.
+  ports.iterateBranch = () => state.iterateBranch;
   ports.getAgentRegistry = () => state.agentRegistry;
   ports.setPaused = (value) => {
     state.paused = value;

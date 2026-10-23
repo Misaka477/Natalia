@@ -47,6 +47,14 @@ export const OFFICIAL_PLUGIN_PACKAGES = [
     directory: "natalia-tool-computer-use",
   },
   {
+    // The self-iteration entry: it hands the work to a session in a copy
+    // of the shipped source, and it is the plugin that carries the tool
+    // which starts that handoff.
+    id: "natalia-tool-iterate",
+    packageName: "@natalia/plugin-iterate",
+    directory: "natalia-tool-iterate",
+  },
+  {
     id: "natalia-skills",
     packageName: "@natalia/plugin-skills",
     directory: "natalia-skills",

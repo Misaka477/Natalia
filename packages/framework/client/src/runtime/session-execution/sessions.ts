@@ -22,6 +22,7 @@ type Surface = Pick<
   | "sessionRollbackMessages"
   | "sessionDelete"
   | "sessionNew"
+  | "sessionSeed"
   | "sessionArchive"
   | "sessionRestore"
   | "sessionExport"
@@ -116,6 +117,23 @@ export function createSessionsSurface(
     async sessionNew(input = {}) {
       await ctx.ports.getReady();
       return await requireSessionStore().create(input);
+    },
+    async sessionSeed(input) {
+      await ctx.ports.getReady();
+      const store = requireSessionStore();
+      const created = await store.create({
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.title ? { title: input.title } : {}),
+      });
+      const events = input.events ?? [];
+      if (events.length > 0) {
+        // appendEvents takes a SessionRecord, not an id: the writer needs
+        // the record the store just made, and loading it back is the only
+        // way to hold the exact object the projection expects.
+        const loaded = await store.load(created.sessionID as SessionID);
+        await store.appendEvents(loaded.session, events);
+      }
+      return { ...created, seeded: events.length };
     },
     async sessionArchive(id) {
       await ctx.ports.getReady();

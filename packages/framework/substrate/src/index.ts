@@ -10,6 +10,7 @@
 export * from "./context";
 export * from "./helpers";
 export * from "./initialize-types";
+export * from "./iterate-branch";
 export * from "./options";
 export * from "./performance-trace";
 export * from "./plan-doc-port";
@@ -29,6 +30,7 @@ export * from "./session-event-retention";
 export * from "./session-event-window";
 export * from "./session-execution-state";
 export * from "./session-facts";
+export * from "./session-fork";
 export * from "./session-full-events";
 export * from "./session-project-client";
 export * from "./session-window";

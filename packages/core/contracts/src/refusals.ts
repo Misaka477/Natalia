@@ -422,6 +422,10 @@ export const RUNTIME_MEMBER_REFUSAL_SEMANTICS = {
     refusal: "error",
     note: "an unknown session or turn is an argument error",
   },
+  sessionSeed: {
+    refusal: "error",
+    note: "an id collision with a DIFFERENT record, or events the target store refuses, is an argument error; seeding an existing id with the same content is idempotent like every other create",
+  },
   sessionRollbackMessages: {
     refusal: "error",
     note: "an unknown session or turn is an argument error",

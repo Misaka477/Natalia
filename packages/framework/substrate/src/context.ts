@@ -121,6 +121,18 @@ export type RuntimeState = {
   runtimeDisposed: boolean;
   initialize: InitializeDependencies;
   workspaceRoot: string;
+  /**
+   * The host-injected self-iteration handoff. Absent unless the host owns a
+   * workspace manager and passed one through the options; the tool reads
+   * it through `ports.iterateBranch` and answers "unavailable here" when it
+   * is missing.
+   */
+  iterateBranch?:
+    | ((
+        baseline: string | undefined,
+        request: import("./iterate-branch").IterateBranchRequest,
+      ) => Promise<import("./iterate-branch").IterateBranchResult>)
+    | undefined;
   pluginStoreRoot?: string;
   /** See {@link RealRuntimeClientOptions.pluginDistributionRoot}. */
   pluginDistributionRoot?: string;

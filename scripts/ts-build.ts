@@ -82,6 +82,7 @@ const pluginRoots = [
   "packages/plugins/ui/file-editor",
   "packages/plugins/browser",
   "packages/plugins/native-computer-use",
+  "packages/plugins/iterate",
   "packages/plugins/native-terminal",
   "packages/plugins/skills",
   "packages/plugins/team",
@@ -384,7 +385,7 @@ const workerOutputs = workerSources.map((source) =>
   resolve(workersOutdir, `${basename(source).replace(/\.ts$/u, "")}.js`),
 );
 
-if (pluginRoots.length !== 16)
+if (pluginRoots.length !== 17)
   throw new Error(`expected 16 release plugins, got ${pluginRoots.length}`);
 for (const artifact of [
   "LICENSE",

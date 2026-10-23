@@ -227,6 +227,7 @@ export const RUNTIME_CAPABILITY_GROUPS = {
     "sessionPin",
     "sessionDuplicate",
     "sessionFork",
+    "sessionSeed",
     "sessionRollbackMessages",
     "sessionDelete",
     "sessionNew",

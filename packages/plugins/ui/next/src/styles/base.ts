@@ -2038,7 +2038,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-action-btn,
 .file-tree-item,
 .review-file-row,
-.review-icon-btn,
 .neu-file-editor-tab {
   transition:
     box-shadow 0.25s ease,

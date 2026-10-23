@@ -34,8 +34,14 @@ test("the shell resolves per call, so a later choice is hot", () => {
   // makes the choice take effect on the next command.
   setConfiguredShell("bash");
   expect(selectExecutor()).toBeInstanceOf(BashLocalExecutor);
+  // The later choice lands on the next call — and lands as the executor the
+  // HOST honours, which is pwsh on Windows and bash off it (the file's own
+  // "pwsh is not honoured off Windows" case below). Asserting
+  // PwshLocalExecutor unconditionally is what kept this file red on Linux.
   setConfiguredShell("pwsh");
-  expect(selectExecutor()).toBeInstanceOf(PwshLocalExecutor);
+  expect(selectExecutor()).toBeInstanceOf(
+    process.platform === "win32" ? PwshLocalExecutor : BashLocalExecutor,
+  );
   // And the caller's own choice still outranks the recorded one.
   expect(selectExecutor(process.platform, "bash")).toBeInstanceOf(
     BashLocalExecutor,

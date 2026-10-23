@@ -1,3 +1,4 @@
+import styles from "./styles/governance-panel.module.css";
 import { createSignal, createEffect, createMemo, Show, For } from "solid-js";
 import type {
   RuntimeClient,
@@ -677,7 +678,7 @@ function DriftCard(props: {
   return (
     <div class="drift-card">
       <div class="drift-card-head">
-        <span class="neu-gov-title" data-priority={finding().severity}>
+        <span class={styles.title} data-priority={finding().severity}>
           {finding().severity} · {Math.round(finding().confidence * 100)}%
         </span>
         <span class="drift-card-status" data-status={finding().status}>
@@ -1490,7 +1491,7 @@ export function GovernancePane(props: {
   }
 
   return (
-    <div class="governance-pane">
+    <div class={styles.pane}>
       <div class="review-subtabs">
         <button
           type="button"
@@ -1566,12 +1567,12 @@ export function GovernancePane(props: {
         </button>
       </div>
       <div
-        class="neu-governance-content"
+        class={styles.content}
         ref={setContentEl}
         onScroll={() => autoAppend.check()}
       >
         <Show when={loadErrors().length}>
-          <div class="neu-gov-error">{loadErrors().join(" · ")}</div>
+          <div class={styles.error}>{loadErrors().join(" · ")}</div>
         </Show>
         <Show when={actionNotice()}>
           <div class="neu-gov-action-note">{actionNotice()}</div>
@@ -1723,7 +1724,7 @@ export function GovernancePane(props: {
           <Show when={overrideEditor()}>
             {(editor) => (
               <div class="constitution-editor">
-                <div class="neu-gov-title">
+                <div class={styles.title}>
                   {t("gov.overrideRequest", { ruleID: editor().ruleID })}
                 </div>
                 <input
@@ -1818,11 +1819,11 @@ export function GovernancePane(props: {
             {(rule) => (
               <div class="constitution-row">
                 <div class="constitution-row-main">
-                  <span class="neu-gov-title" data-priority={rule.priority}>
+                  <span class={styles.title} data-priority={rule.priority}>
                     {rule.ruleID}
                   </span>
-                  <span class="neu-gov-text">{rule.statement}</span>
-                  <span class="neu-gov-meta">
+                  <span class={styles.text}>{rule.statement}</span>
+                  <span class={styles.meta}>
                     {rule.scope} · {rule.enforcement}
                   </span>
                   <RuleOverrides
@@ -1928,9 +1929,9 @@ export function GovernancePane(props: {
               {(rule) => (
                 <div class="constitution-row">
                   <div class="constitution-row-main">
-                    <span class="neu-gov-title">{rule.section}</span>
-                    <span class="neu-gov-text">{rule.statement}</span>
-                    <span class="neu-gov-meta">
+                    <span class={styles.title}>{rule.section}</span>
+                    <span class={styles.text}>{rule.statement}</span>
+                    <span class={styles.meta}>
                       {rule.source} · {rule.enforcement}
                       {rule.annotated ? t("gov.annotated") : t("gov.prose")}
                     </span>
@@ -1976,7 +1977,7 @@ export function GovernancePane(props: {
             {(editor) => (
               <div class="constitution-editor">
                 <div class="constitution-editor-row">
-                  <span class="neu-gov-meta">
+                  <span class={styles.meta}>
                     {t("gov.docRuleEditorTitle", {
                       section: editor().section,
                       source: editor().source,
@@ -2096,10 +2097,10 @@ export function GovernancePane(props: {
           {dialog}
         </Show>
         <Show when={tab() === "decisions"}>
-          <div class="gov-scope-switch">
+          <div class={styles.scopeSwitch}>
             <button
               type="button"
-              class="gov-scope-btn"
+              class={styles.scopeBtn}
               data-active={decisionScope() === "session"}
               onClick={() => setDecisionScope("session")}
             >
@@ -2107,7 +2108,7 @@ export function GovernancePane(props: {
             </button>
             <button
               type="button"
-              class="gov-scope-btn"
+              class={styles.scopeBtn}
               data-active={decisionScope() === "workspace"}
               onClick={() => setDecisionScope("workspace")}
             >
@@ -2122,31 +2123,31 @@ export function GovernancePane(props: {
             }
           >
             {(record) => (
-              <div class="gov-card">
-                <div class="gov-card-head">
-                  <span class="neu-gov-title" data-priority={record.status}>
+              <div class={styles.card}>
+                <div class={styles.cardHead}>
+                  <span class={styles.title} data-priority={record.status}>
                     {record.status}
                   </span>
-                  <span class="gov-card-meta">{record.id}</span>
+                  <span class={styles.cardMeta}>{record.id}</span>
                 </div>
-                <div class="gov-card-section">
-                  <div class="gov-card-label">Decision</div>
-                  <div class="gov-card-text">{record.decision}</div>
+                <div class={styles.cardSection}>
+                  <div class={styles.cardLabel}>Decision</div>
+                  <div class={styles.cardText}>{record.decision}</div>
                 </div>
                 <Show when={record.rationale?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Rationale</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Rationale</div>
+                    <div class={styles.cardText}>
                       {(record.rationale ?? []).join("; ")}
                     </div>
                   </div>
                 </Show>
                 <Show when={record.alternatives?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Alternatives</div>
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Alternatives</div>
                     <For each={record.alternatives ?? []}>
                       {(item: { option: string; rejectedReason?: string }) => (
-                        <div class="gov-card-text">
+                        <div class={styles.cardText}>
                           {item.option}
                           {item.rejectedReason
                             ? ` — ${item.rejectedReason}`
@@ -2157,9 +2158,9 @@ export function GovernancePane(props: {
                   </div>
                 </Show>
                 <Show when={record.consequences?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Consequences</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Consequences</div>
+                    <div class={styles.cardText}>
                       {(record.consequences ?? []).join("; ")}
                     </div>
                   </div>
@@ -2188,24 +2189,24 @@ export function GovernancePane(props: {
             }
           >
             {(record) => (
-              <div class="gov-card">
-                <div class="gov-card-head">
-                  <span class="neu-gov-title" data-priority={record.status}>
+              <div class={styles.card}>
+                <div class={styles.cardHead}>
+                  <span class={styles.title} data-priority={record.status}>
                     {record.status}
                   </span>
-                  <span class="gov-card-meta">{record.taskID}</span>
+                  <span class={styles.cardMeta}>{record.taskID}</span>
                 </div>
-                <div class="gov-card-text">{record.objective}</div>
+                <div class={styles.cardText}>{record.objective}</div>
                 <Show when={record.validations?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Validations</div>
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Validations</div>
                     <For each={record.validations ?? []}>
                       {(validation: {
                         command: string;
                         result: string;
                         safeSummary: string;
                       }) => (
-                        <div class="gov-card-text">
+                        <div class={styles.cardText}>
                           [{validation.result}] {validation.command} —{" "}
                           {validation.safeSummary}
                         </div>
@@ -2214,8 +2215,8 @@ export function GovernancePane(props: {
                   </div>
                 </Show>
                 <Show when={record.changes?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>
                       Changes ({record.changes!.length})
                     </div>
                     <For each={record.changes ?? []}>
@@ -2224,7 +2225,7 @@ export function GovernancePane(props: {
                         changeType?: string;
                         summary?: string;
                       }) => (
-                        <div class="gov-card-text">
+                        <div class={styles.cardText}>
                           {change.changeType ?? "change"}: {change.path}
                           {change.summary ? ` — ${change.summary}` : ""}
                         </div>
@@ -2233,9 +2234,9 @@ export function GovernancePane(props: {
                   </div>
                 </Show>
                 <Show when={record.knownGaps?.length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Known gaps</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Known gaps</div>
+                    <div class={styles.cardText}>
                       {(record.knownGaps ?? []).join("; ")}
                     </div>
                   </div>
@@ -2265,11 +2266,11 @@ export function GovernancePane(props: {
           >
             {(record) => (
               <div class="gov-card gov-completion-card">
-                <div class="gov-card-head">
-                  <span class="neu-gov-title" data-priority="validated">
+                <div class={styles.cardHead}>
+                  <span class={styles.title} data-priority="validated">
                     {record.taskID}
                   </span>
-                  <span class="gov-card-meta">{record.recordedAt}</span>
+                  <span class={styles.cardMeta}>{record.recordedAt}</span>
                   <button
                     type="button"
                     class="constitution-btn"
@@ -2279,26 +2280,26 @@ export function GovernancePane(props: {
                     {t("gov.recordHuman")}
                   </button>
                 </div>
-                <div class="gov-card-section">
-                  <div class="gov-card-label">Target</div>
-                  <div class="gov-card-text">{record.objective}</div>
+                <div class={styles.cardSection}>
+                  <div class={styles.cardLabel}>Target</div>
+                  <div class={styles.cardText}>{record.objective}</div>
                 </div>
-                <div class="gov-card-section">
-                  <div class="gov-card-label">Changes</div>
-                  <div class="gov-card-text">{record.changeSummary}</div>
+                <div class={styles.cardSection}>
+                  <div class={styles.cardLabel}>Changes</div>
+                  <div class={styles.cardText}>{record.changeSummary}</div>
                 </div>
                 <Show when={record.behaviorImpact}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Behavior impact</div>
-                    <div class="gov-card-text">{record.behaviorImpact}</div>
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Behavior impact</div>
+                    <div class={styles.cardText}>{record.behaviorImpact}</div>
                   </div>
                 </Show>
-                <div class="gov-card-section">
-                  <div class="gov-card-label">Validation matrix</div>
+                <div class={styles.cardSection}>
+                  <div class={styles.cardLabel}>Validation matrix</div>
                   <Show
                     when={(record.validations ?? []).length}
                     fallback={
-                      <div class="gov-card-text">no validation recorded</div>
+                      <div class={styles.cardText}>no validation recorded</div>
                     }
                   >
                     <For each={record.validations ?? []}>
@@ -2307,7 +2308,7 @@ export function GovernancePane(props: {
                         result: string;
                         safeSummary: string;
                       }) => (
-                        <div class="gov-card-text">
+                        <div class={styles.cardText}>
                           [{validation.result}] {validation.command} —{" "}
                           {validation.safeSummary}
                         </div>
@@ -2316,39 +2317,39 @@ export function GovernancePane(props: {
                   </Show>
                 </div>
                 <Show when={(record.knownGaps ?? []).length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Known gaps</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Known gaps</div>
+                    <div class={styles.cardText}>
                       {(record.knownGaps ?? []).join("; ")}
                     </div>
                   </div>
                 </Show>
                 <Show when={record.humanValidation}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Human validation</div>
-                    <div class="gov-card-text">{record.humanValidation}</div>
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Human validation</div>
+                    <div class={styles.cardText}>{record.humanValidation}</div>
                   </div>
                 </Show>
                 <Show when={(record.externalSideEffects ?? []).length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">External side effects</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>External side effects</div>
+                    <div class={styles.cardText}>
                       {(record.externalSideEffects ?? []).join("; ")}
                     </div>
                   </div>
                 </Show>
                 <Show when={(record.evidenceIDs ?? []).length}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Evidence IDs</div>
-                    <div class="gov-card-text">
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Evidence IDs</div>
+                    <div class={styles.cardText}>
                       {(record.evidenceIDs ?? []).join(", ")}
                     </div>
                   </div>
                 </Show>
                 <Show when={record.rollbackState}>
-                  <div class="gov-card-section">
-                    <div class="gov-card-label">Rollback</div>
-                    <div class="gov-card-text">{record.rollbackState}</div>
+                  <div class={styles.cardSection}>
+                    <div class={styles.cardLabel}>Rollback</div>
+                    <div class={styles.cardText}>{record.rollbackState}</div>
                   </div>
                 </Show>
               </div>
@@ -2395,7 +2396,7 @@ export function GovernancePane(props: {
           </div>
         </Show>
         <Show when={tab() === "notices"}>
-          <div class="neu-gov-section-title">Runtime Notices</div>
+          <div class={styles.sectionTitle}>Runtime Notices</div>
           <For
             each={
               liveNotices().length
@@ -2404,12 +2405,12 @@ export function GovernancePane(props: {
             }
           >
             {(notice) => (
-              <div class="neu-gov-row">
-                <span class="neu-gov-title" data-priority={notice.kind}>
+              <div class={styles.row}>
+                <span class={styles.title} data-priority={notice.kind}>
                   {notice.kind} · r{notice.revision}
                 </span>
-                <span class="neu-gov-text">{notice.summary}</span>
-                <span class="neu-gov-meta">{notice.at}</span>
+                <span class={styles.text}>{notice.summary}</span>
+                <span class={styles.meta}>{notice.at}</span>
               </div>
             )}
           </For>
@@ -2439,21 +2440,21 @@ export function GovernancePane(props: {
               </div>
             }
           >
-            <div class="neu-gov-section-title">Growth Triggers</div>
+            <div class={styles.sectionTitle}>Growth Triggers</div>
             {/* S4: the order is the triage's (frequency × potential, stable
               tie-break), not the sources' own — the rank used to be
               computed and read by nobody, so the operator re-derived the
               priority by eye. The subtitle says which yardstick the order
               is, so a reader never mistakes it for a chronology. */}
-            <div class="neu-gov-text" style="margin-bottom:6px;">
+            <div class={styles.text} style="margin-bottom:6px;">
               {t("gov.growthSortHint")}
             </div>
             <For each={liveGrowthTriggers()}>
               {(trigger) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">{trigger.capability}</span>
-                  <span class="neu-gov-text">{trigger.reason}</span>
-                  <span class="neu-gov-meta">
+                <div class={styles.row}>
+                  <span class={styles.title}>{trigger.capability}</span>
+                  <span class={styles.text}>{trigger.reason}</span>
+                  <span class={styles.meta}>
                     {trigger.rule} · {trigger.class} ·{" "}
                     {Object.entries(trigger.evidence ?? {})
                       .map(([key, value]) => `${key}=${value}`)
@@ -2504,7 +2505,7 @@ export function GovernancePane(props: {
                 staged, and a trigger applies nothing.
               </div>
             </Show>
-            <div class="neu-gov-section-title">Growth Proposals</div>
+            <div class={styles.sectionTitle}>Growth Proposals</div>
             <For
               each={
                 liveGrowthProposals().length
@@ -2513,18 +2514,18 @@ export function GovernancePane(props: {
               }
             >
               {(proposal) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">{proposal.at}</span>
+                <div class={styles.row}>
+                  <span class={styles.title}>{proposal.at}</span>
                   <For each={proposal.suggestions ?? []}>
                     {(suggestion) => (
-                      <span class="neu-gov-text">
+                      <span class={styles.text}>
                         [{suggestion.kind}] {suggestion.capability} —{" "}
                         {suggestion.reason} ({suggestion.observations}{" "}
                         observations)
                       </span>
                     )}
                   </For>
-                  <span class="neu-gov-meta">
+                  <span class={styles.meta}>
                     considered {proposal.considered?.tasks ?? 0} tasks ·{" "}
                     {proposal.considered?.gaps ?? 0} gaps
                   </span>
@@ -2542,7 +2543,7 @@ export function GovernancePane(props: {
                 applies nothing; the destination's approval policy decides.
               </div>
             </Show>
-            <div class="neu-gov-section-title">Growth Promotions</div>
+            <div class={styles.sectionTitle}>Growth Promotions</div>
             <For
               each={
                 liveGrowthPromotions().length
@@ -2551,15 +2552,15 @@ export function GovernancePane(props: {
               }
             >
               {(promotion) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">
+                <div class={styles.row}>
+                  <span class={styles.title}>
                     {promotion.trigger?.capability ?? promotion.promotionID}
                   </span>
-                  <span class="neu-gov-text">
+                  <span class={styles.text}>
                     → {promotion.destination} ({promotion.approval}) ·{" "}
                     {promotion.next}
                   </span>
-                  <span class="neu-gov-meta">{promotion.at}</span>
+                  <span class={styles.meta}>{promotion.at}</span>
                 </div>
               )}
             </For>
@@ -2585,19 +2586,19 @@ export function GovernancePane(props: {
             }
             fallback={<div class="neu-gov-empty">{t("gov.evalEmpty")}</div>}
           >
-            <div class="neu-gov-section-title">
+            <div class={styles.sectionTitle}>
               External Benchmark — Per-Task Comparison
             </div>
             <For each={liveExternalJoinedTasks()}>
               {(task) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">{task.externalTaskID}</span>
-                  <span class="neu-gov-text">
+                <div class={styles.row}>
+                  <span class={styles.title}>{task.externalTaskID}</span>
+                  <span class={styles.text}>
                     baseline {Math.round((task.baselineSuccessRate ?? 0) * 100)}
                     % · ours {Math.round((task.ourSuccessRate ?? 0) * 100)}%
                     over {task.ourRuns} run{task.ourRuns === 1 ? "" : "s"}
                   </span>
-                  <span class="neu-gov-meta">
+                  <span class={styles.meta}>
                     {task.ourRuns > 0 &&
                     (task.ourSuccessRate ?? 0) > (task.baselineSuccessRate ?? 0)
                       ? "above baseline"
@@ -2615,14 +2616,12 @@ export function GovernancePane(props: {
                 baseline against our recorded runs.
               </div>
             </Show>
-            <div class="neu-gov-section-title">
-              This Session's Recorded Runs
-            </div>
+            <div class={styles.sectionTitle}>This Session's Recorded Runs</div>
             <For each={props.state.externalRuns ?? []}>
               {(run) => (
-                <div class="neu-gov-row">
-                  <span class="neu-gov-title">{run.externalTaskID}</span>
-                  <span class="neu-gov-text">
+                <div class={styles.row}>
+                  <span class={styles.title}>{run.externalTaskID}</span>
+                  <span class={styles.text}>
                     {run.success === undefined
                       ? "unscored"
                       : run.success
@@ -2630,7 +2629,7 @@ export function GovernancePane(props: {
                         : "failure"}{" "}
                     · {run.benchmark}
                   </span>
-                  <span class="neu-gov-meta">{run.at}</span>
+                  <span class={styles.meta}>{run.at}</span>
                 </div>
               )}
             </For>

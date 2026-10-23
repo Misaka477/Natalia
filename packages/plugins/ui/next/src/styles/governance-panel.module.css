@@ -1,0 +1,177 @@
+/* The governance panel: its window and tabs, the findings rows and the
+   growth cards. The pane (shared with the review surface), the empty
+   state and the action note stay global — the transcript uses the same
+   ones. Tokens only. */
+
+.window {
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--neu-bg-light);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-elevation-5);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+
+.tabs :global(.neu-settings-category) {
+  width: auto;
+  padding: 8px 14px;
+  background: var(--neu-bg);
+}
+
+/* The pane must pass a bounded height down to the content, or the nested
+   scrollports (work-graph virtual window, tab lists) never resolve and
+   every tab renders unbounded content. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-inset-2);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-accent);
+  font-family: var(--neu-font-mono);
+}
+
+.title[data-priority="critical"],
+.title[data-priority="failed"],
+.title[data-priority="high"] {
+  color: var(--neu-error);
+}
+
+.title[data-priority="warning"],
+.title[data-priority="superseded"] {
+  color: var(--neu-warning);
+}
+
+.title[data-priority="accepted"],
+.title[data-priority="validated"] {
+  color: var(--neu-success);
+}
+
+.text {
+  font-size: 13px;
+  color: var(--neu-text);
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.sectionTitle {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neu-text);
+}
+
+.card {
+  margin-bottom: 6px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--neu-surface-raised);
+  box-shadow: var(--neu-ring-raised);
+  font-size: 12px;
+}
+
+.scopeSwitch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.scopeBtn {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--neu-border-strong);
+  background: transparent;
+  color: var(--neu-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.scopeBtn[data-active="true"] {
+  color: var(--neu-text);
+  border-color: var(--neu-state-info-border);
+  background: var(--neu-state-info-bg);
+}
+
+.completionCard {
+  border-left: 3px solid var(--neu-state-ok-border);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardMeta {
+  color: var(--neu-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.cardSection {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid var(--neu-surface-raised-strong);
+}
+
+.cardLabel {
+  margin-bottom: 2px;
+  color: var(--neu-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cardText {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.error {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--neu-state-danger-bg);
+  color: var(--neu-state-danger-text);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

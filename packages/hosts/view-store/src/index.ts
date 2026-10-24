@@ -72,6 +72,7 @@ export {
   displayText,
   emptySessionUsageStats,
   initialState,
+  synchronizeStreamSlices,
   policyDecisionLimit,
   streamSegmentChars,
   subagentHistoryLimit,

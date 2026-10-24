@@ -236,6 +236,7 @@ export async function createUiPluginHost<TContext = unknown>(
       activeKey = selectedKey;
       state = sessionStates.get(activeKey) ?? viewStore.initialState();
       state.sessionID ??= sessionID as never;
+      viewStore.synchronizeStreamSlices(state);
       sessionStates.set(activeKey, state);
       for (const listener of projectionListeners) listener(state);
     },

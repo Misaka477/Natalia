@@ -1563,8 +1563,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }
 
   createEffect(() => {
-    const sessionID = selectedSessionID() || state().sessionID;
-    if (sessionID) void loadPerSessionModelConfig(sessionID);
+    const sessionID =
+      selectedSessionID() || (heroDraftMode() ? undefined : state().sessionID);
+    if (!sessionID) return;
+    const timer = setTimeout(() => {
+      void loadPerSessionModelConfig(sessionID);
+    }, 350);
+    onCleanup(() => clearTimeout(timer));
   });
 
   onMount(() => {
@@ -2370,26 +2375,32 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     | undefined
   >(undefined);
   createEffect(() => {
-    const sessionID = selectedSessionID() || state().sessionID;
+    const sessionID =
+      selectedSessionID() || (heroDraftMode() ? undefined : state().sessionID);
     const ask = props.ctx.runtime.runtimeStatus;
     setRuntimeRung(undefined);
     if (!sessionID || !ask) return;
-    void ask(sessionID)
-      .then((snapshot) => {
-        // A newer activation wins: the answer must describe the session the
-        // controls are showing, never the one that was there when it was asked.
-        if ((selectedSessionID() || state().sessionID) !== sessionID) return;
-        if (!snapshot) return;
-        const approval = snapshot.permissions as
-          | "ask"
-          | "auto"
-          | "read_only"
-          | undefined;
-        const confinement = snapshot.confinement as ConfinementMode | undefined;
-        if (!approval || !confinement) return;
-        setRuntimeRung({ approval, confinement });
-      })
-      .catch(() => undefined);
+    const timer = setTimeout(() => {
+      void ask(sessionID)
+        .then((snapshot) => {
+          // A newer activation wins: the answer must describe the session the
+          // controls are showing, never the one that was there when it was asked.
+          if ((selectedSessionID() || state().sessionID) !== sessionID) return;
+          if (!snapshot) return;
+          const approval = snapshot.permissions as
+            | "ask"
+            | "auto"
+            | "read_only"
+            | undefined;
+          const confinement = snapshot.confinement as
+            | ConfinementMode
+            | undefined;
+          if (!approval || !confinement) return;
+          setRuntimeRung({ approval, confinement });
+        })
+        .catch(() => undefined);
+    }, 350);
+    onCleanup(() => clearTimeout(timer));
   });
   /** The rung the controls are standing on. */
   const currentRung = () =>
@@ -2641,20 +2652,38 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   );
 
   // Open/disputed drift findings — the治理 tab's PendingBadge (EI Phase 2).
-  const [openDriftCount] = createResource(
-    () => selectedSessionID() || state().sessionID,
-    async (sessionID) => {
-      try {
-        const page = await props.ctx.runtime.driftFindings?.({ sessionID });
-        return (page?.items ?? []).filter(
-          (finding) =>
-            finding.status === "open" || finding.status === "disputed",
-        ).length;
-      } catch {
-        return 0;
-      }
-    },
-  );
+  // Deferred by 600ms so switching sessions never queues a 1.1s drift.findings
+  // RPC ahead of session.attach and session.messages!
+  const [openDriftCount, setOpenDriftCount] = createSignal(0);
+  createEffect(() => {
+    const sessionID =
+      selectedSessionID() || (heroDraftMode() ? undefined : state().sessionID);
+    if (!sessionID) {
+      setOpenDriftCount(0);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const page = await props.ctx.runtime.driftFindings?.({ sessionID });
+          if (cancelled) return;
+          setOpenDriftCount(
+            (page?.items ?? []).filter(
+              (finding) =>
+                finding.status === "open" || finding.status === "disputed",
+            ).length,
+          );
+        } catch {
+          if (!cancelled) setOpenDriftCount(0);
+        }
+      })();
+    }, 650);
+    onCleanup(() => {
+      cancelled = true;
+      clearTimeout(timer);
+    });
+  });
 
   const mainMessageCache = new Map<
     string,

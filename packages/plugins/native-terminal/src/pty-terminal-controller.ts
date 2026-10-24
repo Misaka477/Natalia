@@ -920,6 +920,16 @@ export function createPtyTerminalController(
     const from = session.inputOwner;
     if (from === to) return;
     session.inputOwner = to;
+    if (to === "human" && session.settleTimer) {
+      clearTimeout(session.settleTimer);
+      session.settleTimer = undefined;
+    }
+    if (to === "model") {
+      // Snapshot the current screen when returning control to the model so
+      // prior human output does not immediately fire a stale frame-settle wake.
+      session.lastFrameText = renderScreenText(session.screen);
+      session.lastFrameScrollback = session.screen.scrollback.length;
+    }
     session.lastOwnershipChange = {
       from,
       to,
@@ -1167,7 +1177,20 @@ export function createPtyTerminalController(
     if (session.settleTimer) clearTimeout(session.settleTimer);
     session.settleTimer = setTimeout(() => {
       session.settleTimer = undefined;
-      if (session.status !== "running") return;
+      if (session.status !== "running" || session.inputOwner !== "model")
+        return;
+      // Do not wake the model for a UI-spawned interactive shell (`terminal_<uuid>`
+      // or `term_<uuid>` that the UI tab bar creates) when the model has never
+      // written to it and it was not started as a confined model pane.
+      if (
+        !session.confined &&
+        session.lastModelWriteAt === undefined &&
+        /^terminal_[0-9a-f]{8}-[0-9a-f]{4}-/iu.test(session.id)
+      ) {
+        session.lastFrameText = renderScreenText(session.screen);
+        session.lastFrameScrollback = session.screen.scrollback.length;
+        return;
+      }
       const text = renderScreenText(session.screen);
       if (text === session.lastFrameText) return;
       const scrolled =

@@ -215,6 +215,18 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             send(ws, { type: "error", message: "input data must be a string" });
             return;
           }
+          // Filter out automated terminal-emulator query responses (DSR cursor
+          // position reports ESC[row;colR, DA1/DA2 device attributes ESC[?...c
+          // / ESC[>...c, OSC color reports) that xterm.js sends automatically
+          // when the shell initializes or replays. They are not human typing
+          // and must never trigger automatic human takeover.
+          if (
+            /^(?:\x1b\[[0-9;?]*[Rn]|\x1b\[[>?=]?[0-9;]*c|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\))+$/u.test(
+              body.data,
+            )
+          ) {
+            return;
+          }
           await client.nativeTerminalWrite?.({
             id: terminalID,
             input: body.data,

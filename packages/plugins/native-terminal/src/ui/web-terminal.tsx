@@ -362,6 +362,16 @@ export function WebTerminal(props: WebTerminalProps) {
     });
     term.onData((data) => {
       if (closed) return;
+      // Ignore automated xterm.js terminal-query responses (DSR cursor position
+      // reports ESC[row;colR, DA1/DA2 device attributes ESC[?...c, OSC replies)
+      // so opening or replaying a terminal never masquerades as human typing.
+      if (
+        /^(?:\x1b\[[0-9;?]*[Rn]|\x1b\[[>?=]?[0-9;]*c|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\))+$/u.test(
+          data,
+        )
+      ) {
+        return;
+      }
       if (socket?.readyState === WebSocket.OPEN) {
         lastInputSentAt = performance.now();
         lastEchoLogged = false;

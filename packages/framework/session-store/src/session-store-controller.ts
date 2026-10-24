@@ -396,12 +396,7 @@ export function createSessionStoreController(input: {
 
   function loadProjectionCheckpoint(id: SessionID) {
     if (!sqliteStore) return undefined;
-    const loaded = sqliteStore.loadProjectionCheckpoint(id);
-    if (!loaded) return undefined;
-    return {
-      serializedState: serializeProjectionState(loaded.state),
-      lastSeq: loaded.lastSeq,
-    };
+    return sqliteStore.loadProjectionCheckpointRaw(id);
   }
 
   function writeContextEpoch(

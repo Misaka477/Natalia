@@ -1043,6 +1043,21 @@ export class SqliteSessionStore {
     return lastSeq;
   }
 
+  loadProjectionCheckpointRaw(
+    sessionID: SessionID,
+  ): { serializedState: string; lastSeq: number } | undefined {
+    const row = this.db
+      .query(
+        `SELECT state_version, last_seq, state FROM projection_checkpoints WHERE session_id = ?`,
+      )
+      .get(sessionID) as
+      | { state_version: number; last_seq: number; state: string }
+      | undefined;
+    if (!row) return undefined;
+    if (row.state_version !== PROJECTION_STATE_VERSION) return undefined;
+    return { serializedState: row.state, lastSeq: row.last_seq };
+  }
+
   /**
    * Loads a persisted projection checkpoint. A row written by an older
    * `PROJECTION_STATE_VERSION` (or a corrupt payload) is discarded (returns

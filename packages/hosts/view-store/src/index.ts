@@ -359,6 +359,7 @@ export function hydrateProjectedMessages(
     // a page that carries none of their events must not speak for them.
     state.sessionUsage = projected.sessionUsage;
     state.usageByChannel.main = projected.usageByChannel.main;
+    state.turnMetrics = { ...state.turnMetrics, ...projected.turnMetrics };
     state.activeTurn = projected.activeTurn;
     state.activeTurnStartedAt = projected.activeTurnStartedAt;
     state.pendingInputs = projected.pendingInputs;
@@ -407,6 +408,9 @@ export function hydrateProjectedMessages(
       state.streamPhases[id] = projected.streamPhases[id];
   for (const id of Object.keys(projected.tools))
     if (!(id in state.tools)) state.tools[id] = projected.tools[id];
+  for (const id of Object.keys(projected.turnMetrics))
+    if (!(id in state.turnMetrics))
+      state.turnMetrics[id] = projected.turnMetrics[id];
   // The older-page counterpart of the replace path above: the pages are
   // disjoint turn windows (the cursor pages by turn), so each step's usage
   // appears in exactly one page and ADDING is the correct fold — no double

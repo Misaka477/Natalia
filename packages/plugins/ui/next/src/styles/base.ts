@@ -691,8 +691,76 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   transition: opacity 0.15s ease;
 }
 .neu-pane .natalia-message-group:hover .natalia-message-group-actions,
-.neu-pane .natalia-message-group-actions:focus-within {
+.neu-pane .natalia-message-group-actions:focus-within,
+.neu-pane .natalia-message-group:last-of-type .natalia-message-group-actions {
   opacity: 1;
+}
+.neu-pane .natalia-turn-deliverables {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 2px 8px;
+}
+.neu-pane .natalia-turn-deliverables-label {
+  font-size: 12px;
+  color: var(--neu-muted);
+  flex-shrink: 0;
+}
+.neu-pane .natalia-turn-deliverables-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.neu-pane .natalia-turn-deliverable-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 160px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 7px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+.neu-pane .natalia-turn-deliverable-pill:hover {
+  border-color: var(--neu-accent);
+  color: var(--neu-accent);
+}
+.neu-pane .natalia-turn-deliverables-more {
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--neu-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.neu-pane .natalia-turn-deliverables-more:hover {
+  color: var(--neu-text);
+}
+.neu-pane .natalia-turn-tail-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 8px;
+  color: var(--neu-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.neu-pane .natalia-turn-tail-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .neu-pane .natalia-message-footer {

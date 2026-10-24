@@ -415,6 +415,13 @@ export type RollbackView = {
   recovered?: boolean;
 };
 
+export type TurnMetricsView = {
+  tokens: number;
+  durationMs: number;
+  endedAt?: string;
+  deliverables: string[];
+};
+
 export type AppState = {
   // workspace / session navigation
   workspaces: WorkspaceSummary[];
@@ -528,6 +535,8 @@ export type AppState = {
    * they belong to so Natalia, Navi and Nia do not show each other's tokens.
    */
   usageByChannel: Record<SessionUsageChannel, SessionUsageStats>;
+  /** Per-turn metrics and deliverables for completed assistant turn tails. */
+  turnMetrics: Record<string, TurnMetricsView>;
   /**
    * Projected WorkContracts per plan (EI §8.2), consumed by the plan tab's
    * contract summary bar. Session-scoped like the rest of the state.
@@ -717,6 +726,7 @@ export function initialState(): AppState {
       navi: emptySessionUsageStats(),
       nia: emptySessionUsageStats(),
     },
+    turnMetrics: {},
     workContracts: {},
   };
 }
@@ -801,6 +811,10 @@ export function cloneState(state: AppState): AppState {
       navi: { ...state.usageByChannel.navi },
       nia: { ...state.usageByChannel.nia },
     },
+    turnMetrics: mapRecord(state.turnMetrics ?? {}, (value) => ({
+      ...value,
+      deliverables: [...value.deliverables],
+    })),
     workContracts: mapRecord(state.workContracts, (value) => ({ ...value })),
     ...(state.goal
       ? {

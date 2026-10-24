@@ -874,6 +874,32 @@ const TOOL_OUTPUT_LINE_HEIGHT = 19;
 const TOOL_CARD_COLLAPSED_OUTPUT_HEIGHT =
   16 + CHAT_OUTPUT_MAX_LINES * TOOL_OUTPUT_LINE_HEIGHT + 28;
 const ATTACHMENT_GAP = 8;
+const DELIVERABLE_COLLAPSED_COUNT = 5;
+
+function formatCompactTokens(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    const m = Math.round((tokens / 1_000_000) * 10) / 10;
+    return `${m}M tok`;
+  }
+  if (tokens >= 1_000) {
+    const k = Math.round((tokens / 1_000) * 10) / 10;
+    return `${k}k tok`;
+  }
+  return `${tokens} tok`;
+}
+
+function formatTurnDuration(ms: number): string {
+  const totalSec = Math.max(1, Math.round(ms / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) return `${min}分${sec}秒`;
+  return `${sec}秒`;
+}
+
+function fileBasename(filePath: string): string {
+  const normalized = filePath.replace(/\\/gu, "/");
+  return normalized.slice(normalized.lastIndexOf("/") + 1) || filePath;
+}
 
 function wrappedLineCount(text: string, charsPerLine: number): number {
   if (text === "") return 0;
@@ -955,6 +981,10 @@ export function estimateMessageHeight(message: Message): number {
     height += estimateAttachmentHeight(attachment) + ATTACHMENT_GAP;
   }
 
+  if (message.turnTail?.deliverables?.length) {
+    height += 36;
+  }
+
   return Math.max(MESSAGE_BASE_HEIGHT, Math.ceil(height));
 }
 
@@ -1023,6 +1053,14 @@ function MessageGroup(props: {
     }
   });
   let rowEl: HTMLDivElement | undefined;
+  const [deliverablesExpanded, setDeliverablesExpanded] = createSignal(false);
+  const deliverables = () => props.message.turnTail?.deliverables ?? [];
+  const visibleDeliverables = () => {
+    const list = deliverables();
+    if (deliverablesExpanded() || list.length <= DELIVERABLE_COLLAPSED_COUNT)
+      return list;
+    return list.slice(0, DELIVERABLE_COLLAPSED_COUNT);
+  };
   return (
     <div
       class="natalia-message-group"
@@ -1042,6 +1080,45 @@ function MessageGroup(props: {
         loadAttachmentUrl={props.loadAttachmentUrl}
         toolCards={props.toolCards}
       />
+      <Show when={deliverables().length > 0}>
+        <div class="natalia-turn-deliverables">
+          <span class="natalia-turn-deliverables-label">产物</span>
+          <div class="natalia-turn-deliverables-list">
+            <For each={visibleDeliverables()}>
+              {(filePath) => (
+                <button
+                  type="button"
+                  class="natalia-turn-deliverable-pill"
+                  title={filePath}
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent("natalia:open-file", {
+                        detail: { path: filePath, line: 1 },
+                      }),
+                    );
+                  }}
+                >
+                  {fileBasename(filePath)}
+                </button>
+              )}
+            </For>
+            <Show
+              when={
+                deliverables().length > DELIVERABLE_COLLAPSED_COUNT &&
+                !deliverablesExpanded()
+              }
+            >
+              <button
+                type="button"
+                class="natalia-turn-deliverables-more"
+                onClick={() => setDeliverablesExpanded(true)}
+              >
+                + {deliverables().length - DELIVERABLE_COLLAPSED_COUNT} 个文件
+              </button>
+            </Show>
+          </div>
+        </div>
+      </Show>
       <Show when={props.message.role !== "system"}>
         <div class="natalia-message-group-actions">
           <Show when={copyText()}>
@@ -1165,6 +1242,60 @@ function MessageGroup(props: {
               </svg>
               <span>回滚</span>
             </button>
+          </Show>
+          <Show
+            when={
+              (props.message.turnTail?.tokens ?? 0) > 0 ||
+              (props.message.turnTail?.durationMs ?? 0) > 0
+            }
+          >
+            <span class="natalia-turn-tail-stats">
+              <Show when={(props.message.turnTail?.tokens ?? 0) > 0}>
+                <span class="natalia-turn-tail-stat">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <ellipse
+                      cx="8"
+                      cy="4"
+                      rx="5"
+                      ry="2"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                    />
+                    <path
+                      d="M3 4v4c0 1.1 2.24 2 5 2s5-.9 5-2V4M3 8v4c0 1.1 2.24 2 5 2s5-.9 5-2V8"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                    />
+                  </svg>
+                  <span>
+                    用量 {formatCompactTokens(props.message.turnTail!.tokens!)}
+                  </span>
+                </span>
+              </Show>
+              <Show when={(props.message.turnTail?.durationMs ?? 0) > 0}>
+                <span class="natalia-turn-tail-stat">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="5.5"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                    />
+                    <path
+                      d="M8 5v3.2l2.2 1.3"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span>
+                    用时{" "}
+                    {formatTurnDuration(props.message.turnTail!.durationMs!)}
+                  </span>
+                </span>
+              </Show>
+            </span>
           </Show>
         </div>
       </Show>

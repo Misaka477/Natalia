@@ -312,4 +312,10 @@ export interface Message {
   toolCalls?: ToolCall[];
   actions?: MessageAction[];
   attachments?: Attachment[];
+  /** Turn tail summary rendered on the closing assistant message of a turn. */
+  turnTail?: {
+    tokens?: number;
+    durationMs?: number;
+    deliverables?: string[];
+  };
 }

@@ -507,6 +507,18 @@ export function applyConversationEvent(
       if (event.durationMs !== undefined) {
         state.sessionUsage.llmMs += event.durationMs;
         state.usageByChannel.main.llmMs += event.durationMs;
+        const entry = (state.turnMetrics[event.id] ??= {
+          tokens: (event.inputTokens ?? 0) + (event.outputTokens ?? 0),
+          durationMs: 0,
+          deliverables: [],
+        });
+        entry.durationMs = event.durationMs;
+        if (
+          entry.tokens === 0 &&
+          (event.inputTokens !== undefined || event.outputTokens !== undefined)
+        ) {
+          entry.tokens = (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
+        }
       }
       flushStream(state, streamID(event.id, "thinking"));
       flushStream(state, streamID(event.id, "assistant"));
@@ -621,6 +633,44 @@ function upsertTool(
   };
   state.tools[stateID] = tool;
   upsertBlock(state, stateID, "tool", event.summary, event.status, { tool });
+  if (event.status === "succeeded") {
+    const isFileWrite =
+      event.name === "write_file" ||
+      event.name === "edit_file" ||
+      event.name === "apply_edits" ||
+      event.name === "write" ||
+      event.name === "edit" ||
+      tool.card?.kind === "diff";
+    if (isFileWrite) {
+      let filePath =
+        (event.meta?.path as string | undefined) ??
+        (tool.card?.kind === "diff" ? tool.card.path : undefined);
+      if (!filePath && argumentsRaw) {
+        try {
+          const parsed = JSON.parse(argumentsRaw) as {
+            path?: unknown;
+            file_path?: unknown;
+          };
+          if (typeof parsed.path === "string") filePath = parsed.path;
+          else if (typeof parsed.file_path === "string")
+            filePath = parsed.file_path;
+        } catch {
+          // ignore partial JSON
+        }
+      }
+      if (filePath && filePath.trim()) {
+        const turnID = turnIDForTool(event);
+        const entry = (state.turnMetrics[turnID] ??= {
+          tokens: 0,
+          durationMs: 0,
+          deliverables: [],
+        });
+        if (!entry.deliverables.includes(filePath)) {
+          entry.deliverables.push(filePath);
+        }
+      }
+    }
+  }
 }
 
 /**

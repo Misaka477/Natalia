@@ -2646,6 +2646,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const mainMessages = createMemo<Message[]>(() => {
     const list = state().natalia.messages;
     const active = state().natalia.activeTurn;
+    const turnMetricsMap = state().turnMetrics ?? {};
+    // Find the closing assistant message index for each completed turn so its
+    // tail renders the turn's deliverables, token usage, and wall time.
+    const closingIdxByTurn = new Map<string, number>();
+    for (let index = 0; index < list.length; index += 1) {
+      const m = list[index]!;
+      if (m.role !== "assistant" || m.tool) continue;
+      const tid = m.id.split(":")[0];
+      if (tid && tid !== active) closingIdxByTurn.set(tid, index);
+    }
     // The running marker belongs to the last message of the active turn, not to
     // whatever message happens to be last — a queued or steering input is not
     // running.
@@ -2749,6 +2759,25 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           streaming,
           text: msg.text,
         });
+        const turnID = msg.id.split(":")[0] ?? "";
+        const isClosingAssistant =
+          role === "assistant" &&
+          msg.role !== "thinking" &&
+          closingIdxByTurn.get(turnID) === idx;
+        const turnMetric = isClosingAssistant
+          ? turnMetricsMap[turnID]
+          : undefined;
+        const turnTail =
+          turnMetric &&
+          (turnMetric.tokens > 0 ||
+            turnMetric.durationMs > 0 ||
+            turnMetric.deliverables.length > 0)
+            ? {
+                tokens: turnMetric.tokens,
+                durationMs: turnMetric.durationMs,
+                deliverables: turnMetric.deliverables,
+              }
+            : undefined;
         // The signature answers identity only: text / pendingText / content are
         // the row's CONTENT and change on every streaming delta, so carrying
         // them here rebuilt the row's DOM per delta.
@@ -2767,6 +2796,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             attachments,
             feedbackRowActions.length,
             messageVerdicts()[msg.id]?.verdict ?? "",
+            turnTail?.tokens ?? 0,
+            turnTail?.durationMs ?? 0,
+            turnTail?.deliverables.length ?? 0,
           ],
           create: () => ({
             id: msg.id,
@@ -2788,6 +2820,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             ...(feedbackRowActions.length
               ? { actions: feedbackRowActions }
               : {}),
+            ...(turnTail ? { turnTail } : {}),
             // Empty on purpose: the text is read live, never carried here.
             content: "",
             contentLive: () => liveContent(msg.id),

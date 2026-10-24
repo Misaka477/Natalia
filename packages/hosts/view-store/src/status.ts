@@ -81,6 +81,20 @@ export function applyStatusEvent(
       if (!state.usageByChannel[channel])
         state.usageByChannel[channel] = emptySessionUsageStats();
       accumulateUsage(state.usageByChannel[channel], event);
+      const turnID = event.id.split(":")[0] || state.activeTurn;
+      if (turnID) {
+        const entry = (state.turnMetrics[turnID] ??= {
+          tokens: 0,
+          durationMs: 0,
+          deliverables: [],
+        });
+        entry.tokens +=
+          (event.inputTokens ?? 0) +
+          (event.outputTokens ?? 0) +
+          (event.cacheReadInputTokens ?? 0) +
+          (event.cacheCreationInputTokens ?? 0);
+        entry.durationMs += (event.llmMs ?? 0) + (event.toolMs ?? 0);
+      }
       return true;
     }
     case "navi.runtime.step_usage": {

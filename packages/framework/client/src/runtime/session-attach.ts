@@ -298,8 +298,18 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // emptiness does NOT work: an indexed-recovery exec surface carries the
     // runtime's bootstrap events, so it is never empty while holding none of
     // the session's turns — and folding it yields zeros.)
-    if (store.status().mode !== "sqlite" || store.loadProjectionCheckpoint(id))
-      return restoreProjection(id, session, store).usage;
+    if (store.status().mode !== "sqlite")
+      return restoreProjection(id, session, emptyProjectionStore).usage;
+    const restored = restoreProjection(id, session, store);
+    if (
+      restored.usage.main.turns > 0 ||
+      restored.usage.main.steps > 0 ||
+      restored.usage.navi.turns > 0 ||
+      restored.usage.nia.turns > 0 ||
+      store.loadProjectionCheckpoint(id)
+    ) {
+      return restored.usage;
+    }
     // Fold the durable log from the store and rewrite the checkpoint: a
     // one-time migration, after which every attach replays only the tail.
     const state = initProjection();
@@ -569,7 +579,7 @@ export function createSessionAttach(ctx: RuntimeContext) {
     // exec surface cannot change them. Live step_usage events keep adding.
     publishForSession(exec, {
       type: "session.usage",
-      channels: usageSnapshotFor(exec.session.id, exec.session),
+      channels: projection.usage,
     });
     void seedStreamContextSnapshots(exec).catch(() => undefined);
     mark("context");

@@ -16,7 +16,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-// This test lives in packages/plugins/ui/web/test, so the repository root is five
+// This test lives in packages/plugins/ui/next/test, so the repository root is five
 // levels up.
 const repoRoot = join(import.meta.dir, "..", "..", "..", "..", "..");
 

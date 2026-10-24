@@ -785,7 +785,7 @@ fake `RuntimeClient`. Assert that registration performs no I/O before
 materialization, events update only local UI state, command execution uses the
 catalog, and `dispose` stops all event listeners and renderer resources. See
 `packages/examples/ui-plugin` and
-`packages/plugins/ui/web/test/plugin.test.ts` for an end-to-end materialization
+`packages/plugins/ui/next/test/plugin.test.ts` for an end-to-end materialization
 test.
 
 ### Launch an installed UI
@@ -1579,7 +1579,7 @@ checkpoint。
 验证 registration 在 materialize 前不产生 I/O，event 只更新 UI 本地 state，command 通过
 catalog 执行，`dispose` 停止所有 event listener 和 renderer resource。端到端
 materialization 测试可参考 `packages/examples/ui-plugin` 与
-`packages/plugins/ui/web/test/plugin.test.ts`。
+`packages/plugins/ui/next/test/plugin.test.ts`。
 
 ### 启动已安装的 UI
 

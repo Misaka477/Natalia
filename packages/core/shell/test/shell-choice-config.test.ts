@@ -60,9 +60,26 @@ const panel = await Bun.file(
     "packages",
     "plugins",
     "ui",
-    "web",
+    // The UI plugin package was renamed `ui/web` -> `ui/next` in this branch.
+    // This scan lives in a DIFFERENT package, so nothing tied the two together:
+    // every other source scan was updated with the rename and this one was
+    // missed, which made the module fail to load with ENOENT and took all five
+    // of its tests with it (CI run 40125265164, core-1 and windows-substrate).
+    "next",
     "src",
     "settings-panel.tsx",
+  ),
+).text();
+const locale = await Bun.file(
+  join(
+    repoRoot,
+    "packages",
+    "plugins",
+    "ui",
+    "next",
+    "src",
+    "locales",
+    "zh.ts",
   ),
 ).text();
 
@@ -138,12 +155,25 @@ test("the settings panel offers the shell, and 自动 is a real answer", () => {
   expect(panel).toContain('"Shell 类型"');
   // The four answers. 自动 names the deployment's default rather than a blank,
   // and the row says the choice takes effect immediately — which is the whole
-  // point of the session-scoped switch. Matched on the label text rather than
-  // one spelling, because prettier decides where the object wraps.
-  expect(panel).toMatch(/value:\s*"auto",\s*label:\s*"自动（跟随部署默认）"/u);
-  expect(panel).toContain("pwsh（PowerShell 7）");
-  expect(panel).toContain("bash（Git Bash / WSL）");
-  expect(panel).toContain("立即生效");
+  // point of the session-scoped switch.
+  //
+  // The words moved into the dictionary (`t("settingsDlg.shellAuto")`) when the
+  // panel was extracted, so this asserts the ROW through its key and the
+  // Chinese through `zh.ts` below. Pinning the sentence inside the panel would
+  // pin where the text is stored instead of what a human reads — and it is what
+  // made this file unloadable when the package was renamed, which took all five
+  // of its tests with it.
+  expect(panel).toMatch(
+    /value:\s*"auto",\s*label:\s*t\("settingsDlg\.shellAuto"\)/u,
+  );
+  expect(panel).toContain('t("settingsDlg.bashWsl")');
+  expect(locale).toContain('"settingsDlg.shellAuto": "自动（跟随部署默认）"');
+  expect(locale).toContain('"settingsDlg.bashWsl": "bash（Git Bash / WSL）"');
+  expect(locale).toContain('"settingsDlg.pwsh7": "pwsh（PowerShell 7）"');
+  // "Takes effect immediately" is the row's own promise, in the title the human
+  // reads before choosing. A session-scoped switch is only worth offering if it
+  // is hot, so the words are part of the contract, not decoration.
+  expect(locale).toMatch(/"settingsDlg\.shellTitle": "[^"]*立即生效/u);
   // A concrete choice moves the SESSION's shell rather than writing config: a
   // workspace's own config outranks the global file, and a config write reloads
   // the whole runtime.

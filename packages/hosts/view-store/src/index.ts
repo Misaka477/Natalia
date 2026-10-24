@@ -359,6 +359,9 @@ export function hydrateProjectedMessages(
     // a page that carries none of their events must not speak for them.
     state.sessionUsage = projected.sessionUsage;
     state.usageByChannel.main = projected.usageByChannel.main;
+    state.activeTurn = projected.activeTurn;
+    state.activeTurnStartedAt = projected.activeTurnStartedAt;
+    state.pendingInputs = projected.pendingInputs;
     // The context meters: carried when the page's fold produced one. A
     // live `context.status` (attach republishes it) still wins afterwards
     // because it mutates state directly.

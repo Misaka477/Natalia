@@ -96,7 +96,12 @@ export function MainInputArea(props: MainInputAreaProps) {
         placeholder={t("hero.placeholder")}
         busy={Boolean(state().natalia.activeTurn)}
         onInput={setMainDraft}
-        onStop={() => props.ctx.runtime.cancel?.()}
+        onStop={() =>
+          props.ctx.runtime.cancel?.(
+            "user cancel",
+            selectedSessionID() || state().sessionID,
+          )
+        }
         attachments={mainAttachments()}
         onRemoveAttachment={(path) =>
           setMainAttachments(

@@ -60,8 +60,11 @@ function toDerivedSession(
 ): DerivedSessionItem {
   const blank = isBlankSession(session);
   const status =
-    session.status ??
-    (session.cancelled ? "error" : session.resumable ? "idle" : "running");
+    session.status && session.status !== "error"
+      ? session.status
+      : (session.pendingInputs ?? 0) > 0
+        ? "running"
+        : "idle";
   return {
     id: session.id,
     name: blank

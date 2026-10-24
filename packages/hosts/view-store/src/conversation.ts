@@ -416,7 +416,12 @@ export function applyConversationEvent(
     }
     case "tool.update": {
       const turnID = turnIDForTool(event);
-      markTurnStarted(state, turnID);
+      // Do not resurrect an already-finished historical turn when a late
+      // terminal tool.update (such as ensureExecution's tool-call-recovery
+      // heal event) is appended after the turn finished.
+      if (!isTerminalToolStatus(event.status) || state.activeTurn === turnID) {
+        markTurnStarted(state, turnID);
+      }
       // Model output is committed before its tool card, so a tool update never
       // reorders text around itself.
       flushStream(state, streamID(turnID, "thinking"));
@@ -511,6 +516,10 @@ export function applyConversationEvent(
       markBlockStatus(state, streamID(event.id, "thinking"), "completed");
       releaseStreams(state, event.id);
       if (state.activeTurn === event.id) state.activeTurn = undefined;
+      // Clear any orphaned next-step or unpromoted inputs that were admitted
+      // before this turn finished so dead historical queue entries never stick
+      // in the QueueDock after the turn is done.
+      state.pendingInputs = [];
       state.paused = false;
       state.lastStopReason = event.stopReason;
       state.status =
@@ -554,6 +563,16 @@ function markTurnStarted(state: AppState, turnID: string) {
   state.activeTurn = turnID;
   const user = state.messages.find((block) => block.id === `${turnID}:user`);
   if (user?.status === "queued") user.status = undefined;
+}
+
+function isTerminalToolStatus(status: string | undefined): boolean {
+  return (
+    status === "succeeded" ||
+    status === "failed" ||
+    status === "rejected" ||
+    status === "cancelled" ||
+    status === "completed"
+  );
 }
 
 function markTurnCancelled(state: AppState, turnID: string) {

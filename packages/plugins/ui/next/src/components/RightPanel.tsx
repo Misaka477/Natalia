@@ -329,8 +329,6 @@ export function ReviewPane(
     const relevant =
       finalToolUpdate ||
       event.type === "checkpoint.created" ||
-      event.type === "rollback.previewed" ||
-      event.type === "rollback.begin" ||
       event.type === "rollback.end" ||
       event.type === "rollback.failed" ||
       event.type === "plan.doc.created" ||
@@ -567,34 +565,6 @@ export function ReviewPane(
     setCheckpointChanges(mapped);
     if (!current || !mapped.some((item) => item.path === current)) {
       setCheckpointSelected(mapped[0]?.path ?? null);
-    }
-    // If any file lacks patch/before/after (or has empty structured hunks),
-    // backfill from roundDiff(checkpoint -> current) so every card can expand.
-    if (
-      props.runtime?.roundDiff &&
-      mapped.some(
-        (item) =>
-          !hasRenderableStructured(item.structured) &&
-          !item.patch &&
-          !item.before &&
-          !item.after,
-      )
-    ) {
-      try {
-        const full = await props.runtime.roundDiff({
-          workspaceID: props.workspaceID,
-          from: { kind: "checkpoint", id },
-          to: { kind: "current" },
-          includePatch: true,
-          includeContent: true,
-        });
-        if (full?.length && selectedCheckpoint() === id) {
-          const fullMapped = full.map(toDiffItem);
-          setCheckpointChanges(fullMapped);
-        }
-      } catch {
-        // Keep preview changes on fallback failure
-      }
     }
     perfLog(
       `[perf] diff checkpoint ${id} ${mapped.length} files ${(performance.now() - start).toFixed(1)}ms`,

@@ -178,7 +178,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     CefString(&settings.log_file)
         .FromWString(trace_path.substr(0, trace_path.find_last_of(L"\\/")) +
                      L"\\cef.log");
-    settings.log_severity = LOGSEVERITY_VERBOSE;
+    settings.log_severity = LOGSEVERITY_WARNING;
   }
 
   const bool cef_initialized =

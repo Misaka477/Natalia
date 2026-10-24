@@ -1,4 +1,12 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import type { Message, TranscriptHandle } from "@natalia/ui-kit";
 import styles from "../styles/turn-navigator.module.css";
 
@@ -47,6 +55,9 @@ export function deriveTurnRailEntries(
   let turnCounter = 0;
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]!;
+    if (msg.role !== "user" && (!includeSystemTurns || msg.role !== "system")) {
+      continue;
+    }
     const rawPrompt = readMessageText(msg).trim();
     if (!rawPrompt || rawPrompt.startsWith("(internal")) continue;
     const isTrigger = includeSystemTurns
@@ -57,13 +68,17 @@ export function deriveTurnRailEntries(
     let responseText = "";
     for (let j = i + 1; j < messages.length; j++) {
       const next = messages[j]!;
-      const nextText = readMessageText(next).trim();
-      const nextIsTrigger = includeSystemTurns
-        ? isSubagentTriggerRow(next, nextText)
-        : next.role === "user";
-      if (nextIsTrigger) break;
-      if (next.role === "assistant" && !next.thinking && nextText) {
-        responseText = nextText;
+      if (
+        next.role === "user" ||
+        (includeSystemTurns &&
+          next.role === "system" &&
+          isSubagentTriggerRow(next, readMessageText(next).trim()))
+      ) {
+        break;
+      }
+      if (next.role === "assistant" && !next.thinking) {
+        const nextText = readMessageText(next).trim();
+        if (nextText) responseText = nextText;
       }
     }
     out.push({
@@ -83,21 +98,90 @@ export interface TurnNavigatorProps {
   activeMessageID?: () => string | undefined;
   /** When true (Subagent/Team pane), also treat Natalia->Subagent task/system dispatches as turn triggers. */
   includeSystemTurns?: boolean;
+  hasOlder?: boolean;
+  onLoadOlder?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
 }
 
+/** Fixed pitch between neighbouring marks; overflow scrolls inside the frame. */
 const TURN_SPACING_PX = 10;
+/** Rail padding above the first mark and below the last one, per end. */
+const RAIL_INSET_PX = 6;
+/** Fade band the mask reserves at a scrollable end. */
+const FADE_PX = 24;
+
+function itemAtPointer(
+  items: TurnRailEntry[],
+  frame: HTMLElement,
+  scrollTop: number,
+  clientY: number,
+): TurnRailEntry | undefined {
+  if (items.length === 0) return undefined;
+  const offset =
+    clientY - frame.getBoundingClientRect().top + scrollTop - RAIL_INSET_PX;
+  const index = Math.max(
+    0,
+    Math.min(items.length - 1, Math.round(offset / TURN_SPACING_PX)),
+  );
+  return items[index];
+}
 
 export function TurnNavigator(props: TurnNavigatorProps) {
-  const entries = createMemo(() =>
-    deriveTurnRailEntries(props.messages(), props.includeSystemTurns),
-  );
+  let cachedSignature = "";
+  let cachedEntries: TurnRailEntry[] = [];
+
+  const entries = createMemo<TurnRailEntry[]>(() => {
+    const msgs = props.messages();
+    const firstId = msgs[0]?.id ?? "";
+    const lastMsg = msgs.at(-1);
+    const lastId = lastMsg?.id ?? "";
+    const lastLen = lastMsg ? readMessageText(lastMsg).length : 0;
+    const sig = `${msgs.length}:${firstId}:${lastId}:${lastLen}:${Boolean(props.includeSystemTurns)}`;
+    if (sig === cachedSignature) return cachedEntries;
+    cachedSignature = sig;
+    cachedEntries = deriveTurnRailEntries(msgs, props.includeSystemTurns);
+    return cachedEntries;
+  });
+
   const [hoveredTurn, setHoveredTurn] = createSignal<number | null>(null);
   const [activeTurn, setActiveTurn] = createSignal<number | null>(null);
-  const [scrollTop, setScrollTop] = createSignal(0);
-  const [viewHeight, setViewHeight] = createSignal(0);
+  const [scrollState, setScrollState] = createSignal({
+    top: 0,
+    canScrollUp: false,
+    canScrollDown: false,
+  });
   let scrollerRef: HTMLDivElement | undefined;
   let pointerInside = false;
+
+  const syncScrollState = () => {
+    if (!scrollerRef) return;
+    const top = scrollerRef.scrollTop;
+    const canScrollUp = top > 1;
+    const canScrollDown =
+      top < scrollerRef.scrollHeight - scrollerRef.clientHeight - 1;
+    setScrollState((prev) =>
+      prev.top === top &&
+      prev.canScrollUp === canScrollUp &&
+      prev.canScrollDown === canScrollDown
+        ? prev
+        : { top, canScrollUp, canScrollDown },
+    );
+    if (top <= 12 && props.hasOlder) {
+      props.onLoadOlder?.();
+    }
+  };
+
+  onMount(() => {
+    if (!scrollerRef || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => syncScrollState());
+    observer.observe(scrollerRef);
+    onCleanup(() => observer.disconnect());
+  });
+
+  createEffect(() => {
+    entries().length;
+    queueMicrotask(syncScrollState);
+  });
 
   createEffect(() => {
     const list = entries();
@@ -125,37 +209,42 @@ export function TurnNavigator(props: TurnNavigatorProps) {
   // Auto-scroll the rail to keep the active mark visible when pointer is outside
   createEffect(() => {
     const current = activeTurn();
+    const list = entries();
     if (current === null || pointerInside || !scrollerRef) return;
-    const idx = entries().findIndex((item) => item.turn === current);
+    const idx = list.findIndex((item) => item.turn === current);
     if (idx < 0) return;
-    const height = scrollerRef.clientHeight;
-    if (height <= 0) return;
-    const center = idx * TURN_SPACING_PX + 10;
-    const currentTop = scrollerRef.scrollTop;
-    if (center < currentTop + 24 || center > currentTop + height - 24) {
-      scrollerRef.scrollTop = Math.max(0, center - height / 2);
-      setScrollTop(scrollerRef.scrollTop);
+    const viewHeight = scrollerRef.clientHeight;
+    const viewTop = scrollerRef.scrollTop;
+    const markTop = idx * TURN_SPACING_PX + RAIL_INSET_PX;
+    if (
+      viewHeight <= 0 ||
+      (markTop >= viewTop + FADE_PX &&
+        markTop <= viewTop + viewHeight - FADE_PX)
+    ) {
+      return;
     }
+    const target = Math.max(0, markTop - viewHeight / 2);
+    if (typeof scrollerRef.scrollTo === "function") {
+      scrollerRef.scrollTo({ top: target, behavior: "smooth" });
+    } else {
+      scrollerRef.scrollTop = target;
+    }
+    syncScrollState();
+  });
+
+  const hoveredIndex = createMemo(() => {
+    const tNum = hoveredTurn();
+    if (tNum === null) return -1;
+    return entries().findIndex((item) => item.turn === tNum);
   });
 
   const hoveredEntry = createMemo(() => {
-    const tNum = hoveredTurn();
-    if (tNum === null) return undefined;
-    return entries().find((item) => item.turn === tNum);
+    const idx = hoveredIndex();
+    return idx < 0 ? undefined : entries()[idx];
   });
 
-  const hoveredCenterPx = createMemo(() => {
-    const tNum = hoveredTurn();
-    if (tNum === null) return 0;
-    const idx = entries().findIndex((item) => item.turn === tNum);
-    if (idx < 0) return 0;
-    return idx * TURN_SPACING_PX + 10 - scrollTop();
-  });
-
-  const totalHeight = () => entries().length * TURN_SPACING_PX + 12;
-  const fadeTop = () => scrollTop() > 1;
-  const fadeBottom = () =>
-    viewHeight() > 0 && scrollTop() < totalHeight() - viewHeight() - 1;
+  const naturalHeight = () =>
+    Math.max(0, (entries().length - 1) * TURN_SPACING_PX + 2 * RAIL_INSET_PX);
 
   const handleJump = (entry: TurnRailEntry) => {
     setActiveTurn(entry.turn);
@@ -170,13 +259,33 @@ export function TurnNavigator(props: TurnNavigatorProps) {
     <Show when={entries().length >= 2}>
       <nav
         class={styles.frame}
+        style={{
+          "--turn-natural-height": `${naturalHeight()}px`,
+          "--turn-rail-inset": `${RAIL_INSET_PX}px`,
+          "--turn-scroll-top": `${scrollState().top}px`,
+        }}
         aria-label={props.t("turnNav.label")}
         onPointerEnter={() => {
           pointerInside = true;
-          if (scrollerRef) {
-            setViewHeight(scrollerRef.clientHeight);
-            setScrollTop(scrollerRef.scrollTop);
-          }
+          syncScrollState();
+        }}
+        onPointerMove={(e) => {
+          const item = itemAtPointer(
+            entries(),
+            e.currentTarget,
+            scrollerRef?.scrollTop ?? 0,
+            e.clientY,
+          );
+          if (item) setHoveredTurn(item.turn);
+        }}
+        onClick={(e) => {
+          const item = itemAtPointer(
+            entries(),
+            e.currentTarget,
+            scrollerRef?.scrollTop ?? 0,
+            e.clientY,
+          );
+          if (item) handleJump(item);
         }}
         onPointerLeave={() => {
           pointerInside = false;
@@ -186,47 +295,40 @@ export function TurnNavigator(props: TurnNavigatorProps) {
         <div
           ref={(el) => {
             scrollerRef = el;
-            queueMicrotask(() => {
-              setViewHeight(el.clientHeight);
-              setScrollTop(el.scrollTop);
-            });
+            queueMicrotask(syncScrollState);
           }}
-          class={`${styles.scroller} ${fadeTop() ? styles.fadeTop : ""} ${fadeBottom() ? styles.fadeBottom : ""}`}
-          onScroll={(e) => {
-            setScrollTop(e.currentTarget.scrollTop);
-            setViewHeight(e.currentTarget.clientHeight);
-          }}
+          class={`${styles.scroller} ${scrollState().canScrollUp ? styles.fadeTop : ""} ${scrollState().canScrollDown ? styles.fadeBottom : ""}`}
+          onScroll={() => syncScrollState()}
         >
-          <div
-            class={styles.marks}
-            style={{
-              height: `${totalHeight()}px`,
-            }}
-          >
+          <div class={styles.marks}>
             <For each={entries()}>
-              {(entry, idx) => {
-                const isActive = () => activeTurn() === entry.turn;
-                const isPreview = () => hoveredTurn() === entry.turn;
-                return (
+              {(entry, index) => (
+                <div
+                  class={styles.markPosition}
+                  style={{
+                    "--turn-natural-position": `${index() * TURN_SPACING_PX}px`,
+                  }}
+                >
                   <button
                     type="button"
                     class={styles.mark}
-                    data-active={isActive()}
-                    data-preview={isPreview()}
-                    style={{
-                      top: `${idx() * TURN_SPACING_PX + 6}px`,
-                    }}
-                    aria-label={props.t("turnNav.jumpToTurn", {
-                      turn: entry.turn,
-                    })}
+                    data-active={
+                      activeTurn() === entry.turn ? "true" : undefined
+                    }
+                    data-preview={
+                      hoveredTurn() === entry.turn ? "true" : undefined
+                    }
+                    aria-label={props.t("turnNav.jump", { turn: entry.turn })}
                     onPointerEnter={() => setHoveredTurn(entry.turn)}
-                    onPointerMove={() => setHoveredTurn(entry.turn)}
                     onFocus={() => setHoveredTurn(entry.turn)}
                     onBlur={() => setHoveredTurn(null)}
-                    onClick={() => handleJump(entry)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJump(entry);
+                    }}
                   />
-                );
-              }}
+                </div>
+              )}
             </For>
           </div>
         </div>
@@ -236,12 +338,12 @@ export function TurnNavigator(props: TurnNavigatorProps) {
               role="tooltip"
               class={styles.preview}
               style={{
-                "--turn-preview-center": `${hoveredCenterPx()}px`,
+                "--turn-preview-pos": `${hoveredIndex() * TURN_SPACING_PX}px`,
               }}
             >
               <div class={styles.previewPrompt}>
                 {entry().prompt ||
-                  props.t("turnNav.turnFallback", { turn: entry().turn })}
+                  props.t("turnNav.turn", { turn: entry().turn })}
               </div>
               <Show when={entry().response}>
                 <div class={styles.previewResponse}>{entry().response}</div>

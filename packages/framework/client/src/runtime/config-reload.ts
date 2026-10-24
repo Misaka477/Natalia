@@ -164,7 +164,11 @@ export function createConfigReload(
     // Record it as a durable `context.instructions` notice per session so the
     // interleaved context stream shows it — appended with a higher revision,
     // never mutating earlier messages (D3/D6).
-    for (const exec of ctx.ports.getExecutionBySession().values()) {
+    const activeExec = ctx.ports.getActiveExec();
+    const targetExecs = activeExec
+      ? [activeExec]
+      : [...ctx.ports.getExecutionBySession().values()];
+    for (const exec of targetExecs) {
       const revision = nextContextInstructionsRevision(exec.session.events);
       ctx.ports.publishForSession(exec, {
         type: "context.instructions",

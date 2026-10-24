@@ -1148,7 +1148,8 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   align-items: center;
   justify-content: center;
   background: var(--neu-overlay-scrim);
-  backdrop-filter: blur(2px);
+  contain: layout style paint;
+  isolation: isolate;
 }
 /* ===== Bulk session select ===== */
 .neu-bulk-bar {
@@ -2426,7 +2427,7 @@ export const confirmDialogCss = `
   align-items: center;
   justify-content: center;
   background: var(--neu-float-scrim);
-  backdrop-filter: blur(2px);
+  contain: layout style paint;
 }
 .neu-confirm-dialog {
   min-width: 280px;

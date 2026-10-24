@@ -141,6 +141,8 @@ export function AgentBody(props: AgentBodyProps) {
             messages={props.messages}
             getApi={() => localApi}
             activeMessageID={activeMessageID}
+            hasOlder={props.hasOlder}
+            onLoadOlder={props.onNearTop}
             t={t}
           />
           <Show when={props.jumpVisible()}>

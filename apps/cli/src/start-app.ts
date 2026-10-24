@@ -268,10 +268,20 @@ export async function startApp(): Promise<number> {
   if (existsSync(host)) {
     console.error("[natalia] starting the window host");
     try {
-      const window = spawn(host, [`--url=${webUrl}`], {
-        cwd: dir,
-        stdio: "inherit",
-      });
+      const window = spawn(
+        host,
+        [
+          `--url=${webUrl}`,
+          "--in-process-gpu",
+          "--ignore-gpu-blocklist",
+          "--enable-gpu-rasterization",
+          "--enable-zero-copy",
+        ],
+        {
+          cwd: dir,
+          stdio: "inherit",
+        },
+      );
       hostExit = await new Promise<number>((resolve) => {
         window.once("error", () => resolve(1));
         window.once("close", (code) => resolve(code ?? 1));

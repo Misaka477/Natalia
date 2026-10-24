@@ -402,12 +402,27 @@ export function applyStatusEvent(
       // position as a system bubble (fold order = event order, so upserting
       // here lands it between the turns it actually separates), never stacked
       // at the top. A replay and a live stream converge on the same rows.
-      upsertInto(
-        state.natalia.messages,
-        `notice:${event.id}`,
-        "system",
-        `${event.kind}: ${event.summary}`,
-      );
+      // When multiple notices of the same kind arrive back-to-back with no
+      // user/assistant/tool message between them, update the trailing notice
+      // in place so rapid settings toggles do not stack duplicate rows.
+      const tail = state.natalia.messages.at(-1);
+      const nextText = `${event.kind}: ${event.summary}`;
+      if (
+        tail &&
+        tail.role === "system" &&
+        tail.id.startsWith("notice:") &&
+        tail.text.startsWith(`${event.kind}: `)
+      ) {
+        tail.id = `notice:${event.id}`;
+        tail.text = nextText;
+      } else {
+        upsertInto(
+          state.natalia.messages,
+          `notice:${event.id}`,
+          "system",
+          nextText,
+        );
+      }
       return true;
     }
     case "model.selection":

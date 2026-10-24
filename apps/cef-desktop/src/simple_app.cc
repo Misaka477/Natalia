@@ -313,6 +313,34 @@ class SimpleBrowserViewDelegate : public CefBrowserViewDelegate {
 
 SimpleApp::SimpleApp() = default;
 
+void SimpleApp::OnBeforeCommandLineProcessing(
+    const CefString& process_type,
+    CefRefPtr<CefCommandLine> command_line) {
+  if (process_type.empty()) {
+#if defined(OS_WIN)
+    // On Windows without the CEF bootstrap sandbox broker (no_sandbox = true),
+    // an out-of-process --type=gpu-process child hits a Chromium CHECK
+    // (0x80000003 STATUS_BREAKPOINT) inside GpuControl.CreateCommandBuffer three
+    // times at startup and falls back to --use-gl=disabled (CPU software
+    // rendering). Running the GPU thread in-process keeps Direct3D11/ANGLE
+    // hardware acceleration active on the discrete GPU at full display refresh
+    // rate (120Hz/144Hz+).
+    if (!command_line->HasSwitch("in-process-gpu")) {
+      command_line->AppendSwitch("in-process-gpu");
+    }
+#endif
+    if (!command_line->HasSwitch("ignore-gpu-blocklist")) {
+      command_line->AppendSwitch("ignore-gpu-blocklist");
+    }
+    if (!command_line->HasSwitch("enable-gpu-rasterization")) {
+      command_line->AppendSwitch("enable-gpu-rasterization");
+    }
+    if (!command_line->HasSwitch("enable-zero-copy")) {
+      command_line->AppendSwitch("enable-zero-copy");
+    }
+  }
+}
+
 void SimpleApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
 

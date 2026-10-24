@@ -666,6 +666,8 @@ export function AgentPanel(props: {
                         getApi={() => subTranscriptApi}
                         activeMessageID={subActiveMessageID}
                         includeSystemTurns={true}
+                        hasOlder={subagentPaging().hasOlder}
+                        onLoadOlder={() => void loadOlderSubagentHistory()}
                         t={props.t}
                       />
                       <SessionUsageBar

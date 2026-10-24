@@ -727,7 +727,7 @@ export function projectTurnMessages(events: RuntimeEvent[]) {
       byID.set(event.id, { submitted: event, rows: [] });
       ordered.push(event.id);
     }
-  let currentTurnID: string | undefined;
+  let currentTurnID: string | undefined = ordered[0];
   const rowIDCounts = new Map<string, Map<string, number>>();
   for (const event of normalizeTurnEventOrder(events)) {
     if (event.type === "turn.submitted" && byID.has(event.id))
@@ -779,10 +779,16 @@ function projectedTurnID(
   // `input.*` events describe a durable admission, not a turn row. Without this
   // they would attach to the started turn carrying the same id.
   if (event.type.startsWith("input.")) return undefined;
-  // Collaboration messages carry their identity under `message.id`, not a
-  // top-level `id` prefixed by the turn. They still belong to the turn that was
-  // open when they were emitted, so attach them by event-stream order.
-  if (event.type === "natalia.collab.message") return currentTurnID;
+  // Collaboration messages and context.instructions notices carry their own
+  // identity (not prefixed by the turn). They belong to the turn that was open
+  // or most recent when they were emitted, so attach them by event-stream order
+  // so they interleave at their exact sequence position instead of stacking at
+  // the bottom.
+  if (
+    event.type === "natalia.collab.message" ||
+    event.type === "context.instructions"
+  )
+    return currentTurnID;
   if (!("id" in event) || typeof event.id !== "string") return undefined;
   let candidate = event.id;
   while (candidate) {
@@ -803,7 +809,11 @@ function projectedRowKind(
   if (event.type === "policy.decision" && event.turnID === turnID)
     return "system";
   if (event.type === "turn.input") return event.internal ? "system" : "user";
-  if (event.type === "natalia.collab.message") return "system";
+  if (
+    event.type === "natalia.collab.message" ||
+    event.type === "context.instructions"
+  )
+    return "system";
   if (!("id" in event) || typeof event.id !== "string") return undefined;
   if (event.id !== turnID && !event.id.startsWith(`${turnID}:`))
     return undefined;
@@ -828,6 +838,7 @@ function projectedRowID(event: RuntimeEvent, turnID: string) {
     return `${event.turnID}:user:${event.inputID}`;
   if (event.type === "natalia.collab.message")
     return `${turnID}:collab:${event.message.id}`;
+  if (event.type === "context.instructions") return `notice:${event.id}`;
   if (event.type === "policy.decision")
     return `${turnID}:policy:${event.toolCallID ?? event.toolName}:${event.decision}`;
   if ("id" in event && typeof event.id === "string")

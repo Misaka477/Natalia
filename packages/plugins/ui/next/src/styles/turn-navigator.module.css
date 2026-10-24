@@ -1,18 +1,26 @@
 .frame {
-  --turn-preview-height: 98px;
+  --turn-preview-height: 100px;
+  --turn-rail-max-height: 400px;
+  --turn-preview-width: min(300px, calc(100vw - 96px));
   position: absolute;
   top: 50%;
   right: 8px;
   z-index: 12;
-  width: 24px;
-  max-height: min(calc(100% - 64px), 420px);
+  width: 28px;
+  height: min(
+    var(--turn-natural-height, 0px),
+    max(72px, calc(100% - 56px)),
+    var(--turn-rail-max-height)
+  );
   transform: translateY(-50%);
+  cursor: pointer;
   pointer-events: auto;
+  transition: height 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .scroller {
-  position: relative;
-  max-height: inherit;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -23,24 +31,18 @@
 }
 
 .fadeTop {
-  mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 100%);
+  mask-image: linear-gradient(transparent 0, #000 24px, #000 100%);
 }
 
 .fadeBottom {
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(100% - 20px),
-    transparent 100%
-  );
+  mask-image: linear-gradient(#000 0, #000 calc(100% - 24px), transparent 100%);
 }
 
 .fadeTop.fadeBottom {
   mask-image: linear-gradient(
-    to bottom,
     transparent 0,
-    #000 20px,
-    #000 calc(100% - 20px),
+    #000 24px,
+    #000 calc(100% - 24px),
     transparent 100%
   );
 }
@@ -48,16 +50,26 @@
 .marks {
   position: relative;
   width: 100%;
+  height: var(--turn-natural-height, 0px);
+}
+
+.markPosition {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--turn-natural-position, 0px) + var(--turn-rail-inset, 6px));
+  height: 10px;
+  transform: translateY(-50%);
+  transition: top 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mark {
   position: absolute;
-  right: 0;
-  left: 0;
-  height: 10px;
+  inset: 0 0 0 auto;
+  width: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
 }
@@ -66,29 +78,28 @@
   position: absolute;
   top: 50%;
   right: 2px;
-  width: 18px;
+  width: 12px;
   height: 2px;
   border-radius: 2px;
   background: var(--neu-hairline-strong, var(--neu-muted));
-  opacity: 0.45;
+  opacity: 0.52;
   content: "";
-  transform: translateY(-50%) scaleX(0.55);
-  transform-origin: right center;
+  transform: translateY(-50%);
   transition:
-    transform 140ms ease,
+    width 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 140ms ease,
     opacity 140ms ease;
 }
 
 .mark[data-preview="true"]::before,
 .mark:hover::before {
-  transform: translateY(-50%) scaleX(0.88);
+  width: 18px;
   background: var(--neu-text);
-  opacity: 0.82;
+  opacity: 0.85;
 }
 
 .mark[data-active="true"]::before {
-  transform: translateY(-50%) scaleX(1);
+  width: 20px;
   background: var(--neu-text);
   opacity: 1;
 }
@@ -98,7 +109,7 @@
 }
 
 .mark:focus-visible::before {
-  transform: translateY(-50%) scaleX(1);
+  width: 20px;
   background: var(--neu-accent);
   opacity: 1;
 }
@@ -106,13 +117,16 @@
 .preview {
   position: absolute;
   top: clamp(
-    -12px,
-    calc(var(--turn-preview-center, 20px) - 26px),
-    calc(100% - 36px)
+    0px,
+    calc(
+      var(--turn-preview-pos, 0px) + var(--turn-rail-inset, 6px) -
+        var(--turn-scroll-top, 0px) - var(--turn-preview-height) / 2
+    ),
+    max(0px, calc(100% - var(--turn-preview-height)))
   );
   right: calc(100% + 10px);
   box-sizing: border-box;
-  width: 280px;
+  width: var(--turn-preview-width);
   max-height: var(--turn-preview-height);
   overflow: hidden;
   padding: 10px 12px;
@@ -123,7 +137,7 @@
   box-shadow: var(--neu-elevation-4);
   pointer-events: none;
   animation: turnPreviewEnter 120ms ease-out;
-  transition: top 130ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: top 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .previewPrompt,
@@ -152,10 +166,53 @@
 @keyframes turnPreviewEnter {
   from {
     opacity: 0;
-    transform: translateX(4px);
+    transform: translate3d(4px, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Multi-size viewport and container adaptation */
+@media (max-height: 820px) {
+  .frame {
+    --turn-rail-max-height: 280px;
+  }
+}
+
+@media (max-height: 600px) {
+  .frame {
+    --turn-rail-max-height: 180px;
+    --turn-preview-height: 84px;
+  }
+  .previewResponse {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 960px) {
+  .frame {
+    right: 4px;
+    width: 22px;
+    --turn-preview-width: min(240px, calc(100vw - 64px));
+  }
+}
+
+@media (max-width: 560px) {
+  .frame {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame,
+  .scroller,
+  .markPosition,
+  .mark::before,
+  .preview {
+    scroll-behavior: auto;
+    transition: none;
+    animation: none;
   }
 }

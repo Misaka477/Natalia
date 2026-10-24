@@ -270,24 +270,6 @@ export function ModalLayer(props: ModalLayerProps) {
         preferences={props.ctx.preferences}
         registeredTools={props.registeredTools()}
         runtime={runtime()}
-        onUpdateConfig={async (patch) => {
-          perfLog("[settings] write ->", JSON.stringify(patch));
-          const applied = await runtime().updateConfig?.({
-            patch,
-            scope: "global",
-          });
-          perfLog("[settings] write applied <-", applied);
-          const next = await runtime().configGet?.();
-          perfLog(
-            "[settings] re-read <-",
-            JSON.stringify({
-              compactionEnabled: next?.context?.compactionEnabled,
-              shellExecutable: next?.runtime?.shell?.executable,
-              maxSteps: next?.runtime?.maxStepsPerTurn,
-            }),
-          );
-          if (next) props.setStateConfig(next);
-        }}
         onConfig={(next) => {
           perfLog("[settings] onConfig ->", JSON.stringify(next));
           props.setStateConfig(next as unknown as ConfigV4);

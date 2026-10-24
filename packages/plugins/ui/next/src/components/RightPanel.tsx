@@ -87,6 +87,13 @@ function statusFor(operation: string) {
   return "?";
 }
 
+const BINARY_MEDIA_EXT_RE =
+  /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|m4a|npy|npz|pkl|pt|pth|onnx|safetensors|bin|wasm|exe|dll|so|dylib|zip|tar|gz|7z|rar|pdf|woff2?|ttf|otf|eot|sqlite3?|db)$/iu;
+
+function isBinaryOrMediaPath(filePath: string): boolean {
+  return BINARY_MEDIA_EXT_RE.test(filePath);
+}
+
 export function ReviewPane(
   props: {
     t: (key: string, params?: Record<string, unknown>) => string;
@@ -549,11 +556,22 @@ export function ReviewPane(
     await runRoundDiff();
   }
 
+  const checkpointPreviewCache = new Map<string, DiffItem[]>();
+
   async function loadCheckpointPreview(
     id: string,
-    options?: { includePatch?: boolean },
+    options?: { includePatch?: boolean; force?: boolean },
   ) {
     const start = performance.now();
+    if (!options?.force && checkpointPreviewCache.has(id)) {
+      const cached = checkpointPreviewCache.get(id)!;
+      const current = checkpointSelected();
+      setCheckpointChanges(cached);
+      if (!current || !cached.some((item) => item.path === current)) {
+        setCheckpointSelected(cached[0]?.path ?? null);
+      }
+      return;
+    }
     const preview = await props.runtime?.checkpointPreview?.(
       id,
       props.sessionID,
@@ -561,6 +579,7 @@ export function ReviewPane(
     );
     if (!preview) return;
     const mapped = preview.changes.map(toDiffItem);
+    checkpointPreviewCache.set(id, mapped);
     const current = checkpointSelected();
     setCheckpointChanges(mapped);
     if (!current || !mapped.some((item) => item.path === current)) {
@@ -650,6 +669,11 @@ export function ReviewPane(
   }
 
   async function loadStructuredDiffForFile(file: DiffItem) {
+    if (isBinaryOrMediaPath(file.path)) {
+      setStructuredDiff(undefined);
+      setStructuredDiffError(undefined);
+      return;
+    }
     // Runtime structured diffs are canonical when they actually carry hunks.
     if (hasRenderableStructured(file.structured)) {
       setStructuredDiff(file.structured);
@@ -2043,18 +2067,27 @@ export function ReviewPane(
                             <span class={styles.accordionPath}>
                               {change.path}
                             </span>
-                            <span class={styles.accordionStats}>
-                              <Show when={change.additions !== undefined}>
-                                <span class={styles.additions}>
-                                  +{change.additions}
+                            <Show
+                              when={!isBinaryOrMediaPath(change.path)}
+                              fallback={
+                                <span class={styles.binaryBadge}>
+                                  {t("review.binaryBadge")}
                                 </span>
-                              </Show>
-                              <Show when={change.deletions !== undefined}>
-                                <span class={styles.deletions}>
-                                  -{change.deletions}
-                                </span>
-                              </Show>
-                            </span>
+                              }
+                            >
+                              <span class={styles.accordionStats}>
+                                <Show when={change.additions !== undefined}>
+                                  <span class={styles.additions}>
+                                    +{change.additions}
+                                  </span>
+                                </Show>
+                                <Show when={change.deletions !== undefined}>
+                                  <span class={styles.deletions}>
+                                    -{change.deletions}
+                                  </span>
+                                </Show>
+                              </span>
+                            </Show>
                             <span
                               class={styles.accordionChevron}
                               data-open={isExpanded()}
@@ -2081,213 +2114,245 @@ export function ReviewPane(
                         <Show when={isExpanded()}>
                           <div class={styles.accordionBody}>
                             <Show
-                              when={
-                                (viewMode() === "ast" &&
-                                  !astBatchPanelOpen()) ||
-                                selectedFile()?.patch ||
-                                selectedFile()?.before ||
-                                selectedFile()?.after ||
-                                hasRenderableStructured(
-                                  selectedFile()?.structured,
-                                ) ||
-                                hasRenderableStructured(structuredDiff())
-                              }
+                              when={!isBinaryOrMediaPath(change.path)}
                               fallback={
                                 <div class="review-diff-content">
                                   <PanelState
                                     state="empty"
-                                    title={t("review.noLineDiff")}
-                                    description={t("review.noLineDiffHint")}
+                                    title={t("review.binaryTitle")}
+                                    description={t("review.binaryHint", {
+                                      path: change.path,
+                                    })}
                                   />
                                 </div>
                               }
                             >
                               <Show
                                 when={
-                                  viewMode() === "ast" && !astBatchPanelOpen()
-                                }
-                              >
-                                <div class="review-diff-content">
-                                  <Show
-                                    when={astDiffError()}
-                                    fallback={
-                                      <Show
-                                        when={astDiffResult()}
-                                        fallback={
-                                          <PanelState
-                                            state="loading"
-                                            title={t("review.loadingAst")}
-                                          />
-                                        }
-                                      >
-                                        <div class={styles.astDiffList}>
-                                          <Show
-                                            when={
-                                              !astDiffResult()!.changes.length
-                                            }
-                                          >
-                                            <PanelState
-                                              state="empty"
-                                              title={t(
-                                                "review.noStructuralChanges",
-                                              )}
-                                            />
-                                          </Show>
-                                          <For each={astGroups()}>
-                                            {(group) => (
-                                              <div
-                                                class={styles.astChangeGroup}
-                                              >
-                                                <button
-                                                  type="button"
-                                                  class={styles.astGroupHeader}
-                                                  onClick={() =>
-                                                    setCollapsedAstGroups(
-                                                      (prev) => {
-                                                        const next = new Set(
-                                                          prev,
-                                                        );
-                                                        if (
-                                                          next.has(
-                                                            group.nodeKind,
-                                                          )
-                                                        )
-                                                          next.delete(
-                                                            group.nodeKind,
-                                                          );
-                                                        else
-                                                          next.add(
-                                                            group.nodeKind,
-                                                          );
-                                                        return next;
-                                                      },
-                                                    )
-                                                  }
-                                                >
-                                                  <span class="ast-group-name">
-                                                    {collapsedAstGroups().has(
-                                                      group.nodeKind,
-                                                    )
-                                                      ? "▸"
-                                                      : "▾"}{" "}
-                                                    {group.nodeKind}
-                                                  </span>
-                                                  <span
-                                                    class={styles.astGroupCount}
-                                                  >
-                                                    {group.changes.length}
-                                                  </span>
-                                                </button>
-                                                <Show
-                                                  when={
-                                                    !collapsedAstGroups().has(
-                                                      group.nodeKind,
-                                                    )
-                                                  }
-                                                >
-                                                  <For each={group.changes}>
-                                                    {(astChange) => (
-                                                      <div
-                                                        class={
-                                                          styles.astChangeRow
-                                                        }
-                                                        data-kind={
-                                                          astChange.kind
-                                                        }
-                                                        onClick={() => {
-                                                          const file =
-                                                            selectedFile();
-                                                          if (!file) return;
-                                                          const source =
-                                                            astChange.kind ===
-                                                            "removed"
-                                                              ? (file.before ??
-                                                                "")
-                                                              : (file.after ??
-                                                                "");
-                                                          const start =
-                                                            astChange.kind ===
-                                                            "removed"
-                                                              ? astChange.oldStart
-                                                              : astChange.newStart;
-                                                          const end =
-                                                            astChange.kind ===
-                                                            "removed"
-                                                              ? astChange.oldEnd
-                                                              : astChange.newEnd;
-                                                          setAstSnippet({
-                                                            kind: astChange.kind,
-                                                            nodeKind:
-                                                              astChange.nodeKind,
-                                                            text: source.slice(
-                                                              start,
-                                                              end,
-                                                            ),
-                                                          });
-                                                        }}
-                                                      >
-                                                        <span
-                                                          class={
-                                                            styles.astChangeKind
-                                                          }
-                                                        >
-                                                          {astChange.kind}
-                                                        </span>
-                                                        <span
-                                                          class={
-                                                            styles.astChangeNode
-                                                          }
-                                                        >
-                                                          {astChange.nodeKind}
-                                                        </span>
-                                                        <span
-                                                          class={
-                                                            styles.astChangePos
-                                                          }
-                                                        >
-                                                          {astChange.kind ===
-                                                          "removed"
-                                                            ? `${astChange.oldStart}-${astChange.oldEnd}`
-                                                            : `${astChange.newStart}-${astChange.newEnd}`}
-                                                        </span>
-                                                      </div>
-                                                    )}
-                                                  </For>
-                                                </Show>
-                                              </div>
-                                            )}
-                                          </For>
-                                        </div>
-                                        <Show when={astSnippet()}>
-                                          <pre class={styles.astSnippet}>
-                                            {astSnippet()!.text}
-                                          </pre>
-                                        </Show>
-                                      </Show>
-                                    }
-                                  >
-                                    <PanelState
-                                      state="error"
-                                      title={t("review.astDiffFailed")}
-                                      description={astDiffError()}
-                                    />
-                                  </Show>
-                                </div>
-                              </Show>
-                              <Show
-                                when={
-                                  viewMode() !== "ast" &&
-                                  (hasRenderableStructured(
+                                  (viewMode() === "ast" &&
+                                    !astBatchPanelOpen()) ||
+                                  selectedFile()?.patch ||
+                                  selectedFile()?.before ||
+                                  selectedFile()?.after ||
+                                  hasRenderableStructured(
                                     selectedFile()?.structured,
                                   ) ||
-                                    hasRenderableStructured(structuredDiff()))
+                                  hasRenderableStructured(structuredDiff())
+                                }
+                                fallback={
+                                  <div class="review-diff-content">
+                                    <PanelState
+                                      state="empty"
+                                      title={t("review.noLineDiff")}
+                                      description={t("review.noLineDiffHint")}
+                                    />
+                                  </div>
                                 }
                               >
                                 <Show
-                                  when={viewMode() === "split"}
-                                  fallback={
-                                    <UnifiedDiffView
-                                      rows={structuredRows(
+                                  when={
+                                    viewMode() === "ast" && !astBatchPanelOpen()
+                                  }
+                                >
+                                  <div class="review-diff-content">
+                                    <Show
+                                      when={astDiffError()}
+                                      fallback={
+                                        <Show
+                                          when={astDiffResult()}
+                                          fallback={
+                                            <PanelState
+                                              state="loading"
+                                              title={t("review.loadingAst")}
+                                            />
+                                          }
+                                        >
+                                          <div class={styles.astDiffList}>
+                                            <Show
+                                              when={
+                                                !astDiffResult()!.changes.length
+                                              }
+                                            >
+                                              <PanelState
+                                                state="empty"
+                                                title={t(
+                                                  "review.noStructuralChanges",
+                                                )}
+                                              />
+                                            </Show>
+                                            <For each={astGroups()}>
+                                              {(group) => (
+                                                <div
+                                                  class={styles.astChangeGroup}
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    class={
+                                                      styles.astGroupHeader
+                                                    }
+                                                    onClick={() =>
+                                                      setCollapsedAstGroups(
+                                                        (prev) => {
+                                                          const next = new Set(
+                                                            prev,
+                                                          );
+                                                          if (
+                                                            next.has(
+                                                              group.nodeKind,
+                                                            )
+                                                          )
+                                                            next.delete(
+                                                              group.nodeKind,
+                                                            );
+                                                          else
+                                                            next.add(
+                                                              group.nodeKind,
+                                                            );
+                                                          return next;
+                                                        },
+                                                      )
+                                                    }
+                                                  >
+                                                    <span class="ast-group-name">
+                                                      {collapsedAstGroups().has(
+                                                        group.nodeKind,
+                                                      )
+                                                        ? "▸"
+                                                        : "▾"}{" "}
+                                                      {group.nodeKind}
+                                                    </span>
+                                                    <span
+                                                      class={
+                                                        styles.astGroupCount
+                                                      }
+                                                    >
+                                                      {group.changes.length}
+                                                    </span>
+                                                  </button>
+                                                  <Show
+                                                    when={
+                                                      !collapsedAstGroups().has(
+                                                        group.nodeKind,
+                                                      )
+                                                    }
+                                                  >
+                                                    <For each={group.changes}>
+                                                      {(astChange) => (
+                                                        <div
+                                                          class={
+                                                            styles.astChangeRow
+                                                          }
+                                                          data-kind={
+                                                            astChange.kind
+                                                          }
+                                                          onClick={() => {
+                                                            const file =
+                                                              selectedFile();
+                                                            if (!file) return;
+                                                            const source =
+                                                              astChange.kind ===
+                                                              "removed"
+                                                                ? (file.before ??
+                                                                  "")
+                                                                : (file.after ??
+                                                                  "");
+                                                            const start =
+                                                              astChange.kind ===
+                                                              "removed"
+                                                                ? astChange.oldStart
+                                                                : astChange.newStart;
+                                                            const end =
+                                                              astChange.kind ===
+                                                              "removed"
+                                                                ? astChange.oldEnd
+                                                                : astChange.newEnd;
+                                                            setAstSnippet({
+                                                              kind: astChange.kind,
+                                                              nodeKind:
+                                                                astChange.nodeKind,
+                                                              text: source.slice(
+                                                                start,
+                                                                end,
+                                                              ),
+                                                            });
+                                                          }}
+                                                        >
+                                                          <span
+                                                            class={
+                                                              styles.astChangeKind
+                                                            }
+                                                          >
+                                                            {astChange.kind}
+                                                          </span>
+                                                          <span
+                                                            class={
+                                                              styles.astChangeNode
+                                                            }
+                                                          >
+                                                            {astChange.nodeKind}
+                                                          </span>
+                                                          <span
+                                                            class={
+                                                              styles.astChangePos
+                                                            }
+                                                          >
+                                                            {astChange.kind ===
+                                                            "removed"
+                                                              ? `${astChange.oldStart}-${astChange.oldEnd}`
+                                                              : `${astChange.newStart}-${astChange.newEnd}`}
+                                                          </span>
+                                                        </div>
+                                                      )}
+                                                    </For>
+                                                  </Show>
+                                                </div>
+                                              )}
+                                            </For>
+                                          </div>
+                                          <Show when={astSnippet()}>
+                                            <pre class={styles.astSnippet}>
+                                              {astSnippet()!.text}
+                                            </pre>
+                                          </Show>
+                                        </Show>
+                                      }
+                                    >
+                                      <PanelState
+                                        state="error"
+                                        title={t("review.astDiffFailed")}
+                                        description={astDiffError()}
+                                      />
+                                    </Show>
+                                  </div>
+                                </Show>
+                                <Show
+                                  when={
+                                    viewMode() !== "ast" &&
+                                    (hasRenderableStructured(
+                                      selectedFile()?.structured,
+                                    ) ||
+                                      hasRenderableStructured(structuredDiff()))
+                                  }
+                                >
+                                  <Show
+                                    when={viewMode() === "split"}
+                                    fallback={
+                                      <UnifiedDiffView
+                                        rows={structuredRows(
+                                          (hasRenderableStructured(
+                                            selectedFile()?.structured,
+                                          )
+                                            ? selectedFile()?.structured
+                                            : structuredDiff())!,
+                                        )}
+                                        language={languageFromPath(
+                                          selectedFile()?.path ?? "",
+                                        )}
+                                      />
+                                    }
+                                  >
+                                    <SplitDiffView
+                                      rows={buildSplitRows(
                                         (hasRenderableStructured(
                                           selectedFile()?.structured,
                                         )
@@ -2298,98 +2363,95 @@ export function ReviewPane(
                                         selectedFile()?.path ?? "",
                                       )}
                                     />
+                                  </Show>
+                                </Show>
+                                <Show
+                                  when={
+                                    viewMode() !== "ast" &&
+                                    !hasRenderableStructured(
+                                      selectedFile()?.structured,
+                                    ) &&
+                                    !hasRenderableStructured(
+                                      structuredDiff(),
+                                    ) &&
+                                    structuredDiffError()
                                   }
                                 >
-                                  <SplitDiffView
-                                    rows={buildSplitRows(
-                                      (hasRenderableStructured(
-                                        selectedFile()?.structured,
-                                      )
-                                        ? selectedFile()?.structured
-                                        : structuredDiff())!,
-                                    )}
+                                  <div class="review-diff-content">
+                                    <div class={styles.diffRaw}>
+                                      <div class={styles.diffRawTitle}>
+                                        {t("review.diffFailed")}
+                                      </div>
+                                      <pre>{structuredDiffError()}</pre>
+                                    </div>
+                                  </div>
+                                </Show>
+                                <Show
+                                  when={
+                                    viewMode() !== "ast" &&
+                                    !hasRenderableStructured(
+                                      selectedFile()?.structured,
+                                    ) &&
+                                    !hasRenderableStructured(
+                                      structuredDiff(),
+                                    ) &&
+                                    !structuredDiffError() &&
+                                    selectedFile()?.patch
+                                  }
+                                >
+                                  <UnifiedDiffView
+                                    rows={diffLines(selectedFile()!.patch)}
                                     language={languageFromPath(
-                                      selectedFile()?.path ?? "",
+                                      selectedFile()!.path,
                                     )}
                                   />
                                 </Show>
-                              </Show>
-                              <Show
-                                when={
-                                  viewMode() !== "ast" &&
-                                  !hasRenderableStructured(
-                                    selectedFile()?.structured,
-                                  ) &&
-                                  !hasRenderableStructured(structuredDiff()) &&
-                                  structuredDiffError()
-                                }
-                              >
-                                <div class="review-diff-content">
-                                  <div class={styles.diffRaw}>
-                                    <div class={styles.diffRawTitle}>
-                                      {t("review.diffFailed")}
+                                <Show
+                                  when={
+                                    viewMode() !== "ast" &&
+                                    !hasRenderableStructured(
+                                      selectedFile()?.structured,
+                                    ) &&
+                                    !hasRenderableStructured(
+                                      structuredDiff(),
+                                    ) &&
+                                    !structuredDiffError() &&
+                                    !selectedFile()?.patch &&
+                                    selectedFile()?.before
+                                  }
+                                >
+                                  <div class="review-diff-content">
+                                    <div class={styles.diffRaw}>
+                                      <div class={styles.diffRawTitle}>
+                                        Before
+                                      </div>
+                                      <pre>{selectedFile()!.before}</pre>
                                     </div>
-                                    <pre>{structuredDiffError()}</pre>
                                   </div>
-                                </div>
-                              </Show>
-                              <Show
-                                when={
-                                  viewMode() !== "ast" &&
-                                  !hasRenderableStructured(
-                                    selectedFile()?.structured,
-                                  ) &&
-                                  !hasRenderableStructured(structuredDiff()) &&
-                                  !structuredDiffError() &&
-                                  selectedFile()?.patch
-                                }
-                              >
-                                <UnifiedDiffView
-                                  rows={diffLines(selectedFile()!.patch)}
-                                  language={languageFromPath(
-                                    selectedFile()!.path,
-                                  )}
-                                />
-                              </Show>
-                              <Show
-                                when={
-                                  viewMode() !== "ast" &&
-                                  !hasRenderableStructured(
-                                    selectedFile()?.structured,
-                                  ) &&
-                                  !hasRenderableStructured(structuredDiff()) &&
-                                  !structuredDiffError() &&
-                                  !selectedFile()?.patch &&
-                                  selectedFile()?.before
-                                }
-                              >
-                                <div class="review-diff-content">
-                                  <div class={styles.diffRaw}>
-                                    <div class={styles.diffRawTitle}>
-                                      Before
+                                </Show>
+                                <Show
+                                  when={
+                                    viewMode() !== "ast" &&
+                                    !hasRenderableStructured(
+                                      selectedFile()?.structured,
+                                    ) &&
+                                    !hasRenderableStructured(
+                                      structuredDiff(),
+                                    ) &&
+                                    !structuredDiffError() &&
+                                    !selectedFile()?.patch &&
+                                    selectedFile()?.after
+                                  }
+                                >
+                                  <div class="review-diff-content">
+                                    <div class={styles.diffRaw}>
+                                      <div class={styles.diffRawTitle}>
+                                        After
+                                      </div>
+                                      <pre>{selectedFile()!.after}</pre>
                                     </div>
-                                    <pre>{selectedFile()!.before}</pre>
                                   </div>
-                                </div>
-                              </Show>
-                              <Show
-                                when={
-                                  viewMode() !== "ast" &&
-                                  !hasRenderableStructured(
-                                    selectedFile()?.structured,
-                                  ) &&
-                                  !hasRenderableStructured(structuredDiff()) &&
-                                  !structuredDiffError() &&
-                                  !selectedFile()?.patch &&
-                                  selectedFile()?.after
-                                }
-                              >
-                                <div class="review-diff-content">
-                                  <div class={styles.diffRaw}>
-                                    <div class={styles.diffRawTitle}>After</div>
-                                    <pre>{selectedFile()!.after}</pre>
-                                  </div>
-                                </div>
+                                </Show>
                               </Show>
                             </Show>
                           </div>

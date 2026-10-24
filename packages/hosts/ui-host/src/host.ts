@@ -247,6 +247,45 @@ export async function createUiPluginHost<TContext = unknown>(
       sessionStates.set(activeKey, state);
       for (const listener of projectionListeners) listener(state);
     },
+    sessionStatuses() {
+      const out: Record<
+        string,
+        {
+          running: boolean;
+          pendingInteraction?: "approval" | "question";
+          startedAt?: number;
+        }
+      > = {};
+      for (const [key, st] of sessionStates) {
+        const sid = st.sessionID ?? key.slice(key.lastIndexOf(":") + 1);
+        if (!sid) continue;
+        const running = Boolean(st.activeTurn || st.natalia?.activeTurn);
+        const pendingInteraction =
+          st.pendingApprovals.length > 0
+            ? "approval"
+            : st.pendingQuestions.length > 0
+              ? "question"
+              : undefined;
+        const prev = out[sid];
+        if (!prev || running || pendingInteraction) {
+          out[sid] = {
+            running: running || Boolean(prev?.running),
+            ...((pendingInteraction ?? prev?.pendingInteraction)
+              ? {
+                  pendingInteraction:
+                    pendingInteraction ?? prev?.pendingInteraction,
+                }
+              : {}),
+            ...(st.activeTurnStartedAt !== undefined
+              ? { startedAt: st.activeTurnStartedAt }
+              : prev?.startedAt !== undefined
+                ? { startedAt: prev.startedAt }
+                : {}),
+          };
+        }
+      }
+      return out;
+    },
   };
 
   const fanout = (event: RuntimeEvent) => {

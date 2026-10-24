@@ -57,13 +57,24 @@ interface DerivedSessionItem {
 function toDerivedSession(
   session: RuntimeSessionSummary,
   t: (key: string, params?: Record<string, unknown>) => string,
+  liveStatus?: {
+    running: boolean;
+    pendingInteraction?: "approval" | "question";
+    startedAt?: number;
+  },
+  unreadDone?: boolean,
 ): DerivedSessionItem {
   const blank = isBlankSession(session);
-  const status =
-    session.status && session.status !== "error"
-      ? session.status
-      : (session.pendingInputs ?? 0) > 0
-        ? "running"
+  const running =
+    Boolean(liveStatus?.running) ||
+    session.status === "running" ||
+    (session.pendingInputs ?? 0) > 0;
+  const status = liveStatus?.pendingInteraction
+    ? "warning"
+    : running
+      ? "running"
+      : unreadDone
+        ? "done"
         : "idle";
   return {
     id: session.id,
@@ -71,7 +82,7 @@ function toDerivedSession(
       ? t("sidebar.newSessionShort")
       : session.title || t("sidebar.untitled"),
     blank,
-    running: status === "running",
+    running,
     status,
     pinned: Boolean(session.pinned) && !session.archived,
     archived: Boolean(session.archived),
@@ -372,6 +383,15 @@ function SessionTree(props: {
   selected: string;
   sessions: RuntimeSessionSummary[];
   workspaces: WorkspaceSummary[];
+  liveStatuses?: Record<
+    string,
+    {
+      running: boolean;
+      pendingInteraction?: "approval" | "question";
+      startedAt?: number;
+    }
+  >;
+  unreadCompleted?: Set<string>;
   groupBy: SessionGroupBy;
   orderBy: SessionOrderBy;
   archivedFilter: ArchivedFilter;
@@ -459,7 +479,14 @@ function SessionTree(props: {
               : workspace.title,
           isRealWorkspace: true,
           containsCurrent: ordered.some((s) => s.id === props.selected),
-          sessions: ordered.map((s) => toDerivedSession(s, t)),
+          sessions: ordered.map((s) =>
+            toDerivedSession(
+              s,
+              t,
+              props.liveStatuses?.[s.id],
+              props.unreadCompleted?.has(s.id),
+            ),
+          ),
         };
       })
       .filter(
@@ -473,7 +500,14 @@ function SessionTree(props: {
         workspace: t("sidebar.ungrouped"),
         isRealWorkspace: false,
         containsCurrent: ordered.some((s) => s.id === props.selected),
-        sessions: ordered.map((s) => toDerivedSession(s, t)),
+        sessions: ordered.map((s) =>
+          toDerivedSession(
+            s,
+            t,
+            props.liveStatuses?.[s.id],
+            props.unreadCompleted?.has(s.id),
+          ),
+        ),
       });
     }
 
@@ -485,7 +519,12 @@ function SessionTree(props: {
       sessionVisible(session, props.selected, props.archivedFilter),
     );
     return sectionSessions(visible, props.selected, props.orderBy).map((s) =>
-      toDerivedSession(s, t),
+      toDerivedSession(
+        s,
+        t,
+        props.liveStatuses?.[s.id],
+        props.unreadCompleted?.has(s.id),
+      ),
     );
   });
 
@@ -987,6 +1026,16 @@ export interface SessionSidebarProps {
   bulkRestoreSelected: () => Promise<void> | void;
   bulkDeleteSelected: () => Promise<void> | void;
   markUserSelectedSession: () => void;
+  liveStatuses?: () => Record<
+    string,
+    {
+      running: boolean;
+      pendingInteraction?: "approval" | "question";
+      startedAt?: number;
+    }
+  >;
+  unreadCompleted?: () => Set<string>;
+  onClearUnreadCompleted?: (sessionID: string) => void;
 }
 
 export function SessionTreeRegion(props: SessionSidebarProps) {
@@ -1412,6 +1461,8 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
               selected={props.selectedSessionID()}
               sessions={filteredSessions()}
               workspaces={props.workspaces()}
+              liveStatuses={props.liveStatuses?.()}
+              unreadCompleted={props.unreadCompleted?.()}
               groupBy={groupBy()}
               orderBy={orderBy()}
               archivedFilter={archivedFilter()}
@@ -1433,12 +1484,17 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
               }
               onSelect={(id, name) => {
                 props.markUserSelectedSession();
+                props.onClearUnreadCompleted?.(id);
                 props.setSelectedSessionID(id);
                 props.setSelectedSession(name);
-                void props.ctx.runtime.sessionAttach?.(id).then(async () => {
-                  await props.refreshWorkspaces();
-                  await props.refreshSessions();
-                  void props.loadPerSessionModelConfig(id);
+                // Instant switch from cached projection state without waiting for RPC round-trip!
+                const wsID = props
+                  .allSessions?.()
+                  .find((s) => s.id === id)?.workspaceID;
+                props.ctx.projection.activateSession?.(id, wsID);
+                void props.ctx.runtime.sessionAttach?.(id).then(() => {
+                  void props.refreshWorkspaces();
+                  void props.refreshSessions();
                 });
               }}
               onRemoveWorkspace={(workspaceID) => {

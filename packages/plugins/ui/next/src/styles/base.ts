@@ -95,14 +95,26 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   color: var(--neu-accent);
 }
 .neu-status-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--neu-muted);
   box-shadow: none;
 }
-.neu-status-dot[data-status="running"] { background: var(--neu-success); }
+.neu-status-dot[data-status="running"],
+.neu-status-dot[data-status="ongoing"] {
+  background: var(--neu-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neu-accent) 28%, transparent);
+  animation: neu-pulse 1.5s ease-in-out infinite;
+}
+.neu-status-dot[data-status="warning"] {
+  background: var(--neu-warning);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neu-warning) 28%, transparent);
+}
+.neu-status-dot[data-status="done"] {
+  background: var(--neu-success);
+}
 .neu-status-dot[data-status="error"] { background: var(--neu-error); }
 .neu-badge {
   font-size: 10px;

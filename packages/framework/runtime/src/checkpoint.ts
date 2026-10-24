@@ -31,7 +31,13 @@ import {
   type CheckpointContextMeta,
 } from "./checkpoint-journal";
 
-/** The checkpoint subsystem's name — the `NATALIA_LOG` threshold key. */
+/** Binary/media extensions that should never be decoded as UTF-8 for line diffs. */
+const BINARY_MEDIA_EXT_RE =
+  /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|m4a|npy|npz|pkl|pt|pth|onnx|safetensors|bin|wasm|exe|dll|so|dylib|zip|tar|gz|7z|rar|pdf|woff2?|ttf|otf|eot|sqlite3?|db)$/iu;
+
+function isBinaryOrMediaPath(filePath: string): boolean {
+  return BINARY_MEDIA_EXT_RE.test(filePath);
+}
 const log = getLogger("checkpoint");
 import {
   appendFile,
@@ -706,6 +712,25 @@ export class CheckpointStore {
         )
       )
         continue;
+      const operation =
+        change.kind === "add"
+          ? "added"
+          : change.kind === "delete"
+            ? "deleted"
+            : change.kind === "rename"
+              ? "renamed"
+              : "modified";
+      if (isBinaryOrMediaPath(change.path)) {
+        result.push({
+          path: change.path,
+          operation,
+          ...(change.oldPath ? { oldPath: change.oldPath } : {}),
+          additions: 0,
+          deletions: 0,
+          ...(change.mode ? { mode: change.mode } : {}),
+        });
+        continue;
+      }
       const oldEntry =
         fromManifest.entries[change.oldPath ?? change.path] ??
         (change.oldPath ? fromManifest.entries[change.oldPath] : undefined);
@@ -722,14 +747,6 @@ export class CheckpointStore {
             .then((buffer) => buffer.toString("utf8"))
             .catch(() => undefined)
         : undefined;
-      const operation =
-        change.kind === "add"
-          ? "added"
-          : change.kind === "delete"
-            ? "deleted"
-            : change.kind === "rename"
-              ? "renamed"
-              : "modified";
       const text = await this.diffTextCached(
         change.path,
         oldContent,
@@ -892,6 +909,17 @@ export class CheckpointStore {
   ): Promise<CheckpointPreview["changes"]> {
     const result: CheckpointPreview["changes"] = [];
     for (const change of changes) {
+      if (isBinaryOrMediaPath(change.path)) {
+        result.push({
+          kind: change.kind,
+          path: change.path,
+          ...(change.oldPath ? { oldPath: change.oldPath } : {}),
+          ...(change.mode ? { mode: change.mode } : {}),
+          additions: 0,
+          deletions: 0,
+        });
+        continue;
+      }
       const fromEntry =
         current.entries[change.oldPath ?? change.path] ??
         (change.oldPath ? current.entries[change.oldPath] : undefined);

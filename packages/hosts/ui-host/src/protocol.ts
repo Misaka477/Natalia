@@ -124,6 +124,15 @@ export type UiProjection = {
   ): boolean;
   /** Activates a cached workspace/session projection without discarding others. */
   activateSession?(sessionID: string, workspaceID?: string): void;
+  /** Live status summary across all cached sessions for sidebar status dots. */
+  sessionStatuses?(): Record<
+    string,
+    {
+      running: boolean;
+      pendingInteraction?: "approval" | "question";
+      startedAt?: number;
+    }
+  >;
 };
 
 export type UiPluginContext<TContext = unknown> = {

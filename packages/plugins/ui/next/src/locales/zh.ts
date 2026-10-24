@@ -615,6 +615,9 @@ export const zh = {
   "review.astPlan": "重构计划",
   "review.filesCount": "{count} 个文件",
   "review.openInEditor": "在文件编辑器中打开",
+  "review.binaryBadge": "二进制 / 媒体",
+  "review.binaryTitle": "媒体或二进制文件已变更",
+  "review.binaryHint": "图片、音视频及二进制数据不展示逐行文本差异（{path}）。",
   // governance panel
   "gov.reopenedCount": "已翻案 {count} 次",
   "gov.expandAll": "展开全部 (+{count})",

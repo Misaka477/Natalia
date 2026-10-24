@@ -613,6 +613,10 @@ export const en = {
   "review.astPlan": "Plan",
   "review.filesCount": "{count} files",
   "review.openInEditor": "Open in file editor",
+  "review.binaryBadge": "Binary / Media",
+  "review.binaryTitle": "Media or binary file changed",
+  "review.binaryHint":
+    "Images, audio/video, and binary files do not render line-by-line text diffs ({path}).",
   "gov.reopenedCount": "reopened {count} times",
   "gov.expandAll": "Show all (+{count})",
   "gov.expandEvidence": "Show all evidence (+{count})",

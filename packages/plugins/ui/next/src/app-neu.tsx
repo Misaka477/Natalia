@@ -634,15 +634,38 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
    * "first time I saw activeTurn" heuristic set it on every switch) nor shows
    * another session's elapsed time as this one's.
    */
-  const activeTurnStartedAt = createSignal<number | undefined>(undefined);
-  const [activeTurnStartedAtValue, setActiveTurnStartedAt] =
-    activeTurnStartedAt;
-  const [legacyTurnStartKey, setLegacyTurnStartKey] = createSignal<
-    string | undefined
-  >(undefined);
+  /** Per-session fallback start times when a turn carries no durable `at`. */
+  const legacyTurnStartsBySession = new Map<
+    string,
+    { turnID: string; startedAt: number }
+  >();
+  /** Sessions that finished a turn in the background and have not been opened yet (green done dot). */
+  const [unreadCompletedSessions, setUnreadCompletedSessions] = createSignal<
+    Set<string>
+  >(new Set());
+  /** Live per-session status map fed by projection + SSE events. */
+  const [liveSessionStatuses, setLiveSessionStatuses] = createSignal<
+    Record<
+      string,
+      {
+        running: boolean;
+        pendingInteraction?: "approval" | "question";
+        startedAt?: number;
+      }
+    >
+  >({});
+
   /** The start the running clock counts from, or undefined when unknown. */
-  const turnStartAt = () =>
-    state().activeTurnStartedAt ?? activeTurnStartedAtValue();
+  const turnStartAt = () => {
+    const durable = state().activeTurnStartedAt;
+    if (durable !== undefined) return durable;
+    const currentTurn = state().activeTurn || state().natalia.activeTurn;
+    if (!currentTurn) return undefined;
+    const sid = selectedSessionID() || state().sessionID || "";
+    const entry = legacyTurnStartsBySession.get(sid);
+    if (entry && entry.turnID === currentTurn) return entry.startedAt;
+    return undefined;
+  };
   const [modelOpen, setModelOpen] = createSignal(false);
   const [modelCatalog, setModelCatalog] = createSignal<
     RuntimeModelCatalogEntry[]
@@ -750,21 +773,22 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           if (projected.workspaces.length)
             mergeProjectedWorkspaces(projected.workspaces);
           const currentTurn = projected.activeTurn;
-          // The turn's durable start is the projection's; the local signal only
-          // remembers a turn that carries none (a journal written before the
-          // field existed), and it is keyed by the turn id so switching sessions
-          // neither restarts a running turn's clock nor shows another session's
-          // elapsed time as this one's.
+          const sid = selectedSessionID() || projected.sessionID || "";
           const durableStart = projected.activeTurnStartedAt;
-          if (currentTurn && durableStart === undefined) {
-            if (legacyTurnStartKey() !== currentTurn) {
-              setLegacyTurnStartKey(currentTurn);
-              setActiveTurnStartedAt(Date.now());
+          if (currentTurn && durableStart === undefined && sid) {
+            const existing = legacyTurnStartsBySession.get(sid);
+            if (!existing || existing.turnID !== currentTurn) {
+              legacyTurnStartsBySession.set(sid, {
+                turnID: currentTurn,
+                startedAt: Date.now(),
+              });
             }
-          } else if (!currentTurn) {
-            setLegacyTurnStartKey(undefined);
-            setActiveTurnStartedAt(undefined);
+          } else if (!currentTurn && sid) {
+            legacyTurnStartsBySession.delete(sid);
             setTurnElapsedMs(0);
+          }
+          if (props.ctx.projection.sessionStatuses) {
+            setLiveSessionStatuses(props.ctx.projection.sessionStatuses());
           }
         })();
       });
@@ -1582,6 +1606,44 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           debouncedRefreshWorkspaces();
           debouncedRefreshSessions();
         }
+        if (
+          event.type === "turn.submitted" ||
+          event.type === "turn.started" ||
+          event.type === "turn.finished" ||
+          event.type === "turn.cancelled" ||
+          event.type === "approval.request" ||
+          event.type === "approval.response" ||
+          event.type === "question.request" ||
+          event.type === "question.response"
+        ) {
+          if (props.ctx.projection.sessionStatuses) {
+            setLiveSessionStatuses(props.ctx.projection.sessionStatuses());
+          }
+          const evSessionID = event.sessionID;
+          const activeID = selectedSessionID() || state().sessionID;
+          if (
+            event.type === "turn.finished" &&
+            evSessionID &&
+            evSessionID !== activeID
+          ) {
+            setUnreadCompletedSessions((prev) => {
+              const next = new Set(prev);
+              next.add(evSessionID);
+              return next;
+            });
+          } else if (
+            (event.type === "turn.submitted" ||
+              event.type === "turn.started") &&
+            evSessionID
+          ) {
+            setUnreadCompletedSessions((prev) => {
+              if (!prev.has(evSessionID)) return prev;
+              const next = new Set(prev);
+              next.delete(evSessionID);
+              return next;
+            });
+          }
+        }
       }),
     );
 
@@ -1608,11 +1670,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       // belongs to the session it was written for, and the projection supplies
       // the standing rung for whichever session is now shown.
       setSessionRung(undefined);
-      // The turn clock belongs to the session too: drop the legacy echo so the
-      // next session starts from its own turn's durable start.
-      setLegacyTurnStartKey(undefined);
-      setActiveTurnStartedAt(undefined);
-      setTurnElapsedMs(0);
+      const nextStart = turnStartAt();
+      setTurnElapsedMs(
+        nextStart !== undefined ? Math.max(0, Date.now() - nextStart) : 0,
+      );
       const projected = cloneState(props.ctx.projection.getState());
       setState(projected);
     };
@@ -1687,6 +1748,18 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         sessionID,
         workspaceIDForSession(sessionID),
       );
+      // Instant paint from the cached projection state on session switch so the
+      // user sees the switched session (and its live running timer) in 0ms
+      // while the background page refresh runs.
+      const cachedState = props.ctx.projection.getState();
+      if (cachedState.natalia.messages.length > 0) {
+        setState(cloneState(cachedState));
+        setTranscriptHistoryLoading(false);
+        const start = turnStartAt();
+        setTurnElapsedMs(
+          start !== undefined ? Math.max(0, Date.now() - start) : 0,
+        );
+      }
       const loadToken = (
         globalThis as unknown as { __nataliaSessionLoadToken?: number }
       ).__nataliaSessionLoadToken;
@@ -3278,6 +3351,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       bulkDeleteSelected={bulkDeleteSelected}
       markUserSelectedSession={() => {
         userSelectedSession = true;
+      }}
+      liveStatuses={liveSessionStatuses}
+      unreadCompleted={unreadCompletedSessions}
+      onClearUnreadCompleted={(id) => {
+        setUnreadCompletedSessions((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }}
     />
   ));

@@ -522,3 +522,13 @@
   font-size: 11px;
   color: var(--neu-muted);
 }
+
+.binaryBadge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+  font-size: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+}

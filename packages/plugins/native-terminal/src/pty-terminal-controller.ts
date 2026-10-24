@@ -1741,14 +1741,7 @@ export function createPtyTerminalController(
     const session = get(id);
     assertSessionOwner(session, options?.sessionID);
     assertRunning(session);
-    if (options?.actor === "human") {
-      // If the human types directly into the embedded terminal while it is
-      // still model-owned, claim human ownership automatically so their
-      // keystrokes do not race the model or trigger model frame-settle notices.
-      if (session.inputOwner !== "human") {
-        setInputOwner(session, "human", "human", "claim");
-      }
-    } else if (session.inputOwner !== "model") {
+    if (options?.actor !== "human" && session.inputOwner !== "model") {
       // T-06: the refusal names the CURRENT owner state — the model needs
       // to know a human holds the pane right now, not that "a human"
       // exists somewhere in the past. (The user's own correction: the

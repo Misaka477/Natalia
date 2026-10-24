@@ -216,14 +216,14 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
             return;
           }
           // Filter out automated terminal-emulator query responses (DSR cursor
-          // position reports ESC[row;colR, DA1/DA2 device attributes ESC[?...c
-          // / ESC[>...c, OSC color reports) that xterm.js sends automatically
-          // when the shell initializes or replays. They are not human typing
-          // and must never trigger automatic human takeover.
+          // position reports, DA1/DA2 device attributes, DECRPM mode reports,
+          // XTVERSION/DCS replies, and OSC color reports) that xterm.js sends
+          // automatically when the shell initializes or replays.
           if (
-            /^(?:\x1b\[[0-9;?]*[Rn]|\x1b\[[>?=]?[0-9;]*c|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\))+$/u.test(
+            /^\x1b(?:\[[0-9;?>$=]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\)+$/u.test(
               body.data,
-            )
+            ) &&
+            !/^\x1b\[(?:[A-HPZ~]|1?[0-9]~|[12][0-9]~)$/u.test(body.data)
           ) {
             return;
           }

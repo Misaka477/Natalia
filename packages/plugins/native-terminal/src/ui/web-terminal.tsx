@@ -363,12 +363,13 @@ export function WebTerminal(props: WebTerminalProps) {
     term.onData((data) => {
       if (closed) return;
       // Ignore automated xterm.js terminal-query responses (DSR cursor position
-      // reports ESC[row;colR, DA1/DA2 device attributes ESC[?...c, OSC replies)
+      // reports, DA1/DA2 device attributes, DECRPM mode reports, DCS/OSC replies)
       // so opening or replaying a terminal never masquerades as human typing.
       if (
-        /^(?:\x1b\[[0-9;?]*[Rn]|\x1b\[[>?=]?[0-9;]*c|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\))+$/u.test(
+        /^\x1b(?:\[[0-9;?>$=]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\)+$/u.test(
           data,
-        )
+        ) &&
+        !/^\x1b\[(?:[A-HPZ~]|1?[0-9]~|[12][0-9]~)$/u.test(data)
       ) {
         return;
       }

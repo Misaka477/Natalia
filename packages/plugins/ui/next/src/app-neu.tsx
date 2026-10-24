@@ -752,6 +752,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       projectionFramePending = true;
       requestAnimationFrame(() => {
         projectionFramePending = false;
+        if (heroDraftMode() && !selectedSessionID()) return;
         void (async () => {
           let projected: AppState;
           const live = props.ctx.projection.getState();
@@ -1058,6 +1059,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   function clearSelectedSession(targetWorkspaceID?: string) {
     userSelectedSession = true;
     setHeroDraftMode(true);
+    setTranscriptHistoryLoading(false);
     setSelectedSessionID("");
     setSelectedSession("");
     mainPager.reset();
@@ -1094,12 +1096,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     );
     setDraftWorkspaceID(targetWorkspaceID);
     clearSelectedSession(targetWorkspaceID);
-    if (targetWorkspaceID && props.ctx.runtime.workspaceActivate) {
-      await props.ctx.runtime
-        .workspaceActivate(targetWorkspaceID)
-        .catch(() => undefined);
-      await refreshWorkspaces();
-    }
   }
 
   /**
@@ -1419,7 +1415,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     }
     // A superseded/expired load must still release the transcript's initial
     // loading gate, otherwise the tail state machine waits forever.
-    if (!isCurrent()) {
+    if (!isCurrent() || (heroDraftMode() && !selectedSessionID())) {
       setTranscriptHistoryLoading(false);
       return;
     }
@@ -1977,7 +1973,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         } finally {
           suppressProjectionClones = false;
         }
-        if (isStaleLoad()) return;
+        if (isStaleLoad() || (heroDraftMode() && !selectedSessionID())) return;
         // Attach hydrates Navi/Nia in the background, but that request is
         // dropped when the load token changes. Re-request after main history is
         // settled so a slow old session cannot leave both chat streams empty.
@@ -1991,7 +1987,8 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
             chatPageSource("nia", secondarySessionID, input),
           );
           await Promise.all([naviPager.loadInitial(), niaPager.loadInitial()]);
-          if (isStaleLoad()) return;
+          if (isStaleLoad() || (heroDraftMode() && !selectedSessionID()))
+            return;
         }
         // Session loading finished; take one projection snapshot instead of
         // cloning once per raw event.

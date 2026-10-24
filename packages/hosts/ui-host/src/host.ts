@@ -221,25 +221,17 @@ export async function createUiPluginHost<TContext = unknown>(
       let selectedKey = sessionStates.has(preferredKey)
         ? preferredKey
         : (siblingKeys[0] ?? preferredKey);
-      // A concrete-workspace key created by a late event is usually a shell.
-      // When the workspace-unknown `default:` key holds this session's history,
-      // prefer whichever side actually has more conversation content.
-      if (defaultKey !== preferredKey && hasProjectedContent(defaultState)) {
+      // Always pick whichever key for this sessionID holds the richest
+      // hydrated conversation state, even when `preferredKey` exists as an
+      // empty shell created by a workspace event.
+      for (const candidateKey of [preferredKey, defaultKey, ...siblingKeys]) {
+        const candidateState = sessionStates.get(candidateKey);
         if (
-          !hasProjectedContent(preferredState) ||
-          projectedContentScore(defaultState) >=
-            projectedContentScore(preferredState)
+          projectedContentScore(candidateState) >
+          projectedContentScore(sessionStates.get(selectedKey))
         ) {
-          selectedKey = defaultKey;
+          selectedKey = candidateKey;
         }
-      } else if (
-        selectedKey === preferredKey &&
-        !hasProjectedContent(preferredState)
-      ) {
-        const hydrated = siblingKeys.find((key) =>
-          hasProjectedContent(sessionStates.get(key)),
-        );
-        if (hydrated) selectedKey = hydrated;
       }
       activeKey = selectedKey;
       state = sessionStates.get(activeKey) ?? viewStore.initialState();

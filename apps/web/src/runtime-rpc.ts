@@ -10,6 +10,7 @@ import type {
   RuntimeReasoningEffort,
   RuntimeSessionSummary,
   RuntimeWorkspaceMatch,
+  RuntimeWorkspaceFileEntry,
   RuntimeWorkspaceListPage,
   RuntimeWorkspaceContent,
   ConfigV4,
@@ -1040,6 +1041,11 @@ export function createWebRuntimeClient(
     },
     async workspaceSearch(input) {
       return (await call<RuntimeWorkspaceMatch[]>("workspace.search", {
+        ...input,
+      })) as never;
+    },
+    async workspaceFiles(input) {
+      return (await call<RuntimeWorkspaceFileEntry[]>("workspace.files", {
         ...input,
       })) as never;
     },

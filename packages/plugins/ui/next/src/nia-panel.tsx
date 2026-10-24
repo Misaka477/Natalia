@@ -385,10 +385,15 @@ export function NiaPanel(props: {
         busy={Boolean(active()) || busy()}
         onInput={setDraft}
         onSearchFiles={
-          props.runtime?.workspaceFiles
+          props.runtime?.workspaceFiles || props.runtime?.workspaceList
             ? async (query) => {
+                const q = query.trim();
+                if (!q && props.runtime?.workspaceList) {
+                  const page = await props.runtime.workspaceList({ path: "." });
+                  return page?.entries ?? [];
+                }
                 const res = await props.runtime?.workspaceFiles?.({
-                  query,
+                  query: q,
                   limit: 20,
                 });
                 return (res ?? []).filter((e) => e.type === "file");

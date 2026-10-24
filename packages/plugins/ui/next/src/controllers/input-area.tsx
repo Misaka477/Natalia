@@ -69,8 +69,13 @@ export function MainInputArea(props: MainInputAreaProps) {
     perfLog,
   } = props;
   const searchWorkspaceFiles = async (query: string) => {
+    const q = query.trim();
+    if (!q && props.ctx.runtime.workspaceList) {
+      const page = await props.ctx.runtime.workspaceList({ path: "." });
+      return page?.entries ?? [];
+    }
     const res = await props.ctx.runtime.workspaceFiles?.({
-      query,
+      query: q,
       limit: 20,
     });
     return (res ?? []).filter((e) => e.type === "file");
@@ -161,7 +166,9 @@ export function MainInputArea(props: MainInputAreaProps) {
         attachments={mainAttachments()}
         slashCommands={slashCommandList}
         onSearchFiles={
-          props.ctx.runtime.workspaceFiles ? searchWorkspaceFiles : undefined
+          props.ctx.runtime.workspaceFiles || props.ctx.runtime.workspaceList
+            ? searchWorkspaceFiles
+            : undefined
         }
         onRemoveAttachment={(path) =>
           setMainAttachments(
@@ -292,8 +299,13 @@ export function ChatInputArea(props: ChatInputAreaProps) {
     perfLog,
   } = props;
   const searchWorkspaceFiles = async (query: string) => {
+    const q = query.trim();
+    if (!q && props.ctx.runtime.workspaceList) {
+      const page = await props.ctx.runtime.workspaceList({ path: "." });
+      return page?.entries ?? [];
+    }
     const res = await props.ctx.runtime.workspaceFiles?.({
-      query,
+      query: q,
       limit: 20,
     });
     return (res ?? []).filter((e) => e.type === "file");
@@ -309,7 +321,9 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         busy={Boolean(naviChatActivity())}
         onInput={setChatDraft}
         onSearchFiles={
-          props.ctx.runtime.workspaceFiles ? searchWorkspaceFiles : undefined
+          props.ctx.runtime.workspaceFiles || props.ctx.runtime.workspaceList
+            ? searchWorkspaceFiles
+            : undefined
         }
         onStop={() =>
           void props.ctx.runtime.naviChat?.abort?.(

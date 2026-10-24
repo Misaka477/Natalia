@@ -1488,11 +1488,18 @@ export class SqliteSessionStore {
     }
   }
 
+  private totalRawEventCount(sessionID: SessionID): number {
+    const row = this.db
+      .query(`SELECT COUNT(*) as cnt FROM events WHERE session_id = ?`)
+      .get(sessionID) as { cnt: number } | undefined;
+    return row?.cnt ?? 0;
+  }
+
   private ensureRecoveryProjection(sessionID: SessionID) {
     const indexed = this.db
       .query(`SELECT indexed_events FROM recovery_state WHERE session_id = ?`)
       .get(sessionID) as { indexed_events: number } | undefined;
-    const total = this.eventCount(sessionID);
+    const total = this.totalRawEventCount(sessionID);
     if (indexed?.indexed_events === total) return;
     const events = this.loadEvents(sessionID);
     this.db.transaction(() => {

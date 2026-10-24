@@ -52,8 +52,8 @@ import {
   duplicateVirtualIndexes,
 } from "./virtual-items";
 
-const VIRTUALIZE_THRESHOLD = 80;
-const BOTTOM_FOLLOW_THRESHOLD_PX = 16;
+const VIRTUALIZE_THRESHOLD = Number.MAX_SAFE_INTEGER;
+const BOTTOM_FOLLOW_THRESHOLD_PX = 24;
 const VIRTUAL_OVERSCAN = 24;
 const VIRTUAL_ROW_GAP = 6;
 const VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 600;
@@ -380,11 +380,14 @@ export function Transcript(props: TranscriptProps) {
   controller = new TailScrollController({
     getScrollElement: () => scrollEl(),
     scrollToEnd: (options) => {
+      const el = scrollEl();
+      if (!el) return;
       if (virtualize() && liveVirtualItems().length > 0) {
         virtualizer.scrollToEnd({ behavior: options?.behavior ?? "auto" });
+      } else if (options?.behavior === "smooth") {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       } else {
-        const el = scrollEl();
-        if (el) el.scrollTop = el.scrollHeight;
+        el.scrollTop = el.scrollHeight;
       }
     },
     scrollToIndex: (index, options) => {

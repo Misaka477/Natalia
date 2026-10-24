@@ -384,6 +384,17 @@ export function NiaPanel(props: {
         placeholder={t("nia.chatPlaceholder")}
         busy={Boolean(active()) || busy()}
         onInput={setDraft}
+        onSearchFiles={
+          props.runtime?.workspaceFiles
+            ? async (query) => {
+                const res = await props.runtime?.workspaceFiles?.({
+                  query,
+                  limit: 20,
+                });
+                return (res ?? []).filter((e) => e.type === "file");
+              }
+            : undefined
+        }
         onStop={() => void props.runtime?.niaChat?.abort?.(props.sessionID)}
         attachments={attachments()}
         onRemoveAttachment={(path) =>

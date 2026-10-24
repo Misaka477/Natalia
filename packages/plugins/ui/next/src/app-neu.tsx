@@ -227,6 +227,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const commands = new CommandRegistry();
   (props.ctx.extra as { commands?: CommandRegistry }).commands = commands;
   commands.register({
+    id: "shell.new",
+    title: t("composer.cmd.new"),
+    keywords: ["new", "session", "新会话"],
+    run: () => void createSession(),
+  });
+  commands.register({
     id: "shell.settings",
     title: t("palette.cmd.settings"),
     keywords: ["settings", "preferences"],
@@ -1802,6 +1808,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         setTurnElapsedMs(
           start !== undefined ? Math.max(0, Date.now() - start) : 0,
         );
+        const saved = transcriptScrollMemory.recall(sessionID);
+        if (!saved || saved.following) {
+          requestAnimationFrame(() => {
+            scrollMainTranscriptToBottom();
+          });
+        }
       }
       const loadToken = (
         globalThis as unknown as { __nataliaSessionLoadToken?: number }
@@ -3474,13 +3486,19 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           return next;
         });
       }}
-      onInstantActivateSession={() => {
+      onInstantActivateSession={(id) => {
         setHeroDraftMode(false);
         lastProjectedSnapshot = undefined;
         const cached = props.ctx.projection.getState();
         if (cached.natalia.messages.length > 0) {
           setTranscriptHistoryLoading(false);
           setState(cloneState(cached));
+          const saved = transcriptScrollMemory.recall(id);
+          if (!saved || saved.following) {
+            requestAnimationFrame(() => {
+              scrollMainTranscriptToBottom();
+            });
+          }
         }
       }}
     />

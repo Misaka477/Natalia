@@ -2,12 +2,16 @@
  * and composer for both agent panes.
  */
 
-import { type JSX } from "solid-js";
+import { createMemo, type JSX } from "solid-js";
 import type { UiPluginContext } from "@natalia/ui-host";
 import type { AppState } from "@natalia/view-store";
 import { QueueDock } from "../components/QueueDock";
 import { SessionUsageBar } from "../components/SessionUsageBar";
-import { Composer, type ComposerAttachment } from "../components/Composer";
+import {
+  Composer,
+  type ComposerAttachment,
+  type ComposerSlashCommand,
+} from "../components/Composer";
 import { goalCommandInstruction } from "../app-neu";
 
 export interface MainInputAreaProps {
@@ -64,6 +68,58 @@ export function MainInputArea(props: MainInputAreaProps) {
     refreshTranscript,
     perfLog,
   } = props;
+  const searchWorkspaceFiles = async (query: string) => {
+    const res = await props.ctx.runtime.workspaceFiles?.({
+      query,
+      limit: 20,
+    });
+    return (res ?? []).filter((e) => e.type === "file");
+  };
+
+  const slashCommandList = createMemo<ComposerSlashCommand[]>(() => {
+    const base: ComposerSlashCommand[] = [
+      {
+        slash: "/goal",
+        description: t("composer.cmd.goal"),
+        insertText: "/goal ",
+      },
+      {
+        slash: "/goal status",
+        description: t("composer.cmd.goalStatus"),
+        insertText: "/goal status",
+      },
+      {
+        slash: "/goal pause",
+        description: t("composer.cmd.goalPause"),
+        insertText: "/goal pause",
+      },
+      {
+        slash: "/goal resume",
+        description: t("composer.cmd.goalResume"),
+        insertText: "/goal resume",
+      },
+      {
+        slash: "/goal clear",
+        description: t("composer.cmd.goalClear"),
+        insertText: "/goal clear",
+      },
+    ];
+    const registered = (props.commands?.list?.() ?? []) as Array<{
+      id: string;
+      title: string;
+      run: () => void;
+    }>;
+    for (const cmd of registered) {
+      const shortName = cmd.id.replace(/^shell\./u, "");
+      base.push({
+        slash: `/${shortName}`,
+        description: cmd.title,
+        execute: () => cmd.run(),
+      });
+    }
+    return base;
+  });
+
   return (
     <>
       <QueueDock
@@ -103,6 +159,10 @@ export function MainInputArea(props: MainInputAreaProps) {
           )
         }
         attachments={mainAttachments()}
+        slashCommands={slashCommandList}
+        onSearchFiles={
+          props.ctx.runtime.workspaceFiles ? searchWorkspaceFiles : undefined
+        }
         onRemoveAttachment={(path) =>
           setMainAttachments(
             mainAttachments().filter((item) => item.path !== path),
@@ -231,6 +291,14 @@ export function ChatInputArea(props: ChatInputAreaProps) {
     handlePasteAttachments,
     perfLog,
   } = props;
+  const searchWorkspaceFiles = async (query: string) => {
+    const res = await props.ctx.runtime.workspaceFiles?.({
+      query,
+      limit: 20,
+    });
+    return (res ?? []).filter((e) => e.type === "file");
+  };
+
   return (
     <>
       <SessionUsageBar t={t} usage={state().usageByChannel.navi} />
@@ -240,6 +308,9 @@ export function ChatInputArea(props: ChatInputAreaProps) {
         placeholder={t("input.chatPlaceholder")}
         busy={Boolean(naviChatActivity())}
         onInput={setChatDraft}
+        onSearchFiles={
+          props.ctx.runtime.workspaceFiles ? searchWorkspaceFiles : undefined
+        }
         onStop={() =>
           void props.ctx.runtime.naviChat?.abort?.(
             selectedSessionID() || state().sessionID,

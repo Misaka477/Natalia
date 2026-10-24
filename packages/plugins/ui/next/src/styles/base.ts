@@ -403,19 +403,9 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   min-width: 0;
   margin-bottom: 5px;
 }
-.neu-pane .natalia-message-avatar {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--neu-accent);
-}
+/* No avatar badge: the author name already says who is speaking, and a
+   "N"/"U" circle beside it is decoration the reference harness does not
+   draw. The row is the name, the clock, and nothing else. */
 .neu-pane .natalia-message-meta {
   display: flex;
   align-items: center;
@@ -472,7 +462,6 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
 .neu-pane .natalia-code-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; color: var(--neu-muted); font-size: 11px; }
 .neu-pane .natalia-code-block pre { padding: 10px; overflow-x: auto; font-family: var(--neu-font-mono); font-size: 12px; }
 .neu-pane .natalia-badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: var(--neu-bg-light); color: var(--neu-muted); box-shadow: var(--neu-badge-inset); }
-.neu-pane .natalia-badge-running { color: var(--neu-success); }
 .neu-pane .natalia-badge-success { color: var(--neu-success); }
 .neu-pane .natalia-badge-error { color: var(--neu-error); }
 .neu-pane .natalia-badge-steering { color: var(--neu-accent); box-shadow: var(--neu-ring-accent); }

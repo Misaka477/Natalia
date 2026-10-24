@@ -48,13 +48,20 @@
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   height: 52px;
   padding: 6px 0 6px 4px;
   margin-bottom: 4px;
   box-sizing: border-box;
   overflow: visible;
+}
+
+/* The toggle rides the row's right edge, so widening the rail grows the
+   empty space between the brand and the button instead of sliding the brand
+   sideways — the mark stays pinned to the rail's left edge at every width. */
+.toggle {
+  margin-left: auto;
 }
 
 .collapsed .logoRow {

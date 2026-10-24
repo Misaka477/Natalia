@@ -2328,15 +2328,6 @@ export function MessageRow(props: MessageRowProps) {
       data-message-id={props.message.id}
     >
       <div class="natalia-message-header">
-        <div class="natalia-message-avatar" data-role={props.message.role}>
-          {isUser()
-            ? "U"
-            : props.message.goalRound
-              ? "G"
-              : isSystem()
-                ? "S"
-                : (props.assistantInitial ?? "N")}
-        </div>
         <div class="natalia-message-meta">
           <span class="natalia-message-author">
             {isUser()
@@ -2357,22 +2348,6 @@ export function MessageRow(props: MessageRowProps) {
             title="运行中注入当前轮"
           >
             已注入
-          </span>
-        </Show>
-        <Show when={props.message.status}>
-          <span
-            class="natalia-badge"
-            classList={{
-              "natalia-badge-running": props.message.status === "running",
-              "natalia-badge-success":
-                props.message.status === "completed" ||
-                props.message.status === "done",
-              "natalia-badge-error":
-                props.message.status === "error" ||
-                props.message.status === "failed",
-            }}
-          >
-            {props.message.status}
           </span>
         </Show>
       </div>

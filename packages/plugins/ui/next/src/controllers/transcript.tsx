@@ -659,16 +659,6 @@ export function MainPanes(props: MainPanesProps) {
                             }`
                           : "idle"}
                       </span>
-                      <Show when={state().natalia.activeTurn}>
-                        <button
-                          type="button"
-                          class={styles.runbarStop}
-                          onClick={() => props.ctx.runtime.cancel?.()}
-                          title={t("composer.stopTitle")}
-                        >
-                          {t("composer.stop")}
-                        </button>
-                      </Show>
                     </div>
                   </Show>
                   <Show when={permissionProblem()}>
@@ -873,18 +863,6 @@ export function MainPanes(props: MainPanesProps) {
                         ? `${chatActivityLabel()} · ${formatDuration(chatElapsedMs())}`
                         : "idle"}
                     </span>
-                    <button
-                      type="button"
-                      class={styles.runbarStop}
-                      onClick={() =>
-                        void props.ctx.runtime.naviChat?.abort?.(
-                          selectedSessionID() || state().sessionID,
-                        )
-                      }
-                      title={t("composer.stopTitle")}
-                    >
-                      {t("composer.stop")}
-                    </button>
                   </div>
                 </Show>
                 <ChatInputArea

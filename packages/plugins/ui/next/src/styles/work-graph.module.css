@@ -343,3 +343,38 @@ button.nodeRow:hover:not(:disabled) {
   font-size: 10px;
   font-family: var(--neu-font-mono);
 }
+
+.canvasBand {
+  fill: var(--neu-bg-light);
+  opacity: 0.35;
+  stroke: var(--neu-hairline);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.canvasNode[data-failed="true"] .canvasNodeRect {
+  stroke: color-mix(in srgb, var(--neu-error) 55%, var(--neu-hairline-strong));
+}
+
+.canvasNode[data-failed="true"] .canvasNodeKind {
+  fill: var(--neu-error);
+}
+
+.canvasCountPill {
+  fill: var(--neu-accent-soft);
+}
+
+.canvasNode[data-failed="true"] .canvasCountPill {
+  fill: var(--neu-state-danger-bg);
+}
+
+.canvasCountText {
+  fill: var(--neu-accent);
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--neu-font-mono);
+}
+
+.canvasNode[data-failed="true"] .canvasCountText {
+  fill: var(--neu-error);
+}

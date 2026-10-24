@@ -2229,7 +2229,10 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     );
   }
 
+  let secondaryStartupDataLoaded = false;
   function loadSecondaryStartupData() {
+    if (secondaryStartupDataLoaded && !startupDataDegraded()) return;
+    secondaryStartupDataLoaded = true;
     const secondaryStart = performance.now();
     perfLog(
       `[perf] loadSecondaryStartupData start +${(secondaryStart - ((globalThis as unknown as { __nataliaStartupStart?: number }).__nataliaStartupStart ?? secondaryStart)).toFixed(1)}ms`,

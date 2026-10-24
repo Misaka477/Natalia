@@ -208,7 +208,7 @@ export function wireRuntimeStatus(ctx: RuntimeContext): RuntimeStatusHandle {
         `skills: ${state.skillsCount}`,
         state.provider
           ? "provider check: configured; submit a short prompt to verify live streaming"
-          : "provider check: set NATALIA_OPENAI_API_KEY (or OPENAI_API_KEY), or configure a provider in .natalia/config.json, then restart the TUI",
+          : "provider check: set NATALIA_OPENAI_API_KEY (or OPENAI_API_KEY), or configure a provider in .natalia/config.json, then restart Natalia",
         "safety: write/shell/process actions require approval unless permissionMode=auto is explicitly configured by a caller",
         commands.egressAdvisory,
       ].join("\n");

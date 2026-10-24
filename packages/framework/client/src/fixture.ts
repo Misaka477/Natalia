@@ -673,7 +673,7 @@ export function createFakeBackend(): FakeBackend {
       publish({
         type: "session.created",
         sessionID,
-        title: "M7 Natalia TUI modals",
+        title: "M7 Natalia modals",
       });
       publish({
         type: "status.update",

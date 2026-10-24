@@ -196,34 +196,45 @@ export type CategoryId =
 /**
  * The product's academic name, shown under the wordmark in the settings
  * footer. Seven words for seven letters, and each one names a fact this
- * codebase can be held to:
+ * codebase can be held to — and pointed at:
  *
- *   Native — a compiled artifact running on the host (native terminal,
- *     Rust native crates)
- *   Agent — a multi-agent runtime (Natalia/Navi/Nia), not a single chatbot
- *   Toolkit — the product's real shape: a tool registry plus a plugin host
- *   Accountable — every action has an owner, an event, and an approval
- *     record; growth proposals never self-authorize
- *   Ledger — the event-sourced session journal is the single source of
- *     truth (append-only, content-addressed, rollback-able)
- *   Instrumented — runtime invariants are published as events, the doctor
- *     and the guard suite read them; self-observation is first-class
- *   Architecture — the layered engine (contracts / plugins / hosts /
- *     @anthelia/*)
+ *   Native — a compiled artifact running on the host: a self-built PTY bridge
+ *     (ConPTY on Windows), a zero-dependency Rust content-addressed store, a
+ *     native pack index, a CEF window host
+ *   Agent — four execution bodies on one runtime (Natalia / Navi / Nia /
+ *     Team) with an explicit collaboration protocol, not a single chatbot
+ *   Transactional — a session is a transaction: every event appended to a
+ *     durable journal, every change hung off a checkpoint that previews its
+ *     own dry-run rollback, an interrupted turn settled into an explicit
+ *     failure instead of a row that claims to be running
+ *   Audit — the read-only auditor's findings are independent of the actor it
+ *     audits, they live in a ledger, and each records how many times it has
+ *     been reopened
+ *   Ledger — the event-sourced journal is the single source of truth
+ *     (append-only, content-addressed, rollback-able), beside the work and
+ *     governance ledgers
+ *   Instrumented — an error record carries its caller's own
+ *     file:line:column plus function name and the whole Error.cause chain,
+ *     separated into kernel / framework / plugin domains
+ *   Attribution — the same call site is what a reader is given: the log
+ *     inspector opens the file, and a plugin attributes through its own
+ *     registered logger rather than writing wherever it likes
  *
  * It replaced a backronym that filled letters with words we do not stand
  * behind. Do not re-introduce them:
  *   "Autonomous"       — the approval posture is ask/auto/read_only and the
  *                        growth lane never self-authorizes; this is the
  *                        opposite of what we ship
- *   "Local Intelligence" — the models are remote providers; local-first is
- *                        about data, not about where the model runs
- *   "Terminal"          — the web shell is a first-class app, not a
- *                        fallback
+ *   "Local Intelligence" — the models are remote providers; data residency is
+ *                        about the journal, not about where the model runs
+ *   "Toolkit"          — the shape is a runtime plus a plugin host, and
+ *                        "toolkit" reads as a pile of parts you assemble
+ *                        yourself, which undersells what is already running
+ *   "Architecture"     — true of every program, verifiable about none
  * "Neural" said nothing at all.
  */
 const ACADEMIC_NAME =
-  "Native Agent Toolkit: Accountable Ledger, Instrumented Architecture";
+  "Native Agent — Transactional Audit Ledger, Instrumented Attribution";
 
 /**
  * A rendered category: the active one and the rows it shows. The rows come

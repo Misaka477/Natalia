@@ -2644,8 +2644,9 @@ test("configured agent selection supplies the provider system prompt and tool po
     .map((message) => message.content)
     .join("\n");
   expect(systemPrompt).toContain(
-    "You are Natalia, a local software engineering agent",
+    "You are Natalia, a software engineering agent running inside the Natalia runtime",
   );
+  expect(systemPrompt).toContain("<natalia_persona>");
   // ADR D1: the workspace root is per-workspace dynamic context, not static
   // system prompt content.
   expect(systemPrompt).not.toContain("Working directory: " + root);
@@ -2676,7 +2677,7 @@ test("runtime sends a baseline system prompt without configured agent instructio
   // A request must have been captured before its content is meaningfully
   // examined. Without this, a provider that never streamed makes every `toContain`
   // below fail against `String(undefined)` — "expected to contain
-  // <natalia_cli_persona>, received [undefined]" — which reads like the prompt is
+  // <natalia_persona>, received [undefined]" — which reads like the prompt is
   // wrong rather than like no prompt ever arrived. CI failed this test once in
   // exactly that undiagnosable shape.
   expect(
@@ -2690,9 +2691,9 @@ test("runtime sends a baseline system prompt without configured agent instructio
     .join("\n");
   expect(requests[0]?.messages[0]).toMatchObject({ role: "system" });
   expect(systemPrompt).toContain(
-    "You are Natalia, a local software engineering agent",
+    "You are Natalia, a software engineering agent",
   );
-  expect(systemPrompt).toContain("<natalia_cli_persona>");
+  expect(systemPrompt).toContain("<natalia_persona>");
   expect(systemPrompt).toContain(
     "Be warm, perceptive, and recognizably yourself",
   );

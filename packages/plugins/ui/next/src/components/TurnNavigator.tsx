@@ -166,9 +166,6 @@ export function TurnNavigator(props: TurnNavigatorProps) {
         ? prev
         : { top, canScrollUp, canScrollDown },
     );
-    if (top <= 12 && props.hasOlder) {
-      props.onLoadOlder?.();
-    }
   };
 
   onMount(() => {
@@ -298,7 +295,17 @@ export function TurnNavigator(props: TurnNavigatorProps) {
             queueMicrotask(syncScrollState);
           }}
           class={`${styles.scroller} ${scrollState().canScrollUp ? styles.fadeTop : ""} ${scrollState().canScrollDown ? styles.fadeBottom : ""}`}
-          onScroll={() => syncScrollState()}
+          onScroll={() => {
+            syncScrollState();
+            if (
+              pointerInside &&
+              scrollerRef &&
+              scrollerRef.scrollTop <= 8 &&
+              props.hasOlder
+            ) {
+              props.onLoadOlder?.();
+            }
+          }}
         >
           <div class={styles.marks}>
             <For each={entries()}>

@@ -73,14 +73,20 @@ export function readTranscriptAnchor(
   const rows = container.querySelectorAll<HTMLElement>("[data-message-id]");
   if (rows.length === 0) return undefined;
   const top = container.getBoundingClientRect().top;
+  let lo = 0;
+  let hi = rows.length - 1;
   let chosen: HTMLElement | undefined;
   let offsetInRow = 0;
-  for (const row of rows) {
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const row = rows[mid]!;
     const rect = row.getBoundingClientRect();
     if (rect.bottom > top) {
       chosen = row;
       offsetInRow = Math.max(0, rect.top - top);
-      break;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
     }
   }
   // Every row is above the viewport's top edge: the reader is at the end.
@@ -118,20 +124,25 @@ export function readVisibleTurnMessageID(
   if (!container) return undefined;
   const rows = container.querySelectorAll<HTMLElement>("[data-message-id]");
   if (rows.length === 0) return undefined;
-  const rect = container.getBoundingClientRect();
   if (
     container.scrollHeight - container.clientHeight - container.scrollTop <=
     16
   ) {
     return rows[rows.length - 1]?.dataset.messageId;
   }
+  const rect = container.getBoundingClientRect();
   const readingLine = rect.top + Math.min(96, rect.height * 0.2);
+  let lo = 0;
+  let hi = rows.length - 1;
   let chosen = rows[0]!;
-  for (const row of rows) {
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const row = rows[mid]!;
     if (row.getBoundingClientRect().top <= readingLine) {
       chosen = row;
+      lo = mid + 1;
     } else {
-      break;
+      hi = mid - 1;
     }
   }
   return chosen.dataset.messageId;

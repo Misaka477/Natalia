@@ -53,6 +53,7 @@ import {
 } from "./virtual-items";
 
 const VIRTUALIZE_THRESHOLD = Number.MAX_SAFE_INTEGER;
+const NATIVE_DOM_WINDOW_STEP = 60;
 const BOTTOM_FOLLOW_THRESHOLD_PX = 24;
 const VIRTUAL_OVERSCAN = 24;
 const VIRTUAL_ROW_GAP = 6;
@@ -133,7 +134,38 @@ export interface TranscriptProps {
 export function Transcript(props: TranscriptProps) {
   const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>();
   const [scrollReady, setScrollReady] = createSignal(false);
+  const [nativeMountedCount, setNativeMountedCount] = createSignal(
+    NATIVE_DOM_WINDOW_STEP,
+  );
   const virtualize = () => props.messages.length > VIRTUALIZE_THRESHOLD;
+  const nativeStartIndex = () =>
+    Math.max(0, props.messages.length - nativeMountedCount());
+  const nativeVisibleMessages = createMemo(() => {
+    const start = nativeStartIndex();
+    return start > 0 ? props.messages.slice(start) : props.messages;
+  });
+  let prependingNativeWindow = false;
+  const expandNativeWindowIfNeeded = () => {
+    if (prependingNativeWindow || useVirtual()) return false;
+    const start = nativeStartIndex();
+    if (start <= 0) return false;
+    const el = scrollEl();
+    if (!el) return false;
+    prependingNativeWindow = true;
+    const prevScrollHeight = el.scrollHeight;
+    const prevScrollTop = el.scrollTop;
+    setNativeMountedCount((c) =>
+      Math.min(props.messages.length, c + NATIVE_DOM_WINDOW_STEP),
+    );
+    queueMicrotask(() => {
+      const nextHeight = el.scrollHeight;
+      if (nextHeight > prevScrollHeight) {
+        el.scrollTop = prevScrollTop + (nextHeight - prevScrollHeight);
+      }
+      prependingNativeWindow = false;
+    });
+    return true;
+  };
   let controller: TailScrollController | undefined;
   // The reference's useStableVirtualRowStructure keeps row identity/height stable across
   // renders. Message heights are dynamic, so cache by a content signature: a
@@ -173,9 +205,9 @@ export function Transcript(props: TranscriptProps) {
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
-      return props.messages.length;
+      return virtualize() ? props.messages.length : 0;
     },
-    getScrollElement: () => scrollEl() ?? null,
+    getScrollElement: () => (virtualize() ? (scrollEl() ?? null) : null),
     estimateSize: (index) => estimateStable(index),
     getItemKey: (index) => props.messages[index]?.id ?? index,
     anchorTo: "end",
@@ -260,6 +292,7 @@ export function Transcript(props: TranscriptProps) {
    * transcript with older pages can fill itself without a manual button.
    */
   const notifyNearTop = () => {
+    if (expandNativeWindowIfNeeded()) return;
     if (
       props.onNearTop === undefined ||
       !tailState.initialized ||
@@ -298,7 +331,7 @@ export function Transcript(props: TranscriptProps) {
   let frozenVirtualItems: ReturnType<typeof virtualizer.getVirtualItems> = [];
   let frozenTotalSize = 0;
   createEffect(() => {
-    if (props.suspendVirtualization) return;
+    if (!virtualize() || props.suspendVirtualization) return;
     frozenVirtualItems = liveVirtualItems();
     frozenTotalSize = liveTotalSize();
   });
@@ -335,6 +368,17 @@ export function Transcript(props: TranscriptProps) {
   let lastMessageCount = -1;
   createEffect(() => {
     const count = props.messages.length;
+    if (count === 0) {
+      setNativeMountedCount(NATIVE_DOM_WINDOW_STEP);
+    } else if (
+      lastMessageCount > 0 &&
+      count > lastMessageCount &&
+      controller?.isFollowing()
+    ) {
+      setNativeMountedCount((c) =>
+        Math.max(NATIVE_DOM_WINDOW_STEP, c + (count - lastMessageCount)),
+      );
+    }
     if (count === lastMessageCount) return;
     const previous = lastMessageCount;
     lastMessageCount = count;
@@ -343,7 +387,7 @@ export function Transcript(props: TranscriptProps) {
     // taken the new count; otherwise the transcript can stay pinned to the
     // previous (possibly single-row) end window.
     requestAnimationFrame(() => {
-      virtualizer.measure();
+      if (virtualize()) virtualizer.measure();
       controller?.notifyDataChanged();
     });
   });
@@ -398,6 +442,9 @@ export function Transcript(props: TranscriptProps) {
       const align = options?.align ?? "auto";
       const behavior = options?.behavior ?? "auto";
       const targetID = props.messages[target]?.id ?? "";
+      if (!useVirtual() && target < nativeStartIndex()) {
+        setNativeMountedCount(props.messages.length - target + 16);
+      }
 
       if (smoothJumpSettleTimer) {
         clearTimeout(smoothJumpSettleTimer);
@@ -643,6 +690,16 @@ export function Transcript(props: TranscriptProps) {
 
   const handleScroll = (event: Event) => {
     const startedAt = performance.now();
+    const el = scrollEl();
+    if (
+      el &&
+      !useVirtual() &&
+      nativeStartIndex() > 0 &&
+      el.scrollTop <= 360 &&
+      !controller?.isFollowing()
+    ) {
+      expandNativeWindowIfNeeded();
+    }
     // The controller owns the follow flag; a scroll event is the reader
     // telling us where they are, so it goes there and nowhere else. The
     // mirror this used to keep in `tailState` is exactly what let the two
@@ -650,7 +707,6 @@ export function Transcript(props: TranscriptProps) {
     controller?.onScroll(event);
     props.onScroll?.(event);
     if (!uiDebugEnabled()) return;
-    const el = scrollEl();
     const mounted = useVirtual() ? virtualItems() : [];
     console.log("[natalia-ui] transcript scroll", {
       elapsedMs: Number((performance.now() - startedAt).toFixed(2)),
@@ -881,7 +937,7 @@ export function Transcript(props: TranscriptProps) {
           <Show
             when={useVirtual()}
             fallback={
-              <For each={props.messages}>
+              <For each={nativeVisibleMessages()}>
                 {(message) => (
                   <MessageGroup
                     message={message}

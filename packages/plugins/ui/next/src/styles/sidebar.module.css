@@ -18,8 +18,8 @@
   color: var(--neu-text);
   font-size: 14px;
   transition:
-    width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    width 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+    padding 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .collapsed {

@@ -442,12 +442,26 @@ export class TailScrollController {
       rows = [];
     }
     const containerRect = element.getBoundingClientRect();
-    for (const row of rows) {
+    let lo = 0;
+    let hi = rows.length - 1;
+    let firstIdx = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const rect = rows[mid]!.getBoundingClientRect();
+      if (rect.bottom > containerRect.top) {
+        firstIdx = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    if (firstIdx >= 0) {
+      const row = rows[firstIdx]!;
       const rect = row.getBoundingClientRect();
-      if (rect.bottom <= containerRect.top || rect.top >= containerRect.bottom)
-        continue;
-      const key = row.dataset.messageId;
-      if (key) return { key, top: rect.top - containerRect.top };
+      if (rect.top < containerRect.bottom) {
+        const key = row.dataset.messageId;
+        if (key) return { key, top: rect.top - containerRect.top };
+      }
     }
     return undefined;
   }

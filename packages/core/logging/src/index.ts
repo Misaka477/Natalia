@@ -472,11 +472,15 @@ export class LogService {
       domain?: LogDomain;
       pluginId?: string;
       location?: LogLocation;
+      error?: unknown;
       fields?: Readonly<Record<string, unknown>>;
     },
   ): void {
     this.sn += 1;
-    const firstError = args.find((arg): arg is Error => arg instanceof Error);
+    const firstError =
+      meta?.error instanceof Error
+        ? meta.error
+        : args.find((arg): arg is Error => arg instanceof Error);
     const extractedError = firstError
       ? extractStructuredError(firstError)
       : undefined;

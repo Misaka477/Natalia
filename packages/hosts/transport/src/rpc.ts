@@ -4961,8 +4961,9 @@ function recordFailure(
   const summary = `rpc ${method ?? "request"} failed [${label}]: ${message}`;
   if (level === "error") {
     if (rawError instanceof Error) {
-      logService.emit("rpc-dispatcher", "error", [summary, rawError], {
+      logService.emit("rpc-dispatcher", "error", [summary], {
         domain: "framework",
+        error: rawError,
         fields: { method: method ?? "unknown", errorID: label },
       });
     } else {

@@ -57,6 +57,10 @@ export function resolveRecordLocation(
 export function formatShortLocation(loc: OperationLogLocation): string {
   const norm = loc.file.replace(/\\/gu, "/");
   const base = norm.slice(norm.lastIndexOf("/") + 1) || norm;
+  const cleanFn = loc.fn?.replace(/^async\s+/u, "").trim();
+  if (cleanFn && cleanFn !== "<anonymous>") {
+    return `${cleanFn} (${base}:${loc.line})`;
+  }
   return `${base}:${loc.line}`;
 }
 
@@ -125,9 +129,19 @@ export function StatusSectionContent(props: {
     try {
       const list = await props.runtime.operationRecords({ limit: 300 });
       if (list) {
-        const cleaned = list.filter(
-          (item) => !JSON.stringify(item).includes("__hero_draft__"),
-        );
+        const cleaned = list.filter((item) => {
+          if (
+            item.level === "warn" &&
+            ((item.component === "usage-snapshot" &&
+              item.message === "attach") ||
+              (item.component === "context-restore" &&
+                (item.message === "session-recovery" ||
+                  item.message === "ensureExecution")))
+          ) {
+            return false;
+          }
+          return !JSON.stringify(item).includes("__hero_draft__");
+        });
         setRecords(cleaned.slice().reverse());
       }
     } catch {

@@ -22,21 +22,28 @@ async function source(...segments: string[]): Promise<string> {
 }
 
 test("the top bar renders the image, and no letter", async () => {
-  const app = await source("plugins", "ui", "web", "src", "app-neu.tsx");
-  expect(app).toContain('<img class="neu-topbar-logo" src="/brand.png"');
-  expect(app).not.toContain('<span class="neu-topbar-logo">N</span>');
+  const topbar = await source(
+    "plugins",
+    "ui",
+    "next",
+    "src",
+    "controllers",
+    "topbar.tsx",
+  );
+  expect(topbar).toContain('src="/brand.png"');
+  expect(topbar).not.toContain('<span class="neu-topbar-logo">N</span>');
 });
 
 test("the logo frame keeps its shape and drops the placeholder styling", async () => {
   const styles = await source(
     "plugins",
     "ui",
-    "web",
+    "next",
     "src",
     "styles",
-    "base.ts",
+    "topbar.module.css",
   );
-  const at = styles.indexOf(".neu-topbar-logo {");
+  const at = styles.indexOf(".logo {");
   expect(at).toBeGreaterThan(0);
   const rule = styles.slice(at, styles.indexOf("}", at));
   expect(rule).toContain("object-fit: cover");

@@ -204,9 +204,9 @@ test("every transcript host routes its tool rows through the kit's toolCallRow",
   // presenters — so a replayed event renders exactly like a live one.
   // This guard keeps the hosts out of the presentation business.
   const hosts = [
-    "packages/plugins/ui/web/src/app-neu.tsx",
-    "packages/plugins/ui/web/src/agent-panel.tsx",
-    "packages/plugins/ui/web/src/nia-panel.tsx",
+    "packages/plugins/ui/next/src/app-neu.tsx",
+    "packages/plugins/ui/next/src/agent-panel.tsx",
+    "packages/plugins/ui/next/src/nia-panel.tsx",
   ];
   const repoRoot = join(import.meta.dir, "../../../..");
   for (const host of hosts) {

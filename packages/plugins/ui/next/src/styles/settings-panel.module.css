@@ -12,6 +12,18 @@
   border-radius: var(--neu-radius);
   box-shadow: var(--neu-elevation-5);
   overflow: hidden;
+  animation: settingsModalEnter 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes settingsModalEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .body {
@@ -83,6 +95,62 @@
   background: var(--neu-bg);
   border-radius: 12px;
   box-shadow: var(--neu-inset-2);
+  transition:
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.12s ease;
+}
+
+.inlineControl {
+  flex-shrink: 0;
+  min-width: 170px;
+}
+
+.inlineControl :global(.neu-select-trigger) {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.togglePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline);
+  font-size: 12px;
+  color: var(--neu-muted);
+  transition:
+    background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.18s ease;
+}
+
+.togglePill[data-checked="true"] {
+  border-color: var(--neu-accent);
+  color: var(--neu-accent);
+}
+
+.toggleThumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--neu-muted);
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.18s ease;
+}
+
+.togglePill[data-checked="true"] .toggleThumb {
+  background: var(--neu-accent);
+  transform: scale(1.08);
+}
+
+.toggleText {
+  font-weight: 600;
 }
 
 .itemMain {
@@ -121,8 +189,13 @@ button.item.itemButton {
   cursor: pointer;
 }
 
+button.item.itemButton:hover {
+  background: var(--neu-hover-overlay);
+}
+
 button.item.itemButton:active {
   box-shadow: var(--neu-inset-3);
+  transform: scale(0.996);
 }
 
 /* The exit. It reads as an action among settings, not as one more toggle —

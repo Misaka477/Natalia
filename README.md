@@ -10,7 +10,7 @@ Natalia is a local-first coding-agent runtime written in TypeScript and Bun.
 Three front ends share one runtime:
 
 - **CLI** (`apps/cli`)
-- **Web shell** (`apps/web`, package `@natalia/web-shell`)
+- **Web shell & Next UI** (`apps/web`, `packages/plugins/ui/next`)
 - **Desktop app** (`apps/cef-desktop`), the CEF shell the packaged
   application opens
 
@@ -136,13 +136,18 @@ npm run ts:cli -- session show <id>
 ```
 
 Configuration lives in `.natalia/config.json` per workspace, with all user data
-in ONE global home: `~/.natalia/` — `$HOME/.natalia` on Linux and macOS,
-`%USERPROFILE%\.natalia\` on Windows. That folder holds the global
-`config.json`, the workspace registry, TUI state, skills, the plugin store,
-caches, operation logs and the object store. Use `NATALIA_HOME` to relocate it
-and `NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` to override single files;
-older locations (`~/.config/natalia/`, `%APPDATA%\natalia\`) are still read,
-never written.
+in ONE global home: `~/.natalia/` by default (`$HOME/.natalia` on Linux and
+macOS, `%USERPROFILE%\.natalia\` on Windows). During installation, the Windows
+Setup wizard (`CreateInputDirPage`) and `scripts/install.ps1 -DataDir <path>`
+(or `scripts/install.sh --data-dir <path>`) let you place this data directory
+on any disk drive (persisted via `NATALIA_HOME`), and the uninstaller
+automatically reads that configured location when asking whether to delete or
+keep your data. That folder holds the global `config.json`, the workspace
+registry, skills, the plugin store, caches, Chromium-grade operation logs, and
+the SQLite session/object stores. Use `NATALIA_HOME` to relocate it and
+`NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` to override single files; older
+locations (`~/.config/natalia/`, `%APPDATA%\natalia\`) are still read, never
+written.
 
 ### Documentation
 
@@ -200,7 +205,7 @@ Natalia 是一个用 TypeScript 和 Bun 编写的 local-first coding-agent runti
 三个前端共用同一份 runtime：
 
 - **CLI**（`apps/cli`）
-- **Web shell**（`apps/web`，包名 `@natalia/web-shell`）
+- **Web shell 与 Next UI**（`apps/web`、`packages/plugins/ui/next`）
 - **桌面端**（`apps/cef-desktop`），打包后的应用打开的 CEF 外壳
 
 ### 桌面端启动链
@@ -309,11 +314,15 @@ npm run ts:cli -- session list
 npm run ts:cli -- session show <id>
 ```
 
-workspace 级配置在 `.natalia/config.json`，**所有用户数据只有一个全局主目录**：
-`~/.natalia/` —— Linux 与 macOS 为 `$HOME/.natalia`，Windows 为
-`%USERPROFILE%\.natalia\`。全局 `config.json`、workspace 注册表、TUI 状态、
-技能、插件店、缓存、操作日志与对象存储都在这个目录里。用 `NATALIA_HOME`
-可以整体迁移它，用 `NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` 覆盖单个文件；
+workspace 级配置在 `.natalia/config.json`，**所有用户数据默认在一个全局主目录**：
+`~/.natalia/`（Linux 与 macOS 为 `$HOME/.natalia`，Windows 默认为
+`%USERPROFILE%\.natalia\`）。Windows 安装向导（`Setup.exe`）提供专门的**数据目录选择页**，
+支持将数据目录直接改到其他磁盘（如 `D:\NataliaData` 或 `E:\NataliaData`，自动写入用户级
+`NATALIA_HOME` 与卸载注册表项 `NataliaDataDir`），避免占用 C 盘空间；卸载器也会自动读取该自定义路径，
+并提供可选的「彻底删除全部数据 / 保留数据」确认。CLI 安装脚本同样支持 `-DataDir <路径>`
+（PowerShell）与 `--data-dir <路径>`（Bash）。全局 `config.json`、workspace 注册表、
+技能、插件店、缓存、Chromium 级系统日志与 SQLite 会话/对象存储都在这个目录里。用
+`NATALIA_HOME` 可以整体迁移它，用 `NATALIA_CONFIG` / `NATALIA_WORKSPACES_FILE` 覆盖单个文件；
 旧位置（`~/.config/natalia/`、`%APPDATA%\natalia\`）**仍会被读取，但不再写入**。
 
 ### 文档

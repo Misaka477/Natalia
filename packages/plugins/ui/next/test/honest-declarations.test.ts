@@ -21,7 +21,7 @@ function source(relative: string): string {
 
 const pkg = JSON.parse(
   readFileSync(
-    join(root, "packages", "plugins", "ui", "web", "package.json"),
+    join(root, "packages", "plugins", "ui", "next", "package.json"),
     "utf8",
   ),
 ) as { version: string };
@@ -29,15 +29,15 @@ const pkg = JSON.parse(
 test("the UI plugin and both skins declare the package's real version", () => {
   const declared = `version: "${pkg.version}"`;
   for (const file of [
-    "packages/plugins/ui/web/src/plugin-neu.tsx",
-    "packages/plugins/ui/web/src/plugin-neu-light.tsx",
+    "packages/plugins/ui/next/src/plugin-neu.tsx",
+    "packages/plugins/ui/next/src/plugin-neu-light.tsx",
   ]) {
     expect(source(file), `${file} must declare ${declared}`).toContain(
       declared,
     );
   }
   // The skins: one entry each, so count them rather than matching once.
-  const skins = source("packages/plugins/ui/web/src/skins.ts");
+  const skins = source("packages/plugins/ui/next/src/skins.ts");
   const occurrences = skins.split(declared).length - 1;
   expect(occurrences).toBe(2);
 });
@@ -46,8 +46,8 @@ test("the shortcuts the help panel advertises all have handlers", () => {
   // A row for a shortcut nothing handles is a feature that exists only in
   // the documentation. Ctrl+K (command palette) and Ctrl+/ (settings) were
   // exactly that: advertised, and dead when pressed.
-  const help = source("packages/plugins/ui/web/src/help-panel.tsx");
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const help = source("packages/plugins/ui/next/src/help-panel.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
   const advertised = [...help.matchAll(/keys: \[([^\]]+)\]/gu)].map((match) =>
     match[1]!
       .split(",")

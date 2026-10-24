@@ -1,5 +1,9 @@
 import styles from "./styles/status-panel.module.css";
 import {
+  newestOperationRecords,
+  operationRecordLine,
+} from "./operation-records";
+import {
   createMemo,
   createSignal,
   For,
@@ -129,7 +133,7 @@ export function StatusSectionContent(props: {
     try {
       const list = await props.runtime.operationRecords({ limit: 300 });
       if (list) {
-        const cleaned = list.filter((item) => {
+        const cleaned = newestOperationRecords(list, 300).filter((item) => {
           if (
             item.level === "warn" &&
             ((item.component === "usage-snapshot" &&
@@ -142,7 +146,8 @@ export function StatusSectionContent(props: {
           }
           return !JSON.stringify(item).includes("__hero_draft__");
         });
-        setRecords(cleaned.slice().reverse());
+        void operationRecordLine;
+        setRecords(cleaned);
       }
     } catch {
       // ignore transient read errors

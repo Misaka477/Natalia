@@ -10,9 +10,6 @@
       "path": "../../packages/hosts/ui-host"
     },
     {
-      "path": "../../packages/plugins/ui/web"
-    },
-    {
       "path": "../../packages/plugins/ui/next"
     },
     {

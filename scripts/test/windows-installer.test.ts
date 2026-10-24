@@ -27,7 +27,18 @@ async function fakeWindowsRelease() {
   await mkdir(join(root, "resources", "plugins"), { recursive: true });
   await writeFile(join(root, "natalia.exe"), "rt\n");
   await writeFile(join(root, "natalia-cef-desktop.exe"), "cef\n");
-  await writeFile(join(root, "icon.ico"), "ico\n");
+  const realIcon = join(
+    import.meta.dir,
+    "..",
+    "..",
+    "assets",
+    "icons",
+    "icon.ico",
+  );
+  await writeFile(
+    join(root, "icon.ico"),
+    existsSync(realIcon) ? await Bun.file(realIcon).bytes() : "ico\n",
+  );
   await writeFile(join(root, "libcef-bin", "libcef.dll"), "lib\n");
   await writeFile(join(root, "resources", "plugins", "one.js"), "p\n");
   return root;
@@ -379,7 +390,7 @@ test("every ExpandConstant names a constant Inno Setup actually defines", async 
   });
   const script = await Bun.file(result.iss!).text();
   const used = new Set(
-    [...script.matchAll(/ExpandConstant\('\{([a-z]+)\}'/gu)].map(
+    [...script.matchAll(/ExpandConstant\('\{([a-z]+)(?::[^}]*)?\}'/gu)].map(
       (match) => match[1]!,
     ),
   );
@@ -401,6 +412,7 @@ test("every ExpandConstant names a constant Inno Setup actually defines", async 
     "group", // {group}
     "autopf", // {autopf}
     "autocf", // {autocf}
+    "param", // {param:DATADIR|...}
   ]);
   const unknown = [...used].filter((name) => !DEFINED.has(name));
   expect(
@@ -504,7 +516,11 @@ test("a compiler, when one is named, produces a real Setup.exe", async () => {
   // how the tray probe treats the same situation.
   const compiler =
     Bun.which("ISCC") ??
-    (process.env.NATALIA_ISCC ? Bun.which(process.env.NATALIA_ISCC) : null);
+    (process.env.NATALIA_ISCC
+      ? existsSync(process.env.NATALIA_ISCC)
+        ? process.env.NATALIA_ISCC
+        : Bun.which(process.env.NATALIA_ISCC)
+      : null);
   if (!compiler) {
     console.warn(
       "skipped: no ISCC on PATH and NATALIA_ISCC unset — the compile step " +
@@ -615,4 +631,15 @@ test("the wizard offers the install directory — the page exists, not just the 
   expect(script).not.toMatch(/[A-Z]:\\/u);
   expect(script).not.toContain("%ProgramFiles%");
   expect(script).not.toContain("Program Files");
+  // And the wizard offers a dedicated Data Directory (NATALIA_HOME) selection
+  // page and persists it to HKCU\Environment\NATALIA_HOME + Uninstall\NataliaDataDir,
+  // which the uninstaller reads back via ConfiguredDataDir.
+  expect(script).toContain("CreateInputDirPage(wpSelectDir");
+  expect(script).toContain(
+    'ValueName: "NATALIA_HOME"; ValueData: "{code:GetDataDir}"',
+  );
+  expect(script).toContain(
+    'ValueName: "NataliaDataDir"; ValueData: "{code:GetDataDir}"',
+  );
+  expect(script).toContain("function ConfiguredDataDir: String;");
 });

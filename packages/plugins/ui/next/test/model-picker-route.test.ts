@@ -23,51 +23,64 @@ function source(relative: string): string {
 }
 
 test("all four model controls route a modelless click to the model settings", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
-  const nia = source("packages/plugins/ui/web/src/nia-panel.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
+  const transcript = source(
+    "packages/plugins/ui/next/src/controllers/transcript.tsx",
+  );
+  const nia = source("packages/plugins/ui/next/src/nia-panel.tsx");
 
   // The shell carries four of them: the main toolbar's model control, Navi's
   // Chat model, Navi's expert model — and the permission control, which routes
   // only when it has no permissions to offer (the same empty-menu bug) and
   // leaves the degraded retry alone, because that entry IS a real option.
-  expect((app.match(/onActivate=\{/gu) ?? []).length).toBe(4);
+  expect((transcript.match(/onActivate=\{/gu) ?? []).length).toBe(4);
   // The three model controls bind it (`: openModelSettings`); the permission
   // one picks it in a ternary (`? openModelSettings`), which is what makes its
   // route conditional.
-  expect((app.match(/[?:] openModelSettings/gu) ?? []).length).toBe(4);
+  expect((transcript.match(/[?:] openModelSettings/gu) ?? []).length).toBe(4);
   // The condition, in the two halves prettier may wrap: nothing degraded, and
   // nothing to choose. Both must be there for the route to be the right one.
-  expect(app).toContain("!startupDataDegraded()");
-  expect(app).toContain("permissionOptions().length === 0");
-  expect(app).toContain("loadSecondaryStartupData()");
+  expect(transcript).toContain("!startupDataDegraded()");
+  expect(transcript).toContain("permissionOptions().length === 0");
+  expect(transcript).toContain("loadSecondaryStartupData()");
   // Nia's is the fourth model one, routed through the prop it was given.
   expect((nia.match(/onActivate=\{/gu) ?? []).length).toBe(1);
   expect(nia).toContain("props.onOpenSettings?.()");
-  expect(app).toContain("onOpenSettings={openModelSettings}");
+  expect(transcript).toContain("onOpenSettings={openModelSettings}");
 
   // The destination is the MODEL page of the settings, requested on open and
   // given back when it closes so it stays a request, not a new default.
   expect(app).toContain('setSettingsCategory("model")');
-  expect(app).toContain("category={settingsCategory()}");
-  expect(app).toContain("setSettingsCategory(undefined)");
-  expect(source("packages/plugins/ui/web/src/settings-panel.tsx")).toContain(
+  expect(
+    source("packages/plugins/ui/next/src/controllers/modals.tsx"),
+  ).toContain("category={props.settingsCategory()}");
+  expect(
+    source("packages/plugins/ui/next/src/controllers/modals.tsx"),
+  ).toContain("props.setSettingsCategory(undefined)");
+  expect(source("packages/plugins/ui/next/src/settings-panel.tsx")).toContain(
     "if (props.open && requested)",
   );
 });
 
 test("the model controls themselves are untouched", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
-  const nia = source("packages/plugins/ui/web/src/nia-panel.tsx");
+  const transcript = source(
+    "packages/plugins/ui/next/src/controllers/transcript.tsx",
+  );
+  const nia = source("packages/plugins/ui/next/src/nia-panel.tsx");
   // Each control still renders as the select it always was, with its own
   // placeholder: no substituted button, no substituted label.
-  for (const placeholder of ["选择模型", "Chat 模型", "专家模型"] as const)
-    expect(app).toContain(`placeholder="${placeholder}"`);
-  expect(nia).toContain('placeholder="Nia 模型"');
-  expect(app).not.toContain("未配置模型");
+  for (const key of [
+    "transcript.selectModel",
+    "transcript.chatModel",
+    "transcript.expertModel",
+  ] as const)
+    expect(transcript).toContain(`placeholder={t("${key}")}`);
+  expect(nia).toContain('placeholder={t("nia.model")}');
+  expect(transcript).not.toContain("未配置模型");
   expect(nia).not.toContain("未配置模型");
-  expect(app).not.toContain("去设置");
+  expect(transcript).not.toContain("去设置");
   // And only the modelless case takes the route: with a model to choose the
   // menu opens exactly as before.
-  expect(app.match(/modelOptions\(\)\.length > 0/gu)?.length).toBe(3);
+  expect(transcript.match(/modelOptions\(\)\.length > 0/gu)?.length).toBe(3);
   expect(nia.match(/modelOptions\(\)\.length > 0/gu)?.length).toBe(1);
 });

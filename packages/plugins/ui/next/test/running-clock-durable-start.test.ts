@@ -25,7 +25,15 @@ async function source(...segments: string[]): Promise<string> {
   return await Bun.file(join(repo, ...segments)).text();
 }
 
-const app = await source("plugins", "ui", "web", "src", "app-neu.tsx");
+const app = await source("plugins", "ui", "next", "src", "app-neu.tsx");
+const transcript = await source(
+  "plugins",
+  "ui",
+  "next",
+  "src",
+  "controllers",
+  "transcript.tsx",
+);
 
 test("the turn's start is stamped where the runtime publishes it", async () => {
   const admission = await source(
@@ -73,24 +81,23 @@ test("the projection carries the start as a per-session fact", async () => {
 test("the clock reads the projection, and the local echo is keyed by turn", () => {
   const at = app.indexOf("const turnStartAt = () =>");
   expect(at).toBeGreaterThan(0);
-  const body = app.slice(at, at + 320);
+  const body = app.slice(at, at + 420);
   expect(body).toContain("state().activeTurnStartedAt");
-  expect(body).toContain("activeTurnStartedAtValue()");
-  // The legacy echo is remembered per turn id, so a session switch neither
-  // restarts a running turn nor shows another session's elapsed time.
+  expect(body).toContain("legacyTurnStartsBySession.get(sid)");
+  // The legacy echo is remembered per session + turn id, so a session switch
+  // neither restarts a running turn nor shows another session's elapsed time.
   const frame = app.indexOf(
     "const durableStart = projected.activeTurnStartedAt",
   );
   expect(frame).toBeGreaterThan(0);
   const frameBody = app.slice(frame, frame + 700);
-  expect(frameBody).toContain("legacyTurnStartKey() !== currentTurn");
-  expect(frameBody).toContain("setLegacyTurnStartKey(currentTurn)");
+  expect(frameBody).toContain("legacyTurnStartsBySession.set(sid");
 });
 
 test("a turn with no durable start says so instead of showing zero", () => {
-  const at = app.indexOf('"计时未知"');
+  const at = transcript.indexOf('t("transcript.timingUnknown")');
   expect(at).toBeGreaterThan(0);
-  const body = app.slice(at - 400, at + 200);
+  const body = transcript.slice(at - 200, at + 200);
   expect(body).toContain("turnStartAt() === undefined");
 });
 
@@ -98,6 +105,6 @@ test("a session switch drops the previous session's clock", () => {
   const at = app.indexOf("const resetProjectionForSessionSwitch = () => {");
   expect(at).toBeGreaterThan(0);
   const body = app.slice(at, at + 1700);
-  expect(body).toContain("setLegacyTurnStartKey(undefined)");
-  expect(body).toContain("setTurnElapsedMs(0)");
+  expect(body).toContain("const nextStart = turnStartAt()");
+  expect(body).toContain("setTurnElapsedMs(");
 });

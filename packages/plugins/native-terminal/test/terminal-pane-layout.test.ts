@@ -72,7 +72,7 @@ test("the pane root stretches to the panel slot instead of resolving a percentag
 test("the plugin mount slot is a flex column so a plugin root can stretch", () => {
   // The slot is the last definite link in the chain. Without a definite basis
   // here, every plugin root that sizes itself in percentages resolves to auto.
-  // native-terminal/test -> repo root -> packages/plugins/ui/web.
+  // native-terminal/test -> repo root -> packages/plugins/ui/next.
   const sheet = readFileSync(
     join(
       import.meta.dir,
@@ -83,15 +83,15 @@ test("the plugin mount slot is a flex column so a plugin root can stretch", () =
       "packages",
       "plugins",
       "ui",
-      "web",
+      "next",
       "src",
       "styles",
-      "base.ts",
+      "workbench.module.css",
     ),
     "utf8",
   );
-  const start = sheet.indexOf(".neu-side-panel-host {");
-  if (start < 0) throw new Error("missing rule: .neu-side-panel-host");
+  const start = sheet.indexOf(".panelHost {");
+  if (start < 0) throw new Error("missing rule: .panelHost");
   const rule = sheet.slice(start, sheet.indexOf("}", start));
   expect(rule).toContain("display: flex");
   expect(rule).toContain("flex-direction: column");

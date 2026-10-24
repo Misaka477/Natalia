@@ -116,7 +116,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-compilation-targets@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+core@7.29.7+631cdf598ada32d6/node_modules/@babel/helper-compilation-targets/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/helper-compilation-targets/LICENSE
 ================================================================================
 MIT License
 
@@ -228,7 +228,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/helper-module-transforms@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+core@7.29.7+631cdf598ada32d6/node_modules/@babel/helper-module-transforms/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/helper-module-transforms/LICENSE
 ================================================================================
 MIT License
 
@@ -450,7 +450,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 @babel/template@7.29.7
 Declared license: MIT
-Source file: node_modules/.bun/@babel+core@7.29.7+631cdf598ada32d6/node_modules/@babel/template/LICENSE
+Source file: node_modules/.bun/@babel+core@7.28.0+6c39b2892b0950f6/node_modules/@babel/template/LICENSE
 ================================================================================
 MIT License
 
@@ -1088,7 +1088,7 @@ No standalone license text was included in the installed package. See the declar
 ================================================================================
 @jridgewell/gen-mapping@0.3.13
 Declared license: MIT
-Source file: node_modules/.bun/@babel+generator@7.29.8/node_modules/@jridgewell/gen-mapping/LICENSE
+Source file: node_modules/.bun/@ampproject+remapping@2.3.0/node_modules/@jridgewell/gen-mapping/LICENSE
 ================================================================================
 Copyright 2024 Justin Ridgewell <justin@ridgewell.name>
 
@@ -1188,7 +1188,7 @@ SOFTWARE.
 ================================================================================
 @jridgewell/trace-mapping@0.3.31
 Declared license: MIT
-Source file: node_modules/.bun/@babel+generator@7.29.8/node_modules/@jridgewell/trace-mapping/LICENSE
+Source file: node_modules/.bun/@ampproject+remapping@2.3.0/node_modules/@jridgewell/trace-mapping/LICENSE
 ================================================================================
 Copyright 2024 Justin Ridgewell <justin@ridgewell.name>
 
@@ -2392,7 +2392,7 @@ THE SOFTWARE.
 ================================================================================
 @marijn/find-cluster-break@1.0.4
 Declared license: MIT
-Source file: node_modules/.bun/@codemirror+state@6.7.6/node_modules/@marijn/find-cluster-break/LICENSE
+Source file: node_modules/.bun/@codemirror+state@6.7.1/node_modules/@marijn/find-cluster-break/LICENSE
 ================================================================================
 MIT License
 
@@ -6500,7 +6500,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 vite-plugin-solid@2.11.10
 Declared license: MIT
-Source file: node_modules/.bun/vite-plugin-solid@2.11.10+cb1fc6c03fcd2a04/node_modules/vite-plugin-solid/package.json
+Source file: node_modules/.bun/vite-plugin-solid@2.11.10+14246d20d46d4d45/node_modules/vite-plugin-solid/package.json
 ================================================================================
 No standalone license text was included in the installed package. See the declared SPDX license and upstream package source.
 

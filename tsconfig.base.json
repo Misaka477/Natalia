@@ -104,7 +104,7 @@
         "packages/plugins/tools/todo/src/ui/plugin.tsx"
       ],
       "@natalia/plugin-tool-web": ["packages/plugins/tools/web/src/index.ts"],
-      "@natalia/plugin-web-ui": ["packages/plugins/ui/web/src/index.ts"],
+      "@natalia/plugin-web-ui-next": ["packages/plugins/ui/next/src/index.ts"],
       "@anthelia/rina": ["packages/framework/rina/src/index.ts"],
       "@anthelia/runtime": ["packages/framework/runtime/src/index.ts"],
       "@anthelia/runtime-config": [

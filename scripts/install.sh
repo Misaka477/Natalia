@@ -25,7 +25,7 @@ HOME_DIR="${NATALIA_HOME:-$HOME/.natalia}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) FROM="$2"; shift 2 ;;
-    --home) HOME_DIR="$2"; shift 2 ;;
+    --home | --data-dir) HOME_DIR="$2"; shift 2 ;;
     -h | --help)
       sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
       exit 0

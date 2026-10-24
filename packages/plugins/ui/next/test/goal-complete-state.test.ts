@@ -37,15 +37,16 @@ describe("a completed goal is visible as completed", () => {
   });
 
   test("the control binds it, twice — main and the secondary surface", () => {
-    const app = source("packages/plugins/ui/web/src/app-neu.tsx");
-    expect((app.match(/data-phase=\{goal\(\)!\.phase\}/gu) ?? []).length).toBe(
-      2,
+    const transcript = source(
+      "packages/plugins/ui/next/src/controllers/transcript.tsx",
     );
+    expect(transcript).toContain("data-phase={goal()!.phase}");
+    expect(transcript).toContain('goal()!.phase === "complete"');
   });
 
   test("the complete state has its own style, not the running one", () => {
-    expect(source("packages/plugins/ui/web/src/styles/base.ts")).toContain(
-      '.neu-goal-control[data-phase="complete"]',
-    );
+    expect(
+      source("packages/plugins/ui/next/src/styles/transcript.module.css"),
+    ).toContain('.control[data-phase="complete"]');
   });
 });

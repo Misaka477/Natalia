@@ -1,4 +1,4 @@
-import { createNataliaNeuPlugin } from "@natalia/plugin-web-ui";
+import { createNataliaNeuPlugin } from "@natalia/plugin-web-ui-next";
 import { UI_PLUGIN_REGISTRY } from "./ui-plugin-registry";
 import {
   createConsoleLogger,

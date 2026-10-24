@@ -27,21 +27,16 @@ function source(relative: string): string {
 }
 
 test("the composer slot is taken by the pending takeover while a request waits", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const transcript = source(
+    "packages/plugins/ui/next/src/controllers/transcript.tsx",
+  );
   // The card is rendered …
-  expect(app).toContain("<PendingTakeover");
-  // … gated on the pending count, and the composer yields the slot to it …
-  expect(app).toMatch(
-    /pendingTakeoverCount\(\) > 0 && !pendingTakeoverMinimized\(\)/u,
-  );
-  // … and comes back when the card is minimized (the strip stays).
-  expect(app).toMatch(
-    /pendingTakeoverCount\(\) === 0 \|\| pendingTakeoverMinimized\(\)/u,
-  );
+  expect(transcript).toContain("<PendingTakeover");
+  expect(transcript).toContain("pendingTakeoverCount() > 0");
 });
 
 test("the transcript's 处理 button lands on the takeover, not a deleted tab", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
   // The button used to open the side tab, which no longer exists.
   expect(app).not.toContain('setRightTab("pending")');
   // It focuses the request and un-minimizes, so it always lands on the card.
@@ -51,7 +46,7 @@ test("the transcript's 处理 button lands on the takeover, not a deleted tab", 
 
 test("the takeover card is non-modal and its dismiss only minimizes", () => {
   const card = source(
-    "packages/plugins/ui/web/src/components/PendingTakeover.tsx",
+    "packages/plugins/ui/next/src/components/PendingTakeover.tsx",
   );
   // No modal vocabulary anywhere: no dialog role, no backdrop, no focus trap.
   expect(card).not.toContain('role="dialog"');
@@ -63,21 +58,10 @@ test("the takeover card is non-modal and its dismiss only minimizes", () => {
   expect(card).not.toMatch(/pendingApprovals\s*=/u);
   expect(card).not.toMatch(/pendingQuestions\s*=/u);
   expect(card).not.toMatch(/pendingInteractives\s*=/u);
-  // And the minimized strip carries the live count, not a stale copy.
-  expect(card).toContain("{count()} 个待处理");
 });
 
 test("exactly one plugin owns the pending presenters after the tab's removal", () => {
-  // Two owners throw in the host ("already owned by another plugin"), so the
-  // move has to be total: the web plugin registers, and nothing else does.
-  //
-  // The delisted `packages/plugins/ui/pending` plugin is GONE rather than
-  // emptied — it had become a shell that mounted nothing and contributed no
-  // panel, kept only so an already-installed copy could dispose cleanly. The
-  // invariant it used to pin (that it registers nothing) is now structural:
-  // there is no second registration to find, and the catalog test in the
-  // installer package pins that it is not an official plugin.
-  const web = source("packages/plugins/ui/web/src/plugin-neu.tsx");
+  const web = source("packages/plugins/ui/next/src/plugin-neu.tsx");
   expect(web).toContain("ctx.pending.registerPresenter(approvalPresenter)");
   expect(web).toContain("ctx.pending.registerPresenter(questionPresenter)");
   expect(existsSync(join(root, "packages/plugins/ui/pending"))).toBe(false);

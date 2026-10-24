@@ -81,6 +81,8 @@ const ALLOWED: Readonly<Record<string, string>> = {
   // open question this entry keeps visible.
   "packages/tooling/testing/src/eval-adapter.ts":
     "called by the external benchmark harness, which lives outside this repo; the rpc route's `joined:false` fallback is the contract's designed answer, not a gap",
+  "packages/plugins/tools/todo/src/ui/todo-panel.tsx":
+    "standalone TodoPanel component kept alongside TodoDock (the input.dock entry) and tested by todo-ui.test.ts",
 };
 
 async function* sourceFiles(dir: string): AsyncGenerator<string> {

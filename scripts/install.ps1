@@ -18,7 +18,9 @@ param(
   # read-only, and a parameter of that name is a WriteError on every Windows
   # run — the CI's pwsh gate caught it; an installer that could never have run
   # had shipped with it.
-  [string]$NataliaHome = $(if ($env:NATALIA_HOME) { $env:NATALIA_HOME } else { Join-Path $env:USERPROFILE ".natalia" })
+  [Alias("DataDir")]
+  [string]$NataliaHome = $(if ($env:NATALIA_HOME) { $env:NATALIA_HOME } else { Join-Path $env:USERPROFILE ".natalia" }),
+  [switch]$PersistDataDir
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,6 +93,10 @@ try {
   }
 
   Write-Output "natalia $version installed at $(Join-Path $binDir 'natalia.exe')"
+  if ($PersistDataDir) {
+    [System.Environment]::SetEnvironmentVariable("NATALIA_HOME", $NataliaHome, "User")
+    Write-Output "NATALIA_HOME persisted to user environment: $NataliaHome"
+  }
   if (Test-Path -LiteralPath (Join-Path $NataliaHome "stores")) {
     Write-Output "existing stores preserved untouched at $(Join-Path $NataliaHome 'stores')"
   }

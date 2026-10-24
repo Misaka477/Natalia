@@ -346,6 +346,34 @@ export function SettingsPanel(props: {
     | undefined =
     props.onUpdateConfig || props.runtime?.updateConfig
       ? async (patch: Record<string, unknown>) => {
+          // Optimistically merge the patch into ownConfig immediately so
+          // toggles and inline selects update on screen in 0ms without waiting
+          // for the background RPC write + configGet round-trip.
+          const currentCfg = effectiveConfig() as
+            | Record<string, unknown>
+            | undefined;
+          if (currentCfg) {
+            const optimistic: Record<string, unknown> = { ...currentCfg };
+            for (const [k, v] of Object.entries(patch)) {
+              const prev = currentCfg[k];
+              if (
+                v &&
+                typeof v === "object" &&
+                !Array.isArray(v) &&
+                prev &&
+                typeof prev === "object" &&
+                !Array.isArray(prev)
+              ) {
+                optimistic[k] = {
+                  ...(prev as Record<string, unknown>),
+                  ...(v as Record<string, unknown>),
+                };
+              } else {
+                optimistic[k] = v;
+              }
+            }
+            setOwnConfig(optimistic as never);
+          }
           // The app's writer when mounted with one — the app keeps its own
           // snapshot honest through it — else the runtime's own face. EITHER
           // WAY the panel re-reads afterwards, and the re-read is not optional:
@@ -410,13 +438,18 @@ export function SettingsPanel(props: {
   const [availableCapabilities, setAvailableCapabilities] = createSignal<
     Set<string>
   >(new Set());
+  let loadedPluginCapabilities = false;
   onMount(() => {
     const unsubscribe = props.host?.subscribePanels(() =>
       setPanelRevision((revision) => revision + 1),
     );
     onCleanup(() => unsubscribe?.());
+  });
+  createEffect(() => {
+    if (!props.open || loadedPluginCapabilities) return;
     const runtime = props.runtime;
     if (!runtime) return;
+    loadedPluginCapabilities = true;
     void (async () => {
       const [plugins, report] = await Promise.all([
         runtime.plugins?.(),
@@ -1346,32 +1379,8 @@ export function SettingsPanel(props: {
                       }
                       if (item.label === "Language" && props.locale) {
                         const localeSnapshot = () => props.locale!.getLocale();
-                        const activeLabel = () => {
-                          const snap = localeSnapshot();
-                          return (
-                            snap.locales.find((l) => l.id === snap.active)
-                              ?.label ?? snap.active
-                          );
-                        };
                         return (
-                          <button
-                            type="button"
-                            class={`${styles.item} ${styles.itemButton}`}
-                            onClick={() => {
-                              const snap = localeSnapshot();
-                              openSelect(
-                                t(item.labelKey),
-                                snap.locales.map((entry) => ({
-                                  value: entry.id,
-                                  label: entry.label,
-                                })),
-                                snap.active,
-                                (next) => {
-                                  props.locale?.setLocale(next);
-                                },
-                              );
-                            }}
-                          >
+                          <div class={styles.item}>
                             <div class={styles.itemMain}>
                               <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
@@ -1380,26 +1389,85 @@ export function SettingsPanel(props: {
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class={styles.itemValue}>
-                              {activeLabel()}
-                            </span>
-                          </button>
+                            <div class={styles.inlineControl}>
+                              <NeuSelect
+                                value={localeSnapshot().active}
+                                options={localeSnapshot().locales.map(
+                                  (entry) => ({
+                                    value: entry.id,
+                                    label: entry.label,
+                                  }),
+                                )}
+                                onChange={(next) => {
+                                  props.locale?.setLocale(next);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (item.label === "Shell 类型" && updateConfig) {
+                        const isWindows = () => hostPlatform() === "win32";
+                        const shellOptions = () => [
+                          {
+                            value: "auto",
+                            label: t("settingsDlg.shellAuto"),
+                          },
+                          ...(isWindows()
+                            ? [{ value: "pwsh", label: "pwsh（PowerShell 7）" }]
+                            : []),
+                          { value: "bash", label: t("settingsDlg.bashWsl") },
+                        ];
+                        const currentShell = () =>
+                          effectiveConfig()?.runtime?.shell?.executable ??
+                          "auto";
+                        return (
+                          <div class={styles.item}>
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
+                                {t(item.labelKey)}
+                              </span>
+                              <span class={styles.itemDescription}>
+                                {t(item.descKey)}
+                              </span>
+                            </div>
+                            <div class={styles.inlineControl}>
+                              <NeuSelect
+                                value={currentShell()}
+                                options={shellOptions()}
+                                onChange={(next) => {
+                                  void updateConfig?.({
+                                    runtime: {
+                                      ...effectiveConfig()?.runtime,
+                                      shell: {
+                                        ...effectiveConfig()?.runtime?.shell,
+                                        ...(next === "auto"
+                                          ? { executable: null }
+                                          : {
+                                              executable: next as
+                                                | "bash"
+                                                | "pwsh"
+                                                | "zsh",
+                                            }),
+                                      } as Record<string, unknown>,
+                                    },
+                                  });
+                                  void props.runtime?.setSessionShell?.({
+                                    shell: next as
+                                      | "bash"
+                                      | "pwsh"
+                                      | "zsh"
+                                      | "auto",
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
                         );
                       }
                       if (item.label === "运行中发送" && props.preferences) {
                         return (
-                          <button
-                            type="button"
-                            class={`${styles.item} ${styles.itemButton}`}
-                            onClick={() => {
-                              const value =
-                                busySendDelivery() === "next-step"
-                                  ? ("next-turn" as const)
-                                  : ("next-step" as const);
-                              setBusySendDelivery(value);
-                              props.preferences?.set("busySendDelivery", value);
-                            }}
-                          >
+                          <div class={styles.item}>
                             <div class={styles.itemMain}>
                               <span class={styles.itemLabel}>
                                 {t(item.labelKey)}
@@ -1408,12 +1476,93 @@ export function SettingsPanel(props: {
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class={styles.itemValue}>
-                              {busySendDelivery() === "next-step"
-                                ? t("settingsDlg.injectCurrent")
-                                : t("settingsDlg.queueNext")}
-                            </span>
-                          </button>
+                            <div class={styles.inlineControl}>
+                              <NeuSelect
+                                value={busySendDelivery()}
+                                options={[
+                                  {
+                                    value: "next-step",
+                                    label: t("settingsDlg.injectCurrent"),
+                                  },
+                                  {
+                                    value: "next-turn",
+                                    label: t("settingsDlg.queueNext"),
+                                  },
+                                ]}
+                                onChange={(next) => {
+                                  const val = next as "next-step" | "next-turn";
+                                  setBusySendDelivery(val);
+                                  props.preferences?.set(
+                                    "busySendDelivery",
+                                    val,
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (
+                        item.label === "界面偏好保存范围" &&
+                        props.preferences
+                      ) {
+                        return (
+                          <div class={styles.item}>
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
+                                {t(item.labelKey)}
+                              </span>
+                              <span class={styles.itemDescription}>
+                                {t(item.descKey)}
+                              </span>
+                            </div>
+                            <div class={styles.inlineControl}>
+                              <NeuSelect
+                                value={uiWriteScope()}
+                                options={[
+                                  { value: "project", label: "project" },
+                                  { value: "global", label: "global" },
+                                ]}
+                                onChange={(next) => {
+                                  setUiWriteScope(next);
+                                  props.preferences?.set("uiWriteScope", next);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (
+                        item.label === "运行时配置保存范围" &&
+                        props.preferences
+                      ) {
+                        return (
+                          <div class={styles.item}>
+                            <div class={styles.itemMain}>
+                              <span class={styles.itemLabel}>
+                                {t(item.labelKey)}
+                              </span>
+                              <span class={styles.itemDescription}>
+                                {t(item.descKey)}
+                              </span>
+                            </div>
+                            <div class={styles.inlineControl}>
+                              <NeuSelect
+                                value={runtimeWriteScope()}
+                                options={[
+                                  { value: "project", label: "project" },
+                                  { value: "global", label: "global" },
+                                ]}
+                                onChange={(next) => {
+                                  setRuntimeWriteScope(next);
+                                  props.preferences?.set(
+                                    "runtimeWriteScope",
+                                    next,
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
                         );
                       }
                       if (
@@ -1421,13 +1570,16 @@ export function SettingsPanel(props: {
                         updateConfig &&
                         effectiveConfig()
                       ) {
+                        const enabled = () =>
+                          Boolean(
+                            effectiveConfig()?.context?.compactionEnabled,
+                          );
                         return (
                           <button
                             type="button"
                             class={`${styles.item} ${styles.itemButton}`}
                             onClick={() => {
-                              const next =
-                                !effectiveConfig()?.context?.compactionEnabled;
+                              const next = !enabled();
                               setConfigError("");
                               void updateConfig?.({
                                 context: {
@@ -1445,7 +1597,13 @@ export function SettingsPanel(props: {
                                 {t(item.descKey)}
                               </span>
                             </div>
-                            <span class={styles.itemValue}>{value()}</span>
+                            <span
+                              class={styles.togglePill}
+                              data-checked={enabled()}
+                            >
+                              <span class={styles.toggleThumb} />
+                              <span class={styles.toggleText}>{value()}</span>
+                            </span>
                           </button>
                         );
                       }

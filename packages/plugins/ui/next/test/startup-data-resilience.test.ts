@@ -23,7 +23,7 @@ function source(relative: string): string {
 }
 
 test("the secondary startup data is retried, not fetched once", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
   // A bounded retry loop with a pause, because the first attempt races
   // the runtime's own startup on a fresh install.
   expect(app).toContain("SECONDARY_STARTUP_ATTEMPTS = 3");
@@ -40,14 +40,16 @@ test("the secondary startup data is retried, not fetched once", () => {
 });
 
 test("the permission dropdown never renders a silent empty state", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const transcript = source(
+    "packages/plugins/ui/next/src/controllers/transcript.tsx",
+  );
   // The dropdown branches on the degraded flag: it offers a retry
   // instead of an empty menu that reads as "this config has no modes".
-  expect(app).toContain("startupDataDegraded()");
-  expect(app).toContain("配置加载失败，点击重试");
-  expect(app).toContain('if (permission === "__retry")');
+  expect(transcript).toContain("startupDataDegraded()");
+  expect(transcript).toContain('t("transcript.configLoadFailedRetry")');
+  expect(transcript).toContain('if (permission === "__retry")');
   // The options are no longer an unconditional read of the config.
-  expect(app).not.toMatch(/options=\{permissionOptions\(\)\}/u);
+  expect(transcript).not.toMatch(/options=\{permissionOptions\(\)\}/u);
 });
 
 test("a workspace listing that fails is shown, not implied", () => {
@@ -65,21 +67,8 @@ test("a workspace listing that fails is shown, not implied", () => {
   expect(styles).toContain(".neu-file-list-error {");
 });
 
-/**
- * The UI must not give up on a source before the server it is waiting on.
- *
- * Measured: the per-source bound was 10s while two of the five sources are
- * answered through a runtime worker whose own deadline is 15s — `plugins()`
- * and the model catalog both answer AFTER that deadline, by falling back
- * inline. The UI therefore reported "no answer" for a question the server was
- * still answering, and a missing `plugins` list was read as "the terminal
- * plugin is not installed", which deleted the terminal tab from the rail. The
- * inversion is invisible in either file alone, which is why it is asserted
- * across both — and why the check names the file to move when the deadline
- * moves.
- */
 test("the UI waits longer for a startup source than the server's deadline", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
   const substrate = source(
     "packages/framework/substrate/src/session-project-client.ts",
   );
@@ -107,22 +96,8 @@ test("the UI waits longer for a startup source than the server's deadline", () =
   expect(uiBound).toBeGreaterThan(serverDeadline);
 });
 
-/**
- * A startup probe cannot decide whether a plugin-owned control exists.
- *
- * The gate that used to sit here asked `plugins()` — the runtime's LOADED
- * plugins — and deleted the terminal tab when the answer was an empty list.
- * The list is empty at startup by design (plugins load lazily) and it is the
- * second, disagreeing answer to a question the host already answers from the
- * plugin catalog, which is what arms a panel in the first place. Measured on
- * an installed app: the catalog listed 16 plugins while `plugin.list` returned
- * none, and the terminal tab was gone — the same empty list also left the file
- * tab blank and the plugin-gated panels missing. Visibility is the catalog's
- * answer alone: installed and enabled means visible, disabled or uninstalled
- * means gone.
- */
 test("no startup probe gates a plugin-owned panel", () => {
-  const app = source("packages/plugins/ui/web/src/app-neu.tsx");
+  const app = source("packages/plugins/ui/next/src/app-neu.tsx");
   expect(app).not.toContain("interactiveTerminalAvailable");
   expect(app).not.toMatch(/item\.panel\.id !== "terminal"/u);
   // The five sources this pins is now four: the plugin list was only ever

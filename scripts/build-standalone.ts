@@ -421,7 +421,7 @@ async function stageWebShell(outDir: string): Promise<void> {
   const shellBuiltAt = await newestMtime(built);
   for (const source of [
     "apps/web/src",
-    "packages/plugins/ui/web/src",
+    "packages/plugins/ui/next/src",
     "packages/hosts/ui-model/src",
   ]) {
     const sourceAt = await newestMtime(join(root, source));

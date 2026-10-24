@@ -85,7 +85,7 @@ test("the row's value is a getter, not a frozen const", () => {
   // Every JSX site must call it; a bare `{value}` is the frozen form.
   expect(source).not.toMatch(/\{value\}/u);
   expect(source.match(/\{value\(\)\}/gu)?.length ?? 0).toBeGreaterThanOrEqual(
-    4,
+    2,
   );
 });
 

@@ -883,12 +883,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         path: attachment.path,
         mediaType: attachment.mediaType ?? "image/png",
       }),
-    )
-      .then((result) => result ?? "")
-      .catch((error) => {
-        attachmentDataUrlCache.delete(key);
-        throw error;
-      });
+    ).then((result) => result ?? "");
     attachmentDataUrlCache.set(key, load);
     return load;
   }

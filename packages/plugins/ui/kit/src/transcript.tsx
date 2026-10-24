@@ -1424,10 +1424,32 @@ function AttachmentImage(props: {
       })
       .catch(() => setStatus("error"));
   };
-  onMount(load);
+  let rootEl: HTMLElement | undefined;
+  onMount(() => {
+    const type = props.attachment.mediaType ?? "";
+    if (!type.startsWith("image/") || !props.load) return;
+    if (typeof IntersectionObserver !== "undefined" && rootEl) {
+      const obs = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            obs.disconnect();
+            load();
+          }
+        },
+        { rootMargin: "400px" },
+      );
+      obs.observe(rootEl);
+      onCleanup(() => obs.disconnect());
+      return;
+    }
+    load();
+  });
 
   const placeholder = () => (
     <button
+      ref={(el) => {
+        rootEl = el;
+      }}
       type="button"
       class="natalia-message-attachment-placeholder"
       style={{

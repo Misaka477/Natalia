@@ -318,9 +318,7 @@ export function ReviewPane(
           (await props.runtime?.checkpointList?.(props.sessionID)) ?? [];
         setCheckpoints(checkpointList);
         if (selectedCheckpoint())
-          await loadCheckpointPreview(selectedCheckpoint()!, {
-            includePatch: false,
-          });
+          await loadCheckpointPreview(selectedCheckpoint()!);
       })();
     } else if (tab() === "rounds") void loadRounds();
   };
@@ -364,7 +362,7 @@ export function ReviewPane(
     const firstSandboxID = prList[0]?.sandboxID ?? sandboxList[0]?.id ?? null;
     if (firstSandboxID) {
       setSelectedSandbox(firstSandboxID);
-      await loadSandboxDiff(firstSandboxID, { includePatch: false });
+      await loadSandboxDiff(firstSandboxID);
     }
   }
 
@@ -377,7 +375,7 @@ export function ReviewPane(
     if (checkpointList.length) {
       const latest = checkpointList[checkpointList.length - 1]!.id;
       setSelectedCheckpoint(latest);
-      await loadCheckpointPreview(latest, { includePatch: false });
+      await loadCheckpointPreview(latest);
     }
   }
 
@@ -433,7 +431,9 @@ export function ReviewPane(
       .map(toDiffItem)
       .filter((change) => !sessionPaths || sessionPaths.has(change.path));
     setGitChanges(mapped);
-    setGitSelected(pickGitSelection(mapped));
+    const target = pickGitSelection(mapped);
+    if (target) await selectGitFile(target, { force: true });
+    else setGitSelected(null);
     perfLog(
       `[perf] diff workspace fallback ${mapped.length} files ${(performance.now() - start).toFixed(1)}ms`,
     );
@@ -493,7 +493,10 @@ export function ReviewPane(
         [];
       const mapped = changes.map(toDiffItem);
       setSandboxChanges(mapped);
-      if (mapped.length) setSandboxSelected(mapped[0]!.path);
+      const current = sandboxSelected();
+      if (!current || !mapped.some((item) => item.path === current)) {
+        setSandboxSelected(mapped[0]?.path ?? null);
+      }
       perfLog(
         `[perf] diff sandbox ${id} ${mapped.length} files ${(performance.now() - start).toFixed(1)}ms`,
       );
@@ -560,8 +563,39 @@ export function ReviewPane(
     );
     if (!preview) return;
     const mapped = preview.changes.map(toDiffItem);
+    const current = checkpointSelected();
     setCheckpointChanges(mapped);
-    if (mapped.length) setCheckpointSelected(mapped[0]!.path);
+    if (!current || !mapped.some((item) => item.path === current)) {
+      setCheckpointSelected(mapped[0]?.path ?? null);
+    }
+    // If any file lacks patch/before/after (or has empty structured hunks),
+    // backfill from roundDiff(checkpoint -> current) so every card can expand.
+    if (
+      props.runtime?.roundDiff &&
+      mapped.some(
+        (item) =>
+          !hasRenderableStructured(item.structured) &&
+          !item.patch &&
+          !item.before &&
+          !item.after,
+      )
+    ) {
+      try {
+        const full = await props.runtime.roundDiff({
+          workspaceID: props.workspaceID,
+          from: { kind: "checkpoint", id },
+          to: { kind: "current" },
+          includePatch: true,
+          includeContent: true,
+        });
+        if (full?.length && selectedCheckpoint() === id) {
+          const fullMapped = full.map(toDiffItem);
+          setCheckpointChanges(fullMapped);
+        }
+      } catch {
+        // Keep preview changes on fallback failure
+      }
+    }
     perfLog(
       `[perf] diff checkpoint ${id} ${mapped.length} files ${(performance.now() - start).toFixed(1)}ms`,
     );
@@ -639,10 +673,15 @@ export function ReviewPane(
   const selectedFile = () =>
     changesForTab().find((change) => change.path === selectedForTab());
 
+  function hasRenderableStructured(
+    s: RuntimeStructuredDiff | StructuredDiffResult | undefined,
+  ): s is RuntimeStructuredDiff | StructuredDiffResult {
+    return Boolean(s && Array.isArray(s.hunks) && s.hunks.length > 0);
+  }
+
   async function loadStructuredDiffForFile(file: DiffItem) {
-    // Runtime structured diffs are canonical. The worker path below is only a
-    // fallback for before/after-only data that did not come with structured.
-    if (file.structured) {
+    // Runtime structured diffs are canonical when they actually carry hunks.
+    if (hasRenderableStructured(file.structured)) {
       setStructuredDiff(file.structured);
       setStructuredDiffError(undefined);
       return;
@@ -1137,11 +1176,14 @@ export function ReviewPane(
           from: fromRef,
           to: toRef,
           includePatch: true,
-          includeContent: false,
+          includeContent: true,
         })) ?? [];
       const mapped = changes.map(toDiffItem);
+      const current = checkpointSelected();
       setCheckpointChanges(mapped);
-      setCheckpointSelected(mapped[0]?.path ?? null);
+      if (!current || !mapped.some((item) => item.path === current)) {
+        setCheckpointSelected(mapped[0]?.path ?? null);
+      }
     } catch {
       setCheckpointChanges([]);
       setCheckpointSelected(null);
@@ -2075,8 +2117,10 @@ export function ReviewPane(
                                 selectedFile()?.patch ||
                                 selectedFile()?.before ||
                                 selectedFile()?.after ||
-                                selectedFile()?.structured ||
-                                structuredDiff()
+                                hasRenderableStructured(
+                                  selectedFile()?.structured,
+                                ) ||
+                                hasRenderableStructured(structuredDiff())
                               }
                               fallback={
                                 <div class="review-diff-content">
@@ -2263,8 +2307,10 @@ export function ReviewPane(
                               <Show
                                 when={
                                   viewMode() !== "ast" &&
-                                  (selectedFile()?.structured ||
-                                    structuredDiff())
+                                  (hasRenderableStructured(
+                                    selectedFile()?.structured,
+                                  ) ||
+                                    hasRenderableStructured(structuredDiff()))
                                 }
                               >
                                 <Show
@@ -2272,8 +2318,11 @@ export function ReviewPane(
                                   fallback={
                                     <UnifiedDiffView
                                       rows={structuredRows(
-                                        selectedFile()?.structured ??
-                                          structuredDiff()!,
+                                        (hasRenderableStructured(
+                                          selectedFile()?.structured,
+                                        )
+                                          ? selectedFile()?.structured
+                                          : structuredDiff())!,
                                       )}
                                       language={languageFromPath(
                                         selectedFile()?.path ?? "",
@@ -2283,8 +2332,11 @@ export function ReviewPane(
                                 >
                                   <SplitDiffView
                                     rows={buildSplitRows(
-                                      selectedFile()?.structured ??
-                                        structuredDiff()!,
+                                      (hasRenderableStructured(
+                                        selectedFile()?.structured,
+                                      )
+                                        ? selectedFile()?.structured
+                                        : structuredDiff())!,
                                     )}
                                     language={languageFromPath(
                                       selectedFile()?.path ?? "",
@@ -2295,8 +2347,10 @@ export function ReviewPane(
                               <Show
                                 when={
                                   viewMode() !== "ast" &&
-                                  !selectedFile()?.structured &&
-                                  !structuredDiff() &&
+                                  !hasRenderableStructured(
+                                    selectedFile()?.structured,
+                                  ) &&
+                                  !hasRenderableStructured(structuredDiff()) &&
                                   structuredDiffError()
                                 }
                               >
@@ -2312,8 +2366,10 @@ export function ReviewPane(
                               <Show
                                 when={
                                   viewMode() !== "ast" &&
-                                  !selectedFile()?.structured &&
-                                  !structuredDiff() &&
+                                  !hasRenderableStructured(
+                                    selectedFile()?.structured,
+                                  ) &&
+                                  !hasRenderableStructured(structuredDiff()) &&
                                   !structuredDiffError() &&
                                   selectedFile()?.patch
                                 }
@@ -2328,8 +2384,10 @@ export function ReviewPane(
                               <Show
                                 when={
                                   viewMode() !== "ast" &&
-                                  !selectedFile()?.structured &&
-                                  !structuredDiff() &&
+                                  !hasRenderableStructured(
+                                    selectedFile()?.structured,
+                                  ) &&
+                                  !hasRenderableStructured(structuredDiff()) &&
                                   !structuredDiffError() &&
                                   !selectedFile()?.patch &&
                                   selectedFile()?.before
@@ -2347,8 +2405,10 @@ export function ReviewPane(
                               <Show
                                 when={
                                   viewMode() !== "ast" &&
-                                  !selectedFile()?.structured &&
-                                  !structuredDiff() &&
+                                  !hasRenderableStructured(
+                                    selectedFile()?.structured,
+                                  ) &&
+                                  !hasRenderableStructured(structuredDiff()) &&
                                   !structuredDiffError() &&
                                   !selectedFile()?.patch &&
                                   selectedFile()?.after

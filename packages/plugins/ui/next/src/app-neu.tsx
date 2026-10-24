@@ -245,12 +245,6 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     run: () => setSearchOpen(true),
   });
   commands.register({
-    id: "shell.help",
-    title: t("palette.cmd.help"),
-    keywords: ["help", "shortcuts"],
-    run: () => setHelpOpen(true),
-  });
-  commands.register({
     id: "shell.status",
     title: t("palette.cmd.status"),
     keywords: ["status", "diagnostics"],

@@ -512,11 +512,6 @@ export function SettingsPanel(props: {
       label: "状态与诊断",
       labelKey: "settings.cat.status",
     },
-    {
-      id: "help",
-      label: "帮助与快捷键",
-      labelKey: "settings.cat.help",
-    },
   ];
 
   const [runtimeWriteScope, setRuntimeWriteScope] = createSignal(
@@ -1197,22 +1192,18 @@ export function SettingsPanel(props: {
                               type="button"
                               class={`${styles.item} ${styles.itemButton}`}
                               data-active={
-                                settingsPanel()?.pluginId === panel.pluginId &&
                                 settingsPanel()?.panelId === panel.panel.id
                               }
                               onClick={() => {
+                                const isAlreadyOpen =
+                                  settingsPanel()?.panelId === panel.panel.id;
+                                if (isAlreadyOpen) {
+                                  setSettingsPanel(null);
+                                  return;
+                                }
                                 setSettingsPanel({
                                   pluginId: panel.pluginId,
                                   panelId: panel.panel.id,
-                                });
-                                requestAnimationFrame(() => {
-                                  if (settingsPanelRef && props.host) {
-                                    void props.host.mountPanel(
-                                      panel.pluginId,
-                                      panel.panel.id,
-                                      settingsPanelRef,
-                                    );
-                                  }
                                 });
                               }}
                             >
@@ -1226,13 +1217,19 @@ export function SettingsPanel(props: {
                               </div>
                             </button>
                             <Show
-                              when={
-                                settingsPanel()?.pluginId === panel.pluginId &&
-                                settingsPanel()?.panelId === panel.panel.id
-                              }
+                              when={settingsPanel()?.panelId === panel.panel.id}
                             >
                               <div
-                                ref={settingsPanelRef}
+                                ref={(el) => {
+                                  settingsPanelRef = el;
+                                  if (el && props.host) {
+                                    void props.host.mountPanel(
+                                      panel.pluginId,
+                                      panel.panel.id,
+                                      el,
+                                    );
+                                  }
+                                }}
                                 class={`${styles.item} ${styles.panelBody}`}
                               />
                             </Show>

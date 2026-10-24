@@ -12,7 +12,7 @@ import type {
 } from "@anthelia/contracts";
 import { humanizeToolResult } from "@natalia/ui-model";
 
-type Tab = "status" | "diagnostics" | "tools";
+type Tab = "status" | "diagnostics";
 
 function formatToolDetail(
   tool: ToolBlock,
@@ -107,15 +107,21 @@ export function StatusSectionContent(props: {
   );
 
   onMount(() => {
+    const sid =
+      props.state.sessionID &&
+      (props.state.sessionID as string) !== "__hero_draft__"
+        ? props.state.sessionID
+        : undefined;
     if (props.runtime) {
       void props.runtime
-        .runtimeStatus?.(props.state.sessionID)
+        .runtimeStatus?.(sid)
         .then((value) => setStatusData(value));
-      void props.runtime
-        .diagnostics?.(undefined, props.state.sessionID)
-        .then((value) => {
-          if (value) setDiagRows(value);
-        });
+      void props.runtime.diagnostics?.(undefined, sid).then((value) => {
+        if (value)
+          setDiagRows(
+            value.filter((d) => !d.message.includes("__hero_draft__")),
+          );
+      });
       void props.runtime.operationRecords?.({ limit: 60 }).then((value) => {
         if (value) setOpRows(value);
       });
@@ -141,21 +147,19 @@ export function StatusSectionContent(props: {
         >
           {t("status.diagnostics")}
         </button>
-        <button
-          type="button"
-          class="neu-settings-category"
-          data-active={tab() === "tools"}
-          onClick={() => setTab("tools")}
-        >
-          {t("status.toolsCapabilities")}
-        </button>
       </div>
       <div class={styles.content}>
         <Show when={tab() === "status"}>
           <div class={styles.grid}>
             <div class={styles.card}>
               <span class={styles.cardLabel}>Runtime</span>
-              <span class={styles.cardValue}>{props.state.status}</span>
+              <span class={styles.cardValue}>
+                {statusData()
+                  ? props.state.natalia.activeTurn
+                    ? "running"
+                    : "ready"
+                  : props.state.status}
+              </span>
             </div>
             <div class={styles.card}>
               <span class={styles.cardLabel}>{t("status.currentModel")}</span>
@@ -216,7 +220,10 @@ export function StatusSectionContent(props: {
             <div class={styles.card}>
               <span class={styles.cardLabel}>{t("status.steps")}</span>
               <span class={styles.cardValue} title={t("status.stepsTitle")}>
-                {statusData()?.steps ?? "—"}
+                {statusData()?.steps ??
+                  (props.state.usageByChannel.main.steps > 0
+                    ? `${props.state.usageByChannel.main.turns} 轮 · ${props.state.usageByChannel.main.steps} 步`
+                    : "—")}
               </span>
             </div>
           </div>
@@ -256,62 +263,6 @@ export function StatusSectionContent(props: {
               </For>
             </div>
           </Show>
-        </Show>
-        <Show when={tab() === "tools"}>
-          <div class={styles.tools}>
-            <div class={styles.sectionTitle}>{t("status.tools")}</div>
-            <For each={Object.values(props.state.tools).slice(-60)}>
-              {(tool: ToolBlock) => (
-                <div>
-                  <button
-                    type="button"
-                    class={styles.toolRow}
-                    data-active={expandedTool() === tool.name + tool.callID}
-                    onClick={() =>
-                      setExpandedTool((value) =>
-                        value === tool.name + tool.callID
-                          ? undefined
-                          : tool.name + tool.callID,
-                      )
-                    }
-                  >
-                    <span class={styles.toolName}>{tool.name}</span>
-                    <span class={styles.toolArrow}>
-                      {expandedTool() === tool.name + tool.callID ? "▾" : "▸"}
-                    </span>
-                    <span class={styles.toolStatus}>{tool.status}</span>
-                  </button>
-                  <Show when={expandedTool() === tool.name + tool.callID}>
-                    <div class={styles.toolDetail}>
-                      <div class={styles.toolDetailSummary}>
-                        {formatToolDetail(tool, t)}
-                      </div>
-                      <Show when={needsRawDetail(tool, t)}>
-                        <pre class={styles.toolDetailRaw}>
-                          {tool.result ??
-                            tool.summary ??
-                            tool.argumentsRaw ??
-                            ""}
-                        </pre>
-                      </Show>
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </For>
-            <div class={styles.sectionTitle}>{t("status.capabilities")}</div>
-            <For each={Object.values(props.state.capabilities)}>
-              {(cap: CapabilityView) => (
-                <div class={styles.capRow}>
-                  <span class={styles.capName}>{cap.name ?? cap.id}</span>
-                  <span class={styles.capVersion}>v{cap.version}</span>
-                  <span class={styles.capGrants}>
-                    {(cap.grants ?? []).join(" · ")}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
         </Show>
       </div>
     </>

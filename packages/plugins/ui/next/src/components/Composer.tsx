@@ -94,6 +94,7 @@ function detectTrigger(text: string, caret: number): ActiveTrigger | null {
 export function Composer(props: ComposerProps) {
   const t = props.t;
   let textareaRef: HTMLTextAreaElement | undefined;
+  let menuRef: HTMLDivElement | undefined;
   let resizeObserver: ResizeObserver | undefined;
   const [isFocused, setIsFocused] = createSignal(false);
   const [caretPos, setCaretPos] = createSignal(0);
@@ -198,6 +199,16 @@ export function Composer(props: ComposerProps) {
     // Reset highlight index when trigger query or list length changes
     activeTrigger();
     setSelectedIndex(0);
+  });
+
+  createEffect(() => {
+    const idx = selectedIndex();
+    if (!menuOpen() || !menuRef) return;
+    requestAnimationFrame(() => {
+      const options = menuRef?.querySelectorAll<HTMLElement>('[role="option"]');
+      const activeEl = options?.[idx];
+      activeEl?.scrollIntoView({ block: "nearest" });
+    });
   });
 
   const menuItemsCount = createMemo(() => {
@@ -393,6 +404,7 @@ export function Composer(props: ComposerProps) {
     <div class={styles.composer} data-focused={isFocused()}>
       <Show when={menuOpen()}>
         <div
+          ref={menuRef}
           class={styles.autocompleteMenu}
           role="listbox"
           onMouseDown={(e) => e.preventDefault()}

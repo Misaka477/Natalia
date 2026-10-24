@@ -235,7 +235,11 @@ export async function createUiPluginHost<TContext = unknown>(
       }
       activeKey = selectedKey;
       state = sessionStates.get(activeKey) ?? viewStore.initialState();
-      state.sessionID ??= sessionID as never;
+      if (sessionID && sessionID !== "__hero_draft__") {
+        state.sessionID ??= sessionID as never;
+      } else if (sessionID === "__hero_draft__") {
+        state.sessionID = undefined;
+      }
       viewStore.synchronizeStreamSlices(state);
       sessionStates.set(activeKey, state);
       for (const listener of projectionListeners) listener(state);
@@ -251,7 +255,7 @@ export async function createUiPluginHost<TContext = unknown>(
       > = {};
       for (const [key, st] of sessionStates) {
         const sid = st.sessionID ?? key.slice(key.lastIndexOf(":") + 1);
-        if (!sid) continue;
+        if (!sid || sid === "__hero_draft__") continue;
         const running = Boolean(st.activeTurn || st.natalia?.activeTurn);
         const pendingInteraction =
           st.pendingApprovals.length > 0
@@ -526,7 +530,13 @@ export async function createUiPluginHost<TContext = unknown>(
             container: HTMLElement,
           ) => {
             await ensureLoaded(armed.pluginId);
-            const entry = mounted.get(armed.pluginId);
+            const entry =
+              mounted.get(armed.pluginId) ??
+              [...mounted.values()].find((candidate) =>
+                candidate.record.panels.some(
+                  (item) => item.id === armed.panel.id,
+                ),
+              );
             const panel = entry?.record.panels.find(
               (item) => item.id === armed.panel.id,
             );
@@ -590,13 +600,17 @@ export async function createUiPluginHost<TContext = unknown>(
       // plugin through the seam, then proceed. Without the seam the loud
       // failure below stands — a silent no-op would hide the gap.
       await ensureLoaded(pluginId);
-      const entry = mounted.get(pluginId);
+      const entry =
+        mounted.get(pluginId) ??
+        [...mounted.values()].find((candidate) =>
+          candidate.record.panels.some((item) => item.id === panelId),
+        );
       if (!entry) throw new Error(`ui plugin not loaded: ${pluginId}`);
       const panel = entry.record.panels.find((item) => item.id === panelId);
       if (!panel) throw new Error(`ui panel not found: ${pluginId}:${panelId}`);
       if (!panel.mount)
         throw new Error(`ui panel has no mount: ${pluginId}:${panelId}`);
-      const key = `${pluginId}:${panelId}`;
+      const key = `${entry.record.plugin.id}:${panelId}`;
       const existing = mountedPanels.get(key);
       existing?.dispose?.();
       existing?.lifecycle?.dispose?.();

@@ -419,6 +419,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const naviPager = new PagedTranscriptController<ChatMessageRow>({
     pageSize: 100,
     onPage: (page, direction) => {
+      if (heroDraftMode() && !selectedSessionID()) return;
       props.ctx.projection.hydrateNaviMessages?.(
         page.data,
         direction === "initial" ? { replace: true } : { direction },
@@ -428,6 +429,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const niaPager = new PagedTranscriptController<ChatMessageRow>({
     pageSize: 100,
     onPage: (page, direction) => {
+      if (heroDraftMode() && !selectedSessionID()) return;
       props.ctx.projection.hydrateNiaMessages?.(
         page.data,
         direction === "initial" ? { replace: true } : { direction },
@@ -493,7 +495,11 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     sessionID: string | undefined,
     input: { cursor?: string; limit: number },
   ) {
-    if (!sessionID || !props.ctx.runtime.messages)
+    if (
+      !sessionID ||
+      !props.ctx.runtime.messages ||
+      (heroDraftMode() && !selectedSessionID())
+    )
       return Promise.resolve({ data: [], cursor: {} });
     return props.ctx.runtime.messages({
       sessionID,
@@ -505,6 +511,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const mainPager = new PagedTranscriptController<RuntimeProjectedMessage>({
     pageSize: 100,
     onPage: (page, direction) => {
+      if (heroDraftMode() && !selectedSessionID()) return;
       props.ctx.projection.hydrateMessages?.(
         [...page.data].reverse(),
         direction === "initial" ? "newer" : direction,
@@ -3437,6 +3444,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         });
       }}
       onInstantActivateSession={() => {
+        setHeroDraftMode(false);
         const cached = props.ctx.projection.getState();
         if (cached.natalia.messages.length > 0) {
           setTranscriptHistoryLoading(false);

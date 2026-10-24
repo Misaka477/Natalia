@@ -1,10 +1,11 @@
-/* The status and diagnostics panel: its window and tabs, the status
-   cards, the diagnostic rows and the tool/capability lists. The modal
-   chrome stays global. Tokens only. */
+/* The Chromium-grade System Log Inspector: domain & severity filters,
+   live verbosity valve, search bar, precision log rows with source call-site
+   badges (file:line), correlation spine pills, structured context table,
+   and stack trace / cause chain forensic cards. Tokens only. */
 
 .window {
-  width: min(720px, 90vw);
-  max-height: 80vh;
+  width: min(960px, 94vw);
+  max-height: 84vh;
   display: flex;
   flex-direction: column;
   background: var(--neu-bg-light);
@@ -13,195 +14,391 @@
   overflow: hidden;
 }
 
-.tabs {
+.toolbar {
   display: flex;
-  gap: 8px;
-  padding: 14px 20px 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
 }
 
-.tabs :global(.neu-settings-category) {
-  width: auto;
-  padding: 8px 16px;
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pillGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline);
+}
+
+.filterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.filterPill:hover {
+  color: var(--neu-text);
+}
+
+.filterPill[data-active="true"] {
   background: var(--neu-bg);
+  color: var(--neu-text);
+  box-shadow: var(--neu-elevation-1);
+}
+
+.filterPill[data-tone="error"][data-active="true"] {
+  color: var(--neu-error);
+}
+
+.filterPill[data-tone="warn"][data-active="true"] {
+  color: var(--neu-warning);
+}
+
+.pillCount {
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: var(--neu-font-mono);
+  background: var(--neu-bg-light);
+  color: inherit;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 180px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  outline: none;
+}
+
+.searchInput:focus {
+  border-color: var(--neu-accent);
+}
+
+.actionBtn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 8px;
+  background: var(--neu-bg-light);
+  color: var(--neu-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--neu-hover-overlay);
+  border-color: var(--neu-accent);
 }
 
 .content {
   flex: 1;
   min-height: 0;
-  padding: 14px 20px 20px;
+  padding: 12px 16px 18px;
   overflow-y: auto;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.card {
+.logList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
+  gap: 6px;
 }
 
-.cardLabel {
-  font-size: 11px;
+.logCard {
+  border: 1px solid var(--neu-hairline);
+  border-radius: 10px;
+  background: var(--neu-bg);
+  overflow: hidden;
+  transition: border-color 0.14s ease;
+}
+
+.logCard[data-level="error"] {
+  border-left: 3px solid var(--neu-error);
+}
+
+.logCard[data-level="warn"] {
+  border-left: 3px solid var(--neu-warning);
+}
+
+.logCard[data-expanded="true"] {
+  border-color: var(--neu-accent);
+}
+
+.logHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--neu-text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.logHeader:hover {
+  background: var(--neu-hover-overlay);
+}
+
+.levelBadge {
+  flex-shrink: 0;
+  width: 46px;
+  padding: 2px 0;
+  border-radius: 5px;
+  font-family: var(--neu-font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  background: var(--neu-bg-light);
   color: var(--neu-muted);
 }
 
-.cardValue {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--neu-text);
-}
-
-.diagnostics {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diagnosticRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-
-.diagnosticLevel {
-  width: 48px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.diagnosticRow[data-level="info"] .diagnosticLevel {
-  color: var(--neu-success);
-}
-
-.diagnosticRow[data-level="warn"] .diagnosticLevel {
-  color: var(--neu-warning);
-}
-
-.diagnosticRow[data-level="error"] .diagnosticLevel {
+.levelBadge[data-level="error"] {
+  background: var(--neu-error-soft);
   color: var(--neu-error);
 }
 
-.diagnosticMessage {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
+.levelBadge[data-level="warn"] {
+  color: var(--neu-warning);
+}
+
+.levelBadge[data-level="info"] {
+  color: var(--neu-accent);
+}
+
+.timeText {
+  flex-shrink: 0;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.domainBadge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
   color: var(--neu-text);
 }
 
-.diagnosticTime {
-  font-size: 11px;
-  color: var(--neu-muted);
+.domainBadge[data-domain="kernel"] {
+  color: var(--neu-accent);
 }
 
-.sectionTitle {
-  margin: 8px 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--neu-muted);
+.domainBadge[data-domain="plugin"] {
+  color: var(--neu-warning);
 }
 
-.tools {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.toolRow,
-.capRow {
-  display: flex;
+.locationBadge {
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg);
-  box-shadow: var(--neu-inset-2);
-}
-
-.toolRow {
-  width: 100%;
-  border: none;
-  text-align: left;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--neu-bg-light);
+  border: 1px solid var(--neu-hairline-accent);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  color: var(--neu-accent);
   cursor: pointer;
 }
 
-.toolArrow {
-  margin-left: auto;
-  color: var(--neu-muted);
-  font-size: 10px;
+.locationBadge:hover {
+  border-color: var(--neu-accent);
+}
+
+.errorCodeBadge {
   flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--neu-error-soft);
+  color: var(--neu-error);
+  font-family: var(--neu-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
-.toolDetail {
-  margin: 4px 0 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--neu-bg-light);
-  box-shadow: var(--neu-inset-2);
-}
-
-.toolDetailSummary {
-  font-size: 12px;
+.messagePreview {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
   color: var(--neu-text);
-  white-space: pre-wrap;
-  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.toolDetailRaw {
-  margin: 8px 0 0;
-  padding: 8px;
-  max-height: 220px;
-  overflow: auto;
-  border-radius: 8px;
-  background: var(--neu-bg);
+.chevron {
+  flex-shrink: 0;
   font-size: 11px;
   color: var(--neu-muted);
+}
+
+.forensicBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--neu-hairline);
+  background: var(--neu-bg-light);
+  font-size: 12px;
+}
+
+.forensicSection {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.forensicLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.forensicLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--neu-muted);
+}
+
+.chromiumBox {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
+  font-family: var(--neu-font-mono);
+  font-size: 11.5px;
+  color: var(--neu-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.corrList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.corrPill {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  color: var(--neu-text);
+}
+
+.fieldsGrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
+  font-family: var(--neu-font-mono);
+  font-size: 11.5px;
+}
+
+.fieldKey {
+  color: var(--neu-muted);
+  font-weight: 600;
+}
+
+.fieldVal {
+  color: var(--neu-text);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.toolName,
-.capName {
-  width: 100px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--neu-text);
+.stackBox {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--neu-hairline);
+  background: var(--neu-bg);
   font-family: var(--neu-font-mono);
-}
-
-.capGrants {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--neu-muted);
-}
-
-.toolStatus {
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: var(--neu-bg-light);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.stackErrorTitle {
+  font-weight: 700;
+  color: var(--neu-error);
+  margin-bottom: 2px;
+}
+
+.stackFrame {
   color: var(--neu-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
-.toolStatus[data-pending="true"] {
-  color: var(--neu-warning);
+.stackFrame[data-project="true"] {
+  color: var(--neu-text);
+  font-weight: 600;
 }
 
-.capVersion {
-  font-size: 11px;
-  color: var(--neu-accent);
+.causeBlock {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--neu-hairline);
+}
+
+.emptyState {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--neu-muted);
+  font-size: 13px;
 }

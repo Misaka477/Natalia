@@ -35,6 +35,7 @@ import type {
   RuntimeFailureData,
   RuntimeEvent,
 } from "@anthelia/contracts";
+import { getLogger, logService } from "@anthelia/logging";
 import type { RPCRequest, RPCResponse } from "./rpc-client";
 
 /**
@@ -4946,6 +4947,7 @@ function recordFailure(
   label: string,
   message: string,
   level: "error" | "warning",
+  rawError?: unknown,
 ): void {
   try {
     client.diagnostic(
@@ -4954,6 +4956,20 @@ function recordFailure(
     );
   } catch {
     /* a runtime that cannot record its own failure still owes the caller a reply */
+  }
+  const rpcLog = getLogger("rpc-dispatcher", "framework");
+  const summary = `rpc ${method ?? "request"} failed [${label}]: ${message}`;
+  if (level === "error") {
+    if (rawError instanceof Error) {
+      logService.emit("rpc-dispatcher", "error", [summary, rawError], {
+        domain: "framework",
+        fields: { method: method ?? "unknown", errorID: label },
+      });
+    } else {
+      rpcLog.error("%s", summary);
+    }
+  } else {
+    rpcLog.warn("%s", summary);
   }
 }
 
@@ -4990,7 +5006,7 @@ function describeFailure(
     // land at `warning`, leaving `error` for the runtime's own breakage.
     if (classified.kind !== "refused") {
       const message = error instanceof Error ? error.message : String(error);
-      recordFailure(client, method, classified.kind, message, "warning");
+      recordFailure(client, method, classified.kind, message, "warning", error);
     }
     return {
       code: RUNTIME_RPC_ERROR_CODES[classified.kind],
@@ -5000,7 +5016,7 @@ function describeFailure(
   }
   const message = error instanceof Error ? error.message : String(error);
   const errorID = `err_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  recordFailure(client, method, errorID, message, "error");
+  recordFailure(client, method, errorID, message, "error", error);
   return {
     code: RUNTIME_RPC_ERROR_CODES.internal,
     message: "internal runtime failure",

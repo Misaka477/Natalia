@@ -12,6 +12,7 @@
  * returned handle.
  */
 import { createAttachmentService } from "@anthelia/attachments";
+import { formatMessage, logService } from "@anthelia/logging";
 import { configuredShellName } from "@anthelia/shell";
 import { sessionStoreController as sessionStoreControllerToken } from "@anthelia/session-store";
 import { applyCompositionObjectStoreBackend } from "./object-store-backend";
@@ -900,6 +901,48 @@ export async function wireFrameworkServices(
     dir: options.operationLogsDir ?? operationLogsDir(),
   });
   ctx.state.serviceDirectory.provide(operationLog, telemetry);
+  // Bridge `@anthelia/logging` (kernel, framework, and registered plugin
+  // loggers) into the unified OperationLog so every error/warning with its
+  // Chromium call-site location and Error cause chain is persisted and
+  // inspectable in the System Log UI.
+  const removeLogBridge = logService.addExporter({
+    export(msg) {
+      telemetry.ingest?.({
+        at: new Date(msg.ts).toISOString(),
+        level: msg.level,
+        domain: msg.domain,
+        ...(msg.pluginId ? { pluginId: msg.pluginId } : {}),
+        ...(msg.pid !== undefined ? { pid: msg.pid } : {}),
+        component: msg.name,
+        message: formatMessage({ maxLength: 4096 }, msg),
+        ...(msg.location ? { location: msg.location } : {}),
+        ...(msg.error
+          ? {
+              error: {
+                name: msg.error.name,
+                ...(msg.error.code ? { code: msg.error.code } : {}),
+                message: msg.error.message,
+                ...(msg.error.location ? { location: msg.error.location } : {}),
+                ...(msg.error.stack ? { stack: [...msg.error.stack] } : {}),
+                ...(msg.error.causes
+                  ? {
+                      causes: msg.error.causes.map((c) => ({
+                        name: c.name,
+                        ...(c.code ? { code: c.code } : {}),
+                        message: c.message,
+                        ...(c.location ? { location: c.location } : {}),
+                        ...(c.stack ? { stack: [...c.stack] } : {}),
+                      })),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(msg.fields ? { fields: { ...msg.fields } } : {}),
+      });
+    },
+  });
+  closeHandles.push(removeLogBridge);
   closeHandles.push(() => telemetry.close());
   // RINA Phase1: the Cold Vault rides the SAME home-conditional shape
   // as the operation log (an injected dir wins, the resolver's home is the

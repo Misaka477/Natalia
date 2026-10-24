@@ -146,6 +146,8 @@ export const RPC_METHOD_ROUTES: Record<string, string> = {
   commandExecute: "command.execute",
   runtimeStatus: "runtime.status",
   diagnostics: "diagnostics.list",
+  operationRecords: "diagnostics.operations",
+  setLogVerbosity: "diagnostics.set_verbosity",
   workGraphNodes: "workgraph.nodes",
   workGraphEdges: "workgraph.edges",
   nativeTerminalList: "nativeTerminal.list",

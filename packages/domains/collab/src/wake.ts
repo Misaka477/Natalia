@@ -90,11 +90,15 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
           admittedSeq: admitted.admittedSeq,
         }),
       );
-      logOf(ctx.state.serviceDirectory).info("collab-wake-inject", "", {
-        id,
-        sessionID: exec.session.id,
-        admittedSeq: admitted.admittedSeq,
-      });
+      logOf(ctx.state.serviceDirectory).debug(
+        "collab-wake-inject",
+        "injected internal step wake",
+        {
+          id,
+          sessionID: exec.session.id,
+          admittedSeq: admitted.admittedSeq,
+        },
+      );
       return delivery;
     }
     scheduleInternalWake(exec, { id, text, delivery });
@@ -115,14 +119,18 @@ export function createCollaborationWake(ctx: ProductRuntimeContext) {
       source === "Nia"
         ? `(internal collaboration wake: Nia sent a ${kind}; read her audit findings in <nia_collaborations>, perform the required remediation work now, then reply to Nia with what you changed. Do not acknowledge with chat alone. This is not a user message.)`
         : `(internal collaboration wake: ${source} sent a ${kind}; read the collaboration context. This is not a user message.)`;
-    logOf(ctx.state.serviceDirectory).info("collab-wake-main", "", {
-      source,
-      kind,
-      sourceID,
-      sessionID: exec.session.id,
-      delivery,
-      coordinatorActive: coordinator.active,
-    });
+    logOf(ctx.state.serviceDirectory).debug(
+      "collab-wake-main",
+      `waking main for ${source} ${kind}`,
+      {
+        source,
+        kind,
+        sourceID,
+        sessionID: exec.session.id,
+        delivery,
+        coordinatorActive: coordinator.active,
+      },
+    );
     deliverInternalWake(exec, id, text);
   }
 

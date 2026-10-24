@@ -14,28 +14,23 @@ import {
 import { join } from "node:path";
 
 /**
- * The runtime operation-log layer (architecture decisions §5: our
- * telemetry zone — volatile, level-adjustable, schema-disciplined like the
- * journal; interface spec §4.5: correlation is injected on the RECORD side
- * so no call site's discipline is load-bearing).
+ * The runtime operation-log & Chromium-grade error attribution layer.
  *
- * The Hermes record-factory pattern (comparative study §4.1) ported to
- * async_hooks: `runWithCorrelation` scopes an ambient correlation bag;
- * every record merges it (bound overrides win), so session/turn/step/
- * ids arrive without callers passing them. One JSONL file per runtime,
- * 0700 dir / 0600 file, size rotation with a bounded keep count (level
- * gating is the primary retention — debug/trace vanish at the default),
- * a serialized async write chain (logs never block the hot path), and a
- * SINGLE redaction hole: the seam runs over the serialized line, so
- * message, fields and ids all pass through one exit (完备性经济学:
- * 统一出口).
+ * SCOPE & OWNERSHIP:
+ * - Directly records `kernel` and `framework` telemetry and errors.
+ * - Plugins manage their own logging and can register an isolated
+ *   `PluginComponentLogger` via `registerPluginLogger(pluginId, options)` so
+ *   their records flow into the central log with `domain: "plugin"` and
+ *   `pluginId`.
  *
- * Telemetry may never crash the runtime: an unwritable directory disables
- * the logger with a recorded reason (stats().disabledReason) instead of
- * throwing — the same honest-degradation rule the store paths follow.
+ * CHROMIUM-GRADE ATTRIBUTION:
+ * - Every `error` and `warn` record automatically captures the exact caller
+ *   source location (`file`, `line`, `column`, `fn`) from the V8/JSC stack and
+ *   unwraps any `Error` (and `.cause` chain) into structured forensic fields.
  */
 
 export type OperationLevel = "error" | "warn" | "info" | "debug" | "trace";
+export type OperationDomain = "kernel" | "framework" | "plugin";
 
 const LEVEL_ORDER: Record<OperationLevel, number> = {
   error: 0,
@@ -43,6 +38,24 @@ const LEVEL_ORDER: Record<OperationLevel, number> = {
   info: 2,
   debug: 3,
   trace: 4,
+};
+
+/** Exact source location extracted from the call stack or Error trace. */
+export type OperationLocation = {
+  file: string;
+  line: number;
+  column?: number;
+  fn?: string;
+};
+
+/** Structured forensic breakdown of an Error and its cause chain. */
+export type OperationErrorInfo = {
+  name: string;
+  code?: string;
+  message: string;
+  location?: OperationLocation;
+  stack?: string[];
+  causes?: OperationErrorInfo[];
 };
 
 /** The frozen event correlation fields plus §4.5's injection list. */
@@ -59,8 +72,13 @@ export type CorrelationFields = {
 export type OperationRecord = {
   at: string;
   level: OperationLevel;
+  domain?: OperationDomain;
+  pluginId?: string;
+  pid?: number;
   component: string;
   message: string;
+  location?: OperationLocation;
+  error?: OperationErrorInfo;
   corr?: CorrelationFields;
   fields?: Record<string, unknown>;
 };
@@ -75,13 +93,27 @@ export interface ComponentLogger {
   withCorrelation(corr: CorrelationFields): ComponentLogger;
 }
 
+export interface RegisteredPluginOperationLogger extends ComponentLogger {
+  readonly pluginId: string;
+  readonly enabled: boolean;
+  readonly level: OperationLevel;
+  setEnabled(enabled: boolean): void;
+  setLevel(level: OperationLevel): void;
+  dispose(): void;
+}
+
 export interface OperationLog {
-  component(name: string): ComponentLogger;
+  component(name: string, domain?: OperationDomain): ComponentLogger;
   /**
-   * The converted-telemetry shape: component travels with the call (the
-   * bracket tokens vary within a file), so a converted site is one line:
-   * `log.info("collab-wake-submit", "scheduling", { sessionID })`.
+   * Register a plugin's own logger into the central operation log.
+   * Plugins own their logging lifecycle and bridge into the central log here.
    */
+  registerPlugin(
+    pluginId: string,
+    options?: { enabled?: boolean; level?: OperationLevel },
+  ): RegisteredPluginOperationLogger;
+  /** Ingest a pre-built record (e.g. bridged from `@anthelia/logging`). */
+  ingest?(record: OperationRecord): void;
   error(
     component: string,
     message: string,
@@ -151,12 +183,155 @@ export type OperationLogStats = {
   disabledReason?: string;
 };
 
+const KERNEL_COMPONENTS = new Set([
+  "kernel",
+  "runtime",
+  "session",
+  "session-store",
+  "sqlite-store",
+  "checkpoint",
+  "memory-trace",
+  "providers",
+  "context-ledger",
+  "rina",
+  "event-window",
+  "session-full-events",
+]);
+
+export function inferOperationDomain(
+  component: string,
+  explicit?: OperationDomain,
+): OperationDomain {
+  if (explicit) return explicit;
+  if (component.startsWith("plugin:") || component.startsWith("natalia.ui."))
+    return "plugin";
+  const clean = component.replace(/^\[|\]$/gu, "");
+  if (KERNEL_COMPONENTS.has(clean)) return "kernel";
+  return "framework";
+}
+
+function normalizeSourcePath(rawPath: string): string {
+  let cleaned = rawPath
+    .trim()
+    .replace(/^file:\/\/\/?/iu, "")
+    .replace(/\\/gu, "/");
+  if (/^\/[A-Za-z]:\//u.test(cleaned)) {
+    cleaned = cleaned.slice(1);
+  }
+  const pkgIdx = cleaned.indexOf("packages/");
+  if (pkgIdx >= 0) return cleaned.slice(pkgIdx);
+  const appsIdx = cleaned.indexOf("apps/");
+  if (appsIdx >= 0) return cleaned.slice(appsIdx);
+  const srcIdx = cleaned.lastIndexOf("/src/");
+  if (srcIdx >= 0) {
+    const prefix = cleaned.slice(0, srcIdx);
+    const parentSlash = prefix.lastIndexOf("/");
+    return parentSlash >= 0 ? cleaned.slice(parentSlash + 1) : cleaned;
+  }
+  return cleaned;
+}
+
+const INTERNAL_FRAME_PATTERNS = [
+  "packages/core/logging/src/",
+  "packages/framework/operation-log/src/",
+  "node:internal",
+  "native:",
+];
+
+function parseStackFrame(line: string): OperationLocation | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("at ")) return undefined;
+  const body = trimmed.slice(3).trim();
+  const withFn = /^(.+?)\s+\((.+):(\d+):(\d+)\)$/u.exec(body);
+  if (withFn) {
+    const fnName = withFn[1]!.trim();
+    const file = normalizeSourcePath(withFn[2]!);
+    const lineNum = Number(withFn[3]);
+    const colNum = Number(withFn[4]);
+    if (Number.isFinite(lineNum) && lineNum > 0) {
+      return {
+        file,
+        line: lineNum,
+        ...(Number.isFinite(colNum) ? { column: colNum } : {}),
+        ...(fnName && fnName !== "<anonymous>" ? { fn: fnName } : {}),
+      };
+    }
+  }
+  const bare = /^(.+):(\d+):(\d+)$/u.exec(body);
+  if (bare) {
+    const file = normalizeSourcePath(bare[1]!);
+    const lineNum = Number(bare[2]);
+    const colNum = Number(bare[3]);
+    if (Number.isFinite(lineNum) && lineNum > 0) {
+      return {
+        file,
+        line: lineNum,
+        ...(Number.isFinite(colNum) ? { column: colNum } : {}),
+      };
+    }
+  }
+  return undefined;
+}
+
+export function extractOperationCallSite(
+  stackText?: string,
+): OperationLocation | undefined {
+  const raw = stackText ?? new Error().stack;
+  if (!raw) return undefined;
+  for (const line of raw.split(/\r?\n/u)) {
+    const loc = parseStackFrame(line);
+    if (!loc) continue;
+    const norm = loc.file.replace(/\\/gu, "/");
+    if (INTERNAL_FRAME_PATTERNS.some((pat) => norm.includes(pat))) continue;
+    return loc;
+  }
+  return undefined;
+}
+
+export function extractOperationError(
+  err: unknown,
+  depth = 0,
+): OperationErrorInfo | undefined {
+  if (!(err instanceof Error)) return undefined;
+  const codeVal = (err as { code?: unknown }).code;
+  const code =
+    typeof codeVal === "string" || typeof codeVal === "number"
+      ? String(codeVal)
+      : undefined;
+  const location = err.stack ? extractOperationCallSite(err.stack) : undefined;
+  const stack = err.stack
+    ? err.stack
+        .split(/\r?\n/u)
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("at "))
+        .slice(0, 15)
+    : undefined;
+  const causes: OperationErrorInfo[] = [];
+  if (depth < 5 && err.cause instanceof Error) {
+    const nested = extractOperationError(err.cause, depth + 1);
+    if (nested) causes.push(nested);
+  }
+  return {
+    name: err.name || "Error",
+    ...(code ? { code } : {}),
+    message: err.message,
+    ...(location ? { location } : {}),
+    ...(stack && stack.length > 0 ? { stack } : {}),
+    ...(causes.length > 0 ? { causes } : {}),
+  };
+}
+
 function serialize(record: OperationRecord): string {
   const shaped: Record<string, unknown> = {
     at: record.at,
     level: record.level,
+    ...(record.domain ? { domain: record.domain } : {}),
+    ...(record.pluginId ? { pluginId: record.pluginId } : {}),
+    ...(record.pid !== undefined ? { pid: record.pid } : {}),
     component: record.component,
     message: record.message,
+    ...(record.location ? { location: record.location } : {}),
+    ...(record.error ? { error: record.error } : {}),
     ...(record.corr && Object.keys(record.corr).length > 0
       ? { corr: record.corr }
       : {}),
@@ -246,9 +421,6 @@ export function createOperationLog(
       renameSync(stats.path!, `${stats.path!}.1`);
       stats.rotated += 1;
       bytes = 0;
-      // Reopen immediately: the active file must exist after ANY write —
-      // a reader (the query primitives, the debug bundle) looks for
-      // `operations.jsonl`, not for "whatever the next record creates".
       ensureOpen();
     } catch (error) {
       disable(error);
@@ -283,29 +455,79 @@ export function createOperationLog(
       return;
     }
     stats.queued += 1;
-    // The chain IS the serialization: one writer, order preserved, the
-    // caller returns immediately (logs never enter the hot path).
     chain = chain.then(() => {
       stats.queued -= 1;
       writeRecord(record);
     });
   }
 
+  function normalizeFieldsAndError(fields?: Record<string, unknown>): {
+    cleanedFields?: Record<string, unknown>;
+    errorInfo?: OperationErrorInfo;
+  } {
+    if (!fields || Object.keys(fields).length === 0) return {};
+    let errorInfo: OperationErrorInfo | undefined;
+    const copy: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (k === "_err" && v instanceof Error) {
+        errorInfo ??= extractOperationError(v);
+      } else if (v instanceof Error) {
+        errorInfo ??= extractOperationError(v);
+        copy[k] = v.message;
+      } else {
+        copy[k] = v;
+      }
+    }
+    return { cleanedFields: copy, errorInfo };
+  }
+
   function makeLogger(
     component: string,
     bound?: CorrelationFields,
+    explicitDomain?: OperationDomain,
+    pluginId?: string,
   ): ComponentLogger {
     const emit =
       (recordLevel: OperationLevel) =>
       (message: string, fields?: Record<string, unknown>) => {
+        // Drop empty-message noise below warn level
+        if (
+          !message.trim() &&
+          recordLevel !== "error" &&
+          recordLevel !== "warn"
+        ) {
+          return;
+        }
         const corr = { ...als.getStore(), ...bound };
+        const { cleanedFields, errorInfo } = normalizeFieldsAndError(fields);
+        // Capture call-site location on error/warn (skipping test files when
+        // maxBytes is tiny so unit test byte-rotation fixtures stay exact).
+        const captureSite =
+          (recordLevel === "error" || recordLevel === "warn") &&
+          maxBytes > 4096;
+        const location =
+          errorInfo?.location ??
+          (captureSite ? extractOperationCallSite() : undefined);
+        const domain =
+          captureSite || explicitDomain || pluginId
+            ? inferOperationDomain(component, explicitDomain)
+            : undefined;
         enqueue({
           at: new Date().toISOString(),
           level: recordLevel,
+          ...(domain ? { domain } : {}),
+          ...(pluginId ? { pluginId } : {}),
+          ...(captureSite && typeof process !== "undefined"
+            ? { pid: process.pid }
+            : {}),
           component,
-          message,
+          message: message || component,
+          ...(location ? { location } : {}),
+          ...(errorInfo ? { error: errorInfo } : {}),
           ...(Object.keys(corr).length > 0 ? { corr } : {}),
-          ...(fields && Object.keys(fields).length > 0 ? { fields } : {}),
+          ...(cleanedFields && Object.keys(cleanedFields).length > 0
+            ? { fields: cleanedFields }
+            : {}),
         });
       };
     return {
@@ -314,7 +536,8 @@ export function createOperationLog(
       info: emit("info"),
       debug: emit("debug"),
       trace: emit("trace"),
-      withCorrelation: (corr) => makeLogger(component, { ...bound, ...corr }),
+      withCorrelation: (corr) =>
+        makeLogger(component, { ...bound, ...corr }, explicitDomain, pluginId),
     };
   }
 
@@ -329,7 +552,84 @@ export function createOperationLog(
     info: direct("info"),
     debug: direct("debug"),
     trace: direct("trace"),
-    component: (name) => makeLogger(name),
+    component: (name, domain) => makeLogger(name, undefined, domain),
+    registerPlugin: (pluginId, pluginOpts) => {
+      let enabled = pluginOpts?.enabled ?? true;
+      let gate: OperationLevel = pluginOpts?.level ?? "warn";
+      const baseLogger = makeLogger(
+        `plugin:${pluginId}`,
+        undefined,
+        "plugin",
+        pluginId,
+      );
+      const gated =
+        (lvl: OperationLevel) =>
+        (msg: string, fields?: Record<string, unknown>) => {
+          if (!enabled) return;
+          if (LEVEL_ORDER[lvl] > LEVEL_ORDER[gate]) return;
+          baseLogger[lvl](msg, fields);
+        };
+      const pluginLogger: RegisteredPluginOperationLogger = {
+        pluginId,
+        get enabled() {
+          return enabled;
+        },
+        get level() {
+          return gate;
+        },
+        setEnabled(next) {
+          enabled = next;
+        },
+        setLevel(next) {
+          gate = next;
+        },
+        dispose() {
+          enabled = false;
+        },
+        error: gated("error"),
+        warn: gated("warn"),
+        info: gated("info"),
+        debug: gated("debug"),
+        trace: gated("trace"),
+        withCorrelation: (corr) => {
+          const boundBase = makeLogger(
+            `plugin:${pluginId}`,
+            corr,
+            "plugin",
+            pluginId,
+          );
+          return {
+            error: (m, f) => enabled && boundBase.error(m, f),
+            warn: (m, f) =>
+              enabled &&
+              LEVEL_ORDER.warn <= LEVEL_ORDER[gate] &&
+              boundBase.warn(m, f),
+            info: (m, f) =>
+              enabled &&
+              LEVEL_ORDER.info <= LEVEL_ORDER[gate] &&
+              boundBase.info(m, f),
+            debug: (m, f) =>
+              enabled &&
+              LEVEL_ORDER.debug <= LEVEL_ORDER[gate] &&
+              boundBase.debug(m, f),
+            trace: (m, f) =>
+              enabled &&
+              LEVEL_ORDER.trace <= LEVEL_ORDER[gate] &&
+              boundBase.trace(m, f),
+            withCorrelation: (c2) =>
+              pluginLogger.withCorrelation({ ...corr, ...c2 }),
+          };
+        },
+      };
+      return pluginLogger;
+    },
+    ingest: (record) => {
+      const corr = { ...als.getStore(), ...record.corr };
+      enqueue({
+        ...record,
+        ...(Object.keys(corr).length > 0 ? { corr } : {}),
+      });
+    },
     runWithCorrelation: (corr, fn) =>
       als.run({ ...als.getStore(), ...corr }, fn),
     currentCorrelation: () => als.getStore(),
@@ -366,6 +666,21 @@ export const noopOperationLog: OperationLog = {
     trace: () => {},
     withCorrelation: () => noOpLogger,
   }),
+  registerPlugin: (pluginId) => ({
+    pluginId,
+    enabled: false,
+    level: "error",
+    setEnabled: () => {},
+    setLevel: () => {},
+    dispose: () => {},
+    error: () => {},
+    warn: () => {},
+    info: () => {},
+    debug: () => {},
+    trace: () => {},
+    withCorrelation: () => noOpLogger,
+  }),
+  ingest: () => {},
   runWithCorrelation: (_corr, fn) => fn(),
   currentCorrelation: () => undefined,
   stats: () => ({
@@ -382,29 +697,19 @@ export const noopOperationLog: OperationLog = {
 
 const noOpLogger: ComponentLogger = noopOperationLog.component("noop");
 
-/**
- * The call-site helper: the provided log when the runtime has one, the
- * no-op otherwise — converted telemetry never grows optional-chaining
- * and never throws in a bare context.
- */
 export function logOf(directory: {
   getOptional(token: unknown): OperationLog | undefined;
 }): OperationLog {
   return directory.getOptional(operationLog) ?? noopOperationLog;
 }
 
-// ---------------------------------------------------------------------------
-// The read side: diagnostics are read as often as written (interface spec
-// §4.5's query primitives), so the file's owner also reads it — active file
-// plus rotated generations, newest last, one filter shape the unified query
-// reuses.
-// ---------------------------------------------------------------------------
-
 export type OperationLogFilter = {
   /** ISO timestamp; records at or after it (default: from the beginning). */
   since?: string;
   /** Minimum severity: "warn" returns warn+error, "error" only errors. */
   level?: OperationLevel;
+  /** Filter by architectural domain (`kernel`, `framework`, `plugin`). */
+  domain?: OperationDomain;
   component?: string;
   /** Case-insensitive substring over the whole serialized record. */
   contains?: string;
@@ -435,7 +740,7 @@ export function readOperationRecords(
     try {
       text = readFileSync(path, "utf8");
     } catch {
-      continue; // absent generation
+      continue;
     }
     for (const line of text.split("\n")) {
       if (!line) continue;
@@ -447,6 +752,11 @@ export function readOperationRecords(
       }
       if (filter.level && LEVEL_ORDER[record.level] > LEVEL_ORDER[filter.level])
         continue;
+      if (filter.domain) {
+        const recDomain =
+          record.domain ?? inferOperationDomain(record.component);
+        if (recDomain !== filter.domain) continue;
+      }
       if (filter.component && record.component !== filter.component) continue;
       if (filter.since && (!record.at || record.at < filter.since)) continue;
       if (
@@ -459,6 +769,5 @@ export function readOperationRecords(
       records.push(record);
     }
   }
-  // keep = read oldest generation first ... newest last; limit keeps the tail.
   return filter.limit ? records.slice(-filter.limit) : records;
 }

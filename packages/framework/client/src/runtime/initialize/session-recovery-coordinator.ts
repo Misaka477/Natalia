@@ -496,9 +496,9 @@ export class SessionRecoveryCoordinator {
       const applied = scope.runtimeContext.restoreUsageCheckpoint(
         durableUsageCheckpoint,
       );
-      logOf(scope.serviceDirectory).warn(
+      logOf(scope.serviceDirectory).debug(
         "context-restore",
-        "session-recovery",
+        "restored usage checkpoint during session recovery",
         {
           sessionID: scope.sessionID,
           checkpointApplied: applied,
@@ -507,14 +507,18 @@ export class SessionRecoveryCoordinator {
       );
     }
 
-    logOf(scope.serviceDirectory).warn("context-restore", "session-recovery", {
-      sessionID: scope.sessionID,
-      replayableEvents: projection.replayableEvents.length,
-      restoreEvents: recoveryRestoreEvents.length,
-      contextEntries: scope.runtimeContext.snapshot().entries.length,
-      hasEpoch: this.sqliteEpoch !== undefined,
-      checkpointHasSummary: prepared.checkpointHasSummary,
-    });
+    logOf(scope.serviceDirectory).debug(
+      "context-restore",
+      "completed session recovery context restore",
+      {
+        sessionID: scope.sessionID,
+        replayableEvents: projection.replayableEvents.length,
+        restoreEvents: recoveryRestoreEvents.length,
+        contextEntries: scope.runtimeContext.snapshot().entries.length,
+        hasEpoch: this.sqliteEpoch !== undefined,
+        checkpointHasSummary: prepared.checkpointHasSummary,
+      },
+    );
   }
 
   /**

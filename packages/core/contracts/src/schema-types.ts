@@ -100,11 +100,32 @@ export type WorkGraphEdgeKind = WorkGraphEdge["kind"];
  * the contracts cannot depend on the framework package that owns the writer
  * — a host reads this shape, the runtime fills it.
  */
+export type OperationLogLocation = {
+  file: string;
+  line: number;
+  column?: number;
+  fn?: string;
+};
+
+export type OperationLogErrorInfo = {
+  name: string;
+  code?: string;
+  message: string;
+  location?: OperationLogLocation;
+  stack?: string[];
+  causes?: OperationLogErrorInfo[];
+};
+
 export type OperationRecord = {
   at: string;
   level: "error" | "warn" | "info" | "debug" | "trace";
+  domain?: "kernel" | "framework" | "plugin";
+  pluginId?: string;
+  pid?: number;
   component: string;
   message: string;
+  location?: OperationLogLocation;
+  error?: OperationLogErrorInfo;
   corr?: Record<string, string>;
   fields?: Record<string, unknown>;
 };

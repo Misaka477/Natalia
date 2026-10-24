@@ -599,6 +599,7 @@ export async function runExecuteStage(
       callID: call.id,
       turnID,
       error: message,
+      ...(error instanceof Error ? { _err: error } : {}),
       // A refusal carries its own structure: the rule that said no and the
       // path it judged. The confinement spawn's fail-closed refusal names its
       // MODE in the rule (`confinement mode ro requires a backend`), so the

@@ -180,9 +180,11 @@ export function createGoalRuntime(ctx: RuntimeContext): GoalRuntime {
     nextEventId,
     log: (event, detail) => {
       if (process.env.NATALIA_GOAL_DEBUG === "0") return;
-      logOf(ctx.state.serviceDirectory).info("goal-driver", "", {
-        args: [event, detail ?? {}],
-      });
+      logOf(ctx.state.serviceDirectory).debug(
+        "goal-driver",
+        String(event || "goal-round"),
+        detail ?? {},
+      );
     },
   };
 

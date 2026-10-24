@@ -199,3 +199,33 @@ test("logOf falls back to the no-op log — telemetry degrades, never crashes", 
   expect(logOf({ getOptional: () => noopOperationLog })).toBe(noopOperationLog);
   expect(noopOperationLog.stats().disabledReason).toBeTruthy();
 });
+
+test("error records capture Chromium call-site location, Error cause chain, and plugin registration", async () => {
+  const path = dir("chromium-forensics");
+  const log = createOperationLog({ dir: path });
+  const cause = Object.assign(new Error("ENOENT: no such file"), {
+    code: "ENOENT",
+  });
+  const top = new Error("read config failed", { cause });
+  log.error("session-store", "store open failed", {
+    _err: top,
+    path: "/tmp/db",
+  });
+
+  const pluginLog = log.registerPlugin("custom-plugin", { level: "warn" });
+  pluginLog.info("dropped info");
+  pluginLog.warn("plugin warning", { detail: "slow response" });
+  await log.flush();
+
+  const list = await records(path);
+  expect(list).toHaveLength(2);
+  expect(list[0]!.domain).toBe("kernel");
+  expect(list[0]!.location?.file).toContain("operation-log.test.ts");
+  expect(list[0]!.error?.message).toBe("read config failed");
+  expect(list[0]!.error?.causes?.[0]?.code).toBe("ENOENT");
+
+  expect(list[1]!.domain).toBe("plugin");
+  expect(list[1]!.pluginId).toBe("custom-plugin");
+  expect(list[1]!.message).toBe("plugin warning");
+  await log.close();
+});

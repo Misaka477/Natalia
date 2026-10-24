@@ -435,12 +435,16 @@ export function createSessionAttach(ctx: RuntimeContext) {
       // Same cold-read ladder as the full path below (checkpoint + tail), so
       // the usage snapshot costs a tail fold rather than a history load.
       const usageChannels = usageSnapshotFor(nextID, exec.session);
-      logOf(ctx.state.serviceDirectory).warn("usage-snapshot", "attach", {
-        sessionID: nextID,
-        steps: usageChannels.main.steps,
-        turns: usageChannels.main.turns,
-        inputTokens: usageChannels.main.inputTokens,
-      });
+      logOf(ctx.state.serviceDirectory).debug(
+        "usage-snapshot",
+        "attached session usage snapshot",
+        {
+          sessionID: nextID,
+          steps: usageChannels.main.steps,
+          turns: usageChannels.main.turns,
+          inputTokens: usageChannels.main.inputTokens,
+        },
+      );
       publishForSession(exec, {
         type: "session.usage",
         channels: usageChannels,

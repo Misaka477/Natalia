@@ -214,7 +214,7 @@ export const zh = {
   "settings.cat.interface": "界面",
   "settings.cat.storage": "配置保存范围",
   "settings.cat.pluginMgr": "插件管理",
-  "settings.cat.status": "状态与诊断",
+  "settings.cat.status": "系统日志",
   "settings.cat.help": "帮助与快捷键",
   "settings.pluginCategory": "插件配置",
   "settings.unset": "未配置",
@@ -907,6 +907,24 @@ export const zh = {
   "jobs.durationHours": "{hours}小时{minutes}分",
   "jobs.durationMinutes": "{minutes}分{seconds}秒",
   "jobs.durationSeconds": "{seconds}秒",
+  "logs.domainAll": "全部域",
+  "logs.domainKernel": "内核 (Kernel)",
+  "logs.domainFramework": "框架 (Framework)",
+  "logs.domainPlugin": "插件 (Plugin)",
+  "logs.searchPlaceholder":
+    "搜索文件名、行号、错误码、组件、SessionID 或报错内容…",
+  "logs.refresh": "刷新",
+  "logs.copyAll": "复制 Chromium 日志",
+  "logs.copied": "已复制",
+  "logs.empty": "当前过滤条件下无日志记录（精准模式下仅记录错误与告警）",
+  "logs.verbosityError": "精准报错模式 (Error/Warn)",
+  "logs.verbosityDebug": "全量调试模式 (Debug)",
+  "logs.sourceLocation": "源码定位",
+  "logs.chromiumLine": "Chromium 标准行",
+  "logs.correlation": "调用链关联 (Correlation)",
+  "logs.structuredFields": "结构化上下文 (Fields)",
+  "logs.errorStack": "异常栈与因果链 (Stack & Cause Chain)",
+  "logs.openInEditor": "在右侧编辑器打开该文件",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

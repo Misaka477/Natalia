@@ -610,17 +610,21 @@ export function createEventSink(
       // the formal audit message is not duplicated.
       const shouldForwardAudit =
         (niaAuditWake || auditReported) && !auditPassed;
-      logOf(ctx.state.serviceDirectory).info("nia-audit-tail", "", {
-        messageID: event.messageID,
-        niaAuditWake,
-        auditReported,
-        auditVerdict,
-        auditPassed,
-        niaCollabSent,
-        shouldForwardAudit,
-        forwarded: Boolean(last && shouldForwardAudit && !niaCollabSent),
-        lastText: last?.text.slice(0, 120),
-      });
+      logOf(ctx.state.serviceDirectory).debug(
+        "nia-audit-tail",
+        "evaluated Nia audit tail",
+        {
+          messageID: event.messageID,
+          niaAuditWake,
+          auditReported,
+          auditVerdict,
+          auditPassed,
+          niaCollabSent,
+          shouldForwardAudit,
+          forwarded: Boolean(last && shouldForwardAudit && !niaCollabSent),
+          lastText: last?.text.slice(0, 120),
+        },
+      );
       if (last && shouldForwardAudit && !niaCollabSent) {
         const wakeID = `turn_nia_${event.messageID.replace(/[^a-zA-Z0-9]/gu, "_")}`;
         logOf(ctx.state.serviceDirectory).info(

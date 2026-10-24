@@ -165,3 +165,50 @@ describe("installDefaultLogExporter", () => {
     expect(quiet.join("\n")).toContain("but not this one");
   });
 });
+
+describe("Chromium-grade attribution & plugin logger registration", () => {
+  test("error records capture exact caller location and Error cause chains", () => {
+    const service = new LogService();
+    const seen = createBufferExporter(100, { default: "debug" });
+    service.addExporter(seen);
+
+    const rootCause = Object.assign(
+      new Error("SQLITE_BUSY: database is locked"),
+      {
+        code: "SQLITE_BUSY",
+      },
+    );
+    const topErr = new Error("failed to append event", { cause: rootCause });
+    service.emit("sqlite-store", "error", ["append failed: %s", topErr]);
+
+    const [msg] = seen.drain();
+    expect(msg).toBeDefined();
+    expect(msg!.domain).toBe("kernel");
+    expect(msg!.location?.file).toContain("logging.test.ts");
+    expect(msg!.location?.line).toBeGreaterThan(0);
+    expect(msg!.error?.name).toBe("Error");
+    expect(msg!.error?.message).toBe("failed to append event");
+    expect(msg!.error?.causes?.[0]?.code).toBe("SQLITE_BUSY");
+  });
+
+  test("registerPluginLogger isolates plugin domain and honours per-plugin level/enable controls", () => {
+    const service = new LogService();
+    const seen = createBufferExporter(100, { default: "debug" });
+    service.addExporter(seen);
+
+    const pluginLog = service.registerPluginLogger("natalia-mcp", {
+      level: "warn",
+    });
+    pluginLog.info("ignored below warn");
+    pluginLog.warn("mcp timeout");
+    const batch1 = seen.drain();
+    expect(batch1).toHaveLength(1);
+    expect(batch1[0]!.domain).toBe("plugin");
+    expect(batch1[0]!.pluginId).toBe("natalia-mcp");
+
+    pluginLog.setEnabled(false);
+    pluginLog.error("muted when disabled");
+    expect(seen.drain()).toHaveLength(0);
+    pluginLog.dispose();
+  });
+});

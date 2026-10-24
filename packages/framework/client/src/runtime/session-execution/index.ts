@@ -360,9 +360,9 @@ export function createSessionExecution(
       const applied = execContext.restoreUsageCheckpoint(
         durableUsageCheckpoint,
       );
-      logOf(ctx.state.serviceDirectory).warn(
+      logOf(ctx.state.serviceDirectory).debug(
         "context-restore",
-        "ensureExecution",
+        "restored usage checkpoint in ensureExecution",
         {
           sessionID,
           checkpointApplied: applied,
@@ -390,9 +390,9 @@ export function createSessionExecution(
       }
       loaded.events = runtimeRestoreEvents;
     }
-    logOf(ctx.state.serviceDirectory).warn(
+    logOf(ctx.state.serviceDirectory).debug(
       "context-restore",
-      "ensureExecution",
+      "completed ensureExecution context restore",
       {
         sessionID,
         replayableEvents: projection.replayableEvents.length,

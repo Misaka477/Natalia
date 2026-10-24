@@ -245,10 +245,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     run: () => setSearchOpen(true),
   });
   commands.register({
-    id: "shell.status",
-    title: t("palette.cmd.status"),
-    keywords: ["status", "diagnostics"],
-    run: () => setStatusOpen(true),
+    id: "shell.logs",
+    title: t("settings.cat.status"),
+    keywords: ["logs", "error", "diagnostics", "日志"],
+    run: () => {
+      setSettingsCategory("status");
+      setSettingsOpen(true);
+    },
   });
   commands.register({
     id: "shell.toggleLeft",

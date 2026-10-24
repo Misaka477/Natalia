@@ -1036,6 +1036,7 @@ export interface SessionSidebarProps {
   >;
   unreadCompleted?: () => Set<string>;
   onClearUnreadCompleted?: (sessionID: string) => void;
+  onInstantActivateSession?: (sessionID: string) => void;
 }
 
 export function SessionTreeRegion(props: SessionSidebarProps) {
@@ -1493,6 +1494,7 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
                   .allSessions?.()
                   .find((s) => s.id === id)?.workspaceID;
                 props.ctx.projection.activateSession?.(id, wsID);
+                props.onInstantActivateSession?.(id);
                 void props.ctx.runtime.sessionAttach?.(id).then(() => {
                   void props.refreshWorkspaces();
                   void props.refreshSessions();

@@ -3439,6 +3439,13 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
           return next;
         });
       }}
+      onInstantActivateSession={() => {
+        const cached = props.ctx.projection.getState();
+        if (cached.natalia.messages.length > 0) {
+          setTranscriptHistoryLoading(false);
+          setState(cloneState(cached));
+        }
+      }}
     />
   ));
 

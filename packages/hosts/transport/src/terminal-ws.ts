@@ -88,7 +88,7 @@ export function terminalWebsocketHandlers(client: TerminalHostClient) {
           );
           return;
         }
-        const listed = await client.nativeTerminalList?.();
+        const listed = await client.nativeTerminalList?.(sessionID);
         let session = listed?.find((item) => item.id === terminalID);
         if (session?.sessionID && session.sessionID !== sessionID) {
           failOpen(

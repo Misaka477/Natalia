@@ -179,18 +179,6 @@
     transform 0.25s ease;
 }
 
-@media (max-width: 1200px) {
-  .secondary {
-    max-width: 380px;
-  }
-}
-
-@media (max-width: 1700px) {
-  :global(.neu-shell)[data-compact="true"] .secondary {
-    width: min(720px, 66vw);
-  }
-}
-
 @media (max-width: 1000px) {
   .tabs {
     flex-wrap: nowrap;

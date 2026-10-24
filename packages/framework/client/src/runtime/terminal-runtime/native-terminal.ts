@@ -36,12 +36,13 @@ function refusalFromRegistry(error: unknown): RuntimeRefusal {
   );
 }
 
-function sessionExec(ctx: RuntimeContext, sessionID?: string) {
-  return sessionID
-    ? ctx.ports
-        .getExecutionBySession()
-        .get(sessionID as import("@anthelia/contracts").SessionID)
-    : ctx.ports.getActiveExec();
+async function sessionExec(ctx: RuntimeContext, sessionID?: string) {
+  if (!sessionID) return ctx.ports.getActiveExec();
+  const sid = sessionID as import("@anthelia/contracts").SessionID;
+  return (
+    ctx.ports.getExecutionBySession().get(sid) ??
+    (await ctx.ports.ensureExecution(sid).catch(() => undefined))
+  );
 }
 
 async function terminalIDsFor(
@@ -112,7 +113,7 @@ export function createNativeTerminalSurface(
     },
     async nativeTerminalRead(id, sessionID?: string) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       // The window and the extent ride along. Destructuring to `text` alone dropped
@@ -154,7 +155,7 @@ export function createNativeTerminalSurface(
     },
     async nativeTerminalClaimHumanInput(id, sessionID?: string) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal =
         ctx.state.serviceDirectory.getOptional(terminalController);
@@ -164,7 +165,7 @@ export function createNativeTerminalSurface(
     },
     async nativeTerminalReleaseHumanControl(id, sessionID) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       const sessionView = terminal.releaseHumanControl(id, sessionID);
@@ -179,21 +180,21 @@ export function createNativeTerminalSurface(
     },
     async nativeTerminalBeginSecureInput(id, sessionID?: string) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       return terminal.beginSecureInput(id, sessionID);
     },
     async nativeTerminalEndSecureInput(id, sessionID?: string) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       return terminal.endSecureInput(id, sessionID);
     },
     async nativeTerminalStop(id, sessionID?: string) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, sessionID);
+      const exec = await sessionExec(ctx, sessionID);
       if (sessionID && exec) await assertTerminalOwned(ctx, exec, id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       return {
@@ -217,13 +218,11 @@ export function createNativeTerminalSurface(
       const owner = ctx.ports.getActiveExec();
       const sessionID = input.sessionID ?? owner?.session.id;
       if (!sessionID) throw new RuntimeRefusal("session is not initialized");
-      if (
-        input.sessionID &&
-        !ctx.ports
-          .getExecutionBySession()
-          .get(input.sessionID as import("@anthelia/contracts").SessionID)
-      )
-        throw new RuntimeRefusal(`session not found: ${input.sessionID}`);
+      if (input.sessionID) {
+        const exec = await sessionExec(ctx, input.sessionID);
+        if (!exec)
+          throw new RuntimeRefusal(`session not found: ${input.sessionID}`);
+      }
       const terminal = ctx.state.serviceDirectory.get(terminalController);
       try {
         return await terminal.start({
@@ -248,7 +247,7 @@ export function createNativeTerminalSurface(
       actor?: "model" | "human";
     }) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, input.sessionID);
+      const exec = await sessionExec(ctx, input.sessionID);
       if (input.sessionID && exec)
         await assertTerminalOwned(ctx, exec, input.id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);
@@ -277,7 +276,7 @@ export function createNativeTerminalSurface(
       actor?: "model" | "human";
     }) {
       await ctx.ports.getReady();
-      const exec = sessionExec(ctx, input.sessionID);
+      const exec = await sessionExec(ctx, input.sessionID);
       if (input.sessionID && exec)
         await assertTerminalOwned(ctx, exec, input.id);
       const terminal = ctx.state.serviceDirectory.get(terminalController);

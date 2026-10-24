@@ -1492,6 +1492,44 @@ export function createWorkspaceRuntimeClient(
           return result;
         };
       }
+      if (prop === "subscribeTerminalOutput") {
+        const active = manager.getActive();
+        if (!active) {
+          return () => {
+            throw new Error(
+              "no active workspace: open or activate a workspace before using the terminal",
+            );
+          };
+        }
+        return (id: string, listener: (chunk: string) => void) => {
+          const candidates = new Set<WorkspaceRuntime>([active]);
+          for (const wid of startedClients) {
+            const ws = manager.get(wid);
+            if (ws) candidates.add(ws);
+          }
+          const unsubs: Array<() => void> = [];
+          for (const ws of candidates) {
+            const sub = (
+              ws.client as unknown as {
+                subscribeTerminalOutput?: (
+                  id: string,
+                  cb: (chunk: string) => void,
+                ) => () => void;
+              }
+            ).subscribeTerminalOutput;
+            if (typeof sub === "function") {
+              try {
+                unsubs.push(sub.call(ws.client, id, listener));
+              } catch {
+                // ignore unstarted workspace
+              }
+            }
+          }
+          return () => {
+            for (const unsub of unsubs) unsub();
+          };
+        };
+      }
       if (prop in manager) {
         const value = (manager as unknown as Record<PropertyKey, unknown>)[
           prop

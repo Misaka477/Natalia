@@ -214,6 +214,14 @@ export function WebTerminal(props: WebTerminalProps) {
       }
       if (message.type === "output") term?.write(message.data);
       if (message.type === "error") {
+        if (
+          message.message.startsWith("session not found:") ||
+          message.message.includes("session is not initialized")
+        ) {
+          socket = undefined;
+          scheduleReconnect();
+          return;
+        }
         if (message.message === lastError) return;
         lastError = message.message;
         term?.writeln(`\r\n[${message.message}]`);

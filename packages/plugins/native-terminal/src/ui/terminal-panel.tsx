@@ -225,6 +225,7 @@ export function TerminalPane(
       else ensureActive(remaining);
     }
     setLimitError();
+    if (!sessions().some((item) => item.id === id)) return;
     try {
       await props.runtime?.nativeTerminalStop?.(id, sessionID());
     } catch {
@@ -245,6 +246,7 @@ export function TerminalPane(
     );
     setTabs(next);
     ensureActive(next);
+    if (!sessions().some((item) => item.id === cellID)) return;
     void props.runtime
       ?.nativeTerminalStop?.(cellID, sessionID())
       .catch(() => undefined);

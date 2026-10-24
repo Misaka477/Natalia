@@ -37,6 +37,18 @@ import type { StatusSnapshotController } from "@anthelia/runtime-status";
 import type { SessionStoreController } from "@anthelia/session-store";
 
 export function createSessionAttach(ctx: RuntimeContext) {
+  // THE READER SHAPE `restoreProjection` NEEDS WHEN NO STORE IS WIRED, and it
+  // is declared HERE, above the early `return { attachSession }` below, for a
+  // reason that cost a live failure: the returned object lets the factory end
+  // immediately, so every declaration AFTER that return is never initialised —
+  // function declarations are hoisted and still work, while a `const` stays in
+  // its temporal dead zone forever and throws `ReferenceError` the first time
+  // a hoisted helper reads it. Measured: attaching a session on a non-sqlite
+  // workspace died with `emptyProjectionStore is not defined`.
+  const emptyProjectionStore = {
+    loadProjectionCheckpoint: () => undefined,
+    eventsAfter: () => [],
+  };
   return {
     attachSession,
   };
@@ -275,12 +287,6 @@ export function createSessionAttach(ctx: RuntimeContext) {
    * the store instead and rewrite the checkpoint: a one-time migration that
    * leaves every later attach paying only the tail.
    */
-  /** Reader shape `restoreProjection` needs when no store is wired. */
-  const emptyProjectionStore = {
-    loadProjectionCheckpoint: () => undefined,
-    eventsAfter: () => [],
-  };
-
   function usageSnapshotFor(
     id: SessionID,
     session: import("@anthelia/substrate").SessionExecutionState["session"],

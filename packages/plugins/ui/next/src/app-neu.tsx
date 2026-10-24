@@ -146,9 +146,10 @@ function queryParam(name: string): string | undefined {
   }
 }
 
-const MIN_SIDEBAR_WIDTH = 180;
+const DEFAULT_SIDEBAR_WIDTH = 240;
+const MIN_SIDEBAR_WIDTH = DEFAULT_SIDEBAR_WIDTH;
 const MAX_SIDEBAR_WIDTH = 360;
-const MIN_RIGHT_WIDTH = 440;
+const MIN_RIGHT_WIDTH = 360;
 const MAX_RIGHT_WIDTH = 560;
 
 /**
@@ -189,11 +190,24 @@ function sessionTurnID(messageID: string) {
   return messageID.replace(/:(?:user|assistant|thinking|system)$/u, "");
 }
 
+function rightPanelMinWidth(): number {
+  if (typeof window === "undefined") return MIN_RIGHT_WIDTH;
+  return Math.max(280, Math.round(window.innerWidth / 4));
+}
+
+function defaultRightPanelWidth(): number {
+  if (typeof window === "undefined") return 440;
+  return Math.max(rightPanelMinWidth(), Math.round(window.innerWidth / 3));
+}
+
 function rightPanelMaxWidth(): number {
   if (typeof window === "undefined") return MAX_RIGHT_WIDTH;
   // On small/compact layouts the right panel is the most space-hungry
   // surface (terminal/diff), so allow it to take up to 2/3 width.
-  return Math.max(MIN_RIGHT_WIDTH, Math.floor((window.innerWidth * 2) / 3));
+  return Math.max(
+    rightPanelMinWidth(),
+    Math.floor((window.innerWidth * 2) / 3),
+  );
 }
 
 export type GoalEditorTarget = {
@@ -292,12 +306,9 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     GOVERNANCE_TABS.includes(requestedGovernanceTab as GovernanceTab)
       ? (requestedGovernanceTab as GovernanceTab)
       : undefined;
-  const [leftWidth, setLeftWidth] = createSignal(240);
-  const [rightWidth, setRightWidth] = createSignal(
-    typeof window === "undefined"
-      ? 440
-      : Math.max(MIN_RIGHT_WIDTH, Math.floor(window.innerWidth / 3)),
-  );
+  const [leftWidth, setLeftWidth] = createSignal(DEFAULT_SIDEBAR_WIDTH);
+  const [rightWidth, setRightWidth] = createSignal(defaultRightPanelWidth());
+  let userResizedRight = false;
   const [resizing, setResizing] = createSignal(false);
   const [leftVisible, setLeftVisible] = createSignal(true);
   const [rightVisible, setRightVisible] = createSignal(true);
@@ -350,8 +361,17 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const layout = layoutProfile();
     const left = layout?.regions?.left;
     const right = layout?.regions?.right;
-    if (left?.width) setLeftWidth(left.width);
-    if (right?.width) setRightWidth(right.width);
+    if (left?.width)
+      setLeftWidth(
+        Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, left.width)),
+      );
+    if (right?.width)
+      setRightWidth(
+        Math.max(
+          rightPanelMinWidth(),
+          Math.min(rightPanelMaxWidth(), right.width),
+        ),
+      );
     if (left?.visible !== undefined) setLeftVisible(left.visible);
     if (right?.visible !== undefined) setRightVisible(right.visible);
     if (right?.order?.[0]) {
@@ -3182,16 +3202,15 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }
 
   function startRightResize(event: PointerEvent) {
+    userResizedRight = true;
     const startX = event.clientX;
     const startWidth = rightWidth();
+    const minRight = rightPanelMinWidth();
     const maxRight = rightPanelMaxWidth();
     startResize(
       event,
       (clientX) =>
-        Math.max(
-          MIN_RIGHT_WIDTH,
-          Math.min(maxRight, startWidth - (clientX - startX)),
-        ),
+        Math.max(minRight, Math.min(maxRight, startWidth - (clientX - startX))),
       setRightWidth,
     );
   }
@@ -3339,19 +3358,33 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   }
 
   onMount(() => {
+    let lastMode: "wide" | "compact" | "tiny" | undefined;
     const updateLayout = () => {
       const width = window.innerWidth;
       const tiny = width <= 1000;
-      const mode = tiny ? "tiny" : width <= 1700 ? "compact" : "wide";
+      const mode = tiny ? "tiny" : width <= 1280 ? "compact" : "wide";
       setLayoutMode(mode);
-      if (mode !== "wide") {
-        setLeftVisible(false);
-        setRightVisible(false);
-      } else {
-        setLeftVisible(true);
-        setRightVisible(true);
+      if (mode !== lastMode) {
+        lastMode = mode;
+        if (mode !== "wide") {
+          setLeftVisible(false);
+          setRightVisible(false);
+        } else {
+          setLeftVisible(true);
+          setRightVisible(true);
+        }
       }
       setNaviOpen(mode !== "tiny");
+      setLeftWidth((w) =>
+        Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, w)),
+      );
+      if (!userResizedRight) {
+        setRightWidth(defaultRightPanelWidth());
+      } else {
+        setRightWidth((w) =>
+          Math.max(rightPanelMinWidth(), Math.min(rightPanelMaxWidth(), w)),
+        );
+      }
     };
     updateLayout();
     window.addEventListener("resize", updateLayout);

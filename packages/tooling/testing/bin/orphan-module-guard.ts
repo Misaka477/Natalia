@@ -30,6 +30,17 @@ import { join, relative } from "node:path";
 // Injectable so the guard's own test can drive it against a synthetic tree;
 // the default is the working directory a CI run invokes it from.
 const root = process.env.ORPHAN_GUARD_ROOT ?? process.cwd();
+/**
+ * Whether this run is scanning the repository itself.
+ *
+ * ALLOWED is a list of REPOSITORY paths with repository-specific reasons, so a
+ * scan of some other tree (the guard's own test builds one in a temp
+ * directory) cannot judge it: every entry would look "stale" there simply
+ * because a synthetic tree does not contain `packages/…`. The stale sweep is
+ * therefore scoped to the real repository, which is the only place the list
+ * means anything — and the gate that enforces it is the one CI runs.
+ */
+const scanningRepository = root === process.cwd();
 const sourceRoots = ["packages", "apps"];
 const skipDirs = new Set([
   "node_modules",
@@ -81,8 +92,6 @@ const ALLOWED: Readonly<Record<string, string>> = {
   // open question this entry keeps visible.
   "packages/tooling/testing/src/eval-adapter.ts":
     "called by the external benchmark harness, which lives outside this repo; the rpc route's `joined:false` fallback is the contract's designed answer, not a gap",
-  "packages/plugins/tools/todo/src/ui/todo-panel.tsx":
-    "standalone TodoPanel component kept alongside TodoDock (the input.dock entry) and tested by todo-ui.test.ts",
 };
 
 async function* sourceFiles(dir: string): AsyncGenerator<string> {
@@ -213,10 +222,12 @@ for (const base of sourceRoots) {
 }
 
 // A stale entry is a module that is no longer on disk, or that HAS gained a
-// caller (and is therefore never visited by the orphan branch above).
-for (const [rel, reason] of Object.entries(ALLOWED))
-  if (!allowedStillPresent.has(rel) && !existsSync(join(root, rel)))
-    failures.push(`${rel}: ALLOWED entry is stale (${reason}) — remove it`);
+// caller (and is therefore never visited by the orphan branch above). Only the
+// repository scan can answer that: see `scanningRepository`.
+if (scanningRepository)
+  for (const [rel, reason] of Object.entries(ALLOWED))
+    if (!allowedStillPresent.has(rel) && !existsSync(join(root, rel)))
+      failures.push(`${rel}: ALLOWED entry is stale (${reason}) — remove it`);
 
 if (failures.length) {
   console.error(`orphan-module guard: ${failures.length} finding(s)`);

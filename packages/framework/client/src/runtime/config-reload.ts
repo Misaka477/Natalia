@@ -161,10 +161,19 @@ export function createConfigReload(
         : "runtime config reloaded; provider unchanged",
     });
     // ADR Phase C: a config reload is a prompt-level instruction change.
-    // Record it as a durable `context.instructions` notice per session so the
-    // interleaved context stream shows it — appended with a higher revision,
-    // never mutating earlier messages (D3/D6).
-    const activeExec = ctx.ports.getActiveExec();
+    // Record it as a durable `context.instructions` notice so the interleaved
+    // context stream shows it — appended with a higher revision, never
+    // mutating earlier messages (D3/D6).
+    //
+    // The ACTIVE session only. A reload is a decision the human just made in
+    // the window they are looking at, and broadcasting it to every attached
+    // session stacked identical notices into transcripts nobody had open (the
+    // system-bubble pile-up reported from a long-running workspace).
+    //
+    // `getActiveExec` is read through an optional call because a ports object
+    // in a unit test need not carry it; the fallback keeps the notice rather
+    // than dropping it.
+    const activeExec = ctx.ports.getActiveExec?.();
     const targetExecs = activeExec
       ? [activeExec]
       : [...ctx.ports.getExecutionBySession().values()];

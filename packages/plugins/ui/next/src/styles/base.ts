@@ -238,6 +238,7 @@ body { background: var(--neu-bg); color: var(--neu-text); font-size: 14px; }
   box-shadow: var(--neu-elevation-3);
   padding: 14px;
   overflow: hidden;
+  contain: layout paint;
 }
 .neu-pane-header {
   display: flex;

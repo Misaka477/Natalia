@@ -23,22 +23,47 @@ function cleanPreviewText(raw: string, maxChars = 180): string {
   return `${compact.slice(0, maxChars)}…`;
 }
 
-export function deriveTurnRailEntries(messages: Message[]): TurnRailEntry[] {
+const NOISE_SYSTEM_PREFIXES = [
+  "(internal",
+  "shell_switch:",
+  "config_reload:",
+  "sandbox_rung:",
+  "cancelled:",
+];
+
+function isSubagentTriggerRow(msg: Message, text: string): boolean {
+  if (msg.role === "user") return true;
+  if (msg.role !== "system") return false;
+  if (NOISE_SYSTEM_PREFIXES.some((prefix) => text.startsWith(prefix)))
+    return false;
+  return true;
+}
+
+export function deriveTurnRailEntries(
+  messages: Message[],
+  includeSystemTurns = false,
+): TurnRailEntry[] {
   const out: TurnRailEntry[] = [];
   let turnCounter = 0;
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]!;
-    if (msg.role !== "user") continue;
     const rawPrompt = readMessageText(msg).trim();
     if (!rawPrompt || rawPrompt.startsWith("(internal")) continue;
+    const isTrigger = includeSystemTurns
+      ? isSubagentTriggerRow(msg, rawPrompt)
+      : msg.role === "user";
+    if (!isTrigger) continue;
     turnCounter += 1;
     let responseText = "";
     for (let j = i + 1; j < messages.length; j++) {
       const next = messages[j]!;
-      if (next.role === "user") break;
-      if (next.role === "assistant" && !next.thinking) {
-        const text = readMessageText(next).trim();
-        if (text) responseText = text;
+      const nextText = readMessageText(next).trim();
+      const nextIsTrigger = includeSystemTurns
+        ? isSubagentTriggerRow(next, nextText)
+        : next.role === "user";
+      if (nextIsTrigger) break;
+      if (next.role === "assistant" && !next.thinking && nextText) {
+        responseText = nextText;
       }
     }
     out.push({
@@ -56,18 +81,24 @@ export interface TurnNavigatorProps {
   messages: () => Message[];
   getApi: () => TranscriptHandle | undefined;
   activeMessageID?: () => string | undefined;
+  /** When true (Subagent/Team pane), also treat Natalia->Subagent task/system dispatches as turn triggers. */
+  includeSystemTurns?: boolean;
   t: (key: string, params?: Record<string, unknown>) => string;
 }
 
 const TURN_SPACING_PX = 10;
 
 export function TurnNavigator(props: TurnNavigatorProps) {
-  const entries = createMemo(() => deriveTurnRailEntries(props.messages()));
+  const entries = createMemo(() =>
+    deriveTurnRailEntries(props.messages(), props.includeSystemTurns),
+  );
   const [hoveredTurn, setHoveredTurn] = createSignal<number | null>(null);
   const [activeTurn, setActiveTurn] = createSignal<number | null>(null);
+  const [scrollTop, setScrollTop] = createSignal(0);
+  const [viewHeight, setViewHeight] = createSignal(0);
   let scrollerRef: HTMLDivElement | undefined;
+  let pointerInside = false;
 
-  // Keep activeTurn synced when activeMessageID or entry count updates
   createEffect(() => {
     const list = entries();
     if (list.length === 0) {
@@ -76,7 +107,6 @@ export function TurnNavigator(props: TurnNavigatorProps) {
     }
     const activeID = props.activeMessageID?.();
     if (activeID) {
-      // Find the latest user turn at or before activeID
       const allMsgs = props.messages();
       const activeIdx = allMsgs.findIndex((m) => m.id === activeID);
       if (activeIdx >= 0) {
@@ -89,8 +119,22 @@ export function TurnNavigator(props: TurnNavigatorProps) {
         return;
       }
     }
-    if (activeTurn() === null || activeTurn()! > list.length) {
-      setActiveTurn(list.at(-1)?.turn ?? null);
+    setActiveTurn(list.at(-1)?.turn ?? null);
+  });
+
+  // Auto-scroll the rail to keep the active mark visible when pointer is outside
+  createEffect(() => {
+    const current = activeTurn();
+    if (current === null || pointerInside || !scrollerRef) return;
+    const idx = entries().findIndex((item) => item.turn === current);
+    if (idx < 0) return;
+    const height = scrollerRef.clientHeight;
+    if (height <= 0) return;
+    const center = idx * TURN_SPACING_PX + 10;
+    const currentTop = scrollerRef.scrollTop;
+    if (center < currentTop + 24 || center > currentTop + height - 24) {
+      scrollerRef.scrollTop = Math.max(0, center - height / 2);
+      setScrollTop(scrollerRef.scrollTop);
     }
   });
 
@@ -105,9 +149,13 @@ export function TurnNavigator(props: TurnNavigatorProps) {
     if (tNum === null) return 0;
     const idx = entries().findIndex((item) => item.turn === tNum);
     if (idx < 0) return 0;
-    const scrollTop = scrollerRef?.scrollTop ?? 0;
-    return idx * TURN_SPACING_PX + 10 - scrollTop;
+    return idx * TURN_SPACING_PX + 10 - scrollTop();
   });
+
+  const totalHeight = () => entries().length * TURN_SPACING_PX + 12;
+  const fadeTop = () => scrollTop() > 1;
+  const fadeBottom = () =>
+    viewHeight() > 0 && scrollTop() < totalHeight() - viewHeight() - 1;
 
   const handleJump = (entry: TurnRailEntry) => {
     setActiveTurn(entry.turn);
@@ -123,13 +171,36 @@ export function TurnNavigator(props: TurnNavigatorProps) {
       <nav
         class={styles.frame}
         aria-label={props.t("turnNav.label")}
-        onPointerLeave={() => setHoveredTurn(null)}
+        onPointerEnter={() => {
+          pointerInside = true;
+          if (scrollerRef) {
+            setViewHeight(scrollerRef.clientHeight);
+            setScrollTop(scrollerRef.scrollTop);
+          }
+        }}
+        onPointerLeave={() => {
+          pointerInside = false;
+          setHoveredTurn(null);
+        }}
       >
-        <div ref={scrollerRef} class={styles.scroller}>
+        <div
+          ref={(el) => {
+            scrollerRef = el;
+            queueMicrotask(() => {
+              setViewHeight(el.clientHeight);
+              setScrollTop(el.scrollTop);
+            });
+          }}
+          class={`${styles.scroller} ${fadeTop() ? styles.fadeTop : ""} ${fadeBottom() ? styles.fadeBottom : ""}`}
+          onScroll={(e) => {
+            setScrollTop(e.currentTarget.scrollTop);
+            setViewHeight(e.currentTarget.clientHeight);
+          }}
+        >
           <div
             class={styles.marks}
             style={{
-              height: `${entries().length * TURN_SPACING_PX + 12}px`,
+              height: `${totalHeight()}px`,
             }}
           >
             <For each={entries()}>

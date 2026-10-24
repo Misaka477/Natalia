@@ -29,7 +29,7 @@ import type { Message } from "./types";
 import { stableRows, type RowSignature } from "./stable-rows";
 import { SessionUsageBar } from "./components/SessionUsageBar";
 import { TurnNavigator } from "./components/TurnNavigator";
-import { readTranscriptAnchor } from "./controllers/scroll-memory";
+import { readVisibleTurnMessageID } from "./controllers/scroll-memory";
 
 function subagentToolCallsFromText(
   text: string,
@@ -376,6 +376,9 @@ export function AgentPanel(props: {
 
   let subTranscriptApi: TranscriptHandle | undefined;
   const [subShowJumpToBottom, setSubShowJumpToBottom] = createSignal(false);
+  const [subActiveMessageID, setSubActiveMessageID] = createSignal<
+    string | undefined
+  >(undefined);
   const renderedSubagentMessages = createMemo<Message[]>(() =>
     subagentMessages(),
   );
@@ -647,6 +650,12 @@ export function AgentPanel(props: {
                         onFollowChange={(following) =>
                           setSubShowJumpToBottom(!following)
                         }
+                        onScroll={(event) => {
+                          const visibleID = readVisibleTurnMessageID(
+                            event.currentTarget as HTMLElement | undefined,
+                          );
+                          if (visibleID) setSubActiveMessageID(visibleID);
+                        }}
                         onNearTop={() => void loadOlderSubagentHistory()}
                         hasOlder={subagentPaging().hasOlder}
                         historyLoading={!subagentPaging().initialized}
@@ -655,6 +664,8 @@ export function AgentPanel(props: {
                       <TurnNavigator
                         messages={renderedSubagentMessages}
                         getApi={() => subTranscriptApi}
+                        activeMessageID={subActiveMessageID}
+                        includeSystemTurns={true}
                         t={props.t}
                       />
                       <SessionUsageBar

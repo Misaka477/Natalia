@@ -390,7 +390,7 @@ export function Transcript(props: TranscriptProps) {
       const el = scrollEl();
       const align = options?.align ?? "auto";
       const behavior = options?.behavior ?? "auto";
-      const alignDomRow = () => {
+      const alignDomRow = (scrollBehavior: ScrollBehavior) => {
         const row = el?.querySelector<HTMLElement>(
           `[data-message-id="${CSS.escape(props.messages[target]?.id ?? "")}"]`,
         );
@@ -398,24 +398,25 @@ export function Transcript(props: TranscriptProps) {
         const containerRect = el.getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
         let nextTop = el.scrollTop + (rowRect.top - containerRect.top);
-        if (align === "center") {
+        if (align === "start") {
+          nextTop -= 20;
+        } else if (align === "center") {
           nextTop -= (containerRect.height - rowRect.height) / 2;
         } else if (align === "end") {
           nextTop -= containerRect.height - rowRect.height;
         }
-        el.scrollTo({ top: Math.max(0, nextTop), behavior });
+        el.scrollTo({ top: Math.max(0, nextTop), behavior: scrollBehavior });
         return true;
       };
+      if (alignDomRow(behavior)) return;
       if (el && virtualize() && liveVirtualItems().length > 0) {
-        virtualizer.scrollToIndex(target, { align, behavior });
+        virtualizer.scrollToIndex(target, { align, behavior: "auto" });
         if (typeof requestAnimationFrame === "function") {
           requestAnimationFrame(() => {
-            alignDomRow();
+            alignDomRow("auto");
           });
         }
-        return;
       }
-      alignDomRow();
     },
     distanceThreshold: BOTTOM_FOLLOW_THRESHOLD_PX,
     nearTopThreshold: 80,

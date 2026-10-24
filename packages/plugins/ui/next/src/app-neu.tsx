@@ -1052,15 +1052,30 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
   const [draftWorkspaceID, setDraftWorkspaceID] = createSignal<
     string | undefined
   >(undefined);
+  const [heroDraftMode, setHeroDraftMode] = createSignal(false);
 
-  function clearSelectedSession() {
+  function clearSelectedSession(targetWorkspaceID?: string) {
     userSelectedSession = true;
+    setHeroDraftMode(true);
     setSelectedSessionID("");
     setSelectedSession("");
-    props.ctx.projection.hydrateMessages?.([], "newer", { replace: true });
-    props.ctx.projection.hydrateNaviMessages?.([], { replace: true });
-    props.ctx.projection.hydrateNiaMessages?.([], { replace: true });
-    setState(cloneState(props.ctx.projection.getState()));
+    mainPager.reset();
+    naviPager.reset();
+    niaPager.reset();
+    props.ctx.projection.activateSession?.(
+      "__hero_draft__",
+      targetWorkspaceID ?? draftWorkspaceID() ?? state().activeWorkspaceID,
+    );
+    const fresh = cloneState(props.ctx.projection.getState());
+    fresh.sessionID = undefined;
+    fresh.messages = [];
+    fresh.natalia.messages = [];
+    fresh.navi.messages = [];
+    fresh.nia.messages = [];
+    fresh.activeTurn = undefined;
+    fresh.natalia.activeTurn = undefined;
+    fresh.pendingInputs = [];
+    setState(fresh);
   }
 
   /**
@@ -1077,7 +1092,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       draftWorkspaceID() ?? state().activeWorkspaceID,
     );
     setDraftWorkspaceID(targetWorkspaceID);
-    clearSelectedSession();
+    clearSelectedSession(targetWorkspaceID);
     if (targetWorkspaceID && props.ctx.runtime.workspaceActivate) {
       await props.ctx.runtime
         .workspaceActivate(targetWorkspaceID)
@@ -1127,13 +1142,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       )?.sessionID;
     if (nextSessionID) {
       userSelectedSession = true;
+      setHeroDraftMode(false);
       setSelectedSessionID(nextSessionID);
       setSelectedSession(t("shell.newSessionName"));
       props.ctx.projection.activateSession?.(nextSessionID, targetWorkspaceID);
-      props.ctx.projection.hydrateMessages?.([], "newer", { replace: true });
-      props.ctx.projection.hydrateNaviMessages?.([], { replace: true });
-      props.ctx.projection.hydrateNiaMessages?.([], { replace: true });
-      setState(cloneState(props.ctx.projection.getState()));
+      const fresh = cloneState(props.ctx.projection.getState());
+      fresh.messages = [];
+      fresh.natalia.messages = [];
+      fresh.navi.messages = [];
+      fresh.nia.messages = [];
+      setState(fresh);
       await props.ctx.runtime.sessionAttach?.(nextSessionID);
     }
     await refreshWorkspaces();
@@ -1731,11 +1749,16 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       sessionList().find((session) => session.id === sessionID)?.workspaceID ??
       state().activeWorkspaceID;
     const hydrateRecentMessagesOnLoad = async () => {
-      const sessionID = selectedSessionID() || state().sessionID;
+      if (heroDraftMode() && !selectedSessionID()) return;
+      const sessionID =
+        selectedSessionID() ||
+        (heroDraftMode() ? undefined : state().sessionID);
       if (!sessionID) {
         // Startup may not have selected/restored the session yet. Retry until
         // runtime publishes the active session rather than hydrating empty data.
-        setTimeout(() => void hydrateRecentMessagesOnLoad(), 100);
+        if (!heroDraftMode()) {
+          setTimeout(() => void hydrateRecentMessagesOnLoad(), 100);
+        }
         return;
       }
       if (
@@ -1903,6 +1926,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     const onSessionAttached = (event: Event) => {
       const sessionID = (event as CustomEvent<{ sessionID?: string }>).detail
         ?.sessionID;
+      if (heroDraftMode() && !selectedSessionID()) return;
       if (sessionID)
         props.ctx.projection.activateSession?.(
           sessionID,
@@ -3384,6 +3408,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       bulkDeleteSelected={bulkDeleteSelected}
       markUserSelectedSession={() => {
         userSelectedSession = true;
+        setHeroDraftMode(false);
       }}
       liveStatuses={liveSessionStatuses}
       unreadCompleted={unreadCompletedSessions}

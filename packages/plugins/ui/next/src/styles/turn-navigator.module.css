@@ -22,6 +22,29 @@
   display: none;
 }
 
+.fadeTop {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 100%);
+}
+
+.fadeBottom {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+}
+
+.fadeTop.fadeBottom {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 20px,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+}
+
 .marks {
   position: relative;
   width: 100%;
@@ -83,9 +106,9 @@
 .preview {
   position: absolute;
   top: clamp(
-    0px,
-    calc(var(--turn-preview-center, 40px) - var(--turn-preview-height) / 2),
-    calc(100% - var(--turn-preview-height))
+    -12px,
+    calc(var(--turn-preview-center, 20px) - 26px),
+    calc(100% - 36px)
   );
   right: calc(100% + 10px);
   box-sizing: border-box;

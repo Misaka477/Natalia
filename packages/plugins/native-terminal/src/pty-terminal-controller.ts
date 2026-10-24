@@ -1437,7 +1437,15 @@ export function createPtyTerminalController(
       throw new Error(
         "secure input must end before returning control to model",
       );
+    if (session.settleTimer) {
+      clearTimeout(session.settleTimer);
+      session.settleTimer = undefined;
+    }
     setInputOwner(session, "model", "human", "release");
+    // Reset lastModelWriteAt on handoff back to model so background shell output
+    // left over from human use cannot fire a frame-settle wake until the model
+    // itself writes to this pane again.
+    session.lastModelWriteAt = undefined;
     publishAudit(session, "detach", "human");
     return publicSession(session);
   }

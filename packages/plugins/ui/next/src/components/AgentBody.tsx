@@ -24,7 +24,7 @@ import type { WorkspaceSummary } from "@anthelia/contracts";
 import { SlotMount } from "../slots/mount";
 import type { SlotsRegistry } from "../slots/registry";
 import { TurnNavigator } from "./TurnNavigator";
-import { readTranscriptAnchor } from "../controllers/scroll-memory";
+import { readVisibleTurnMessageID } from "../controllers/scroll-memory";
 import styles from "../styles/transcript.module.css";
 
 export interface AgentBodyProps {
@@ -121,11 +121,10 @@ export function AgentBody(props: AgentBodyProps) {
             }}
             onFollowChange={props.onFollowChange}
             onScroll={(event) => {
-              const anchor = readTranscriptAnchor(
+              const visibleID = readVisibleTurnMessageID(
                 event.currentTarget as HTMLElement | undefined,
-                localApi?.isFollowing() ?? true,
               );
-              if (anchor) setActiveMessageID(anchor.messageID);
+              if (visibleID) setActiveMessageID(visibleID);
               props.onScroll?.(event);
             }}
             onNearTop={props.onNearTop}

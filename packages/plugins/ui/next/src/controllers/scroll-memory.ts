@@ -107,3 +107,32 @@ export function anchorIndexFor(
   if (!anchor) return -1;
   return messageIDs.indexOf(anchor.messageID);
 }
+
+/**
+ * Read the message id at the viewport's reading line (`top + min(96, height * 0.2)`),
+ * used by TurnNavigator to highlight the turn currently being read.
+ */
+export function readVisibleTurnMessageID(
+  container: HTMLElement | undefined,
+): string | undefined {
+  if (!container) return undefined;
+  const rows = container.querySelectorAll<HTMLElement>("[data-message-id]");
+  if (rows.length === 0) return undefined;
+  const rect = container.getBoundingClientRect();
+  if (
+    container.scrollHeight - container.clientHeight - container.scrollTop <=
+    16
+  ) {
+    return rows[rows.length - 1]?.dataset.messageId;
+  }
+  const readingLine = rect.top + Math.min(96, rect.height * 0.2);
+  let chosen = rows[0]!;
+  for (const row of rows) {
+    if (row.getBoundingClientRect().top <= readingLine) {
+      chosen = row;
+    } else {
+      break;
+    }
+  }
+  return chosen.dataset.messageId;
+}

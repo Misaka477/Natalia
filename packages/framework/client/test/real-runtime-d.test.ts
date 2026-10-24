@@ -2514,6 +2514,42 @@ test("terminal_request_human reports the bounded reason", async () => {
   }
 }, 30_000);
 
+/**
+ * What the native-terminal tools answered, one entry per call, for the two
+ * TERM-M.3 (c) tests below.
+ *
+ * Both of them rest on a premise the runtime has to earn: the model started a
+ * real pty pane through the tool, so the pane exists when `request_human` names
+ * it. When that premise breaks, the turn settles `done` instead of
+ * `waiting_human`, and an assertion on `stopReason` alone reports "expected
+ * waiting_human, got done" — which says nothing about WHY, and the full suite
+ * produced exactly that twice (1 then 2 of these tests, 0 in isolation and 0
+ * with the whole client layer) before this helper existed. Naming the settled
+ * calls turns the same failure into the tool, its status and its own message.
+ */
+function terminalCallOutcomes(events: RuntimeEvent[]): string[] {
+  const settled = new Map<string, string>();
+  for (const event of events) {
+    if (event.type !== "tool.update") continue;
+    const record = event as unknown as {
+      callID?: string;
+      name?: string;
+      status?: string;
+      summary?: string;
+    };
+    if (!record.callID || !record.name?.startsWith("interactive_terminal_"))
+      continue;
+    if (record.status !== "succeeded" && record.status !== "failed") continue;
+    settled.set(
+      record.callID,
+      record.status === "succeeded"
+        ? `${record.name}:succeeded`
+        : `${record.name}:failed (${record.summary ?? "no message"})`,
+    );
+  }
+  return [...settled.values()];
+}
+
 test("request_human endTurn settles as waiting_human and resumes automatically after release", async () => {
   const root = await mkdtemp(join(tmpdir(), "natalia-continue-turn-"));
   let streamCalls = 0;
@@ -2589,6 +2625,12 @@ test("request_human endTurn settles as waiting_human and resumes automatically a
   });
   try {
     await client.submitAndWait!("ask the human");
+    // The premise first, so a pane that never started reports itself here
+    // instead of arriving as an unexplained `done` below.
+    expect(terminalCallOutcomes(events)).toEqual([
+      "interactive_terminal_start:succeeded",
+      "interactive_terminal_request_human:succeeded",
+    ]);
     const finished = events.filter((event) => event.type === "turn.finished");
     expect(finished.at(-1)).toMatchObject({
       stopReason: "waiting_human",
@@ -2741,6 +2783,14 @@ test("releasing a pane that is not the pending one does not resume or clear stat
   });
   try {
     await client.submitAndWait!("ask");
+    // Same premise as above: both panes and the request have to have gone
+    // through, or the pending-human state asserted below is not the thing this
+    // test is about.
+    expect(terminalCallOutcomes(events)).toEqual([
+      "interactive_terminal_start:succeeded",
+      "interactive_terminal_start:succeeded",
+      "interactive_terminal_request_human:succeeded",
+    ]);
     expect(
       events.filter((event) => event.type === "turn.finished").at(-1)
         ?.stopReason,

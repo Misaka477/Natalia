@@ -67,6 +67,7 @@ import { CommandRegistry } from "./commands/registry";
 import { CommandPalette } from "./controllers/command-palette";
 import { SlotMount } from "./slots/mount";
 import { transcriptRefs } from "./transcript-refs";
+import { transcriptScrollMemory } from "./transcript-scroll-memory";
 import { Composer, type ComposerAttachment } from "./components/Composer";
 import { PendingTakeover } from "./components/PendingTakeover";
 import { QueueDock } from "./components/QueueDock";
@@ -1670,13 +1671,22 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     // requests are not re-opened because their response events clear them
     // from the view-store pending state during replay.
     const resetProjectionForSessionSwitch = () => {
-      historyReplayDone = false;
-      setTranscriptHistoryLoading(true);
+      const targetID = selectedSessionID();
+      if (targetID) {
+        props.ctx.projection.activateSession?.(
+          targetID,
+          workspaceIDForSession(targetID),
+        );
+      }
+      const cached = props.ctx.projection.getState();
+      const hasCached = cached.natalia.messages.length > 0;
+      historyReplayDone = hasCached;
+      setTranscriptHistoryLoading(!hasCached);
       lastHydratedSessionID = undefined;
       // A stale in-flight load must not block the same session from being
       // retried after the reset.
       hydratingSessionID = undefined;
-      mainPager.reset();
+      if (!hasCached) mainPager.reset();
       toolOutputCache.clear();
       setShowJumpToBottom(false);
       setChatShowJumpToBottom(false);
@@ -1692,7 +1702,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       setTurnElapsedMs(
         nextStart !== undefined ? Math.max(0, Date.now() - nextStart) : 0,
       );
-      const projected = cloneState(props.ctx.projection.getState());
+      const projected = cloneState(cached);
       setState(projected);
     };
     const unsubscribePanels = props.ctx.host?.subscribePanels(() => {
@@ -2009,10 +2019,19 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         }
         logStartupSummary();
         void loadSecondaryStartupData();
-        // One explicit initial tail alignment. Later measurement/data
-        // changes are owned by the shared Transcript controller.
-        scrollMainTranscriptToBottom();
-        scrollChatTranscriptToBottom();
+        // Only align to the bottom when the user has not already scrolled up or
+        // jumped to an earlier turn in this session.
+        const savedAnchor = transcriptScrollMemory.recall(
+          selectedSessionID() || projected.sessionID || "",
+        );
+        if (!savedAnchor || savedAnchor.following) {
+          if (transcriptRefs.main?.isFollowing() !== false) {
+            scrollMainTranscriptToBottom();
+          }
+        }
+        if (transcriptRefs.chat?.isFollowing() !== false) {
+          scrollChatTranscriptToBottom();
+        }
         perfLog(
           `[perf] openUnresolvedInteractives done +${(performance.now() - openStart).toFixed(1)}ms`,
         );

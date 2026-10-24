@@ -374,6 +374,9 @@ export function Transcript(props: TranscriptProps) {
     return last ? Math.max(0, totalSize() - last.end) : 0;
   };
 
+  let smoothJumpSettleTimer: ReturnType<typeof setTimeout> | undefined;
+  let smoothJumpRetryRaf: number | undefined;
+
   controller = new TailScrollController({
     getScrollElement: () => scrollEl(),
     scrollToEnd: (options) => {
@@ -388,13 +391,25 @@ export function Transcript(props: TranscriptProps) {
       if (props.messages.length === 0) return;
       const target = Math.max(0, Math.min(index, props.messages.length - 1));
       const el = scrollEl();
+      if (!el) return;
       const align = options?.align ?? "auto";
       const behavior = options?.behavior ?? "auto";
+      const targetID = props.messages[target]?.id ?? "";
+
+      if (smoothJumpSettleTimer) {
+        clearTimeout(smoothJumpSettleTimer);
+        smoothJumpSettleTimer = undefined;
+      }
+      if (smoothJumpRetryRaf !== undefined) {
+        cancelAnimationFrame(smoothJumpRetryRaf);
+        smoothJumpRetryRaf = undefined;
+      }
+
       const alignDomRow = (scrollBehavior: ScrollBehavior) => {
-        const row = el?.querySelector<HTMLElement>(
-          `[data-message-id="${CSS.escape(props.messages[target]?.id ?? "")}"]`,
+        const row = el.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(targetID)}"]`,
         );
-        if (!el || !row) return false;
+        if (!row) return false;
         const containerRect = el.getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
         let nextTop = el.scrollTop + (rowRect.top - containerRect.top);
@@ -405,17 +420,69 @@ export function Transcript(props: TranscriptProps) {
         } else if (align === "end") {
           nextTop -= containerRect.height - rowRect.height;
         }
-        el.scrollTo({ top: Math.max(0, nextTop), behavior: scrollBehavior });
+        const clampedTop = Math.max(
+          0,
+          Math.min(el.scrollHeight - el.clientHeight, nextTop),
+        );
+        if (scrollBehavior === "smooth") {
+          el.scrollTo({ top: clampedTop, behavior: "smooth" });
+          smoothJumpSettleTimer = setTimeout(() => {
+            smoothJumpSettleTimer = undefined;
+            alignDomRow("auto");
+          }, 360);
+        } else {
+          el.scrollTop = clampedTop;
+        }
         return true;
       };
+
       if (alignDomRow(behavior)) return;
-      if (el && virtualize() && liveVirtualItems().length > 0) {
+
+      if (virtualize() && liveVirtualItems().length > 0) {
+        const currentTop = el.scrollTop;
         virtualizer.scrollToIndex(target, { align, behavior: "auto" });
-        if (typeof requestAnimationFrame === "function") {
-          requestAnimationFrame(() => {
+        const landedTop = el.scrollTop;
+        let attempts = 0;
+        const waitAndGlide = () => {
+          const row = el.querySelector<HTMLElement>(
+            `[data-message-id="${CSS.escape(targetID)}"]`,
+          );
+          if (!row && attempts < 4) {
+            attempts += 1;
+            smoothJumpRetryRaf = requestAnimationFrame(waitAndGlide);
+            return;
+          }
+          smoothJumpRetryRaf = undefined;
+          if (!row) return;
+          if (behavior === "smooth") {
+            const containerRect = el.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            let exactTop = el.scrollTop + (rowRect.top - containerRect.top);
+            if (align === "start") exactTop -= 20;
+            const clampedExact = Math.max(
+              0,
+              Math.min(el.scrollHeight - el.clientHeight, exactTop),
+            );
+            const startOffset =
+              clampedExact > currentTop
+                ? Math.max(currentTop, clampedExact - 380)
+                : Math.min(currentTop, clampedExact + 380);
+            if (Math.abs(clampedExact - startOffset) > 12) {
+              el.scrollTop = startOffset;
+              el.scrollTo({ top: clampedExact, behavior: "smooth" });
+              smoothJumpSettleTimer = setTimeout(() => {
+                smoothJumpSettleTimer = undefined;
+                alignDomRow("auto");
+              }, 360);
+            } else {
+              el.scrollTop = clampedExact;
+            }
+          } else {
+            void landedTop;
             alignDomRow("auto");
-          });
-        }
+          }
+        };
+        smoothJumpRetryRaf = requestAnimationFrame(waitAndGlide);
       }
     },
     distanceThreshold: BOTTOM_FOLLOW_THRESHOLD_PX,
@@ -838,7 +905,6 @@ export function Transcript(props: TranscriptProps) {
                 <MessageGroup
                   message={message}
                   virtualIndex={windowedIndex(virtualItems(), position())}
-                  rowRef={(el) => virtualizer.measureElement(el)}
                   assistantName={props.assistantName}
                   assistantInitial={props.assistantInitial}
                   loadAttachmentUrl={props.loadAttachmentUrl}

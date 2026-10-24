@@ -1487,7 +1487,8 @@ export function SessionTreeRegion(props: SessionSidebarProps) {
                 props.onClearUnreadCompleted?.(id);
                 props.setSelectedSessionID(id);
                 props.setSelectedSession(name);
-                // Instant switch from cached projection state without waiting for RPC round-trip!
+                // Instant switch from cached projection state before sessionAttach
+                // dispatches natalia:session-switch-reset!
                 const wsID = props
                   .allSessions?.()
                   .find((s) => s.id === id)?.workspaceID;

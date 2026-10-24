@@ -878,6 +878,21 @@ export const zh = {
   "panel.skills-settings": "Skills",
   "panelGroup.扩展": "扩展",
   "panelGroup.Extensions": "扩展",
+  // turn navigator & background jobs
+  "turnNav.label": "对话提示词导航",
+  "turnNav.jumpToTurn": "跳转到第 {turn} 轮",
+  "turnNav.turnFallback": "第 {turn} 轮",
+  "jobs.triggerCount": "{count} 个后台任务",
+  "jobs.title": "后台任务列表",
+  "jobs.runningSection": "正在运行",
+  "jobs.openTerminal": "在终端面板打开",
+  "jobs.stop": "停止此任务",
+  "jobs.confirmStop": "再次点击确认终止",
+  "jobs.confirmStopShort": "确认",
+  "jobs.clearSettled": "清理已结束项",
+  "jobs.durationHours": "{hours}小时{minutes}分",
+  "jobs.durationMinutes": "{minutes}分{seconds}秒",
+  "jobs.durationSeconds": "{seconds}秒",
 } satisfies Record<string, string>;
 
 /** The shell's common key set. */

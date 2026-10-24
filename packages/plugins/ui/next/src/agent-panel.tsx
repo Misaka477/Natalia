@@ -28,6 +28,8 @@ import {
 import type { Message } from "./types";
 import { stableRows, type RowSignature } from "./stable-rows";
 import { SessionUsageBar } from "./components/SessionUsageBar";
+import { TurnNavigator } from "./components/TurnNavigator";
+import { readTranscriptAnchor } from "./controllers/scroll-memory";
 
 function subagentToolCallsFromText(
   text: string,
@@ -649,6 +651,11 @@ export function AgentPanel(props: {
                         hasOlder={subagentPaging().hasOlder}
                         historyLoading={!subagentPaging().initialized}
                         olderHistoryLoading={subagentPaging().loadingOlder}
+                      />
+                      <TurnNavigator
+                        messages={renderedSubagentMessages}
+                        getApi={() => subTranscriptApi}
+                        t={props.t}
                       />
                       <SessionUsageBar
                         t={props.t}

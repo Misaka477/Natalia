@@ -1,0 +1,239 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 2px 8px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 999px;
+  background: var(--neu-bg-light);
+  color: var(--neu-muted);
+  font-size: 11.5px;
+  line-height: 16px;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.trigger:hover,
+.trigger[data-open="true"] {
+  color: var(--neu-text);
+  border-color: var(--neu-accent);
+}
+
+.triggerChevron {
+  transition: transform 140ms ease;
+}
+
+.trigger[data-open="true"] .triggerChevron {
+  transform: rotate(180deg);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--neu-success);
+}
+
+.dot[data-status="running"] {
+  background: var(--neu-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neu-accent) 26%, transparent);
+  animation: neu-pulse 1.5s ease-in-out infinite;
+}
+
+.dot[data-status="failed"] {
+  background: var(--neu-error);
+}
+
+.dot[data-status="stopped"] {
+  background: var(--neu-warning);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 120;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(400px, calc(100vh - 140px));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 12px;
+  background: var(--neu-bg-light);
+  box-shadow: var(--neu-elevation-5);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+}
+
+.rowLine {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+
+.rowLine[data-live="true"] {
+  background: color-mix(in srgb, var(--neu-accent) 7%, var(--neu-bg));
+}
+
+.rowLine:hover {
+  background: var(--neu-bg);
+}
+
+.rowBtn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--neu-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kindBadge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--neu-text);
+  font-family: var(--neu-font-mono);
+  font-size: 11.5px;
+}
+
+.detail {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--neu-muted);
+}
+
+.duration {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--neu-muted);
+}
+
+.iconAction,
+.stopBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--neu-hairline);
+  border-radius: 5px;
+  background: var(--neu-bg);
+  color: var(--neu-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.iconAction:hover {
+  color: var(--neu-accent);
+  border-color: var(--neu-accent);
+}
+
+.stopBtn:hover,
+.stopBtn[data-armed="true"] {
+  color: var(--neu-error);
+  border-color: var(--neu-error);
+}
+
+.outputPanel {
+  margin: 2px 4px 4px;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--neu-bg);
+  border: 1px solid var(--neu-hairline);
+}
+
+.outputPre {
+  margin: 0;
+  font-family: var(--neu-font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--neu-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.footerBar {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  margin-top: 2px;
+  border-top: 1px solid var(--neu-hairline);
+}
+
+.clearBtn {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neu-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.clearBtn:hover {
+  color: var(--neu-text);
+  background: var(--neu-bg);
+}

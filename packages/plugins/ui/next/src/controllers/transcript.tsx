@@ -25,6 +25,7 @@ import { QueueDock } from "../components/QueueDock";
 import { SlotMount } from "../slots/mount";
 import { MainInputArea, ChatInputArea } from "./input-area";
 import { AgentBody } from "../components/AgentBody";
+import { BackgroundJobsPopover } from "../components/BackgroundJobsPopover";
 import { SessionUsageBar } from "../components/SessionUsageBar";
 import { NiaPanel } from "../nia-panel";
 import { AgentPanel } from "../agent-panel";
@@ -333,7 +334,7 @@ export function MainPanes(props: MainPanesProps) {
     const sessionID = selectedSessionID();
     restoredSessionID = sessionID;
     const anchor = transcriptScrollMemory.recall(sessionID);
-    if (anchor?.following) {
+    if (!anchor || anchor.following) {
       transcriptRefs.main?.scrollToBottom();
       return;
     }
@@ -437,6 +438,16 @@ export function MainPanes(props: MainPanesProps) {
               </For>
             </div>
             <span class={styles.headerRight}>
+              <BackgroundJobsPopover
+                state={state}
+                runtime={props.ctx.runtime}
+                sessionID={() => selectedSessionID() || state().sessionID}
+                onOpenTerminal={(terminalID) =>
+                  props.onOpenTerminal(terminalID)
+                }
+                onSelectSubagent={() => setFocusAgent("team")}
+                t={t}
+              />
               <Show
                 when={focusAgent() === "natalia"}
                 fallback={

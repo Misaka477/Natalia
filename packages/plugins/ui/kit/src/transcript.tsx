@@ -53,7 +53,7 @@ import {
 } from "./virtual-items";
 
 const VIRTUALIZE_THRESHOLD = 80;
-const BOTTOM_FOLLOW_THRESHOLD_PX = 2;
+const BOTTOM_FOLLOW_THRESHOLD_PX = 16;
 const VIRTUAL_OVERSCAN = 24;
 const VIRTUAL_ROW_GAP = 6;
 const VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 600;
@@ -388,22 +388,36 @@ export function Transcript(props: TranscriptProps) {
       if (props.messages.length === 0) return;
       const target = Math.max(0, Math.min(index, props.messages.length - 1));
       const el = scrollEl();
+      const align = options?.align ?? "auto";
+      const behavior = options?.behavior ?? "auto";
+      const alignDomRow = () => {
+        const row = el?.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(props.messages[target]?.id ?? "")}"]`,
+        );
+        if (!el || !row) return false;
+        const containerRect = el.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        let nextTop = el.scrollTop + (rowRect.top - containerRect.top);
+        if (align === "center") {
+          nextTop -= (containerRect.height - rowRect.height) / 2;
+        } else if (align === "end") {
+          nextTop -= containerRect.height - rowRect.height;
+        }
+        el.scrollTo({ top: Math.max(0, nextTop), behavior });
+        return true;
+      };
       if (el && virtualize() && liveVirtualItems().length > 0) {
-        virtualizer.scrollToIndex(target, {
-          align: options?.align ?? "auto",
-          behavior: options?.behavior ?? "auto",
-        });
+        virtualizer.scrollToIndex(target, { align, behavior });
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            alignDomRow();
+          });
+        }
         return;
       }
-      const row = el?.querySelector<HTMLElement>(
-        `[data-message-id="${CSS.escape(props.messages[target]?.id ?? "")}"]`,
-      );
-      if (el && row) {
-        el.scrollTop +=
-          row.getBoundingClientRect().top - el.getBoundingClientRect().top;
-      }
+      alignDomRow();
     },
-    distanceThreshold: 2,
+    distanceThreshold: BOTTOM_FOLLOW_THRESHOLD_PX,
     nearTopThreshold: 80,
     isPaused: () => props.suspendVirtualization === true,
     onFollowChange: (following) => props.onFollowChange?.(following),
@@ -823,6 +837,7 @@ export function Transcript(props: TranscriptProps) {
                 <MessageGroup
                   message={message}
                   virtualIndex={windowedIndex(virtualItems(), position())}
+                  rowRef={(el) => virtualizer.measureElement(el)}
                   assistantName={props.assistantName}
                   assistantInitial={props.assistantInitial}
                   loadAttachmentUrl={props.loadAttachmentUrl}
@@ -993,21 +1008,31 @@ function MessageGroup(props: {
       .join("\n");
   };
   const setRowRef = (el: HTMLDivElement) => {
-    // Solid can call the ref before dynamic data-* attributes are patched.
-    // data-index is kept for diagnostics and tests; rows are no longer
-    // DOM-measured (the fixed-height row model is the rendered height).
+    // Solid can call the ref before dynamic data-* attributes are patched;
+    // set data-index explicitly before measureElement reads it.
     if (props.virtualIndex !== undefined) {
       el.setAttribute("data-index", String(props.virtualIndex));
     }
     props.rowRef?.(el);
   };
+  createEffect(() => {
+    const idx = props.virtualIndex;
+    if (idx !== undefined && rowEl) {
+      rowEl.setAttribute("data-index", String(idx));
+      props.rowRef?.(rowEl);
+    }
+  });
+  let rowEl: HTMLDivElement | undefined;
   return (
     <div
       class="natalia-message-group"
       data-role={props.message.role}
       data-message-id={props.message.id}
       data-index={props.virtualIndex}
-      ref={setRowRef}
+      ref={(el) => {
+        rowEl = el;
+        setRowRef(el);
+      }}
       style={props.style}
     >
       <MessageRow

@@ -23,6 +23,8 @@ import type { Attachment, Message } from "@natalia/ui-kit";
 import type { WorkspaceSummary } from "@anthelia/contracts";
 import { SlotMount } from "../slots/mount";
 import type { SlotsRegistry } from "../slots/registry";
+import { TurnNavigator } from "./TurnNavigator";
+import { readTranscriptAnchor } from "../controllers/scroll-memory";
 import styles from "../styles/transcript.module.css";
 
 export interface AgentBodyProps {
@@ -69,6 +71,10 @@ export function AgentBody(props: AgentBodyProps) {
   const t = props.t;
   const hero = () => props.messages().length === 0;
   const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [activeMessageID, setActiveMessageID] = createSignal<
+    string | undefined
+  >(undefined);
+  let localApi: TranscriptHandle | undefined;
 
   const currentWorkspace = createMemo(() => {
     const list = props.workspaces?.() ?? [];
@@ -109,9 +115,19 @@ export function AgentBody(props: AgentBodyProps) {
             assistantName={props.assistantName}
             assistantInitial={props.assistantInitial}
             toolCards={props.toolCards}
-            apiRef={props.onApi}
+            apiRef={(api) => {
+              localApi = api;
+              props.onApi(api);
+            }}
             onFollowChange={props.onFollowChange}
-            onScroll={props.onScroll}
+            onScroll={(event) => {
+              const anchor = readTranscriptAnchor(
+                event.currentTarget as HTMLElement | undefined,
+                localApi?.isFollowing() ?? true,
+              );
+              if (anchor) setActiveMessageID(anchor.messageID);
+              props.onScroll?.(event);
+            }}
             onNearTop={props.onNearTop}
             hasOlder={props.hasOlder}
             historyLoading={props.historyLoading}
@@ -121,6 +137,12 @@ export function AgentBody(props: AgentBodyProps) {
             onRollback={props.onRollback}
             checkpointIDForMessage={props.checkpointIDForMessage}
             suspendVirtualization={props.suspendVirtualization}
+          />
+          <TurnNavigator
+            messages={props.messages}
+            getApi={() => localApi}
+            activeMessageID={activeMessageID}
+            t={t}
           />
           <Show when={props.jumpVisible()}>
             <button

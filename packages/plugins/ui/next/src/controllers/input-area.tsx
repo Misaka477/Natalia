@@ -68,11 +68,21 @@ export function MainInputArea(props: MainInputAreaProps) {
     refreshTranscript,
     perfLog,
   } = props;
+  const IGNORED_DIRS = new Set([
+    "__pycache__",
+    ".pytest_cache",
+    ".natalia",
+    ".git",
+    "node_modules",
+  ]);
   const searchWorkspaceFiles = async (query: string) => {
     const q = query.trim();
     if (!q && props.ctx.runtime.workspaceList) {
       const page = await props.ctx.runtime.workspaceList({ path: "." });
-      return page?.entries ?? [];
+      return (page?.entries ?? []).filter((e) => {
+        const clean = e.path.replace(/\\/gu, "/").replace(/\/+$/u, "");
+        return !IGNORED_DIRS.has(clean);
+      });
     }
     const res = await props.ctx.runtime.workspaceFiles?.({
       query: q,
@@ -298,11 +308,21 @@ export function ChatInputArea(props: ChatInputAreaProps) {
     handlePasteAttachments,
     perfLog,
   } = props;
+  const IGNORED_DIRS = new Set([
+    "__pycache__",
+    ".pytest_cache",
+    ".natalia",
+    ".git",
+    "node_modules",
+  ]);
   const searchWorkspaceFiles = async (query: string) => {
     const q = query.trim();
     if (!q && props.ctx.runtime.workspaceList) {
       const page = await props.ctx.runtime.workspaceList({ path: "." });
-      return page?.entries ?? [];
+      return (page?.entries ?? []).filter((e) => {
+        const clean = e.path.replace(/\\/gu, "/").replace(/\/+$/u, "");
+        return !IGNORED_DIRS.has(clean);
+      });
     }
     const res = await props.ctx.runtime.workspaceFiles?.({
       query: q,

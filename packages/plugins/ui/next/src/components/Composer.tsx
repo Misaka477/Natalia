@@ -292,8 +292,10 @@ export function Composer(props: ComposerProps) {
   function handleInput(event: Event) {
     const target = event.currentTarget as HTMLTextAreaElement;
     setDismissedKey(null);
-    props.onInput(target.value);
-    setCaretPos(target.selectionStart ?? target.value.length);
+    const nextVal = target.value;
+    const rawPos = target.selectionStart;
+    setCaretPos(rawPos && rawPos > 0 ? rawPos : nextVal.length);
+    props.onInput(nextVal);
     adjustHeight();
   }
 
@@ -440,12 +442,15 @@ export function Composer(props: ComposerProps) {
               >
                 <For each={fileEntries()}>
                   {(entry, idx) => {
-                    const norm = entry.path.replace(/\\/gu, "/");
+                    const norm = entry.path
+                      .replace(/\\/gu, "/")
+                      .replace(/\/+$/u, "");
                     const base = norm.slice(norm.lastIndexOf("/") + 1) || norm;
                     const dir =
                       norm.lastIndexOf("/") > 0
                         ? norm.slice(0, norm.lastIndexOf("/"))
                         : "";
+                    const isDir = entry.type === "directory";
                     return (
                       <button
                         type="button"
@@ -456,7 +461,10 @@ export function Composer(props: ComposerProps) {
                         onMouseEnter={() => setSelectedIndex(idx())}
                         onClick={() => applyFileMention(entry)}
                       >
-                        <span class={styles.autocompletePrimary}>@{base}</span>
+                        <span class={styles.autocompletePrimary}>
+                          @{base}
+                          {isDir ? "/" : ""}
+                        </span>
                         <Show when={dir}>
                           <span class={styles.autocompleteSecondary}>
                             {dir}

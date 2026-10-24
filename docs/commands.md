@@ -1,4 +1,4 @@
-# Natalia CLI Command Reference
+# Natalia Command Reference
 
 [中文](#中文) | [English](#english)
 
@@ -6,7 +6,7 @@
 
 ## English
 
-Natalia CLI runs on Bun. The examples below use the workspace entrypoint:
+Natalia's CLI runs on Bun. The examples below use the workspace entrypoint:
 
 ```bash
 npm run ts:cli -- <command>
@@ -184,7 +184,7 @@ The current CLI does not yet implement a generated `--help` command. Until that 
 
 ## 中文
 
-Natalia CLI 基于 Bun 运行。以下示例使用 workspace 入口：
+Natalia 的 CLI 基于 Bun 运行。以下示例使用 workspace 入口：
 
 ```bash
 npm run ts:cli -- <command>

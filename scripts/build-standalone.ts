@@ -1005,7 +1005,7 @@ for (const target of targets) {
               "--windows-title=Natalia",
               "--windows-publisher=Misaka477",
               "--windows-version=" + windowsFileVersion(version),
-              "--windows-description=Natalia - a Wire-native AI agent runtime",
+              "--windows-description=Natalia - the coding agent that can't lose your work",
               `--windows-copyright=${WINDOWS_COPYRIGHT}`,
             ]
           : []),

@@ -315,8 +315,8 @@ CMake 侧已经按平台分支（`WIN32`），工具链自备。
 
 ## English
 
-Natalia is a local-first coding-agent runtime. This guide covers building
-the workspace, staging the terminal executables, and installing.
+Natalia is a coding agent runtime. This guide covers building the workspace,
+staging the terminal executables, and installing.
 
 ### 1. Install
 

@@ -6,10 +6,11 @@
 
 ## English
 
-Natalia is a local-first coding-agent runtime. This guide covers installing the workspace, configuring a provider, and using the three shipped front ends:
+Natalia is a coding agent runtime. This guide covers installing the workspace, configuring a provider, and using the shipped front ends:
 
 - **CLI** (`apps/cli`)
-- **Web shell** (`apps/web`, package `@natalia/web-shell`)
+- **Web shell** (`apps/web`, package `@natalia/web-shell`), whose interface ships as the UI plugin `packages/plugins/ui/next`
+- **Window host** (`apps/cef-desktop`) — a CEF window around the same web shell, not a separate interface
 
 There is no legacy TUI application in the current tree.
 
@@ -175,10 +176,11 @@ settings — nothing writes them any more.
 
 ## 中文
 
-Natalia 是 local-first 的 coding-agent runtime。本指南覆盖安装工作区、配置 provider，以及使用三个已提供的前端：
+Natalia 是一个 coding agent runtime。本指南覆盖安装工作区、配置 provider，以及使用已提供的前端：
 
 - **CLI**（`apps/cli`）
-- **Web shell**（`apps/web`，包名 `@natalia/web-shell`）
+- **Web shell**（`apps/web`，包名 `@natalia/web-shell`），其界面由 UI 插件 `packages/plugins/ui/next` 提供
+- **窗口宿主**（`apps/cef-desktop`）—— 给同一个 web shell 套的 CEF 窗口，不是另一个界面
 
 当前代码树中没有旧的 TUI 应用。
 

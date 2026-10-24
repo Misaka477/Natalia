@@ -1,6 +1,6 @@
 .frame {
   --turn-preview-height: 100px;
-  --turn-rail-max-height: 400px;
+  --turn-rail-max-height: 220px;
   --turn-preview-width: min(300px, calc(100vw - 96px));
   position: absolute;
   top: 50%;
@@ -9,7 +9,7 @@
   width: 28px;
   height: min(
     var(--turn-natural-height, 0px),
-    max(72px, calc(100% - 56px)),
+    max(72px, calc(100% - 96px)),
     var(--turn-rail-max-height)
   );
   transform: translateY(-50%);
@@ -177,13 +177,13 @@
 /* Multi-size viewport and container adaptation */
 @media (max-height: 820px) {
   .frame {
-    --turn-rail-max-height: 280px;
+    --turn-rail-max-height: 170px;
   }
 }
 
 @media (max-height: 600px) {
   .frame {
-    --turn-rail-max-height: 180px;
+    --turn-rail-max-height: 130px;
     --turn-preview-height: 84px;
   }
   .previewResponse {

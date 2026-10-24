@@ -13,13 +13,10 @@ export type UiPanelRequirementContext = {
 export async function createUiPanelRequirementContext(
   runtime: RuntimeClient,
 ): Promise<UiPanelRequirementContext> {
-  const [plugins, report] = await Promise.all([
-    runtime.plugins?.(),
-    Promise.resolve(describeRuntimeCapabilities(runtime)),
-  ]);
+  const report = describeRuntimeCapabilities(runtime);
   return {
     runtime,
-    pluginIds: new Set((plugins ?? []).map((plugin) => plugin.id)),
+    pluginIds: new Set(),
     capabilities: new Set(
       report.groups
         .filter((group) => group.available)

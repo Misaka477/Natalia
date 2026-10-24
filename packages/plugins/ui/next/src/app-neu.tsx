@@ -2180,10 +2180,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         if (timer) clearTimeout(timer);
       }
     };
-    const [requirementContext, catalog, tools, nextConfig] = await Promise.all([
-      settle("panelRequirements", () =>
-        createUiPanelRequirementContext(props.ctx.runtime),
-      ),
+    const [catalog, tools, nextConfig] = await Promise.all([
       settle("modelCatalog", () => props.ctx.runtime.modelCatalog?.()),
       settle("registeredTools", () =>
         props.ctx.runtime.registeredTools?.(
@@ -2192,17 +2189,12 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       ),
       settle("configGet", () => props.ctx.runtime.configGet?.()),
     ]);
-    const failed = [requirementContext, catalog, tools, nextConfig]
+    const failed = [catalog, tools, nextConfig]
       .map((entry, index) => (entry.failed ? index : -1))
       .filter((index) => index >= 0)
-      .map(
-        (index) =>
-          ["panelRequirements", "modelCatalog", "registeredTools", "configGet"][
-            index
-          ]!,
-      );
+      .map((index) => ["modelCatalog", "registeredTools", "configGet"][index]!);
     return {
-      requirementContext: requirementContext.value,
+      requirementContext: undefined,
       catalog: catalog.value,
       tools: tools.value,
       nextConfig: nextConfig.value,

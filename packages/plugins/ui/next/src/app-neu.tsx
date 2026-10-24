@@ -1085,6 +1085,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
     fresh.activeTurn = undefined;
     fresh.natalia.activeTurn = undefined;
     fresh.pendingInputs = [];
+    lastProjectedSnapshot = undefined;
     setState(fresh);
   }
 
@@ -1706,6 +1707,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
         nextStart !== undefined ? Math.max(0, Date.now() - nextStart) : 0,
       );
       const projected = cloneState(cached);
+      lastProjectedSnapshot = projected;
       setState(projected);
     };
     const unsubscribePanels = props.ctx.host?.subscribePanels(() => {
@@ -3445,6 +3447,7 @@ export function AppNeu(props: { ctx: UiPluginContext }) {
       }}
       onInstantActivateSession={() => {
         setHeroDraftMode(false);
+        lastProjectedSnapshot = undefined;
         const cached = props.ctx.projection.getState();
         if (cached.natalia.messages.length > 0) {
           setTranscriptHistoryLoading(false);
